@@ -118,6 +118,12 @@ body {
 .w-full-span  { grid-column: span 2; aspect-ratio: 2.1/1; flex-direction: column; justify-content: space-between; padding: 22px; }
 .w-big-square { grid-column: span 1; aspect-ratio: 1/1; flex-direction: column; justify-content: space-between; padding: 26px; }
 .w-square     { aspect-ratio: 1/1; flex-direction: column; justify-content: space-between; padding: 20px; }
+.w-half    { aspect-ratio: 2/1; flex-direction: row; align-items: center; padding: 14px; gap: 12px; }
+.w-compact { aspect-ratio: 2.1/1; flex-direction: row; align-items: center; padding: 14px; gap: 14px; }
+
+/* Stack: two half-widgets vertically in the same square footprint */
+.w-stack { display: grid; grid-template-rows: 1fr 1fr; gap: var(--gg, 14px); aspect-ratio: 1/1; }
+.w-stack > .widget { aspect-ratio: auto; }
 
 .icon-box {
   display: flex; align-items: center; justify-content: center;

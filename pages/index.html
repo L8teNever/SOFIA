@@ -10,6 +10,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
   <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&display=swap">
   <link rel="stylesheet" href="/static/css/base.css">
@@ -49,95 +50,104 @@
   <!-- Widget Grid -->
   <div class="widget-grid" id="widget-grid">
 
-    <!-- Calendar -->
+    <!-- Calendar: full-width banner -->
     <div class="widget w-full-span" style="background:#eaddff;color:#21005d;" onclick="openPage('calendar',this)" data-page="calendar">
       <div>
-        <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.6;">Kalender</div>
+        <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.6;">Nächster Termin</div>
         <div style="font-size:1.4rem;font-weight:700;margin-top:4px;" id="w-next-event">Keine Termine</div>
+        <div style="font-size:0.82rem;opacity:0.65;margin-top:2px;" id="w-next-event-sub"></div>
       </div>
-      <div class="icon-box" style="width:52px;height:52px;background:rgba(33,0,93,0.1);">
+      <div class="icon-box" style="width:52px;height:52px;background:rgba(33,0,93,0.12);">
         <i data-lucide="calendar" style="width:26px;height:26px;"></i>
       </div>
     </div>
 
     <!-- Homework -->
-    <div class="widget w-big-square" style="background:#ffd8e4;color:#31111d;" onclick="openPage('homework',this)" data-page="homework">
-      <div>
-        <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.6;">Hausaufgaben</div>
-        <div style="font-size:2rem;font-weight:700;margin-top:8px;" id="w-hw-count">0</div>
-        <div style="font-size:0.85rem;opacity:0.7;">offen</div>
+    <div class="widget w-square" style="background:#ffd8e4;color:#31111d;" onclick="openPage('homework',this)" data-page="homework">
+      <div class="icon-box" style="width:48px;height:48px;background:rgba(49,17,29,0.1);">
+        <i data-lucide="book-open" style="width:24px;height:24px;"></i>
       </div>
-      <div class="icon-box" style="width:52px;height:52px;background:rgba(49,17,29,0.1);">
-        <i data-lucide="book-open" style="width:26px;height:26px;"></i>
+      <div>
+        <div style="font-size:1.1rem;font-weight:700;">Aufgaben</div>
+        <div style="font-size:3rem;font-weight:800;line-height:1;margin-top:2px;" id="w-hw-count">0</div>
       </div>
     </div>
 
     <!-- Grades -->
-    <div class="widget w-big-square" style="background:#d3e3fd;color:#041e49;" onclick="openPage('grades',this)" data-page="grades">
-      <div>
-        <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.6;">Noten</div>
-        <div style="font-size:2rem;font-weight:700;margin-top:8px;" id="w-grade-avg">–</div>
-        <div style="font-size:0.85rem;opacity:0.7;">Ø Gesamt</div>
+    <div class="widget w-square" style="background:#d3e3fd;color:#041e49;" onclick="openPage('grades',this)" data-page="grades">
+      <div class="icon-box" style="width:48px;height:48px;background:rgba(4,30,73,0.1);">
+        <i data-lucide="trending-up" style="width:24px;height:24px;"></i>
       </div>
-      <div class="icon-box" style="width:52px;height:52px;background:rgba(4,30,73,0.1);">
-        <i data-lucide="bar-chart-2" style="width:26px;height:26px;"></i>
+      <div>
+        <div style="font-size:1.1rem;font-weight:700;">Schnitt</div>
+        <div style="font-size:3rem;font-weight:800;line-height:1;margin-top:2px;" id="w-grade-avg">–</div>
       </div>
     </div>
 
     <!-- Timetable -->
-    <div class="widget w-full-span" style="background:#ffdec1;color:#442b00;" onclick="openPage('timetable',this)" data-page="timetable">
-      <div>
-        <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.6;">Stundenplan</div>
-        <div style="font-size:1.2rem;font-weight:700;margin-top:4px;" id="w-current-lesson">Heute</div>
+    <div class="widget w-square" style="background:#ffdec1;color:#442b00;" onclick="openPage('timetable',this)" data-page="timetable">
+      <div class="icon-box" style="width:48px;height:48px;background:rgba(68,43,0,0.1);">
+        <i data-lucide="clock" style="width:24px;height:24px;"></i>
       </div>
-      <div class="icon-box" style="width:52px;height:52px;background:rgba(68,43,0,0.1);">
-        <i data-lucide="clock" style="width:26px;height:26px;"></i>
+      <div>
+        <div style="font-size:1.1rem;font-weight:700;">Stundenplan</div>
+        <div style="font-size:0.8rem;opacity:0.65;margin-top:2px;">Jetzt</div>
+        <div style="font-size:1.25rem;font-weight:700;" id="w-current-lesson">–</div>
       </div>
     </div>
 
-    <!-- Chat -->
-    <div class="widget w-square" style="background:#c4eed0;color:#072711;" onclick="openPage('chat',this)" data-page="chat">
-      <div>
-        <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.6;">Chat</div>
-        <div style="font-size:1.6rem;font-weight:700;margin-top:8px;" id="w-unread">0</div>
-        <div style="font-size:0.82rem;opacity:0.7;">ungelesen</div>
+    <!-- Chat + Drive stacked in one square -->
+    <div class="w-stack">
+      <div class="widget w-half" style="background:#c4eed0;color:#072711;" onclick="openPage('chat',this)" data-page="chat">
+        <div class="icon-box" style="width:40px;height:40px;background:rgba(7,39,17,0.1);">
+          <i data-lucide="message-square" style="width:20px;height:20px;"></i>
+        </div>
+        <div style="overflow:hidden;flex:1;">
+          <div style="font-size:0.88rem;font-weight:700;">Chat</div>
+          <div style="font-size:0.72rem;opacity:0.65;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" id="w-chat-preview">Nachrichten</div>
+        </div>
       </div>
-      <div class="icon-box" style="width:44px;height:44px;background:rgba(7,39,17,0.1);">
-        <i data-lucide="message-circle" style="width:22px;height:22px;"></i>
+      <div class="widget w-half" style="background:#e8def8;color:#1d192b;" onclick="openPage('drive',this)" data-page="drive">
+        <div class="icon-box" style="width:40px;height:40px;background:rgba(29,25,43,0.1);">
+          <i data-lucide="hard-drive" style="width:20px;height:20px;"></i>
+        </div>
+        <div style="overflow:hidden;flex:1;">
+          <div style="font-size:0.88rem;font-weight:700;">Drive</div>
+          <div style="font-size:0.72rem;opacity:0.6;">Dateien</div>
+        </div>
       </div>
     </div>
 
     <!-- QuickShare -->
-    <div class="widget w-square" style="background:#f9dedc;color:#410e0b;" onclick="openPage('quickshare',this)" data-page="quickshare">
-      <div>
-        <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.6;">QuickShare</div>
-        <div style="font-size:1.6rem;font-weight:700;margin-top:8px;" id="w-files-count">0</div>
-        <div style="font-size:0.82rem;opacity:0.7;">geteilt</div>
+    <div class="widget w-compact" style="background:#f9dedc;color:#410e0b;" onclick="openPage('quickshare',this)" data-page="quickshare">
+      <div class="icon-box" style="width:40px;height:40px;background:rgba(65,14,11,0.1);">
+        <i data-lucide="share-2" style="width:20px;height:20px;"></i>
       </div>
-      <div class="icon-box" style="width:44px;height:44px;background:rgba(65,14,11,0.1);">
-        <i data-lucide="share-2" style="width:22px;height:22px;"></i>
+      <div style="overflow:hidden;">
+        <div style="font-size:0.88rem;font-weight:700;">Share</div>
+        <div style="font-size:0.72rem;opacity:0.6;"><span id="w-files-count">0</span> geteilt</div>
       </div>
     </div>
 
-    <!-- Drive -->
-    <div class="widget w-square" style="background:#e8def8;color:#1d192b;" onclick="openPage('drive',this)" data-page="drive">
-      <div>
-        <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.6;">Drive</div>
-        <div style="font-size:0.9rem;font-weight:600;margin-top:8px;opacity:0.7;">Bald</div>
+    <!-- Settings -->
+    <div class="widget w-compact" style="background:#25232a;color:white;" onclick="openPage('settings',this)" data-page="settings">
+      <div class="icon-box" style="width:40px;height:40px;background:rgba(255,255,255,0.1);">
+        <i data-lucide="settings" style="width:20px;height:20px;"></i>
       </div>
-      <div class="icon-box" style="width:44px;height:44px;background:rgba(29,25,43,0.1);">
-        <i data-lucide="hard-drive" style="width:22px;height:22px;"></i>
+      <div style="overflow:hidden;">
+        <div style="font-size:0.88rem;font-weight:700;">Einstellungen</div>
+        <div style="font-size:0.72rem;opacity:0.5;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" id="w-settings-name">–</div>
       </div>
     </div>
 
     <!-- Admin (shown conditionally) -->
-    <div class="widget w-square" style="background:#25232a;color:white;display:none;" id="admin-widget" onclick="openPage('admin',this)" data-page="admin">
-      <div>
-        <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.6;">Admin</div>
-        <div style="font-size:0.9rem;font-weight:600;margin-top:8px;">Panel</div>
+    <div class="widget w-compact" style="background:#25232a;color:white;display:none;" id="admin-widget" onclick="openPage('admin',this)" data-page="admin">
+      <div class="icon-box" style="width:40px;height:40px;background:rgba(255,255,255,0.1);">
+        <i data-lucide="shield" style="width:20px;height:20px;"></i>
       </div>
-      <div class="icon-box" style="width:44px;height:44px;background:rgba(255,255,255,0.1);">
-        <i data-lucide="shield" style="width:22px;height:22px;"></i>
+      <div style="overflow:hidden;">
+        <div style="font-size:0.88rem;font-weight:700;">Admin</div>
+        <div style="font-size:0.72rem;opacity:0.5;">Panel</div>
       </div>
     </div>
 

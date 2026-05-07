@@ -1,24 +1,23 @@
-﻿<div class="page" id="page-grades" style="background:#f4f8ff;">
+<div class="page" id="page-grades" style="background:#f4f8ff;">
   <div class="page-header">
     <button class="back-btn"><i data-lucide="arrow-left" style="width:22px;height:22px;"></i></button>
-    <span class="page-title">Noten</span>
-    <div style="flex:1;"></div>
-    <div id="grades-avg-badge" style="background:#d3e3fd;color:#041e49;padding:8px 16px;border-radius:16px;font-weight:700;font-size:0.95rem;">Ø –</div>
-  </div>
-
-  <div class="page-scroll">
-    <div id="grades-by-subject"></div>
-    <div id="grades-empty" style="display:none;text-align:center;padding:60px 20px;opacity:0.4;">
-      <i data-lucide="bar-chart-2" style="width:48px;height:48px;margin-bottom:12px;"></i>
-      <div>Noch keine Noten eingetragen</div>
+    <div style="flex:1;">
+      <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.5;color:#041e49;">Halbjahr 2 · 2025/26</div>
+      <span class="page-title" style="color:#041e49;">Noten</span>
     </div>
   </div>
-
+  <div class="page-scroll">
+    <div id="grades-summary"></div>
+    <div id="grades-by-subject"></div>
+    <div id="grades-empty" style="display:none;text-align:center;padding:60px 20px;opacity:0.4;">
+      <i data-lucide="bar-chart-2" style="width:48px;height:48px;margin-bottom:12px;display:block;margin:0 auto 12px;"></i>
+      <div style="font-weight:600;">Noch keine Noten</div>
+    </div>
+  </div>
   <button class="fab" onclick="openGradeSheet()">
     <i data-lucide="plus" style="width:24px;height:24px;"></i>
   </button>
 </div>
-
 <script>
 let gradeItems = [], gradeSubjects = [];
 
@@ -38,88 +37,102 @@ function gradeColor(v) {
   return '#f9dedc';
 }
 
+function gradeTextColor(v) {
+  if (v <= 1.5) return '#0a3818';
+  if (v <= 2.5) return '#041e49';
+  if (v <= 3.5) return '#21005d';
+  if (v <= 4.5) return '#3b1a00';
+  return '#410e0b';
+}
+
 function renderGrades() {
   const subMap = Object.fromEntries(gradeSubjects.map(s => [s.id, s]));
   const bySubject = {};
-  gradeItems.forEach(g => {
-    if (!bySubject[g.subject_id]) bySubject[g.subject_id] = [];
-    bySubject[g.subject_id].push(g);
-  });
+  gradeItems.forEach(g => { if (!bySubject[g.subject_id]) bySubject[g.subject_id] = []; bySubject[g.subject_id].push(g); });
 
   if (!gradeItems.length) {
+    document.getElementById('grades-summary').innerHTML = '';
     document.getElementById('grades-by-subject').innerHTML = '';
     document.getElementById('grades-empty').style.display = 'block';
-    document.getElementById('grades-avg-badge').textContent = 'Ø –';
     return;
   }
   document.getElementById('grades-empty').style.display = 'none';
 
-  const total = gradeItems.reduce((s,g) => s+g.value,0) / gradeItems.length;
-  document.getElementById('grades-avg-badge').textContent = 'Ø ' + total.toFixed(1);
+  const total = gradeItems.reduce((s,g) => s+g.value, 0) / gradeItems.length;
 
-  const container = document.getElementById('grades-by-subject');
-  container.innerHTML = Object.entries(bySubject).map(([sid, grades]) => {
+  // Build bar chart from last 7 grades (oldest→newest)
+  const last7 = [...gradeItems].sort((a,b) => (a.date||'').localeCompare(b.date||'')).slice(-7);
+  const barMax = 6;
+  const bars = last7.map(g => {
+    const pct = Math.round((1 - (g.value-1)/5) * 90 + 10);
+    return '<div style="flex:1;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:4px;">'
+      + '<div style="width:100%;border-radius:6px 6px 3px 3px;background:rgba(255,255,255,' + (g===last7[last7.length-1]?'1':'0.45') + ');height:' + pct + '%;"></div>'
+      + '</div>';
+  }).join('');
+
+  document.getElementById('grades-summary').innerHTML =
+    '<div style="background:#21005d;color:white;border-radius:28px;padding:28px 28px 24px;margin-bottom:12px;">'
+    + '<div style="display:flex;align-items:flex-start;justify-content:space-between;">'
+    + '<div>'
+    + '<div style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;opacity:0.6;">Notenschnitt</div>'
+    + '<div style="font-size:4.5rem;font-weight:800;line-height:1;margin-top:6px;">' + total.toFixed(1) + '</div>'
+    + '<div style="display:flex;align-items:center;gap:6px;margin-top:10px;font-size:0.82rem;opacity:0.75;">'
+    + '<i data-lucide="trending-up" style="width:15px;height:15px;"></i><span>' + gradeItems.length + ' Noten · ' + Object.keys(bySubject).length + ' Fächer</span>'
+    + '</div>'
+    + '</div>'
+    + '</div>'
+    + (last7.length ? '<div style="display:flex;align-items:flex-end;gap:4px;height:56px;margin-top:20px;">' + bars + '</div>' : '')
+    + '</div>';
+
+  document.getElementById('grades-by-subject').innerHTML = Object.entries(bySubject).map(([sid, grades]) => {
     const sub = subMap[sid] || {name:'Unbekannt',color:'#eaddff'};
     const avg = grades.reduce((s,g)=>s+g.value,0)/grades.length;
-    return `
-    <div class="m3-card">
-      <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">
-        <div style="width:10px;height:10px;border-radius:50%;background:${sub.color||'#6750a4'};flex-shrink:0;"></div>
-        <span style="font-weight:700;flex:1;">${sub.name}</span>
-        <span style="background:#d3e3fd;color:#041e49;padding:6px 12px;border-radius:12px;font-weight:700;">Ø ${avg.toFixed(1)}</span>
-      </div>
-      ${grades.map(g => `
-        <div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-top:1px solid rgba(0,0,0,0.04);">
-          <div class="grade-badge" style="background:${gradeColor(g.value)};color:#1c1b1f;">${g.value % 1 === 0 ? g.value : g.value.toFixed(1)}</div>
-          <div style="flex:1;">
-            <div style="font-weight:500;">${g.label||'Note'}</div>
-            ${g.date?`<div style="font-size:0.75rem;opacity:0.5;">${new Date(g.date+'T00:00').toLocaleDateString('de-DE')}</div>`:''}
-          </div>
-          <button onclick="deleteGrade(${g.id})" style="background:none;border:none;cursor:pointer;opacity:0.3;padding:4px;">
-            <i data-lucide="trash-2" style="width:15px;height:15px;"></i>
-          </button>
-        </div>`).join('')}
-    </div>`;
+    const ac = gradeColor(avg); const atc = gradeTextColor(avg);
+    return '<div class="m3-card">'
+      + '<div style="display:flex;align-items:center;gap:14px;margin-bottom:14px;">'
+      + '<div style="width:40px;height:40px;border-radius:14px;background:' + (sub.color||'#eaddff') + ';flex-shrink:0;display:flex;align-items:center;justify-content:center;">'
+      + '<div style="width:10px;height:10px;border-radius:50%;background:' + (gradeTextColor(avg)) + ';opacity:0.6;"></div></div>'
+      + '<span style="font-weight:700;flex:1;font-size:1rem;">' + sub.name + '</span>'
+      + '<span style="background:' + ac + ';color:' + atc + ';padding:8px 14px;border-radius:14px;font-weight:800;font-size:1.1rem;">Ø ' + avg.toFixed(1) + '</span>'
+      + '</div>'
+      + grades.map(g => {
+          const c = gradeColor(g.value); const tc = gradeTextColor(g.value);
+          return '<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid rgba(0,0,0,0.05);">'
+            + '<div style="background:' + c + ';color:' + tc + ';width:44px;height:44px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:1.15rem;flex-shrink:0;">'
+            + (g.value%1===0?g.value:g.value.toFixed(1)) + '</div>'
+            + '<div style="flex:1;"><div style="font-weight:600;">' + (g.label||'Note') + '</div>'
+            + (g.date?'<div style="font-size:0.75rem;opacity:0.45;margin-top:1px;">'+new Date(g.date+'T00:00').toLocaleDateString('de-DE')+'</div>':'')
+            + '</div>'
+            + '<button onclick="deleteGrade('+g.id+')" style="background:rgba(0,0,0,0.05);border:none;border-radius:10px;width:32px;height:32px;cursor:pointer;display:flex;align-items:center;justify-content:center;">'
+            + '<i data-lucide="trash-2" style="width:14px;height:14px;opacity:0.4;"></i></button>'
+            + '</div>';
+        }).join('')
+      + '</div>';
   }).join('');
-  lucide.createIcons();
+  if (window.lucide) lucide.createIcons();
 }
 
 async function deleteGrade(id) {
-  await API.deleteGrade(id).catch(() => { showToast('Fehler'); return; });
-  gradeItems = gradeItems.filter(g => g.id !== id);
-  renderGrades();
-  showToast('Note gelöscht');
+  await API.deleteGrade(id).catch(()=>{showToast('Fehler');return;});
+  gradeItems = gradeItems.filter(g=>g.id!==id); renderGrades(); showToast('Note geloescht');
 }
 
 function openGradeSheet() {
-  openSheet(`
-    <div style="font-size:1.1rem;font-weight:700;margin-bottom:20px;">Note eintragen</div>
-    <select class="m3-select" id="g-subject">
-      ${gradeSubjects.map(s=>`<option value="${s.id}">${s.name}</option>`).join('')}
-    </select>
-    <input class="m3-input" id="g-value" type="number" step="0.5" min="1" max="6" placeholder="Note (1–6)">
-    <input class="m3-input" id="g-label" placeholder="Bezeichnung (z.B. Mathearbeit 1)">
-    <input class="m3-input" id="g-date" type="date" value="${new Date().toISOString().slice(0,10)}">
-    <textarea class="m3-input" id="g-note" placeholder="Notiz (optional)" rows="2" style="resize:none;height:auto;"></textarea>
-    <button class="m3-btn-full" onclick="saveGrade()">Speichern</button>
-  `);
+  openSheet('<div style="font-size:1.1rem;font-weight:700;margin-bottom:20px;">Note eintragen</div>'
+    + '<select class="m3-select" id="g-subject">' + gradeSubjects.map(s=>'<option value="'+s.id+'">'+s.name+'</option>').join('') + '</select>'
+    + '<input class="m3-input" id="g-value" type="number" step="0.5" min="1" max="6" placeholder="Note (1-6)">'
+    + '<input class="m3-input" id="g-label" placeholder="Bezeichnung (z.B. Mathearbeit 1)">'
+    + '<input class="m3-input" id="g-date" type="date" value="' + new Date().toISOString().slice(0,10) + '">'
+    + '<button class="m3-btn-full" onclick="saveGrade()">Speichern</button>');
 }
 
 async function saveGrade() {
   const value = parseFloat(document.getElementById('g-value').value);
   const subject_id = parseInt(document.getElementById('g-subject').value);
-  if (!value || value < 1 || value > 6) { showToast('Gültige Note eingeben (1–6)'); return; }
+  if (!value||value<1||value>6) { showToast('Gueltige Note (1-6)'); return; }
   try {
-    const g = await API.createGrade({
-      subject_id, value,
-      label: document.getElementById('g-label').value || null,
-      date: document.getElementById('g-date').value || null,
-      note: document.getElementById('g-note').value || null,
-    });
-    gradeItems.unshift(g);
-    closeSheet();
-    renderGrades();
-    showToast('Note gespeichert');
+    const g = await API.createGrade({subject_id,value,label:document.getElementById('g-label').value||null,date:document.getElementById('g-date').value||null});
+    gradeItems.unshift(g); closeSheet(); renderGrades(); showToast('Note gespeichert');
   } catch { showToast('Fehler'); }
 }
 </script>

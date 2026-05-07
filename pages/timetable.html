@@ -1,7 +1,10 @@
 ﻿<div class="page" id="page-timetable" style="background:#fff8ef;">
   <div class="page-header">
     <button class="back-btn"><i data-lucide="arrow-left" style="width:22px;height:22px;"></i></button>
-    <span class="page-title">Stundenplan</span>
+    <div style="flex:1;">
+      <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.5;color:#442b00;" id="tt-header-sub">Diese Woche</div>
+      <span class="page-title" style="color:#442b00;">Stundenplan</span>
+    </div>
   </div>
   <div class="page-scroll" style="column-count:unset!important;">
     <div id="tt-loading" style="text-align:center;padding:60px;opacity:0.5;">Stundenplan wird geladen…</div>
@@ -84,21 +87,31 @@ function renderTimetable(data) {
   }).sort((a,b) => (a.startTime||0)-(b.startTime||0));
 
   const todayList = document.getElementById('tt-today-list');
+  const sub = document.getElementById('tt-header-sub');
+  if (sub) sub.textContent = new Date().toLocaleDateString('de-DE',{weekday:'long',day:'numeric',month:'long'});
+
   if (!todayLessons.length) {
-    todayList.innerHTML = '<div style="opacity:0.5;padding:16px;text-align:center;">Keine Stunden heute</div>';
+    todayList.innerHTML = '<div style="text-align:center;padding:40px 20px;opacity:0.4;">'
+      + '<div style="font-weight:600;">Keine Stunden heute</div></div>';
   } else {
     todayList.innerHTML = todayLessons.map(l => {
       const subName = l.su?.[0]?.name || l.name || '?';
       const teacher = l.te?.[0]?.name || '';
       const room = l.ro?.[0]?.name || '';
-      const start = l.startTime ? `${String(l.startTime).slice(0,-2)}:${String(l.startTime).slice(-2)}` : '';
-      const end = l.endTime ? `${String(l.endTime).slice(0,-2)}:${String(l.endTime).slice(-2)}` : '';
+      const fmt = t => t ? String(t).padStart(4,'0').replace(/(\d{2})(\d{2})/,'$1:$2') : '';
+      const start = fmt(l.startTime); const end = fmt(l.endTime);
       const color = subjectColors[subName] || '#eaddff';
-      return `<div class="tt-block" style="background:${color};">
-        <div class="tt-time">${start}<br>${end}</div>
-        <div style="flex:1;"><div style="font-weight:700;">${subName}</div><div style="font-size:0.78rem;opacity:0.6;">${[teacher,room].filter(Boolean).join(' · ')}</div></div>
-        ${l.code===1?'<span style="background:#f9dedc;color:#410e0b;padding:2px 8px;border-radius:8px;font-size:0.7rem;font-weight:700;">Vertr.</span>':''}
-      </div>`;
+      const isSubst = l.code === 1;
+      return '<div class="tt-block" style="background:' + color + ';cursor:default;">'
+        + '<div class="tt-time" style="text-align:center;">' + start + '<br><span style="opacity:0.5;font-size:0.68rem;">–</span><br>' + end + '</div>'
+        + '<div style="flex:1;min-width:0;">'
+        + '<div style="font-weight:700;font-size:0.95rem;">' + subName + '</div>'
+        + '<div style="display:flex;gap:6px;margin-top:5px;flex-wrap:wrap;">'
+        + (teacher ? '<span style="font-size:0.7rem;font-weight:600;background:rgba(0,0,0,0.1);padding:2px 8px;border-radius:8px;">' + teacher + '</span>' : '')
+        + (room ? '<span style="font-size:0.7rem;font-weight:600;background:rgba(0,0,0,0.1);padding:2px 8px;border-radius:8px;">' + room + '</span>' : '')
+        + '</div></div>'
+        + (isSubst ? '<span style="background:#f9dedc;color:#410e0b;padding:4px 10px;border-radius:10px;font-size:0.7rem;font-weight:700;flex-shrink:0;">Vertretung</span>' : '')
+        + '</div>';
     }).join('');
   }
 }

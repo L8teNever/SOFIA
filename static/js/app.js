@@ -117,7 +117,11 @@ async function loadDashboard() {
     if (upcoming.length) {
       const ev = upcoming[0];
       const d = new Date(ev.date + 'T00:00');
-      document.getElementById('w-next-event').textContent = ev.title + ' · ' + d.toLocaleDateString('de-DE', { day: 'numeric', month: 'short' });
+      const isTomorrow = ev.date === new Date(Date.now()+86400000).toISOString().slice(0,10);
+      const dayLabel = ev.date === today ? 'Heute' : isTomorrow ? 'Morgen' : d.toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'short' });
+      document.getElementById('w-next-event').textContent = ev.title;
+      const sub = document.getElementById('w-next-event-sub');
+      if (sub) sub.textContent = dayLabel + (ev.time ? ' · ' + ev.time : '');
     }
     if (grades.length) {
       const avg = (grades.reduce((s, g) => s + g.value, 0) / grades.length).toFixed(1);
@@ -201,6 +205,8 @@ async function boot() {
     document.getElementById('admin-widget').style.display = 'flex';
   }
   updateGreeting();
+  const sn = document.getElementById('w-settings-name');
+  if (sn) sn.textContent = (currentUser.display_name || currentUser.email.split('@')[0]) + ' · ' + (currentUser.class_name || '');
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/static/sw.js').catch(function() {});
   }

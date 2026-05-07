@@ -1,27 +1,27 @@
-﻿<div class="page" id="page-homework" style="background:#fff5f8;">
+<div class="page" id="page-homework" style="background:#fff5f8;">
   <div class="page-header">
     <button class="back-btn"><i data-lucide="arrow-left" style="width:22px;height:22px;"></i></button>
-    <span class="page-title">Hausaufgaben</span>
-    <div style="flex:1;"></div>
-    <div style="display:flex;gap:8px;">
-      <button onclick="hwFilter('all',this)" class="chip active" id="hw-f-all">Alle</button>
-      <button onclick="hwFilter('open',this)" class="chip" id="hw-f-open">Offen</button>
+    <div style="flex:1;">
+      <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.5;color:#31111d;" id="hw-header-sub">Lade…</div>
+      <span class="page-title" style="color:#31111d;">Aufgaben</span>
     </div>
   </div>
-
-  <div class="page-scroll">
+  <div style="padding:0 20px 8px;display:flex;gap:8px;overflow-x:auto;flex-shrink:0;" class="no-scrollbar">
+    <button onclick="hwFilter('all',this)" class="chip active" id="hw-f-all">Alle</button>
+    <button onclick="hwFilter('open',this)" class="chip" id="hw-f-open">Offen</button>
+    <button onclick="hwFilter('done',this)" class="chip" id="hw-f-done">Erledigt</button>
+  </div>
+  <div class="page-scroll no-scrollbar">
     <div id="hw-list"></div>
     <div id="hw-empty" style="display:none;text-align:center;padding:60px 20px;opacity:0.4;">
-      <i data-lucide="check-circle" style="width:48px;height:48px;margin-bottom:12px;"></i>
-      <div>Keine Hausaufgaben!</div>
+      <i data-lucide="check-circle" style="width:48px;height:48px;margin-bottom:12px;display:block;margin-left:auto;margin-right:auto;"></i>
+      <div style="font-weight:600;">Keine Hausaufgaben!</div>
     </div>
   </div>
-
   <button class="fab" onclick="openHwSheet()">
     <i data-lucide="plus" style="width:24px;height:24px;"></i>
   </button>
 </div>
-
 <script>
 let hwItems = [], hwSubjects = [], hwCurrentFilter = 'all', hwCurrentUser = null;
 
@@ -31,51 +31,84 @@ async function init_homework() {
     API.subjects().catch(() => []),
     API.me().catch(() => null),
   ]);
-  renderHw();
+  renderHwStats(); renderHw();
+}
+
+function renderHwStats() {
+  const today = new Date().toISOString().slice(0,10);
+  const uid = hwCurrentUser && hwCurrentUser.id;
+  const open = hwItems.filter(h => !h.checked_by.includes(uid) && h.due_date >= today).length;
+  const done = hwItems.filter(h => h.checked_by.includes(uid)).length;
+  const sub = document.getElementById('hw-header-sub');
+  if (sub) sub.textContent = open + ' offen · ' + done + ' erledigt';
 }
 
 function hwFilter(f, btn) {
   hwCurrentFilter = f;
   document.querySelectorAll('#page-homework .chip').forEach(c => c.classList.remove('active'));
-  btn.classList.add('active');
-  renderHw();
+  btn.classList.add('active'); renderHw();
+}
+
+function sectionLabel(text) {
+  return '<div class="section-label" style="color:#31111d;">' + text + '</div>';
+}
+
+function hwCard(h, sub, uid, today) {
+  const checked = h.checked_by.includes(uid);
+  const overdue = h.due_date < today && !checked;
+  const bg = sub.color || '#ffd8e4';
+  const d = new Date(h.due_date+'T00:00');
+  const isToday = h.due_date === today;
+  const isTomorrow = h.due_date === new Date(Date.now()+86400000).toISOString().slice(0,10);
+  const dateLabel = isToday ? 'Heute' : isTomorrow ? 'Morgen' : d.toLocaleDateString('de-DE',{weekday:'short',day:'numeric',month:'short'});
+  return '<div style="background:' + bg + ';border-radius:24px;padding:18px;margin-bottom:10px;' + (checked?'opacity:0.5;':'' ) + '">'
+    + '<div style="display:flex;gap:12px;align-items:flex-start;">'
+    + '<div onclick="toggleHw(' + h.id + ')" style="width:28px;height:28px;border-radius:50%;flex-shrink:0;margin-top:1px;cursor:pointer;display:flex;align-items:center;justify-content:center;'
+    + (checked ? 'background:rgba(0,0,0,0.3);' : 'border:2.5px solid rgba(0,0,0,0.25);background:transparent;') + '">'
+    + (checked ? '<i data-lucide="check" style="width:14px;height:14px;color:white;"></i>' : '') + '</div>'
+    + '<div style="flex:1;min-width:0;">'
+    + '<div style="font-weight:700;font-size:0.95rem;' + (checked?'text-decoration:line-through;':'') + '">' + h.description + '</div>'
+    + '<div style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap;">'
+    + '<span style="font-size:0.72rem;font-weight:700;background:rgba(0,0,0,0.1);padding:4px 10px;border-radius:10px;">' + (sub.name||'?') + '</span>'
+    + '<span style="font-size:0.72rem;font-weight:' + (overdue?'700':'500') + ';opacity:0.7;' + (overdue?'color:#b3261e;':'') + '">'
+    + (overdue ? '⚠ Überfällig · ' : '') + dateLabel + '</span>'
+    + '</div></div>'
+    + '<button onclick="deleteHw(' + h.id + ')" style="background:rgba(0,0,0,0.08);border:none;border-radius:10px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;">'
+    + '<i data-lucide="x" style="width:14px;height:14px;"></i></button>'
+    + '</div></div>';
 }
 
 function renderHw() {
   const today = new Date().toISOString().slice(0,10);
-  let items = [...hwItems].sort((a,b) => a.due_date.localeCompare(b.due_date));
-  if (hwCurrentFilter === 'open') items = items.filter(h => !h.checked_by.includes(hwCurrentUser?.id) && h.due_date >= today);
-  const list = document.getElementById('hw-list');
-  if (!items.length) {
-    list.innerHTML = '';
-    document.getElementById('hw-empty').style.display = 'block';
-    return;
-  }
-  document.getElementById('hw-empty').style.display = 'none';
+  const thisWeekEnd = new Date(Date.now() + 6*86400000).toISOString().slice(0,10);
+  const uid = hwCurrentUser && hwCurrentUser.id;
   const subMap = Object.fromEntries(hwSubjects.map(s => [s.id, s]));
-  const uid = hwCurrentUser?.id;
-  list.innerHTML = items.map(h => {
-    const sub = subMap[h.subject_id] || {};
-    const checked = h.checked_by.includes(uid);
-    const overdue = h.due_date < today && !checked;
-    return `
-    <div class="hw-item ${checked?'done':''}" id="hw-${h.id}">
-      <div class="hw-check ${checked?'checked':''}" onclick="toggleHw(${h.id})">
-        ${checked?'<i data-lucide="check" style="width:14px;height:14px;color:white;"></i>':''}
-      </div>
-      <div style="flex:1;">
-        <div style="font-weight:600;${checked?'text-decoration:line-through;':''}">${h.description}</div>
-        <div style="display:flex;gap:8px;margin-top:6px;align-items:center;flex-wrap:wrap;">
-          <span style="background:${sub.color||'#eaddff'};color:${sub.color?'#21005d':'#21005d'};padding:3px 10px;border-radius:8px;font-size:0.75rem;font-weight:600;">${sub.name||'?'}</span>
-          <span style="font-size:0.78rem;opacity:0.6;${overdue?'color:#b3261e;font-weight:600;':''}">${overdue?'Überfällig · ':''} ${new Date(h.due_date+'T00:00').toLocaleDateString('de-DE',{weekday:'short',day:'numeric',month:'short'})}</span>
-        </div>
-      </div>
-      <button onclick="deleteHw(${h.id})" style="background:none;border:none;cursor:pointer;opacity:0.3;padding:4px;flex-shrink:0;">
-        <i data-lucide="trash-2" style="width:16px;height:16px;"></i>
-      </button>
-    </div>`;
-  }).join('');
-  lucide.createIcons();
+  let items = [...hwItems].sort((a,b) => a.due_date.localeCompare(b.due_date));
+  const list = document.getElementById('hw-list');
+
+  if (hwCurrentFilter === 'open') items = items.filter(h => !h.checked_by.includes(uid) && h.due_date >= today);
+  if (hwCurrentFilter === 'done') items = items.filter(h => h.checked_by.includes(uid));
+
+  if (!items.length) { list.innerHTML = ''; document.getElementById('hw-empty').style.display = 'block'; return; }
+  document.getElementById('hw-empty').style.display = 'none';
+
+  if (hwCurrentFilter !== 'done') {
+    const todayItems    = items.filter(h => !h.checked_by.includes(uid) && h.due_date === today);
+    const weekItems     = items.filter(h => !h.checked_by.includes(uid) && h.due_date > today && h.due_date <= thisWeekEnd);
+    const laterItems    = items.filter(h => !h.checked_by.includes(uid) && h.due_date > thisWeekEnd);
+    const overdueItems  = items.filter(h => !h.checked_by.includes(uid) && h.due_date < today);
+    const doneItems     = hwCurrentFilter === 'all' ? items.filter(h => h.checked_by.includes(uid)) : [];
+    let html = '';
+    if (overdueItems.length) { html += sectionLabel('Überfällig'); html += overdueItems.map(h => hwCard(h, subMap[h.subject_id]||{}, uid, today)).join(''); }
+    if (todayItems.length)   { html += sectionLabel('Heute fällig'); html += todayItems.map(h => hwCard(h, subMap[h.subject_id]||{}, uid, today)).join(''); }
+    if (weekItems.length)    { html += sectionLabel('Diese Woche'); html += weekItems.map(h => hwCard(h, subMap[h.subject_id]||{}, uid, today)).join(''); }
+    if (laterItems.length)   { html += sectionLabel('Später'); html += laterItems.map(h => hwCard(h, subMap[h.subject_id]||{}, uid, today)).join(''); }
+    if (doneItems.length)    { html += sectionLabel('Erledigt'); html += doneItems.map(h => hwCard(h, subMap[h.subject_id]||{}, uid, today)).join(''); }
+    list.innerHTML = html;
+  } else {
+    list.innerHTML = items.map(h => hwCard(h, subMap[h.subject_id]||{}, uid, today)).join('');
+  }
+  if (window.lucide) lucide.createIcons();
 }
 
 async function toggleHw(id) {
@@ -83,48 +116,36 @@ async function toggleHw(id) {
     await API.checkHomework(id);
     const idx = hwItems.findIndex(h => h.id === id);
     if (idx >= 0) {
-      const uid = hwCurrentUser?.id;
+      const uid = hwCurrentUser && hwCurrentUser.id;
       const arr = [...(hwItems[idx].checked_by||[])];
-      const i = arr.indexOf(uid);
-      if (i >= 0) arr.splice(i,1); else arr.push(uid);
+      const i = arr.indexOf(uid); if (i>=0) arr.splice(i,1); else arr.push(uid);
       hwItems[idx].checked_by = arr;
     }
-    renderHw();
+    renderHwStats(); renderHw();
   } catch { showToast('Fehler'); }
 }
 
 async function deleteHw(id) {
-  try {
-    await API.deleteHomework(id);
-    hwItems = hwItems.filter(h => h.id !== id);
-    renderHw();
-    showToast('Gelöscht');
-  } catch { showToast('Fehler'); }
+  try { await API.deleteHomework(id); hwItems = hwItems.filter(h=>h.id!==id); renderHwStats(); renderHw(); showToast('Geloescht'); }
+  catch { showToast('Fehler'); }
 }
 
 function openHwSheet() {
-  openSheet(`
-    <div style="font-size:1.1rem;font-weight:700;margin-bottom:20px;">Neue Hausaufgabe</div>
-    <select class="m3-select" id="hw-subject">
-      ${hwSubjects.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}
-    </select>
-    <textarea class="m3-input" id="hw-desc" placeholder="Beschreibung" rows="3" style="resize:none;height:auto;"></textarea>
-    <input class="m3-input" id="hw-due" type="date" value="${new Date(Date.now()+86400000).toISOString().slice(0,10)}">
-    <button class="m3-btn-full" onclick="saveHw()">Speichern</button>
-  `);
+  openSheet('<div style="font-size:1.1rem;font-weight:700;margin-bottom:20px;">Neue Hausaufgabe</div>'
+    + '<select class="m3-select" id="hw-subject">' + hwSubjects.map(s=>'<option value="'+s.id+'">'+s.name+'</option>').join('') + '</select>'
+    + '<textarea class="m3-input" id="hw-desc" placeholder="Beschreibung" rows="3" style="resize:none;height:auto;"></textarea>'
+    + '<input class="m3-input" id="hw-due" type="date" value="' + new Date(Date.now()+86400000).toISOString().slice(0,10) + '">'
+    + '<button class="m3-btn-full" onclick="saveHw()">Speichern</button>');
 }
 
 async function saveHw() {
   const subject_id = parseInt(document.getElementById('hw-subject').value);
   const description = document.getElementById('hw-desc').value.trim();
   const due_date = document.getElementById('hw-due').value;
-  if (!description || !due_date) { showToast('Felder ausfüllen'); return; }
+  if (!description||!due_date) { showToast('Felder ausfullen'); return; }
   try {
-    const hw = await API.createHomework({ subject_id, description, due_date });
-    hwItems.push(hw);
-    closeSheet();
-    renderHw();
-    showToast('Gespeichert');
+    const hw = await API.createHomework({subject_id,description,due_date});
+    hwItems.push(hw); closeSheet(); renderHwStats(); renderHw(); showToast('Gespeichert');
   } catch { showToast('Fehler'); }
 }
 </script>

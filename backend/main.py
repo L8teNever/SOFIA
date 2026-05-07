@@ -43,16 +43,10 @@ if os.path.exists("static"):
 if os.path.exists("uploads"):
     app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
-# Serve frontend SPA — catch-all
+if os.path.exists("pages"):
+    app.mount("/pages", StaticFiles(directory="pages"), name="pages")
+
+# Serve frontend SPA — catch-all returns index.html for all non-API paths
 @app.get("/{full_path:path}", include_in_schema=False)
 async def spa(full_path: str, request: Request):
-    # Pages fetched as partials by the JS router
-    page_path = os.path.join("pages", full_path + ".html")
-    if full_path.startswith("pages/") and os.path.exists(page_path.replace("pages/", "", 1)):
-        return FileResponse(page_path.replace("pages/", "", 1))
-    # Direct page partial requests
-    if full_path and not full_path.startswith("api/"):
-        partial = os.path.join("pages", full_path.lstrip("/") + ".html")
-        if os.path.exists(partial):
-            return FileResponse(partial)
     return FileResponse("pages/index.html")
