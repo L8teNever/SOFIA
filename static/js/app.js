@@ -14,6 +14,14 @@ function showToast(msg, duration = 3000) {
   }, duration);
 }
 
+function runScripts(container) {
+  container.querySelectorAll('script').forEach(function(old) {
+    var s = document.createElement('script');
+    s.textContent = old.textContent;
+    old.parentNode.replaceChild(s, old);
+  });
+}
+
 async function openPage(name, triggerEl) {
   if (currentPage === name) return;
   let ox = '50%', oy = '50%';
@@ -35,6 +43,7 @@ async function openPage(name, triggerEl) {
   if (existing) existing.remove();
   const container = document.getElementById('page-container');
   container.innerHTML = html;
+  runScripts(container);
   const page = container.querySelector('.page') || container.firstElementChild;
   if (!page) return;
   page.style.setProperty('--ox', ox);
