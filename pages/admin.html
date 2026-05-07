@@ -13,10 +13,11 @@
 
     <!-- Tabs -->
     <div style="column-span:all;" class="full-span">
-      <div class="view-toggle" style="margin-bottom:16px;">
+      <div class="view-toggle" style="margin-bottom:16px;flex-wrap:wrap;">
         <button class="active" onclick="adminTab('users',this)">Nutzer</button>
         <button onclick="adminTab('classes',this)">Klassen</button>
         <button onclick="adminTab('subjects',this)">Fächer</button>
+        <button onclick="adminTab('untis',this)">Untis</button>
         <button onclick="adminTab('push',this)">Push</button>
       </div>
     </div>
@@ -36,6 +37,15 @@
     <div id="tab-subjects" style="display:none;">
       <div id="admin-subjects-list"></div>
       <button class="m3-btn-tonal" style="width:100%;margin-top:8px;" onclick="openNewSubjectSheet()">+ Neues Fach</button>
+    </div>
+
+    <!-- Untis tab -->
+    <div id="tab-untis" style="display:none;">
+      <div class="m3-card-tonal" style="background:#ffdec1;color:#442b00;margin-bottom:12px;">
+        <div style="font-weight:700;margin-bottom:6px;">WebUntis Stundenplan</div>
+        <div style="font-size:0.82rem;opacity:0.75;line-height:1.5;">Trage pro Klasse die WebUntis-Zugangsdaten ein. Der Stundenplan wird dann automatisch geladen. Die Daten findest du in deinem WebUntis-Konto unter <strong>Einstellungen → API-Zugang</strong>.</div>
+      </div>
+      <div id="untis-classes-list"></div>
     </div>
 
     <!-- Push tab -->
@@ -88,11 +98,51 @@ async function init_admin() {
 }
 
 function adminTab(tab, btn) {
-  ['users','classes','subjects','push'].forEach(t => {
+  ['users','classes','subjects','untis','push'].forEach(t => {
     document.getElementById('tab-'+t).style.display = t===tab?'block':'none';
   });
   document.querySelectorAll('#page-admin .view-toggle button').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
+  if (tab === 'untis') renderUntisTab();
+}
+
+async function renderUntisTab() {
+  const list = document.getElementById('untis-classes-list');
+  if (!adminClasses.length) {
+    list.innerHTML = '<div class="m3-card" style="opacity:0.5;text-align:center;">Keine Klassen vorhanden</div>';
+    return;
+  }
+  list.innerHTML = adminClasses.map(c => `
+    <div class="m3-card" style="margin-bottom:10px;">
+      <div style="display:flex;align-items:center;gap:14px;">
+        <div style="width:44px;height:44px;background:#ffdec1;border-radius:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+          <i data-lucide="calendar-days" style="width:20px;height:20px;color:#442b00;"></i>
+        </div>
+        <div style="flex:1;">
+          <div style="font-weight:700;">${c.name}</div>
+          <div style="font-size:0.75rem;opacity:0.5;" id="untis-status-${c.id}">Status wird geladen…</div>
+        </div>
+        <button onclick="openUntisSheet(${c.id})" style="background:#ffdec1;color:#442b00;border:none;border-radius:14px;padding:10px 16px;font-size:0.82rem;font-weight:700;cursor:pointer;font-family:inherit;">
+          Konfigurieren
+        </button>
+      </div>
+    </div>`).join('');
+  lucide.createIcons();
+  // Load status for each class
+  for (const c of adminClasses) {
+    API.getUntis(c.id).then(d => {
+      const el = document.getElementById('untis-status-' + c.id);
+      if (!el) return;
+      if (d && d.url) {
+        el.innerHTML = '<span style="color:#146c2e;font-weight:600;">✓ Konfiguriert</span> · ' + d.url;
+      } else {
+        el.innerHTML = '<span style="color:#b3261e;">Nicht konfiguriert</span>';
+      }
+    }).catch(() => {
+      const el = document.getElementById('untis-status-' + c.id);
+      if (el) el.innerHTML = '<span style="color:#b3261e;">Nicht konfiguriert</span>';
+    });
+  }
 }
 
 function renderAdminUsers() {

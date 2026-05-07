@@ -185,6 +185,8 @@ function runIntro() {
   }, charIdx * 60 + 700);
 }
 
+const KNOWN_PAGES = ['calendar','homework','grades','timetable','chat','drive','quickshare','settings','admin','notifications'];
+
 function showApp() {
   document.getElementById('app').classList.add('ready');
   document.querySelectorAll('.widget').forEach(function(w, i) {
@@ -192,6 +194,11 @@ function showApp() {
   });
   if (window.lucide) lucide.createIcons();
   loadDashboard();
+  // Auto-open page if URL path matches a known page (e.g. navigating to /homework directly)
+  const urlPage = window.location.pathname.replace(/^\//, '').split('/')[0];
+  if (urlPage && KNOWN_PAGES.includes(urlPage)) {
+    setTimeout(function() { openPage(urlPage); }, 400);
+  }
 }
 
 async function boot() {
