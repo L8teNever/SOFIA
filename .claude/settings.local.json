@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\Docker\\\\Pictures\\\\SOFIA\" -Force | ForEach-Object { $_.FullName })",
+      "mcp__plugin_everything-claude-code_github__search_users",
+      "mcp__plugin_everything-claude-code_github__create_repository"
+    ]
+  }
+}

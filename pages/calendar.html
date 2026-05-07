@@ -1,0 +1,183 @@
+﻿<div class="page" id="page-calendar" style="background:#faf6ff;">
+  <div class="page-header">
+    <button class="back-btn"><i data-lucide="arrow-left" style="width:22px;height:22px;"></i></button>
+    <span class="page-title">Kalender</span>
+    <div style="flex:1;"></div>
+    <div class="view-toggle">
+      <button class="active" onclick="calView('month',this)">Monat</button>
+      <button onclick="calView('list',this)">Liste</button>
+    </div>
+  </div>
+
+  <div class="page-scroll" style="column-count:unset!important;">
+    <!-- Mini calendar -->
+    <div class="m3-card" id="cal-card" style="break-inside:avoid;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+        <button onclick="calNav(-1)" style="background:#f3edf7;border:none;border-radius:12px;width:36px;height:36px;display:flex;align-items:center;justify-content:center;cursor:pointer;">
+          <i data-lucide="chevron-left" style="width:18px;height:18px;"></i>
+        </button>
+        <span id="cal-month-label" style="font-weight:700;font-size:1rem;"></span>
+        <button onclick="calNav(1)" style="background:#f3edf7;border:none;border-radius:12px;width:36px;height:36px;display:flex;align-items:center;justify-content:center;cursor:pointer;">
+          <i data-lucide="chevron-right" style="width:18px;height:18px;"></i>
+        </button>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:8px;">
+        <div style="text-align:center;font-size:0.7rem;font-weight:700;opacity:0.5;">Mo</div>
+        <div style="text-align:center;font-size:0.7rem;font-weight:700;opacity:0.5;">Di</div>
+        <div style="text-align:center;font-size:0.7rem;font-weight:700;opacity:0.5;">Mi</div>
+        <div style="text-align:center;font-size:0.7rem;font-weight:700;opacity:0.5;">Do</div>
+        <div style="text-align:center;font-size:0.7rem;font-weight:700;opacity:0.5;">Fr</div>
+        <div style="text-align:center;font-size:0.7rem;font-weight:700;opacity:0.5;">Sa</div>
+        <div style="text-align:center;font-size:0.7rem;font-weight:700;opacity:0.5;">So</div>
+      </div>
+      <div id="cal-grid" style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;"></div>
+    </div>
+
+    <!-- Event list -->
+    <div id="cal-events-section">
+      <div class="section-label">Kommende Termine</div>
+      <div id="cal-events-list"></div>
+      <div id="cal-no-events" style="display:none;text-align:center;padding:40px 20px;opacity:0.4;font-size:0.9rem;">Keine Termine in diesem Monat</div>
+    </div>
+  </div>
+
+  <!-- FAB -->
+  <button class="fab" onclick="openNewEventSheet()">
+    <i data-lucide="plus" style="width:24px;height:24px;"></i>
+  </button>
+</div>
+
+<script>
+let calYear = new Date().getFullYear();
+let calMonth = new Date().getMonth();
+let calEvents = [];
+
+async function init_calendar() {
+  await loadCalEvents();
+  renderCal();
+}
+
+async function loadCalEvents() {
+  const month = `${calYear}-${String(calMonth+1).padStart(2,'0')}`;
+  calEvents = await API.events(month).catch(() => []);
+}
+
+function renderCal() {
+  const months = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+  document.getElementById('cal-month-label').textContent = `${months[calMonth]} ${calYear}`;
+  const grid = document.getElementById('cal-grid');
+  grid.innerHTML = '';
+  const first = new Date(calYear, calMonth, 1);
+  const startDay = (first.getDay() + 6) % 7; // 0=Mon
+  const daysInMonth = new Date(calYear, calMonth+1, 0).getDate();
+  const today = new Date().toISOString().slice(0,10);
+  const eventDates = new Set(calEvents.map(e => e.date.slice(0,10)));
+
+  // Prev month filler
+  const prevDays = new Date(calYear, calMonth, 0).getDate();
+  for (let i = startDay - 1; i >= 0; i--) {
+    const d = document.createElement('div');
+    d.className = 'cal-day muted';
+    d.textContent = prevDays - i;
+    grid.appendChild(d);
+  }
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const el = document.createElement('div');
+    el.className = 'cal-day' + (dateStr === today ? ' today' : '') + (eventDates.has(dateStr) ? ' has-event' : '');
+    el.textContent = d;
+    el.onclick = () => showDayEvents(dateStr);
+    grid.appendChild(el);
+  }
+
+  renderEventList();
+}
+
+function renderEventList() {
+  const list = document.getElementById('cal-events-list');
+  const today = new Date().toISOString().slice(0,10);
+  const upcoming = calEvents.filter(e => e.date >= today).sort((a,b) => a.date.localeCompare(b.date));
+  if (!upcoming.length) {
+    list.innerHTML = '';
+    document.getElementById('cal-no-events').style.display = 'block';
+    return;
+  }
+  document.getElementById('cal-no-events').style.display = 'none';
+  const typeColors = { exam:'#ffd8e4', trip:'#c4eed0', other:'#eaddff', personal:'#d3e3fd' };
+  const typeLabel = { exam:'Klassenarbeit', trip:'Ausflug', other:'Sonstiges', personal:'Persönlich' };
+  list.innerHTML = upcoming.map(e => `
+    <div class="m3-card" style="display:flex;gap:14px;align-items:flex-start;">
+      <div style="background:${typeColors[e.event_type]||'#eaddff'};border-radius:14px;padding:10px;flex-shrink:0;text-align:center;min-width:48px;">
+        <div style="font-size:1.1rem;font-weight:700;">${new Date(e.date+'T00:00').getDate()}</div>
+        <div style="font-size:0.65rem;opacity:0.7;">${new Date(e.date+'T00:00').toLocaleDateString('de-DE',{month:'short'})}</div>
+      </div>
+      <div style="flex:1;">
+        <div style="font-weight:700;margin-bottom:2px;">${e.title}</div>
+        <div style="font-size:0.8rem;opacity:0.6;">${typeLabel[e.event_type]||''} ${e.time?'· '+e.time:''}</div>
+      </div>
+      <button onclick="delEvent(${e.id},this)" style="background:none;border:none;cursor:pointer;opacity:0.4;padding:4px;">
+        <i data-lucide="trash-2" style="width:16px;height:16px;"></i>
+      </button>
+    </div>`).join('');
+  lucide.createIcons();
+}
+
+async function calNav(dir) {
+  calMonth += dir;
+  if (calMonth < 0) { calMonth = 11; calYear--; }
+  if (calMonth > 11) { calMonth = 0; calYear++; }
+  await loadCalEvents();
+  renderCal();
+}
+
+function calView(mode, btn) {
+  document.querySelectorAll('.view-toggle button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+function showDayEvents(date) {
+  const dayEvts = calEvents.filter(e => e.date.slice(0,10) === date);
+  if (!dayEvts.length) { openNewEventSheet(date); return; }
+  // show in sheet
+}
+
+function openNewEventSheet(defaultDate) {
+  const today = defaultDate || new Date().toISOString().slice(0,10);
+  openSheet(`
+    <div style="font-size:1.1rem;font-weight:700;margin-bottom:20px;">Neuer Termin</div>
+    <input class="m3-input" id="ev-title" placeholder="Titel">
+    <input class="m3-input" id="ev-date" type="date" value="${today}">
+    <input class="m3-input" id="ev-time" type="time" placeholder="Uhrzeit (optional)">
+    <select class="m3-select" id="ev-type">
+      <option value="other">Sonstiges</option>
+      <option value="exam">Klassenarbeit</option>
+      <option value="trip">Ausflug</option>
+      <option value="personal">Persönlich</option>
+    </select>
+    <button class="m3-btn-full" onclick="saveEvent()">Speichern</button>
+  `);
+}
+
+async function saveEvent() {
+  const title = document.getElementById('ev-title').value.trim();
+  const date = document.getElementById('ev-date').value;
+  if (!title || !date) { showToast('Titel und Datum erforderlich'); return; }
+  try {
+    await API.createEvent({ title, date, time: document.getElementById('ev-time').value || null, event_type: document.getElementById('ev-type').value });
+    closeSheet();
+    await loadCalEvents();
+    renderCal();
+    showToast('Termin gespeichert');
+  } catch { showToast('Fehler beim Speichern'); }
+}
+
+async function delEvent(id, btn) {
+  try {
+    await API.deleteEvent(id);
+    await loadCalEvents();
+    renderCal();
+    showToast('Termin gelöscht');
+  } catch { showToast('Fehler'); }
+}
+</script>

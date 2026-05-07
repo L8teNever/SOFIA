@@ -1,0 +1,125 @@
+﻿<div class="page" id="page-grades" style="background:#f4f8ff;">
+  <div class="page-header">
+    <button class="back-btn"><i data-lucide="arrow-left" style="width:22px;height:22px;"></i></button>
+    <span class="page-title">Noten</span>
+    <div style="flex:1;"></div>
+    <div id="grades-avg-badge" style="background:#d3e3fd;color:#041e49;padding:8px 16px;border-radius:16px;font-weight:700;font-size:0.95rem;">Ø –</div>
+  </div>
+
+  <div class="page-scroll">
+    <div id="grades-by-subject"></div>
+    <div id="grades-empty" style="display:none;text-align:center;padding:60px 20px;opacity:0.4;">
+      <i data-lucide="bar-chart-2" style="width:48px;height:48px;margin-bottom:12px;"></i>
+      <div>Noch keine Noten eingetragen</div>
+    </div>
+  </div>
+
+  <button class="fab" onclick="openGradeSheet()">
+    <i data-lucide="plus" style="width:24px;height:24px;"></i>
+  </button>
+</div>
+
+<script>
+let gradeItems = [], gradeSubjects = [];
+
+async function init_grades() {
+  [gradeItems, gradeSubjects] = await Promise.all([
+    API.grades().catch(() => []),
+    API.subjects().catch(() => []),
+  ]);
+  renderGrades();
+}
+
+function gradeColor(v) {
+  if (v <= 1.5) return '#c4eed0';
+  if (v <= 2.5) return '#d3e3fd';
+  if (v <= 3.5) return '#eaddff';
+  if (v <= 4.5) return '#ffdec1';
+  return '#f9dedc';
+}
+
+function renderGrades() {
+  const subMap = Object.fromEntries(gradeSubjects.map(s => [s.id, s]));
+  const bySubject = {};
+  gradeItems.forEach(g => {
+    if (!bySubject[g.subject_id]) bySubject[g.subject_id] = [];
+    bySubject[g.subject_id].push(g);
+  });
+
+  if (!gradeItems.length) {
+    document.getElementById('grades-by-subject').innerHTML = '';
+    document.getElementById('grades-empty').style.display = 'block';
+    document.getElementById('grades-avg-badge').textContent = 'Ø –';
+    return;
+  }
+  document.getElementById('grades-empty').style.display = 'none';
+
+  const total = gradeItems.reduce((s,g) => s+g.value,0) / gradeItems.length;
+  document.getElementById('grades-avg-badge').textContent = 'Ø ' + total.toFixed(1);
+
+  const container = document.getElementById('grades-by-subject');
+  container.innerHTML = Object.entries(bySubject).map(([sid, grades]) => {
+    const sub = subMap[sid] || {name:'Unbekannt',color:'#eaddff'};
+    const avg = grades.reduce((s,g)=>s+g.value,0)/grades.length;
+    return `
+    <div class="m3-card">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">
+        <div style="width:10px;height:10px;border-radius:50%;background:${sub.color||'#6750a4'};flex-shrink:0;"></div>
+        <span style="font-weight:700;flex:1;">${sub.name}</span>
+        <span style="background:#d3e3fd;color:#041e49;padding:6px 12px;border-radius:12px;font-weight:700;">Ø ${avg.toFixed(1)}</span>
+      </div>
+      ${grades.map(g => `
+        <div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-top:1px solid rgba(0,0,0,0.04);">
+          <div class="grade-badge" style="background:${gradeColor(g.value)};color:#1c1b1f;">${g.value % 1 === 0 ? g.value : g.value.toFixed(1)}</div>
+          <div style="flex:1;">
+            <div style="font-weight:500;">${g.label||'Note'}</div>
+            ${g.date?`<div style="font-size:0.75rem;opacity:0.5;">${new Date(g.date+'T00:00').toLocaleDateString('de-DE')}</div>`:''}
+          </div>
+          <button onclick="deleteGrade(${g.id})" style="background:none;border:none;cursor:pointer;opacity:0.3;padding:4px;">
+            <i data-lucide="trash-2" style="width:15px;height:15px;"></i>
+          </button>
+        </div>`).join('')}
+    </div>`;
+  }).join('');
+  lucide.createIcons();
+}
+
+async function deleteGrade(id) {
+  await API.deleteGrade(id).catch(() => { showToast('Fehler'); return; });
+  gradeItems = gradeItems.filter(g => g.id !== id);
+  renderGrades();
+  showToast('Note gelöscht');
+}
+
+function openGradeSheet() {
+  openSheet(`
+    <div style="font-size:1.1rem;font-weight:700;margin-bottom:20px;">Note eintragen</div>
+    <select class="m3-select" id="g-subject">
+      ${gradeSubjects.map(s=>`<option value="${s.id}">${s.name}</option>`).join('')}
+    </select>
+    <input class="m3-input" id="g-value" type="number" step="0.5" min="1" max="6" placeholder="Note (1–6)">
+    <input class="m3-input" id="g-label" placeholder="Bezeichnung (z.B. Mathearbeit 1)">
+    <input class="m3-input" id="g-date" type="date" value="${new Date().toISOString().slice(0,10)}">
+    <textarea class="m3-input" id="g-note" placeholder="Notiz (optional)" rows="2" style="resize:none;height:auto;"></textarea>
+    <button class="m3-btn-full" onclick="saveGrade()">Speichern</button>
+  `);
+}
+
+async function saveGrade() {
+  const value = parseFloat(document.getElementById('g-value').value);
+  const subject_id = parseInt(document.getElementById('g-subject').value);
+  if (!value || value < 1 || value > 6) { showToast('Gültige Note eingeben (1–6)'); return; }
+  try {
+    const g = await API.createGrade({
+      subject_id, value,
+      label: document.getElementById('g-label').value || null,
+      date: document.getElementById('g-date').value || null,
+      note: document.getElementById('g-note').value || null,
+    });
+    gradeItems.unshift(g);
+    closeSheet();
+    renderGrades();
+    showToast('Note gespeichert');
+  } catch { showToast('Fehler'); }
+}
+</script>

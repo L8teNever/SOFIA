@@ -1,0 +1,13 @@
+﻿__pycache__/
+*.pyc
+*.pyo
+.env
+.git/
+.claude/
+sofia.db
+uploads/
+data/
+*.egg-info/
+.venv/
+venv/
+node_modules/

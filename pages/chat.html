@@ -1,0 +1,225 @@
+﻿<div class="page" id="page-chat" style="background:#f4fbf5;">
+  <div class="page-header">
+    <button class="back-btn"><i data-lucide="arrow-left" style="width:22px;height:22px;"></i></button>
+    <span class="page-title">Chat</span>
+    <div style="flex:1;"></div>
+    <button onclick="openNewRoomSheet()" style="background:#c4eed0;border:none;border-radius:14px;padding:10px 16px;font-weight:600;cursor:pointer;font-size:0.85rem;font-family:inherit;">
+      + Gruppe
+    </button>
+  </div>
+
+  <div class="page-scroll" style="column-count:unset!important;padding-bottom:20px;">
+    <div id="chat-rooms-list"></div>
+    <div id="chat-empty" style="display:none;text-align:center;padding:60px 20px;opacity:0.4;">
+      <i data-lucide="message-circle" style="width:48px;height:48px;margin-bottom:12px;"></i>
+      <div>Noch keine Chats</div>
+    </div>
+  </div>
+</div>
+
+<!-- Chat Room View (injected on room open) -->
+<template id="tpl-chat-room">
+  <div class="page" id="page-chat-room" style="background:#f4fbf5;">
+    <div class="page-header" style="padding-bottom:12px;">
+      <button class="back-btn" onclick="closeChatRoom()"><i data-lucide="arrow-left" style="width:22px;height:22px;"></i></button>
+      <div class="avatar" id="room-avatar" style="background:#6750a4;width:36px;height:36px;font-size:0.8rem;"></div>
+      <span id="room-title" style="font-weight:700;font-size:1.1rem;"></span>
+    </div>
+    <div id="chat-messages" style="flex:1;overflow-y:auto;padding:0 16px 80px 16px;display:flex;flex-direction:column;"></div>
+    <div class="input-bar">
+      <button onclick="startRecording()" id="rec-btn" style="background:none;border:none;cursor:pointer;color:#49454f;padding:4px;">
+        <i data-lucide="mic" style="width:20px;height:20px;"></i>
+      </button>
+      <input id="chat-input" placeholder="Nachricht…" onkeydown="if(event.key==='Enter')sendMsg()">
+      <label style="cursor:pointer;padding:4px;color:#49454f;">
+        <i data-lucide="paperclip" style="width:20px;height:20px;"></i>
+        <input type="file" style="display:none;" onchange="sendFile(this.files[0])">
+      </label>
+      <button class="send-btn" onclick="sendMsg()">
+        <i data-lucide="send" style="width:18px;height:18px;"></i>
+      </button>
+    </div>
+  </div>
+</template>
+
+<script>
+let chatRooms = [], chatCurrentUser = null, chatClassUsers = [], activeRoomId = null, chatWs = null;
+
+async function init_chat() {
+  [chatRooms, chatCurrentUser, chatClassUsers] = await Promise.all([
+    API.rooms().catch(() => []),
+    API.me().catch(() => null),
+    API.classUsers().catch(() => []),
+  ]);
+  renderRooms();
+}
+
+function renderRooms() {
+  if (!chatRooms.length) {
+    document.getElementById('chat-empty').style.display = 'block';
+    return;
+  }
+  document.getElementById('chat-empty').style.display = 'none';
+  const userMap = Object.fromEntries(chatClassUsers.map(u=>[u.id, u]));
+  const uid = chatCurrentUser?.id;
+  document.getElementById('chat-rooms-list').innerHTML = chatRooms.map(r => {
+    const other = r.member_ids.find(id => id !== uid);
+    const name = r.name || (other ? (userMap[other]?.display_name || userMap[other]?.email?.split('@')[0] || '?') : 'Gruppe');
+    const initials = name.slice(0,2).toUpperCase();
+    const colors = ['#c4eed0','#d3e3fd','#ffd8e4','#eaddff','#ffdec1'];
+    const color = colors[r.id % colors.length];
+    return `
+    <div onclick="openRoom(${r.id},'${name}')" style="display:flex;gap:14px;align-items:center;padding:14px;background:white;border-radius:20px;margin-bottom:8px;cursor:pointer;border:1px solid rgba(0,0,0,0.04);">
+      <div class="avatar" style="background:${color};color:#1c1b1f;">${initials}</div>
+      <div style="flex:1;">
+        <div style="font-weight:600;">${name}</div>
+        <div style="font-size:0.78rem;opacity:0.5;">${r.is_group?'Gruppe':'Direktnachricht'}</div>
+      </div>
+      <i data-lucide="chevron-right" style="width:18px;height:18px;opacity:0.3;"></i>
+    </div>`;
+  }).join('');
+  lucide.createIcons();
+}
+
+async function openRoom(roomId, roomName) {
+  activeRoomId = roomId;
+  const tpl = document.getElementById('tpl-chat-room').content.cloneNode(true);
+  document.body.appendChild(tpl);
+  const roomPage = document.getElementById('page-chat-room');
+  roomPage.style.setProperty('--ox','50%');
+  roomPage.style.setProperty('--oy','50%');
+  requestAnimationFrame(() => requestAnimationFrame(() => roomPage.classList.add('active')));
+  document.getElementById('room-title').textContent = roomName;
+  document.getElementById('room-avatar').textContent = roomName.slice(0,2).toUpperCase();
+  lucide.createIcons();
+
+  const msgs = await API.messages(roomId).catch(() => []);
+  renderMessages(msgs);
+  connectWs(roomId);
+}
+
+function renderMessages(msgs) {
+  const uid = chatCurrentUser?.id;
+  const container = document.getElementById('chat-messages');
+  const userMap = Object.fromEntries(chatClassUsers.map(u=>[u.id,u]));
+  container.innerHTML = msgs.map(m => {
+    const isMe = m.sender_id === uid;
+    const sender = userMap[m.sender_id];
+    const time = new Date(m.created_at).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
+    let content = '';
+    if (m.file_type === 'image' && m.file_url) {
+      content = `<img src="${m.file_url}" style="max-width:200px;border-radius:12px;">`;
+    } else if (m.file_type === 'audio' && m.file_url) {
+      content = `<audio controls src="${m.file_url}" style="max-width:220px;"></audio>`;
+    } else {
+      content = m.content || '';
+    }
+    return `
+    ${!isMe?`<div style="font-size:0.7rem;opacity:0.5;margin-bottom:2px;padding-left:4px;">${sender?.display_name||sender?.email?.split('@')[0]||'?'}</div>`:''}
+    <div class="bubble ${isMe?'me':'them'}">${content}</div>
+    <div class="bubble-meta" style="text-align:${isMe?'right':'left'};">${time}</div>`;
+  }).join('');
+  container.scrollTop = container.scrollHeight;
+}
+
+function connectWs(roomId) {
+  if (chatWs) chatWs.close();
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  chatWs = new WebSocket(`${proto}://${location.host}/api/v1/chat/ws/${roomId}`);
+  chatWs.onmessage = e => {
+    const msg = JSON.parse(e.data);
+    const container = document.getElementById('chat-messages');
+    if (!container) return;
+    const isMe = msg.sender_id === chatCurrentUser?.id;
+    const time = new Date(msg.created_at).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
+    const div = document.createElement('div');
+    div.className = `bubble ${isMe?'me':'them'}`;
+    div.textContent = msg.content || '';
+    container.appendChild(div);
+    container.scrollTop = container.scrollHeight;
+  };
+}
+
+async function sendMsg() {
+  const input = document.getElementById('chat-input');
+  const text = input.value.trim();
+  if (!text || !chatWs) return;
+  chatWs.send(JSON.stringify({ sender_id: chatCurrentUser?.id, content: text, file_type: 'text' }));
+  input.value = '';
+}
+
+async function sendFile(file) {
+  if (!file) return;
+  const form = new FormData();
+  form.append('file', file);
+  form.append('visibility', 'all');
+  form.append('expires_minutes', '120');
+  try {
+    const uploaded = await API.uploadFile(form);
+    if (chatWs) {
+      chatWs.send(JSON.stringify({
+        sender_id: chatCurrentUser?.id,
+        file_url: `/api/v1/files/download/${uploaded.id}`,
+        file_type: file.type.startsWith('image') ? 'image' : 'file',
+      }));
+    }
+  } catch { showToast('Upload fehlgeschlagen'); }
+}
+
+let mediaRecorder, audioChunks = [];
+async function startRecording() {
+  if (mediaRecorder?.state === 'recording') {
+    mediaRecorder.stop();
+    document.getElementById('rec-btn').style.color = '';
+    return;
+  }
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  mediaRecorder = new MediaRecorder(stream);
+  audioChunks = [];
+  mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+  mediaRecorder.onstop = async () => {
+    stream.getTracks().forEach(t => t.stop());
+    const blob = new Blob(audioChunks, { type: 'audio/webm' });
+    const file = new File([blob], 'voice.webm', { type: 'audio/webm' });
+    await sendFile(file);
+  };
+  mediaRecorder.start();
+  document.getElementById('rec-btn').style.color = '#b3261e';
+}
+
+function closeChatRoom() {
+  if (chatWs) { chatWs.close(); chatWs = null; }
+  activeRoomId = null;
+  const page = document.getElementById('page-chat-room');
+  if (page) { page.classList.remove('active'); page.classList.add('closing'); setTimeout(() => page.remove(), 600); }
+}
+
+function openNewRoomSheet() {
+  openSheet(`
+    <div style="font-size:1.1rem;font-weight:700;margin-bottom:20px;">Neue Gruppe</div>
+    <input class="m3-input" id="room-name" placeholder="Gruppenname">
+    <div style="font-size:0.8rem;font-weight:700;opacity:0.5;margin-bottom:10px;">MITGLIEDER</div>
+    <div id="room-members" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;">
+      ${chatClassUsers.filter(u=>u.id!==chatCurrentUser?.id).map(u=>`
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+          <input type="checkbox" value="${u.id}">
+          <span>${u.display_name||u.email.split('@')[0]}</span>
+        </label>`).join('')}
+    </div>
+    <button class="m3-btn-full" onclick="createRoom()">Gruppe erstellen</button>
+  `);
+}
+
+async function createRoom() {
+  const name = document.getElementById('room-name').value.trim();
+  const checked = [...document.querySelectorAll('#room-members input:checked')].map(i=>parseInt(i.value));
+  const member_ids = [...checked, chatCurrentUser?.id];
+  try {
+    const room = await API.createRoom({ name, is_group: true, member_ids });
+    chatRooms.push(room);
+    closeSheet();
+    renderRooms();
+    showToast('Gruppe erstellt');
+  } catch { showToast('Fehler'); }
+}
+</script>

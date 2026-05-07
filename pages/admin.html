@@ -1,0 +1,274 @@
+﻿<div class="page" id="page-admin" style="background:#f5f3f9;">
+  <div class="page-header">
+    <button class="back-btn"><i data-lucide="arrow-left" style="width:22px;height:22px;"></i></button>
+    <span class="page-title">Admin</span>
+    <div style="flex:1;"></div>
+    <div id="admin-role-badge" style="background:#25232a;color:white;padding:6px 14px;border-radius:12px;font-size:0.8rem;font-weight:600;"></div>
+  </div>
+
+  <div class="page-scroll">
+    <!-- Stats -->
+    <div id="admin-stats-row" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:4px;column-span:all;">
+    </div>
+
+    <!-- Tabs -->
+    <div style="column-span:all;" class="full-span">
+      <div class="view-toggle" style="margin-bottom:16px;">
+        <button class="active" onclick="adminTab('users',this)">Nutzer</button>
+        <button onclick="adminTab('classes',this)">Klassen</button>
+        <button onclick="adminTab('subjects',this)">Fächer</button>
+        <button onclick="adminTab('push',this)">Push</button>
+      </div>
+    </div>
+
+    <!-- Users tab -->
+    <div id="tab-users">
+      <div id="admin-users-list"></div>
+    </div>
+
+    <!-- Classes tab -->
+    <div id="tab-classes" style="display:none;">
+      <div id="admin-classes-list"></div>
+      <button class="m3-btn-tonal" style="width:100%;margin-top:8px;" onclick="openNewClassSheet()">+ Neue Klasse</button>
+    </div>
+
+    <!-- Subjects tab -->
+    <div id="tab-subjects" style="display:none;">
+      <div id="admin-subjects-list"></div>
+      <button class="m3-btn-tonal" style="width:100%;margin-top:8px;" onclick="openNewSubjectSheet()">+ Neues Fach</button>
+    </div>
+
+    <!-- Push tab -->
+    <div id="tab-push" style="display:none;" class="m3-card">
+      <div style="font-weight:700;margin-bottom:12px;">Push-Benachrichtigung senden</div>
+      <input class="m3-input" id="push-title" placeholder="Titel">
+      <textarea class="m3-input" id="push-body" placeholder="Nachricht" rows="3" style="resize:none;height:auto;"></textarea>
+      <select class="m3-select" id="push-target">
+        <option value="class">Meine Klasse</option>
+        <option value="all">Alle</option>
+      </select>
+      <button class="m3-btn-full" onclick="sendAdminPush()">Senden</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let adminUsers=[], adminClasses=[], adminSubjects=[], adminMe=null;
+
+async function init_admin() {
+  adminMe = await API.me().catch(()=>null);
+  if (!adminMe) return;
+  const isSuperAdmin = adminMe.role === 'super_admin';
+  document.getElementById('admin-role-badge').textContent = isSuperAdmin ? 'Super-Admin' : 'Admin';
+
+  const tasks = [
+    API.classUsers().catch(()=>[]),
+    API.classes().catch(()=>[]),
+    API.subjects().catch(()=>[]),
+  ];
+  if (isSuperAdmin) tasks[0] = API.users().catch(()=>[]);
+  [adminUsers, adminClasses, adminSubjects] = await Promise.all(tasks);
+
+  if (isSuperAdmin) {
+    const stats = await API.adminStats().catch(()=>({users:0,classes:0}));
+    document.getElementById('admin-stats-row').innerHTML = `
+      <div class="m3-card-tonal" style="background:#eaddff;color:#21005d;text-align:center;">
+        <div style="font-size:1.8rem;font-weight:700;">${stats.users}</div>
+        <div style="font-size:0.8rem;opacity:0.7;">Nutzer</div>
+      </div>
+      <div class="m3-card-tonal" style="background:#c4eed0;color:#072711;text-align:center;">
+        <div style="font-size:1.8rem;font-weight:700;">${stats.classes}</div>
+        <div style="font-size:0.8rem;opacity:0.7;">Klassen</div>
+      </div>`;
+  }
+
+  renderAdminUsers();
+  renderAdminClasses();
+  renderAdminSubjects();
+}
+
+function adminTab(tab, btn) {
+  ['users','classes','subjects','push'].forEach(t => {
+    document.getElementById('tab-'+t).style.display = t===tab?'block':'none';
+  });
+  document.querySelectorAll('#page-admin .view-toggle button').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+function renderAdminUsers() {
+  const roleLabel = { student:'Schüler', admin:'Admin', super_admin:'Super-Admin' };
+  const classMap = Object.fromEntries(adminClasses.map(c=>[c.id,c]));
+  document.getElementById('admin-users-list').innerHTML = adminUsers.map(u => `
+    <div class="m3-card" style="padding:14px;margin-bottom:8px;">
+      <div style="display:flex;align-items:center;gap:12px;">
+        <div class="avatar" style="background:#6750a4;">${(u.display_name||u.email).slice(0,2).toUpperCase()}</div>
+        <div style="flex:1;">
+          <div style="font-weight:600;">${u.display_name||u.email.split('@')[0]}</div>
+          <div style="font-size:0.75rem;opacity:0.6;">${u.email}</div>
+          <div style="font-size:0.72rem;margin-top:4px;display:flex;gap:6px;">
+            <span style="background:#eaddff;color:#21005d;padding:2px 8px;border-radius:8px;">${roleLabel[u.role]||u.role}</span>
+            ${u.class_id?`<span style="background:#d3e3fd;color:#041e49;padding:2px 8px;border-radius:8px;">${classMap[u.class_id]?.name||'?'}</span>`:''}
+          </div>
+        </div>
+        <button onclick="openEditUserSheet(${u.id})" style="background:#f3edf7;border:none;border-radius:12px;width:36px;height:36px;display:flex;align-items:center;justify-content:center;cursor:pointer;">
+          <i data-lucide="edit-2" style="width:16px;height:16px;"></i>
+        </button>
+      </div>
+    </div>`).join('');
+  lucide.createIcons();
+}
+
+function renderAdminClasses() {
+  document.getElementById('admin-classes-list').innerHTML = adminClasses.map(c => `
+    <div class="m3-card" style="padding:14px;margin-bottom:8px;display:flex;align-items:center;gap:12px;">
+      <div style="background:#eaddff;border-radius:14px;padding:10px;"><i data-lucide="users" style="width:20px;height:20px;color:#21005d;"></i></div>
+      <div style="flex:1;font-weight:600;">${c.name}</div>
+      <button onclick="openUntisSheet(${c.id})" style="background:#ffdec1;border:none;border-radius:12px;padding:8px 12px;font-size:0.78rem;font-weight:600;cursor:pointer;font-family:inherit;">Untis</button>
+      <button onclick="deleteClass(${c.id})" style="background:none;border:none;cursor:pointer;opacity:0.4;padding:4px;"><i data-lucide="trash-2" style="width:16px;height:16px;"></i></button>
+    </div>`).join('');
+  lucide.createIcons();
+}
+
+function renderAdminSubjects() {
+  document.getElementById('admin-subjects-list').innerHTML = adminSubjects.map(s => `
+    <div class="m3-card" style="padding:14px;margin-bottom:8px;display:flex;align-items:center;gap:12px;">
+      <div style="width:16px;height:16px;border-radius:50%;background:${s.color||'#6750a4'};flex-shrink:0;"></div>
+      <div style="flex:1;font-weight:600;">${s.name}${s.short_name?` <span style="opacity:0.5;font-size:0.8rem;">(${s.short_name})</span>`:''}</div>
+      ${s.is_global?'<span style="background:#c4eed0;color:#072711;padding:3px 8px;border-radius:8px;font-size:0.72rem;font-weight:600;">Global</span>':''}
+      <button onclick="deleteSubject(${s.id})" style="background:none;border:none;cursor:pointer;opacity:0.4;padding:4px;"><i data-lucide="trash-2" style="width:16px;height:16px;"></i></button>
+    </div>`).join('');
+  lucide.createIcons();
+}
+
+function openEditUserSheet(uid) {
+  const u = adminUsers.find(x=>x.id===uid);
+  if (!u) return;
+  openSheet(`
+    <div style="font-size:1.1rem;font-weight:700;margin-bottom:20px;">Nutzer bearbeiten</div>
+    <div style="font-size:0.8rem;opacity:0.6;margin-bottom:12px;">${u.email}</div>
+    <input class="m3-input" id="eu-name" placeholder="Anzeigename" value="${u.display_name||''}">
+    <select class="m3-select" id="eu-role">
+      <option value="student"${u.role==='student'?' selected':''}>Schüler</option>
+      <option value="admin"${u.role==='admin'?' selected':''}>Admin</option>
+      <option value="super_admin"${u.role==='super_admin'?' selected':''}>Super-Admin</option>
+    </select>
+    <select class="m3-select" id="eu-class">
+      <option value="">Keine Klasse</option>
+      ${adminClasses.map(c=>`<option value="${c.id}"${u.class_id===c.id?' selected':''}>${c.name}</option>`).join('')}
+    </select>
+    <button class="m3-btn-full" onclick="saveUser(${uid})">Speichern</button>
+  `);
+}
+
+async function saveUser(uid) {
+  const data = {
+    display_name: document.getElementById('eu-name').value.trim() || null,
+    role: document.getElementById('eu-role').value,
+    class_id: parseInt(document.getElementById('eu-class').value) || null,
+  };
+  await API.updateUser(uid, data).catch(()=>{ showToast('Fehler'); return; });
+  const idx = adminUsers.findIndex(u=>u.id===uid);
+  if (idx>=0) Object.assign(adminUsers[idx], data);
+  closeSheet();
+  renderAdminUsers();
+  showToast('Gespeichert');
+}
+
+function openNewClassSheet() {
+  openSheet(`
+    <div style="font-size:1.1rem;font-weight:700;margin-bottom:20px;">Neue Klasse</div>
+    <input class="m3-input" id="nc-name" placeholder="Klassenname (z.B. 10a)">
+    <button class="m3-btn-full" onclick="createClass()">Erstellen</button>
+  `);
+}
+
+async function createClass() {
+  const name = document.getElementById('nc-name').value.trim();
+  if (!name) return;
+  const cls = await API.createClass({ name }).catch(()=>null);
+  if (!cls) { showToast('Fehler'); return; }
+  adminClasses.push(cls);
+  closeSheet();
+  renderAdminClasses();
+  showToast('Klasse erstellt');
+}
+
+async function deleteClass(id) {
+  if (!confirm('Klasse wirklich löschen?')) return;
+  await API.deleteClass(id).catch(()=>{ showToast('Fehler'); return; });
+  adminClasses = adminClasses.filter(c=>c.id!==id);
+  renderAdminClasses();
+  showToast('Gelöscht');
+}
+
+function openUntisSheet(classId) {
+  openSheet(`
+    <div style="font-size:1.1rem;font-weight:700;margin-bottom:20px;">Untis-Zugangsdaten</div>
+    <input class="m3-input" id="ut-url" placeholder="Server-URL (z.B. https://niobe.webuntis.com)">
+    <input class="m3-input" id="ut-school" placeholder="Schulkürzel">
+    <input class="m3-input" id="ut-class" placeholder="Klasse (z.B. 10a)">
+    <input class="m3-input" id="ut-user" placeholder="Benutzername">
+    <input class="m3-input" id="ut-pass" type="password" placeholder="Passwort">
+    <button class="m3-btn-full" onclick="saveUntis(${classId})">Speichern</button>
+  `);
+}
+
+async function saveUntis(classId) {
+  const data = {
+    url: document.getElementById('ut-url').value.trim(),
+    school: document.getElementById('ut-school').value.trim(),
+    class_name: document.getElementById('ut-class').value.trim(),
+    username: document.getElementById('ut-user').value.trim(),
+    password: document.getElementById('ut-pass').value,
+  };
+  await API.saveUntis(classId, data).catch(()=>{ showToast('Fehler'); return; });
+  closeSheet();
+  showToast('Untis-Daten gespeichert');
+}
+
+function openNewSubjectSheet() {
+  openSheet(`
+    <div style="font-size:1.1rem;font-weight:700;margin-bottom:20px;">Neues Fach</div>
+    <input class="m3-input" id="ns-name" placeholder="Name (z.B. Mathematik)">
+    <input class="m3-input" id="ns-short" placeholder="Kürzel (z.B. M)">
+    <input class="m3-input" id="ns-color" type="color" value="#6750a4" style="height:56px;padding:8px;">
+    <label style="display:flex;align-items:center;gap:10px;margin-bottom:16px;cursor:pointer;">
+      <input type="checkbox" id="ns-global"> <span>Globales Fach (für alle Klassen)</span>
+    </label>
+    <button class="m3-btn-full" onclick="createSubject()">Erstellen</button>
+  `);
+}
+
+async function createSubject() {
+  const data = {
+    name: document.getElementById('ns-name').value.trim(),
+    short_name: document.getElementById('ns-short').value.trim() || null,
+    color: document.getElementById('ns-color').value,
+    is_global: document.getElementById('ns-global').checked,
+  };
+  if (!data.name) return;
+  const s = await API.createSubject(data).catch(()=>null);
+  if (!s) { showToast('Fehler'); return; }
+  adminSubjects.push(s);
+  closeSheet();
+  renderAdminSubjects();
+  showToast('Fach erstellt');
+}
+
+async function deleteSubject(id) {
+  await API.deleteSubject(id).catch(()=>{ showToast('Fehler'); return; });
+  adminSubjects = adminSubjects.filter(s=>s.id!==id);
+  renderAdminSubjects();
+  showToast('Gelöscht');
+}
+
+async function sendAdminPush() {
+  const title = document.getElementById('push-title').value.trim();
+  const body = document.getElementById('push-body').value.trim();
+  const target = document.getElementById('push-target').value;
+  if (!title || !body) { showToast('Felder ausfüllen'); return; }
+  const r = await API.sendPush({ title, body, target }).catch(()=>null);
+  if (r) showToast(`Gesendet an ${r.sent} Gerät(e)`);
+  else showToast('Fehler');
+}
+</script>

@@ -1,0 +1,105 @@
+﻿<div class="page" id="page-timetable" style="background:#fff8ef;">
+  <div class="page-header">
+    <button class="back-btn"><i data-lucide="arrow-left" style="width:22px;height:22px;"></i></button>
+    <span class="page-title">Stundenplan</span>
+  </div>
+  <div class="page-scroll" style="column-count:unset!important;">
+    <div id="tt-loading" style="text-align:center;padding:60px;opacity:0.5;">Stundenplan wird geladen…</div>
+    <div id="tt-not-configured" style="display:none;text-align:center;padding:60px 20px;">
+      <i data-lucide="settings" style="width:48px;height:48px;margin-bottom:16px;opacity:0.4;"></i>
+      <div style="font-weight:700;margin-bottom:8px;">Nicht konfiguriert</div>
+      <div style="opacity:0.6;font-size:0.9rem;">Der Klassen-Admin muss Untis-Zugangsdaten hinterlegen.</div>
+    </div>
+    <div id="tt-error" style="display:none;text-align:center;padding:40px 20px;color:#b3261e;"></div>
+    <div id="tt-week" style="display:none;">
+      <div id="tt-week-label" style="font-size:0.8rem;font-weight:700;opacity:0.5;margin-bottom:12px;text-align:center;"></div>
+      <div class="week-grid" id="tt-grid"></div>
+    </div>
+    <div id="tt-list" style="display:none;margin-top:16px;">
+      <div class="section-label">Heutige Stunden</div>
+      <div id="tt-today-list"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const LESSON_COLORS = ['#eaddff','#d3e3fd','#c4eed0','#ffdec1','#ffd8e4','#f9dedc','#e8def8'];
+
+async function init_timetable() {
+  try {
+    const data = await API.timetable();
+    document.getElementById('tt-loading').style.display = 'none';
+    if (!data.configured) {
+      document.getElementById('tt-not-configured').style.display = 'block';
+      return;
+    }
+    if (data.error) {
+      document.getElementById('tt-error').style.display = 'block';
+      document.getElementById('tt-error').textContent = 'Fehler: ' + data.error;
+      return;
+    }
+    renderTimetable(data);
+  } catch(e) {
+    document.getElementById('tt-loading').style.display = 'none';
+    document.getElementById('tt-error').style.display = 'block';
+    document.getElementById('tt-error').textContent = 'Stundenplan konnte nicht geladen werden.';
+  }
+}
+
+function renderTimetable(data) {
+  // Try to render what we get — WebUntis API returns complex JSON
+  // For now show a placeholder week view if lessons array is available
+  const lessons = Array.isArray(data.lessons) ? data.lessons : (data.lessons?.data?.result?.data?.elementPeriods?.['1'] || []);
+  document.getElementById('tt-week').style.display = 'block';
+  document.getElementById('tt-list').style.display = 'block';
+
+  const days = ['Mo','Di','Mi','Do','Fr'];
+  const today = new Date().getDay(); // 0=Sun,1=Mon...
+  const todayIdx = today >= 1 && today <= 5 ? today - 1 : -1;
+
+  const grid = document.getElementById('tt-grid');
+  // Header row
+  const headerHtml = `<div class="week-time"></div>` + days.map((d,i) =>
+    `<div class="week-head${i===todayIdx?' today':''}">${d}</div>`
+  ).join('');
+  grid.innerHTML = headerHtml;
+
+  if (!lessons.length) {
+    grid.innerHTML += `<div style="grid-column:1/-1;padding:20px;text-align:center;opacity:0.5;">Keine Stunden diese Woche</div>`;
+  }
+
+  // Simple week view from raw lessons
+  const subjectColors = {};
+  let colorIdx = 0;
+  lessons.slice(0, 40).forEach(l => {
+    const subName = l.su?.[0]?.name || l.name || '';
+    if (subName && !subjectColors[subName]) subjectColors[subName] = LESSON_COLORS[colorIdx++ % LESSON_COLORS.length];
+  });
+
+  // Today list
+  const todayLessons = lessons.filter(l => {
+    const d = l.date ? String(l.date) : '';
+    const todayStr = new Date().toISOString().slice(0,10).replace(/-/g,'');
+    return d === todayStr;
+  }).sort((a,b) => (a.startTime||0)-(b.startTime||0));
+
+  const todayList = document.getElementById('tt-today-list');
+  if (!todayLessons.length) {
+    todayList.innerHTML = '<div style="opacity:0.5;padding:16px;text-align:center;">Keine Stunden heute</div>';
+  } else {
+    todayList.innerHTML = todayLessons.map(l => {
+      const subName = l.su?.[0]?.name || l.name || '?';
+      const teacher = l.te?.[0]?.name || '';
+      const room = l.ro?.[0]?.name || '';
+      const start = l.startTime ? `${String(l.startTime).slice(0,-2)}:${String(l.startTime).slice(-2)}` : '';
+      const end = l.endTime ? `${String(l.endTime).slice(0,-2)}:${String(l.endTime).slice(-2)}` : '';
+      const color = subjectColors[subName] || '#eaddff';
+      return `<div class="tt-block" style="background:${color};">
+        <div class="tt-time">${start}<br>${end}</div>
+        <div style="flex:1;"><div style="font-weight:700;">${subName}</div><div style="font-size:0.78rem;opacity:0.6;">${[teacher,room].filter(Boolean).join(' · ')}</div></div>
+        ${l.code===1?'<span style="background:#f9dedc;color:#410e0b;padding:2px 8px;border-radius:8px;font-size:0.7rem;font-weight:700;">Vertr.</span>':''}
+      </div>`;
+    }).join('');
+  }
+}
+</script>

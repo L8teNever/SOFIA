@@ -1,0 +1,161 @@
+﻿<div class="page" id="page-quickshare" style="background:#fff5f4;">
+  <div class="page-header">
+    <button class="back-btn"><i data-lucide="arrow-left" style="width:22px;height:22px;"></i></button>
+    <span class="page-title">QuickShare</span>
+  </div>
+
+  <div class="page-scroll" style="column-count:unset!important;">
+    <!-- Drop zone -->
+    <div class="drop-zone" id="drop-zone" onclick="document.getElementById('qs-file-input').click()">
+      <i data-lucide="upload-cloud" style="width:48px;height:48px;opacity:0.4;margin-bottom:12px;"></i>
+      <div style="font-weight:600;margin-bottom:4px;">Datei hier ablegen</div>
+      <div style="font-size:0.85rem;opacity:0.5;">oder klicken zum Auswählen</div>
+      <input type="file" id="qs-file-input" style="display:none;" onchange="handleFileSelect(this.files[0])">
+    </div>
+
+    <!-- Upload options (hidden until file selected) -->
+    <div id="qs-options" style="display:none;margin-top:16px;" class="m3-card">
+      <div id="qs-filename" style="font-weight:600;margin-bottom:12px;"></div>
+      <div style="font-size:0.8rem;font-weight:700;opacity:0.5;margin-bottom:8px;">SICHTBARKEIT</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
+        <button class="chip active" onclick="setVis('class',this)">Klasse</button>
+        <button class="chip" onclick="setVis('all',this)">Alle</button>
+        <button class="chip" onclick="setVis('person',this)">Person</button>
+      </div>
+      <div id="qs-person-select" style="display:none;">
+        <select class="m3-select" id="qs-target-user">
+          <option value="">Person auswählen…</option>
+        </select>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+        <span style="font-size:0.9rem;opacity:0.7;">Ablaufzeit:</span>
+        <select class="m3-select" id="qs-expire" style="margin:0;flex:1;">
+          <option value="45">45 Minuten</option>
+          <option value="90">90 Minuten</option>
+          <option value="180">3 Stunden</option>
+          <option value="480">8 Stunden</option>
+        </select>
+      </div>
+      <button class="m3-btn-full" onclick="uploadShare()" id="qs-upload-btn">Teilen</button>
+    </div>
+
+    <!-- File list -->
+    <div class="section-label" style="margin-top:20px;">Geteilte Dateien</div>
+    <div id="qs-files-list"></div>
+    <div id="qs-no-files" style="display:none;text-align:center;padding:40px;opacity:0.4;font-size:0.9rem;">Keine Dateien geteilt</div>
+  </div>
+</div>
+
+<script>
+let qsFiles = [], qsSelectedFile = null, qsVisibility = 'class', qsClassUsers = [];
+
+async function init_quickshare() {
+  [qsFiles, qsClassUsers] = await Promise.all([
+    API.files().catch(()=>[]),
+    API.classUsers().catch(()=>[]),
+  ]);
+  const sel = document.getElementById('qs-target-user');
+  qsClassUsers.forEach(u => { const o = document.createElement('option'); o.value = u.id; o.textContent = u.display_name||u.email.split('@')[0]; sel.appendChild(o); });
+  renderQsFiles();
+  setupDragDrop();
+}
+
+function setupDragDrop() {
+  const zone = document.getElementById('drop-zone');
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+  zone.addEventListener('drop', e => { e.preventDefault(); zone.classList.remove('drag-over'); handleFileSelect(e.dataTransfer.files[0]); });
+}
+
+function handleFileSelect(file) {
+  if (!file) return;
+  qsSelectedFile = file;
+  document.getElementById('qs-filename').textContent = file.name + ' (' + formatBytes(file.size) + ')';
+  document.getElementById('qs-options').style.display = 'block';
+}
+
+function setVis(v, btn) {
+  qsVisibility = v;
+  document.querySelectorAll('#page-quickshare .chip').forEach(c => c.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('qs-person-select').style.display = v === 'person' ? 'block' : 'none';
+}
+
+async function uploadShare() {
+  if (!qsSelectedFile) return;
+  const form = new FormData();
+  form.append('file', qsSelectedFile);
+  form.append('visibility', qsVisibility);
+  form.append('expires_minutes', document.getElementById('qs-expire').value);
+  let visible_to = [];
+  if (qsVisibility === 'person') {
+    const uid = document.getElementById('qs-target-user').value;
+    if (uid) visible_to = [parseInt(uid)];
+  }
+  form.append('visible_to', JSON.stringify(visible_to));
+  const btn = document.getElementById('qs-upload-btn');
+  btn.textContent = 'Hochladen…';
+  btn.disabled = true;
+  try {
+    const f = await API.uploadFile(form);
+    qsFiles.unshift(f);
+    qsSelectedFile = null;
+    document.getElementById('qs-options').style.display = 'none';
+    document.getElementById('qs-filename').textContent = '';
+    renderQsFiles();
+    showToast('Datei geteilt!');
+  } catch { showToast('Upload fehlgeschlagen'); }
+  btn.textContent = 'Teilen';
+  btn.disabled = false;
+}
+
+function renderQsFiles() {
+  if (!qsFiles.length) {
+    document.getElementById('qs-no-files').style.display = 'block';
+    document.getElementById('qs-files-list').innerHTML = '';
+    return;
+  }
+  document.getElementById('qs-no-files').style.display = 'none';
+  const now = Date.now();
+  document.getElementById('qs-files-list').innerHTML = qsFiles.map(f => {
+    const expires = new Date(f.expires_at).getTime();
+    const remaining = expires - now;
+    const mins = Math.floor(remaining / 60000);
+    const ext = f.original_name.split('.').pop().toLowerCase();
+    const iconMap = { pdf:'file-text', jpg:'image', jpeg:'image', png:'image', gif:'image', mp3:'music', mp4:'video', zip:'archive' };
+    const icon = iconMap[ext] || 'file';
+    const colors = ['#eaddff','#d3e3fd','#c4eed0','#ffdec1','#ffd8e4'];
+    const color = colors[f.id % colors.length];
+    return `
+    <div class="file-row">
+      <div class="file-icon" style="background:${color};">
+        <i data-lucide="${icon}" style="width:20px;height:20px;"></i>
+      </div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${f.original_name}</div>
+        <div style="font-size:0.75rem;opacity:0.6;">${formatBytes(f.file_size)} · ${mins>0?mins+' Min. verbleibend':'Abgelaufen'}</div>
+      </div>
+      <a href="/api/v1/files/download/${f.id}" download style="background:#f3edf7;border-radius:12px;padding:8px;display:flex;align-items:center;justify-content:center;">
+        <i data-lucide="download" style="width:18px;height:18px;"></i>
+      </a>
+      <button onclick="deleteQsFile(${f.id})" style="background:none;border:none;cursor:pointer;opacity:0.4;padding:4px;">
+        <i data-lucide="trash-2" style="width:16px;height:16px;"></i>
+      </button>
+    </div>`;
+  }).join('');
+  lucide.createIcons();
+}
+
+async function deleteQsFile(id) {
+  await API.deleteFile(id).catch(()=>{ showToast('Fehler'); return; });
+  qsFiles = qsFiles.filter(f => f.id !== id);
+  renderQsFiles();
+  showToast('Gelöscht');
+}
+
+function formatBytes(b) {
+  if (b < 1024) return b + ' B';
+  if (b < 1048576) return (b/1024).toFixed(1) + ' KB';
+  return (b/1048576).toFixed(1) + ' MB';
+}
+</script>

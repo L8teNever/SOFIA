@@ -1,0 +1,163 @@
+﻿<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Sofia</title>
+  <link rel="manifest" href="/static/manifest.json">
+  <meta name="theme-color" content="#6750a4">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&display=swap">
+  <link rel="stylesheet" href="/static/css/base.css">
+  <link rel="stylesheet" href="/static/css/components.css">
+</head>
+<body>
+
+<!-- Intro Overlay -->
+<div id="intro-overlay">
+  <div class="m3-blob" style="width:400px;height:400px;background:#d0bcff;top:-100px;left:-100px;"></div>
+  <div class="m3-blob" style="width:300px;height:300px;background:#ffd8e4;bottom:-50px;right:-50px;animation-delay:3s;"></div>
+  <div class="intro-text-container" id="intro-text"></div>
+</div>
+
+<!-- App Shell -->
+<div class="app-container" id="app">
+
+  <!-- Dashboard Header -->
+  <div id="dashboard-header" style="padding:0 4px 20px 4px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+      <div>
+        <div style="font-size:0.78rem;opacity:0.5;font-weight:500;" id="greeting-date"></div>
+        <div style="font-size:1.6rem;font-weight:700;color:#e6e1e5;" id="greeting-name">Hallo!</div>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;">
+        <button onclick="openPage('notifications')" style="background:rgba(255,255,255,0.08);border:none;border-radius:16px;width:44px;height:44px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#e6e1e5;position:relative;" id="notif-btn">
+          <i data-lucide="bell" style="width:20px;height:20px;"></i>
+          <span id="notif-badge" style="display:none;position:absolute;top:8px;right:8px;width:8px;height:8px;background:#f2b8b5;border-radius:50%;"></span>
+        </button>
+        <button onclick="openPage('settings')" style="background:rgba(255,255,255,0.08);border:none;border-radius:16px;width:44px;height:44px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#e6e1e5;">
+          <i data-lucide="settings" style="width:20px;height:20px;"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Widget Grid -->
+  <div class="widget-grid" id="widget-grid">
+
+    <!-- Calendar -->
+    <div class="widget w-full-span" style="background:#eaddff;color:#21005d;" onclick="openPage('calendar',this)" data-page="calendar">
+      <div>
+        <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.6;">Kalender</div>
+        <div style="font-size:1.4rem;font-weight:700;margin-top:4px;" id="w-next-event">Keine Termine</div>
+      </div>
+      <div class="icon-box" style="width:52px;height:52px;background:rgba(33,0,93,0.1);">
+        <i data-lucide="calendar" style="width:26px;height:26px;"></i>
+      </div>
+    </div>
+
+    <!-- Homework -->
+    <div class="widget w-big-square" style="background:#ffd8e4;color:#31111d;" onclick="openPage('homework',this)" data-page="homework">
+      <div>
+        <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.6;">Hausaufgaben</div>
+        <div style="font-size:2rem;font-weight:700;margin-top:8px;" id="w-hw-count">0</div>
+        <div style="font-size:0.85rem;opacity:0.7;">offen</div>
+      </div>
+      <div class="icon-box" style="width:52px;height:52px;background:rgba(49,17,29,0.1);">
+        <i data-lucide="book-open" style="width:26px;height:26px;"></i>
+      </div>
+    </div>
+
+    <!-- Grades -->
+    <div class="widget w-big-square" style="background:#d3e3fd;color:#041e49;" onclick="openPage('grades',this)" data-page="grades">
+      <div>
+        <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.6;">Noten</div>
+        <div style="font-size:2rem;font-weight:700;margin-top:8px;" id="w-grade-avg">–</div>
+        <div style="font-size:0.85rem;opacity:0.7;">Ø Gesamt</div>
+      </div>
+      <div class="icon-box" style="width:52px;height:52px;background:rgba(4,30,73,0.1);">
+        <i data-lucide="bar-chart-2" style="width:26px;height:26px;"></i>
+      </div>
+    </div>
+
+    <!-- Timetable -->
+    <div class="widget w-full-span" style="background:#ffdec1;color:#442b00;" onclick="openPage('timetable',this)" data-page="timetable">
+      <div>
+        <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.6;">Stundenplan</div>
+        <div style="font-size:1.2rem;font-weight:700;margin-top:4px;" id="w-current-lesson">Heute</div>
+      </div>
+      <div class="icon-box" style="width:52px;height:52px;background:rgba(68,43,0,0.1);">
+        <i data-lucide="clock" style="width:26px;height:26px;"></i>
+      </div>
+    </div>
+
+    <!-- Chat -->
+    <div class="widget w-square" style="background:#c4eed0;color:#072711;" onclick="openPage('chat',this)" data-page="chat">
+      <div>
+        <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.6;">Chat</div>
+        <div style="font-size:1.6rem;font-weight:700;margin-top:8px;" id="w-unread">0</div>
+        <div style="font-size:0.82rem;opacity:0.7;">ungelesen</div>
+      </div>
+      <div class="icon-box" style="width:44px;height:44px;background:rgba(7,39,17,0.1);">
+        <i data-lucide="message-circle" style="width:22px;height:22px;"></i>
+      </div>
+    </div>
+
+    <!-- QuickShare -->
+    <div class="widget w-square" style="background:#f9dedc;color:#410e0b;" onclick="openPage('quickshare',this)" data-page="quickshare">
+      <div>
+        <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.6;">QuickShare</div>
+        <div style="font-size:1.6rem;font-weight:700;margin-top:8px;" id="w-files-count">0</div>
+        <div style="font-size:0.82rem;opacity:0.7;">geteilt</div>
+      </div>
+      <div class="icon-box" style="width:44px;height:44px;background:rgba(65,14,11,0.1);">
+        <i data-lucide="share-2" style="width:22px;height:22px;"></i>
+      </div>
+    </div>
+
+    <!-- Drive -->
+    <div class="widget w-square" style="background:#e8def8;color:#1d192b;" onclick="openPage('drive',this)" data-page="drive">
+      <div>
+        <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.6;">Drive</div>
+        <div style="font-size:0.9rem;font-weight:600;margin-top:8px;opacity:0.7;">Bald</div>
+      </div>
+      <div class="icon-box" style="width:44px;height:44px;background:rgba(29,25,43,0.1);">
+        <i data-lucide="hard-drive" style="width:22px;height:22px;"></i>
+      </div>
+    </div>
+
+    <!-- Admin (shown conditionally) -->
+    <div class="widget w-square" style="background:#25232a;color:white;display:none;" id="admin-widget" onclick="openPage('admin',this)" data-page="admin">
+      <div>
+        <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.6;">Admin</div>
+        <div style="font-size:0.9rem;font-weight:600;margin-top:8px;">Panel</div>
+      </div>
+      <div class="icon-box" style="width:44px;height:44px;background:rgba(255,255,255,0.1);">
+        <i data-lucide="shield" style="width:22px;height:22px;"></i>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Page Container (SPA pages load here) -->
+<div id="page-container"></div>
+
+<!-- Bottom Sheet Scrim -->
+<div id="bottom-sheet-scrim"></div>
+
+<!-- Modal Scrim -->
+<div id="modal-scrim"><div class="modal" id="modal-content"></div></div>
+
+<!-- Toast -->
+<div id="toast" style="position:fixed;bottom:80px;left:50%;transform:translateX(-50%) translateY(20px);background:#1c1b1f;color:#e6e1e5;padding:12px 20px;border-radius:16px;font-size:0.85rem;font-weight:500;opacity:0;transition:all 0.3s;z-index:1000;pointer-events:none;white-space:nowrap;"></div>
+
+<script src="/static/js/api.js"></script>
+<script src="/static/js/notifications.js"></script>
+<script src="/static/js/app.js"></script>
+</body>
+</html>
