@@ -1,4 +1,4 @@
-﻿const API = {
+const API = {
   _base: '/api/v1',
 
   async _req(method, path, body, isForm = false) {
@@ -9,7 +9,7 @@
     if (!res.ok) {
       let detail = '';
       try { detail = (await res.json()).detail; } catch {}
-      const err = new Error(detail || ${res.status} );
+      const err = new Error(detail || `${res.status}`);
       err.status = res.status;
       err.detail = detail;
       throw err;
@@ -28,32 +28,32 @@
   users:         ()       => API.get('/users/'),
   classUsers:    ()       => API.get('/users/class'),
   updateMe:      (d)      => API.patch('/users/me', d),
-  updateUser:    (id, d)  => API.patch(/users/, d),
+  updateUser:    (id, d)  => API.patch(`/users/${id}`, d),
   classes:       ()       => API.get('/classes/'),
   createClass:   (d)      => API.post('/classes/', d),
-  deleteClass:   (id)     => API.delete(/classes/),
-  saveUntis:     (id, d)  => API.post(/classes//untis, d),
-  getUntis:      (id)     => API.get(/classes//untis),
+  deleteClass:   (id)     => API.delete(`/classes/${id}`),
+  saveUntis:     (id, d)  => API.post(`/classes/${id}/untis`, d),
+  getUntis:      (id)     => API.get(`/classes/${id}/untis`),
   subjects:      ()       => API.get('/subjects/'),
   createSubject: (d)      => API.post('/subjects/', d),
-  deleteSubject: (id)     => API.delete(/subjects/),
-  events:        (month)  => API.get('/calendar/' + (month ? ?month= : '')),
+  deleteSubject: (id)     => API.delete(`/subjects/${id}`),
+  events:        (month)  => API.get('/calendar/' + (month ? `?month=${month}` : '')),
   createEvent:   (d)      => API.post('/calendar/', d),
-  deleteEvent:   (id)     => API.delete(/calendar/),
+  deleteEvent:   (id)     => API.delete(`/calendar/${id}`),
   homework:      ()       => API.get('/homework/'),
   createHomework:(d)      => API.post('/homework/', d),
-  checkHomework: (id)     => API.post(/homework//check),
-  deleteHomework:(id)     => API.delete(/homework/),
+  checkHomework: (id)     => API.post(`/homework/${id}/check`),
+  deleteHomework:(id)     => API.delete(`/homework/${id}`),
   grades:        ()       => API.get('/grades/'),
   createGrade:   (d)      => API.post('/grades/', d),
-  deleteGrade:   (id)     => API.delete(/grades/),
+  deleteGrade:   (id)     => API.delete(`/grades/${id}`),
   timetable:     ()       => API.get('/timetable/'),
   rooms:         ()       => API.get('/chat/rooms'),
   createRoom:    (d)      => API.post('/chat/rooms', d),
-  messages:      (id)     => API.get(/chat/rooms//messages),
+  messages:      (id)     => API.get(`/chat/rooms/${id}/messages`),
   files:         ()       => API.get('/files/'),
   uploadFile:    (form)   => API.upload('/files/', form),
-  deleteFile:    (id)     => API.delete(/files/),
+  deleteFile:    (id)     => API.delete(`/files/${id}`),
   vapidKey:      ()       => API.get('/push/vapid-public-key'),
   subscribe:     (sub)    => API.post('/push/subscribe', { subscription: sub }),
   unsubscribe:   ()       => API.post('/push/unsubscribe'),
