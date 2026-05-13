@@ -230,7 +230,7 @@ async function boot() {
   const sn = document.getElementById('w-settings-name');
   if (sn) sn.textContent = (currentUser.display_name || currentUser.email.split('@')[0]) + ' · ' + (currentUser.class_name || '');
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/static/sw.js').catch(function() {});
+    navigator.serviceWorker.register('/sw.js').catch(function() {});
   }
   await Push.init();
   runIntro();

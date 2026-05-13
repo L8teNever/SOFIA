@@ -298,8 +298,36 @@ function openUntisSheet(classId) {
     <input class="m3-input" id="ut-class" placeholder="Klasse (z.B. 10a)" autocomplete="off">
     <input class="m3-input" id="ut-user" placeholder="Benutzername" autocomplete="off">
     <input class="m3-input" id="ut-pass" type="password" placeholder="Passwort" autocomplete="new-password">
-    <button class="m3-btn-full" onclick="saveUntis(${classId})">Speichern</button>
+    <div id="ut-test-result" style="min-height:20px;font-size:0.82rem;margin-bottom:10px;padding:0 4px;"></div>
+    <div style="display:flex;gap:10px;">
+      <button class="m3-btn-tonal" style="flex:1;" onclick="testUntisConn(${classId})">Verbindung testen</button>
+      <button class="m3-btn-full" style="flex:1;" onclick="saveUntis(${classId})">Speichern</button>
+    </div>
   `);
+}
+
+async function testUntisConn(classId) {
+  const btn = event.target;
+  btn.disabled = true; btn.textContent = 'Teste…';
+  const data = {
+    url: document.getElementById('ut-url').value.trim(),
+    school: document.getElementById('ut-school').value.trim(),
+    class_name: document.getElementById('ut-class').value.trim(),
+    username: document.getElementById('ut-user').value.trim(),
+    password: document.getElementById('ut-pass').value,
+  };
+  const el = document.getElementById('ut-test-result');
+  try {
+    const res = await API.testUntis(classId, data);
+    if (res.ok) {
+      el.innerHTML = '<span style="color:#146c2e;font-weight:600;">✓ ' + res.message + '</span>';
+    } else {
+      el.innerHTML = '<span style="color:#b3261e;font-weight:600;">✗ ' + res.message + '</span>';
+    }
+  } catch(e) {
+    el.innerHTML = '<span style="color:#b3261e;">Fehler: ' + (e.message||'Unbekannt') + '</span>';
+  }
+  btn.disabled = false; btn.textContent = 'Verbindung testen';
 }
 
 async function saveUntis(classId) {
@@ -312,6 +340,7 @@ async function saveUntis(classId) {
   };
   await API.saveUntis(classId, data).catch(()=>{ showToast('Fehler'); return; });
   closeSheet();
+  renderUntisTab();
   showToast('Untis-Daten gespeichert');
 }
 

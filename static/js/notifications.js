@@ -1,4 +1,4 @@
-﻿const Push = {
+const Push = {
   async init() {
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
     try {

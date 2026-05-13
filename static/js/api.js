@@ -35,6 +35,7 @@ const API = {
   deleteClass:   (id)     => API.delete(`/classes/${id}`),
   saveUntis:     (id, d)  => API.post(`/classes/${id}/untis`, d),
   getUntis:      (id)     => API.get(`/classes/${id}/untis`),
+  testUntis:     (id, d)  => API.post(`/classes/${id}/untis/test`, d),
   subjects:      ()       => API.get('/subjects/'),
   createSubject: (d)      => API.post('/subjects/', d),
   deleteSubject: (id)     => API.delete(`/subjects/${id}`),

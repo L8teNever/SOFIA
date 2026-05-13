@@ -10,6 +10,7 @@ from backend.config import settings
 from cryptography.fernet import Fernet
 from typing import List, Optional
 from pydantic import BaseModel
+import httpx
 
 router = APIRouter(prefix="/api/v1/classes", tags=["classes"])
 
@@ -79,3 +80,31 @@ async def get_untis_status(class_id: int, db: AsyncSession = Depends(get_db), _:
         "class_name": cls.untis_class,
         "username": cls.untis_user,
     }
+
+@router.post("/{class_id}/untis/test")
+async def test_untis(class_id: int, data: UntisCredentials, _: User = Depends(require_admin)):
+    base = data.url.rstrip("/")
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.post(
+                f"{base}/WebUntis/jsonrpc.do?school={data.school}",
+                json={"id": "1", "method": "authenticate",
+                      "params": {"user": data.username, "password": data.password, "client": "sofia"},
+                      "jsonrpc": "2.0"}
+            )
+            body = resp.json()
+            if "error" in body:
+                msg = body["error"].get("message", "Login fehlgeschlagen")
+                return {"ok": False, "message": msg}
+            session_id = body.get("result", {}).get("sessionId")
+            # Logout immediately
+            await client.post(
+                f"{base}/WebUntis/jsonrpc.do?school={data.school}",
+                json={"id": "2", "method": "logout", "params": {}, "jsonrpc": "2.0"},
+                cookies={"JSESSIONID": session_id}
+            )
+            return {"ok": True, "message": "Verbindung erfolgreich"}
+    except httpx.ConnectError:
+        return {"ok": False, "message": "Server nicht erreichbar"}
+    except Exception as e:
+        return {"ok": False, "message": str(e)}

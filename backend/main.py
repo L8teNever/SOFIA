@@ -36,6 +36,12 @@ async def serve_page(page_name: str, _: User = Depends(get_current_user)):
         return FileResponse(path)
     raise HTTPException(status_code=404, detail="Page not found")
 
+# Service Worker at root so it controls all pages (default scope = /)
+@app.get("/sw.js", include_in_schema=False)
+async def service_worker():
+    return FileResponse("static/sw.js", media_type="application/javascript",
+                        headers={"Service-Worker-Allowed": "/"})
+
 # Serve frontend SPA — catch-all returns index.html for all non-API paths
 @app.get("/{full_path:path}", include_in_schema=False)
 async def spa(full_path: str, request: Request):

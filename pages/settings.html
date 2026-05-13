@@ -101,15 +101,24 @@ async function togglePush(sw) {
     sw.classList.remove('on');
     showToast('Benachrichtigungen deaktiviert');
   } else {
-    if (!Push._vapidKey) { showToast('Push nicht konfiguriert (kein VAPID-Key)'); return; }
+    if (!Push._vapidKey) {
+      // Try re-initializing once (key may have been generated after page load)
+      await Push.init().catch(()=>{});
+      if (!Push._vapidKey) { showToast('Push nicht verfügbar'); return; }
+    }
     if (Notification.permission === 'denied') {
       showToast('Berechtigung blockiert — bitte in den Browser-Einstellungen erlauben');
       return;
     }
-    const ok = await Push.subscribe().catch(()=>false);
-    if (ok) { sw.classList.add('on'); showToast('Benachrichtigungen aktiviert'); }
-    else if (Notification.permission === 'denied') showToast('Berechtigung verweigert');
-    else showToast('Aktivierung fehlgeschlagen');
+    try {
+      const ok = await Push.subscribe();
+      if (ok) { sw.classList.add('on'); showToast('Benachrichtigungen aktiviert'); }
+      else showToast('Berechtigung verweigert');
+    } catch(e) {
+      console.error('Push subscribe error:', e);
+      if (Notification.permission === 'denied') showToast('Berechtigung verweigert');
+      else showToast('Fehler: ' + (e.message || 'Aktivierung fehlgeschlagen'));
+    }
   }
 }
 </script>
