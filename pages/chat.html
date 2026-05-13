@@ -8,12 +8,14 @@
     </button>
   </div>
 
-  <div class="page-scroll" style="column-count:unset!important;padding-bottom:20px;">
+  <div class="page-scroll-1col">
+  <div class="page-inner">
     <div id="chat-rooms-list"></div>
     <div id="chat-empty" style="display:none;text-align:center;padding:60px 20px;opacity:0.4;">
       <i data-lucide="message-circle" style="width:48px;height:48px;margin-bottom:12px;"></i>
       <div>Noch keine Chats</div>
     </div>
+  </div>
   </div>
 </div>
 
@@ -196,7 +198,7 @@ function closeChatRoom() {
 
 function openNewRoomSheet() {
   openSheet(`
-    <div style="font-size:1.1rem;font-weight:700;margin-bottom:20px;">Neue Gruppe</div>
+    <div class="sheet-title">Neue Gruppe</div>
     <input class="m3-input" id="room-name" placeholder="Gruppenname">
     <div style="font-size:0.8rem;font-weight:700;opacity:0.5;margin-bottom:10px;">MITGLIEDER</div>
     <div id="room-members" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;">
