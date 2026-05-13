@@ -6,8 +6,7 @@ load_dotenv()
 
 class Settings:
     database_url: str = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./sofia.db")
-    super_admin_email: str = os.getenv("SUPER_ADMIN_EMAIL", "")
-    vapid_private_key: str = os.getenv("VAPID_PRIVATE_KEY", "")
+vapid_private_key: str = os.getenv("VAPID_PRIVATE_KEY", "")
     vapid_public_key: str = os.getenv("VAPID_PUBLIC_KEY", "")
     vapid_claim_email: str = os.getenv("VAPID_CLAIM_EMAIL", "mailto:admin@example.com")
     secret_key: str = os.getenv("SECRET_KEY", "dev-secret-key")

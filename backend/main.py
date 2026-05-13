@@ -13,25 +13,7 @@ import os
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
-    await ensure_super_admin()
     yield
-
-async def ensure_super_admin():
-    if not settings.super_admin_email:
-        return
-    from backend.database import AsyncSessionLocal
-    from backend.models.user import User, UserRole
-    from sqlalchemy import select
-    async with AsyncSessionLocal() as db:
-        result = await db.execute(select(User).where(User.email == settings.super_admin_email))
-        user = result.scalar_one_or_none()
-        if not user:
-            user = User(email=settings.super_admin_email, role=UserRole.super_admin, display_name="Super Admin")
-            db.add(user)
-            await db.commit()
-        elif user.role != UserRole.super_admin:
-            user.role = UserRole.super_admin
-            await db.commit()
 
 app = FastAPI(title="Sofia", lifespan=lifespan)
 
