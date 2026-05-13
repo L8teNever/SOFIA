@@ -194,8 +194,8 @@ function renderAdminSubjects() {
 
 function openNewUserSheet() {
   openSheet(`
-    <div style="font-size:1.1rem;font-weight:700;margin-bottom:20px;">Neuer Nutzer</div>
-    <input class="m3-input" id="nu-email" type="email" placeholder="E-Mail-Adresse">
+    <div class="sheet-title">Neuer Nutzer</div>
+    <input class="m3-input" id="nu-email" type="email" placeholder="E-Mail-Adresse" autocomplete="off">
     <input class="m3-input" id="nu-name" placeholder="Anzeigename (optional)">
     <select class="m3-select" id="nu-role">
       <option value="student">Schüler</option>
@@ -233,8 +233,8 @@ function openEditUserSheet(uid) {
   const u = adminUsers.find(x=>x.id===uid);
   if (!u) return;
   openSheet(`
-    <div style="font-size:1.1rem;font-weight:700;margin-bottom:20px;">Nutzer bearbeiten</div>
-    <div style="font-size:0.8rem;opacity:0.6;margin-bottom:12px;">${u.email}</div>
+    <div class="sheet-title">Nutzer bearbeiten</div>
+    <div style="font-size:0.82rem;color:#79747e;margin-bottom:14px;padding:10px 14px;background:#f3edf7;border-radius:12px;">${u.email}</div>
     <input class="m3-input" id="eu-name" placeholder="Anzeigename" value="${u.display_name||''}">
     <select class="m3-select" id="eu-role">
       <option value="student"${u.role==='student'?' selected':''}>Schüler</option>
@@ -265,7 +265,7 @@ async function saveUser(uid) {
 
 function openNewClassSheet() {
   openSheet(`
-    <div style="font-size:1.1rem;font-weight:700;margin-bottom:20px;">Neue Klasse</div>
+    <div class="sheet-title">Neue Klasse</div>
     <input class="m3-input" id="nc-name" placeholder="Klassenname (z.B. 10a)">
     <button class="m3-btn-full" onclick="createClass()">Erstellen</button>
   `);
@@ -292,12 +292,12 @@ async function deleteClass(id) {
 
 function openUntisSheet(classId) {
   openSheet(`
-    <div style="font-size:1.1rem;font-weight:700;margin-bottom:20px;">Untis-Zugangsdaten</div>
-    <input class="m3-input" id="ut-url" placeholder="Server-URL (z.B. https://niobe.webuntis.com)">
-    <input class="m3-input" id="ut-school" placeholder="Schulkürzel">
-    <input class="m3-input" id="ut-class" placeholder="Klasse (z.B. 10a)">
-    <input class="m3-input" id="ut-user" placeholder="Benutzername">
-    <input class="m3-input" id="ut-pass" type="password" placeholder="Passwort">
+    <div class="sheet-title">Untis-Zugangsdaten</div>
+    <input class="m3-input" id="ut-url" placeholder="Server-URL (z.B. https://niobe.webuntis.com)" autocomplete="off">
+    <input class="m3-input" id="ut-school" placeholder="Schulkürzel" autocomplete="off">
+    <input class="m3-input" id="ut-class" placeholder="Klasse (z.B. 10a)" autocomplete="off">
+    <input class="m3-input" id="ut-user" placeholder="Benutzername" autocomplete="off">
+    <input class="m3-input" id="ut-pass" type="password" placeholder="Passwort" autocomplete="new-password">
     <button class="m3-btn-full" onclick="saveUntis(${classId})">Speichern</button>
   `);
 }
@@ -317,12 +317,19 @@ async function saveUntis(classId) {
 
 function openNewSubjectSheet() {
   openSheet(`
-    <div style="font-size:1.1rem;font-weight:700;margin-bottom:20px;">Neues Fach</div>
+    <div class="sheet-title">Neues Fach</div>
     <input class="m3-input" id="ns-name" placeholder="Name (z.B. Mathematik)">
     <input class="m3-input" id="ns-short" placeholder="Kürzel (z.B. M)">
-    <input class="m3-input" id="ns-color" type="color" value="#6750a4" style="height:56px;padding:8px;">
-    <label style="display:flex;align-items:center;gap:10px;margin-bottom:16px;cursor:pointer;">
-      <input type="checkbox" id="ns-global"> <span>Globales Fach (für alle Klassen)</span>
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
+      <label style="font-size:0.9rem;color:#49454f;flex:1;">Farbe</label>
+      <input type="color" id="ns-color" value="#6750a4" style="width:48px;height:40px;border:none;border-radius:10px;cursor:pointer;padding:2px;background:#f3edf7;">
+    </div>
+    <label style="display:flex;align-items:center;gap:12px;margin-bottom:18px;cursor:pointer;padding:14px;background:#f3edf7;border-radius:14px;">
+      <input type="checkbox" id="ns-global" style="width:18px;height:18px;accent-color:#6750a4;cursor:pointer;">
+      <div>
+        <div style="font-size:0.9rem;font-weight:600;color:#1c1b1f;">Globales Fach</div>
+        <div style="font-size:0.78rem;color:#79747e;">Für alle Klassen sichtbar</div>
+      </div>
     </label>
     <button class="m3-btn-full" onclick="createSubject()">Erstellen</button>
   `);

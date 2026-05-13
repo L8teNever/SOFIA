@@ -27,42 +27,73 @@
 
 /* Bottom sheet */
 #bottom-sheet-scrim {
-  position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 200;
+  position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 200;
   opacity: 0; pointer-events: none; transition: opacity 0.3s ease;
+  backdrop-filter: blur(4px);
 }
 #bottom-sheet-scrim.active { opacity: 1; pointer-events: all; }
 
 .bottom-sheet {
   position: fixed; left: 0; right: 0; bottom: 0;
-  max-width: 480px; margin: 0 auto;
-  background: white; border-radius: 32px 32px 0 0;
-  padding: 12px 24px 40px 24px;
+  max-width: 520px; margin: 0 auto;
+  background: #fef7ff;
+  border-radius: 28px 28px 0 0;
+  padding: 8px 24px env(safe-area-inset-bottom, 32px) 24px;
   z-index: 210; transform: translateY(100%);
   transition: transform 0.4s var(--m3-easing);
-  box-shadow: 0 -8px 24px rgba(0,0,0,0.1);
+  box-shadow: 0 -4px 32px rgba(103,80,164,0.12), 0 -1px 0 rgba(0,0,0,0.06);
+  max-height: 90vh; overflow-y: auto;
 }
 .bottom-sheet.active { transform: translateY(0); }
-.sheet-handle { width: 32px; height: 4px; background: #e0e0e0; border-radius: 2px; margin: 0 auto 24px auto; }
+.sheet-handle {
+  width: 36px; height: 4px;
+  background: rgba(0,0,0,0.15); border-radius: 2px;
+  margin: 8px auto 20px auto;
+}
 
 /* Inputs */
 .m3-input {
-  width: 100%; background: #f3edf7; border-radius: 12px;
-  padding: 16px; border: none; outline: none; margin-bottom: 12px;
-  font-size: 1rem; font-family: inherit;
+  width: 100%; background: #f3edf7; border-radius: 14px;
+  padding: 15px 16px; border: 1.5px solid transparent; outline: none; margin-bottom: 10px;
+  font-size: 0.95rem; font-family: inherit; color: #1c1b1f;
+  transition: border-color 0.15s, background 0.15s;
+  box-sizing: border-box;
 }
-.m3-input:focus { background: #ebe2f5; }
-.m3-select { width: 100%; background: #f3edf7; border-radius: 12px; padding: 16px; border: none; outline: none; margin-bottom: 12px; font-size: 1rem; font-family: inherit; appearance: none; }
+.m3-input::placeholder { color: #79747e; }
+.m3-input:focus { background: #fff; border-color: var(--m3-prim); }
+.m3-select {
+  width: 100%; background: #f3edf7; border-radius: 14px;
+  padding: 15px 40px 15px 16px; border: 1.5px solid transparent; outline: none; margin-bottom: 10px;
+  font-size: 0.95rem; font-family: inherit; color: #1c1b1f;
+  appearance: none; cursor: pointer; box-sizing: border-box;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2379747e' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 14px center;
+  transition: border-color 0.15s, background-color 0.15s;
+}
+.m3-select:focus { background-color: #fff; border-color: var(--m3-prim); }
+
+/* Sheet title */
+.sheet-title { font-size: 1.1rem; font-weight: 700; color: #1c1b1f; margin-bottom: 18px; }
 
 /* Buttons */
 .m3-btn-full {
   width: 100%; background: var(--m3-prim); color: white;
-  padding: 16px; border-radius: 28px; font-weight: 500;
-  text-align: center; cursor: pointer; transition: opacity 0.2s;
-  border: none; font-size: 1rem;
+  padding: 16px; border-radius: 16px; font-weight: 600;
+  text-align: center; cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+  border: none; font-size: 1rem; font-family: inherit;
+  margin-top: 4px;
 }
-.m3-btn-full:active { opacity: 0.8; }
-.m3-btn-tonal { background: var(--m3-prim-cont); color: var(--m3-on-prim-cont); padding: 12px 20px; border-radius: 20px; border: none; font-weight: 500; cursor: pointer; font-size: 0.9rem; font-family: inherit; }
-.m3-btn-tonal:active { opacity: 0.8; }
+.m3-btn-full:hover { background: #5b3e9a; }
+.m3-btn-full:active { transform: scale(0.98); }
+.m3-btn-tonal {
+  background: var(--m3-prim-cont); color: var(--m3-on-prim-cont);
+  padding: 12px 20px; border-radius: 14px; border: none;
+  font-weight: 600; cursor: pointer; font-size: 0.9rem; font-family: inherit;
+  transition: background 0.15s, transform 0.1s;
+}
+.m3-btn-tonal:hover { background: #d0bcff; }
+.m3-btn-tonal:active { transform: scale(0.97); }
 
 /* Chips */
 .chip {

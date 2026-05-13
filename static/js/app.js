@@ -161,16 +161,26 @@ function showNotActivated(email) {
 }
 
 function runIntro() {
-  const text = 'Sofia';
+  const name = currentUser && (currentUser.display_name || currentUser.email.split('@')[0]);
+  const lines = name ? ['Willkommen zurück,', name] : ['Willkommen zurück'];
   const container = document.getElementById('intro-text');
+  container.style.flexDirection = 'column';
+  container.style.alignItems = 'center';
+  container.style.gap = '4px';
   let charIdx = 0;
-  text.split('').forEach(function(ch) {
-    const span = document.createElement('span');
-    span.className = 'flying-char';
-    span.textContent = ch;
-    span.style.transitionDelay = (charIdx * 60) + 'ms';
-    container.appendChild(span);
-    charIdx++;
+  lines.forEach(function(line, li) {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;justify-content:center;gap:0;' + (li === 1 ? 'font-size:2.8rem;font-weight:800;' : 'font-size:1.1rem;font-weight:500;opacity:0.7;');
+    line.split('').forEach(function(ch) {
+      const span = document.createElement('span');
+      span.className = 'flying-char';
+      span.textContent = ch === ' ' ? ' ' : ch;
+      span.style.transitionDelay = (charIdx * 45) + 'ms';
+      if (li === 1) span.style.fontSize = 'inherit';
+      row.appendChild(span);
+      charIdx++;
+    });
+    container.appendChild(row);
   });
   requestAnimationFrame(function() {
     document.querySelectorAll('.flying-char').forEach(function(c) {
@@ -184,7 +194,7 @@ function runIntro() {
     overlay.style.pointerEvents = 'none';
     setTimeout(function() { if (overlay.parentNode) overlay.remove(); }, 900);
     showApp();
-  }, charIdx * 60 + 700);
+  }, charIdx * 45 + 700);
 }
 
 const KNOWN_PAGES = ['calendar','homework','grades','timetable','chat','drive','quickshare','settings','admin','notifications'];
