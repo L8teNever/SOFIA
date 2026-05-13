@@ -131,7 +131,7 @@ async function deleteHw(id) {
 }
 
 function openHwSheet() {
-  openSheet('<div style="font-size:1.1rem;font-weight:700;margin-bottom:20px;">Neue Hausaufgabe</div>'
+  openSheet('<div class="sheet-title">Neue Hausaufgabe</div>'
     + '<select class="m3-select" id="hw-subject">' + hwSubjects.map(s=>'<option value="'+s.id+'">'+s.name+'</option>').join('') + '</select>'
     + '<textarea class="m3-input" id="hw-desc" placeholder="Beschreibung" rows="3" style="resize:none;height:auto;"></textarea>'
     + '<input class="m3-input" id="hw-due" type="date" value="' + new Date(Date.now()+86400000).toISOString().slice(0,10) + '">'

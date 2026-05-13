@@ -9,23 +9,28 @@
     <button onclick="calNav(1)" class="back-btn"><i data-lucide="chevron-right" style="width:20px;height:20px;"></i></button>
   </div>
 
-  <div class="page-scroll no-scrollbar" style="column-count:unset!important;">
-    <div class="m3-card-tonal" style="background:#eaddff;color:#21005d;break-inside:avoid;">
-      <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:6px;">
-        <div style="text-align:center;font-size:0.65rem;font-weight:700;opacity:0.5;padding:4px 0;">Mo</div>
-        <div style="text-align:center;font-size:0.65rem;font-weight:700;opacity:0.5;padding:4px 0;">Di</div>
-        <div style="text-align:center;font-size:0.65rem;font-weight:700;opacity:0.5;padding:4px 0;">Mi</div>
-        <div style="text-align:center;font-size:0.65rem;font-weight:700;opacity:0.5;padding:4px 0;">Do</div>
-        <div style="text-align:center;font-size:0.65rem;font-weight:700;opacity:0.5;padding:4px 0;">Fr</div>
-        <div style="text-align:center;font-size:0.65rem;font-weight:700;opacity:0.5;padding:4px 0;">Sa</div>
-        <div style="text-align:center;font-size:0.65rem;font-weight:700;opacity:0.5;padding:4px 0;">So</div>
+  <div class="page-2col no-scrollbar">
+    <!-- Left: Calendar grid -->
+    <div class="page-2col-left">
+      <div class="m3-card-tonal" style="background:#eaddff;color:#21005d;">
+        <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:8px;">
+          <div style="text-align:center;font-size:0.7rem;font-weight:700;opacity:0.5;padding:4px 0;">Mo</div>
+          <div style="text-align:center;font-size:0.7rem;font-weight:700;opacity:0.5;padding:4px 0;">Di</div>
+          <div style="text-align:center;font-size:0.7rem;font-weight:700;opacity:0.5;padding:4px 0;">Mi</div>
+          <div style="text-align:center;font-size:0.7rem;font-weight:700;opacity:0.5;padding:4px 0;">Do</div>
+          <div style="text-align:center;font-size:0.7rem;font-weight:700;opacity:0.5;padding:4px 0;">Fr</div>
+          <div style="text-align:center;font-size:0.7rem;font-weight:700;opacity:0.5;padding:4px 0;">Sa</div>
+          <div style="text-align:center;font-size:0.7rem;font-weight:700;opacity:0.5;padding:4px 0;">So</div>
+        </div>
+        <div id="cal-grid" style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;"></div>
       </div>
-      <div id="cal-grid" style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;"></div>
     </div>
-
-    <div class="section-label" style="color:#21005d;">Kommende Termine</div>
-    <div id="cal-events-list"></div>
-    <div id="cal-no-events" style="display:none;text-align:center;padding:40px 20px;opacity:0.4;font-size:0.9rem;">Keine Termine in diesem Monat</div>
+    <!-- Right: Events list -->
+    <div class="page-2col-right" style="padding-bottom:100px;">
+      <div class="section-label" style="color:#21005d;">Kommende Termine</div>
+      <div id="cal-events-list"></div>
+      <div id="cal-no-events" style="display:none;text-align:center;padding:40px 20px;opacity:0.4;font-size:0.9rem;">Keine Termine in diesem Monat</div>
+    </div>
   </div>
 
   <button class="fab" onclick="openNewEventSheet()">
@@ -143,7 +148,7 @@ function showDayEvents(date) {
 
 function openNewEventSheet(defaultDate) {
   const today = defaultDate || new Date().toISOString().slice(0,10);
-  openSheet('<div style="font-size:1.1rem;font-weight:700;margin-bottom:20px;">Neuer Termin</div>'
+  openSheet('<div class="sheet-title">Neuer Termin</div>'
     + '<input class="m3-input" id="ev-title" placeholder="Titel">'
     + '<input class="m3-input" id="ev-date" type="date" value="' + today + '">'
     + '<input class="m3-input" id="ev-time" type="time" placeholder="Uhrzeit (optional)">'

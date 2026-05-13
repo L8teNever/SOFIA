@@ -118,7 +118,7 @@ async function deleteGrade(id) {
 }
 
 function openGradeSheet() {
-  openSheet('<div style="font-size:1.1rem;font-weight:700;margin-bottom:20px;">Note eintragen</div>'
+  openSheet('<div class="sheet-title">Note eintragen</div>'
     + '<select class="m3-select" id="g-subject">' + gradeSubjects.map(s=>'<option value="'+s.id+'">'+s.name+'</option>').join('') + '</select>'
     + '<input class="m3-input" id="g-value" type="number" step="0.5" min="1" max="6" placeholder="Note (1-6)">'
     + '<input class="m3-input" id="g-label" placeholder="Bezeichnung (z.B. Mathearbeit 1)">'
