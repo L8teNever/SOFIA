@@ -208,6 +208,7 @@ async function boot() {
     showNotActivated('');
     return;
   }
+  const didOnboard = await checkAndRunOnboarding();
   if (currentUser.role === 'admin' || currentUser.role === 'super_admin') {
     document.getElementById('admin-widget').style.display = 'flex';
   }
