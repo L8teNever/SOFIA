@@ -19,6 +19,12 @@ class UserAdminUpdate(BaseModel):
     role: Optional[str] = None
     class_id: Optional[int] = None
 
+class UserCreate(BaseModel):
+    email: str
+    display_name: Optional[str] = None
+    role: str = "student"
+    class_id: Optional[int] = None
+
 # ClassGroup
 class ClassGroupOut(BaseModel):
     id: int

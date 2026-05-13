@@ -101,9 +101,15 @@ async function togglePush(sw) {
     sw.classList.remove('on');
     showToast('Benachrichtigungen deaktiviert');
   } else {
+    if (!Push._vapidKey) { showToast('Push nicht konfiguriert (kein VAPID-Key)'); return; }
+    if (Notification.permission === 'denied') {
+      showToast('Berechtigung blockiert — bitte in den Browser-Einstellungen erlauben');
+      return;
+    }
     const ok = await Push.subscribe().catch(()=>false);
     if (ok) { sw.classList.add('on'); showToast('Benachrichtigungen aktiviert'); }
-    else showToast('Berechtigung abgelehnt');
+    else if (Notification.permission === 'denied') showToast('Berechtigung verweigert');
+    else showToast('Aktivierung fehlgeschlagen');
   }
 }
 </script>

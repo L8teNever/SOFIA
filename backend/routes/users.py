@@ -4,7 +4,7 @@ from sqlalchemy import select
 from backend.database import get_db
 from backend.auth import get_current_user, require_super_admin
 from backend.models.user import User, UserRole
-from backend.schemas import UserOut, UserUpdate, UserAdminUpdate
+from backend.schemas import UserOut, UserUpdate, UserAdminUpdate, UserCreate
 from typing import List
 
 router = APIRouter(prefix="/api/v1/users", tags=["users"])
@@ -13,6 +13,18 @@ router = APIRouter(prefix="/api/v1/users", tags=["users"])
 async def list_users(db: AsyncSession = Depends(get_db), current_user: User = Depends(require_super_admin)):
     result = await db.execute(select(User))
     return result.scalars().all()
+
+@router.post("/", response_model=UserOut)
+async def create_user(data: UserCreate, db: AsyncSession = Depends(get_db), _: User = Depends(require_super_admin)):
+    email = data.email.strip().lower()
+    existing = await db.execute(select(User).where(User.email == email))
+    if existing.scalar_one_or_none():
+        raise HTTPException(400, "E-Mail bereits vorhanden")
+    user = User(email=email, display_name=data.display_name or None, role=UserRole(data.role), class_id=data.class_id)
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+    return user
 
 @router.get("/class", response_model=List[UserOut])
 async def list_class_users(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):

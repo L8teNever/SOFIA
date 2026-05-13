@@ -28,6 +28,7 @@
 
       <div id="tab-users">
         <div id="admin-users-list"></div>
+        <button class="m3-btn-tonal" style="width:100%;margin-top:8px;" onclick="openNewUserSheet()">+ Neuer Nutzer</button>
       </div>
 
       <div id="tab-classes" style="display:none;">
@@ -189,6 +190,43 @@ function renderAdminSubjects() {
       <button onclick="deleteSubject(${s.id})" style="background:none;border:none;cursor:pointer;opacity:0.4;padding:4px;"><i data-lucide="trash-2" style="width:16px;height:16px;"></i></button>
     </div>`).join('');
   lucide.createIcons();
+}
+
+function openNewUserSheet() {
+  openSheet(`
+    <div style="font-size:1.1rem;font-weight:700;margin-bottom:20px;">Neuer Nutzer</div>
+    <input class="m3-input" id="nu-email" type="email" placeholder="E-Mail-Adresse">
+    <input class="m3-input" id="nu-name" placeholder="Anzeigename (optional)">
+    <select class="m3-select" id="nu-role">
+      <option value="student">Schüler</option>
+      <option value="admin">Admin</option>
+      <option value="super_admin">Super-Admin</option>
+    </select>
+    <select class="m3-select" id="nu-class">
+      <option value="">Keine Klasse</option>
+      ${adminClasses.map(c=>`<option value="${c.id}">${c.name}</option>`).join('')}
+    </select>
+    <div id="nu-err" style="color:#b3261e;font-size:0.82rem;min-height:18px;margin-bottom:8px;"></div>
+    <button class="m3-btn-full" onclick="submitNewUser()">Erstellen</button>
+  `);
+}
+
+async function submitNewUser() {
+  const email = document.getElementById('nu-email').value.trim().toLowerCase();
+  const name = document.getElementById('nu-name').value.trim();
+  const role = document.getElementById('nu-role').value;
+  const classId = parseInt(document.getElementById('nu-class').value) || null;
+  const err = document.getElementById('nu-err');
+  if (!email || !email.includes('@')) { err.textContent = 'Gültige E-Mail eingeben'; return; }
+  try {
+    const user = await API.createUser({ email, display_name: name || null, role, class_id: classId });
+    adminUsers.push(user);
+    closeSheet();
+    renderAdminUsers();
+    showToast('Nutzer erstellt');
+  } catch(e) {
+    err.textContent = e.detail || 'Fehler beim Erstellen';
+  }
 }
 
 function openEditUserSheet(uid) {

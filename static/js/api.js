@@ -27,6 +27,7 @@ const API = {
   me:            ()       => API.get('/auth/me'),
   users:         ()       => API.get('/users/'),
   classUsers:    ()       => API.get('/users/class'),
+  createUser:    (d)      => API.post('/users/', d),
   updateMe:      (d)      => API.patch('/users/me', d),
   updateUser:    (id, d)  => API.patch(`/users/${id}`, d),
   classes:       ()       => API.get('/classes/'),
