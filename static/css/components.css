@@ -144,6 +144,28 @@
 .view-toggle button { padding: 8px 16px; border-radius: 10px; font-size: 0.78rem; font-weight: 600; background: transparent; border: none; cursor: pointer; color: inherit; }
 .view-toggle button.active { background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
 
+/* Admin tab buttons */
+.admin-tab-btn {
+  padding: 10px 18px; border-radius: 14px; font-size: 0.85rem; font-weight: 600;
+  background: rgba(0,0,0,0.05); border: none; cursor: pointer; color: #49454f;
+  font-family: inherit; transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+.admin-tab-btn:hover { background: rgba(103,80,164,0.08); color: #21005d; }
+.admin-tab-btn.active { background: #eaddff; color: #21005d; }
+
+@media (min-width: 760px) {
+  #page-admin > div:has(#admin-stats-row) { padding: 0 28px 16px 28px; }
+  #admin-stats-row { grid-template-columns: repeat(4, 1fr) !important; }
+  #admin-nav { border-right: 1px solid rgba(0,0,0,0.06); width: 180px; }
+  #admin-tab-btns {
+    flex-direction: column; padding: 0 16px 0 20px;
+    gap: 4px; flex-wrap: nowrap;
+  }
+  #admin-tab-btns .admin-tab-btn { text-align: left; width: 100%; }
+  #page-admin > div:last-child > div:last-child { padding: 0 28px 80px 24px; }
+}
+
 /* Drag-drop zone */
 .drop-zone { border: 2px dashed rgba(103,80,164,0.3); border-radius: 24px; padding: 40px 20px; text-align: center; transition: all 0.2s; cursor: pointer; }
 .drop-zone.drag-over { border-color: var(--m3-prim); background: rgba(103,80,164,0.05); }

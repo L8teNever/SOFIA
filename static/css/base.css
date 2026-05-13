@@ -85,13 +85,13 @@ body {
 }
 @media (min-width: 700px) {
   .app-container {
-    max-width: 900px; padding: 24px; margin: auto;
+    max-width: 960px; padding: 0 28px 32px 28px; margin: auto;
     background: rgba(255,255,255,0.02);
-    border-radius: 32px;
+    border-radius: 32px; height: auto; min-height: 100%;
   }
 }
 @media (min-width: 1100px) {
-  .app-container { max-width: 1180px; padding: 32px; }
+  .app-container { max-width: 1240px; padding: 0 36px 40px 36px; }
 }
 .app-container.ready { opacity: 1; }
 
@@ -120,6 +120,8 @@ body {
 .w-square     { aspect-ratio: 1/1; flex-direction: column; justify-content: space-between; padding: 20px; }
 .w-half    { aspect-ratio: 2/1; flex-direction: row; align-items: center; padding: 14px; gap: 12px; }
 .w-compact { aspect-ratio: 2.1/1; flex-direction: row; align-items: center; padding: 14px; gap: 14px; }
+@media (min-width: 700px)  { .w-full-span { grid-column: span 4; aspect-ratio: 3/1; } }
+@media (min-width: 1100px) { .w-full-span { grid-column: span 6; aspect-ratio: 4/1; padding: 28px 32px; } }
 
 /* Stack: two half-widgets vertically in the same square footprint */
 .w-stack { display: grid; grid-template-rows: 1fr 1fr; gap: var(--gg, 14px); aspect-ratio: 1/1; }
@@ -144,11 +146,20 @@ body {
   transition: transform 0.55s var(--m3-easing), opacity 0.35s var(--m3-easing), border-radius 0.5s var(--m3-easing);
 }
 @media (min-width: 700px) {
-  .page { inset: 24px; border-radius: 32px; max-width: 1180px; }
+  .page {
+    top: 24px; bottom: 24px;
+    left: max(24px, calc(50% - 590px));
+    right: max(24px, calc(50% - 590px));
+    border-radius: 32px;
+  }
   .page.active { border-radius: 32px; }
 }
 .page.active  { transform: scale(1); opacity: 1; pointer-events: all; border-radius: 0; }
 .page.closing { transform: scale(0.05); opacity: 0; border-radius: 32px; }
+@media (min-width: 700px) {
+  .page.active  { border-radius: 32px; }
+  .page.closing { border-radius: 32px; }
+}
 
 .page-scroll {
   flex: 1; overflow-y: auto;

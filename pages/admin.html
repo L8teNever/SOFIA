@@ -6,58 +6,59 @@
     <div id="admin-role-badge" style="background:#25232a;color:white;padding:6px 14px;border-radius:12px;font-size:0.8rem;font-weight:600;"></div>
   </div>
 
-  <div class="page-scroll">
-    <!-- Stats -->
-    <div id="admin-stats-row" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:4px;column-span:all;">
-    </div>
+  <!-- Stats bar -->
+  <div id="admin-stats-row" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:0 20px 16px 20px;flex-shrink:0;"></div>
 
-    <!-- Tabs -->
-    <div style="column-span:all;" class="full-span">
-      <div class="view-toggle" style="margin-bottom:16px;flex-wrap:wrap;">
-        <button class="active" onclick="adminTab('users',this)">Nutzer</button>
-        <button onclick="adminTab('classes',this)">Klassen</button>
-        <button onclick="adminTab('subjects',this)">Fächer</button>
-        <button onclick="adminTab('untis',this)">Untis</button>
-        <button onclick="adminTab('push',this)">Push</button>
+  <!-- Desktop: sidebar + content / Mobile: stacked -->
+  <div style="display:flex;flex:1;overflow:hidden;">
+
+    <!-- Sidebar nav (desktop) / top tabs (mobile) -->
+    <div id="admin-nav" style="flex-shrink:0;">
+      <div id="admin-tab-btns" style="display:flex;flex-wrap:wrap;gap:6px;padding:0 20px 12px 20px;">
+        <button class="admin-tab-btn active" onclick="adminTab('users',this)" data-tab="users">Nutzer</button>
+        <button class="admin-tab-btn" onclick="adminTab('classes',this)" data-tab="classes">Klassen</button>
+        <button class="admin-tab-btn" onclick="adminTab('subjects',this)" data-tab="subjects">Fächer</button>
+        <button class="admin-tab-btn" onclick="adminTab('untis',this)" data-tab="untis">Untis</button>
+        <button class="admin-tab-btn" onclick="adminTab('push',this)" data-tab="push">Push</button>
       </div>
     </div>
 
-    <!-- Users tab -->
-    <div id="tab-users">
-      <div id="admin-users-list"></div>
-    </div>
+    <!-- Content area -->
+    <div style="flex:1;overflow-y:auto;padding:0 20px 80px 20px;">
 
-    <!-- Classes tab -->
-    <div id="tab-classes" style="display:none;">
-      <div id="admin-classes-list"></div>
-      <button class="m3-btn-tonal" style="width:100%;margin-top:8px;" onclick="openNewClassSheet()">+ Neue Klasse</button>
-    </div>
-
-    <!-- Subjects tab -->
-    <div id="tab-subjects" style="display:none;">
-      <div id="admin-subjects-list"></div>
-      <button class="m3-btn-tonal" style="width:100%;margin-top:8px;" onclick="openNewSubjectSheet()">+ Neues Fach</button>
-    </div>
-
-    <!-- Untis tab -->
-    <div id="tab-untis" style="display:none;">
-      <div class="m3-card-tonal" style="background:#ffdec1;color:#442b00;margin-bottom:12px;">
-        <div style="font-weight:700;margin-bottom:6px;">WebUntis Stundenplan</div>
-        <div style="font-size:0.82rem;opacity:0.75;line-height:1.5;">Trage pro Klasse die WebUntis-Zugangsdaten ein. Der Stundenplan wird dann automatisch geladen. Die Daten findest du in deinem WebUntis-Konto unter <strong>Einstellungen → API-Zugang</strong>.</div>
+      <div id="tab-users">
+        <div id="admin-users-list"></div>
       </div>
-      <div id="untis-classes-list"></div>
-    </div>
 
-    <!-- Push tab -->
-    <div id="tab-push" style="display:none;" class="m3-card">
-      <div style="font-weight:700;margin-bottom:12px;">Push-Benachrichtigung senden</div>
-      <input class="m3-input" id="push-title" placeholder="Titel">
-      <textarea class="m3-input" id="push-body" placeholder="Nachricht" rows="3" style="resize:none;height:auto;"></textarea>
-      <select class="m3-select" id="push-target">
-        <option value="class">Meine Klasse</option>
-        <option value="all">Alle</option>
-      </select>
-      <button class="m3-btn-full" onclick="sendAdminPush()">Senden</button>
+      <div id="tab-classes" style="display:none;">
+        <div id="admin-classes-list"></div>
+        <button class="m3-btn-tonal" style="width:100%;margin-top:8px;" onclick="openNewClassSheet()">+ Neue Klasse</button>
+      </div>
+
+      <div id="tab-subjects" style="display:none;">
+        <div id="admin-subjects-list"></div>
+        <button class="m3-btn-tonal" style="width:100%;margin-top:8px;" onclick="openNewSubjectSheet()">+ Neues Fach</button>
+      </div>
+
+      <div id="tab-untis" style="display:none;">
+        <div class="m3-card-tonal" style="background:#ffdec1;color:#442b00;margin-bottom:12px;">
+          <div style="font-weight:700;margin-bottom:6px;">WebUntis Stundenplan</div>
+          <div style="font-size:0.82rem;opacity:0.75;line-height:1.5;">Trage pro Klasse die WebUntis-Zugangsdaten ein. Der Stundenplan wird dann automatisch geladen. Die Daten findest du in deinem WebUntis-Konto unter <strong>Einstellungen → API-Zugang</strong>.</div>
+        </div>
+        <div id="untis-classes-list"></div>
+      </div>
+
+      <div id="tab-push" style="display:none;" class="m3-card">
+        <div style="font-weight:700;margin-bottom:12px;">Push-Benachrichtigung senden</div>
+        <input class="m3-input" id="push-title" placeholder="Titel">
+        <textarea class="m3-input" id="push-body" placeholder="Nachricht" rows="3" style="resize:none;height:auto;"></textarea>
+        <select class="m3-select" id="push-target">
+          <option value="class">Meine Klasse</option>
+          <option value="all">Alle</option>
+        </select>
+        <button class="m3-btn-full" onclick="sendAdminPush()">Senden</button>
+      </div>
+
     </div>
   </div>
 </div>
@@ -101,7 +102,7 @@ function adminTab(tab, btn) {
   ['users','classes','subjects','untis','push'].forEach(t => {
     document.getElementById('tab-'+t).style.display = t===tab?'block':'none';
   });
-  document.querySelectorAll('#page-admin .view-toggle button').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('#page-admin .admin-tab-btn').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
   if (tab === 'untis') renderUntisTab();
 }

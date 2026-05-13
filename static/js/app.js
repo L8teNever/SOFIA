@@ -146,15 +146,17 @@ function showNotActivated(email) {
   overlay.style.opacity = '1';
   overlay.style.pointerEvents = 'all';
   overlay.innerHTML =
-    '<div style="text-align:center;padding:40px;max-width:360px;">' +
+    '<div class="m3-blob" style="width:400px;height:400px;background:#d0bcff;top:-100px;left:-100px;opacity:0.3;"></div>' +
+    '<div style="position:relative;z-index:1;text-align:center;padding:40px;max-width:360px;">' +
       '<div style="width:72px;height:72px;background:#ffd8e4;border-radius:24px;display:flex;align-items:center;justify-content:center;margin:0 auto 24px auto;">' +
         '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#31111d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>' +
       '</div>' +
-      '<div style="font-size:1.5rem;font-weight:700;color:#21005d;margin-bottom:8px;">Kein Zugang</div>' +
-      '<div style="color:#49454f;line-height:1.6;font-size:0.95rem;">' +
-        'Dein Konto' + (email ? ' (<strong>' + email + '</strong>)' : '') + ' wurde noch nicht freigeschaltet.<br><br>' +
+      '<div style="font-size:1.5rem;font-weight:700;color:#e6e1e5;margin-bottom:8px;">Kein Zugang</div>' +
+      '<div style="color:#cac4d0;line-height:1.6;font-size:0.95rem;">' +
+        'Das Konto' + (email ? ' <strong>' + email + '</strong>' : '') + ' wurde noch nicht freigeschaltet.<br><br>' +
         'Bitte wende dich an den Administrator.' +
       '</div>' +
+      '<button onclick="showLoginScreen()" style="margin-top:20px;padding:12px 24px;background:#2b2930;color:#e6e1e5;border:none;border-radius:14px;cursor:pointer;font-size:0.9rem;">Andere E-Mail verwenden</button>' +
     '</div>';
 }
 
@@ -205,7 +207,9 @@ async function boot() {
   try {
     currentUser = await API.me();
   } catch (err) {
-    showNotActivated('');
+    let email = '';
+    try { const c = await fetch('/api/v1/auth/check'); const j = await c.json(); email = j.email || ''; } catch {}
+    showNotActivated(email);
     return;
   }
   const didOnboard = await checkAndRunOnboarding();
