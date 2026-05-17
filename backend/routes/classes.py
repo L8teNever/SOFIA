@@ -11,6 +11,7 @@ from backend.config import settings
 from cryptography.fernet import Fernet
 from typing import List, Optional
 from pydantic import BaseModel
+from datetime import date, timedelta
 import httpx
 
 router = APIRouter(prefix="/api/v1/classes", tags=["classes"])
@@ -127,6 +128,9 @@ async def import_untis_subjects(class_id: int, db: AsyncSession = Depends(get_db
     school = cls.untis_school
 
     try:
+        today = date.today()
+        monday = today - timedelta(days=today.weekday())
+
         async with httpx.AsyncClient(timeout=15) as client:
             login = await client.post(
                 f"{base}/WebUntis/jsonrpc.do?school={school}",
@@ -140,29 +144,53 @@ async def import_untis_subjects(class_id: int, db: AsyncSession = Depends(get_db
             session_id = login_data["result"]["sessionId"]
             cookies = {"JSESSIONID": session_id}
 
-            subj_resp = await client.post(
+            # Find actual Untis class ID
+            classes_resp = await client.post(
                 f"{base}/WebUntis/jsonrpc.do?school={school}",
-                json={"id": "2", "method": "getSubjects", "params": {}, "jsonrpc": "2.0"},
+                json={"id": "2", "method": "getClasses", "params": {}, "jsonrpc": "2.0"},
                 cookies=cookies,
             )
-            await client.post(
-                f"{base}/WebUntis/jsonrpc.do?school={school}",
-                json={"id": "3", "method": "logout", "params": {}, "jsonrpc": "2.0"},
-                cookies=cookies,
+            untis_classes = classes_resp.json().get("result", [])
+            untis_class_id = next(
+                (c["id"] for c in untis_classes if c.get("name", "").lower() == (cls.untis_class or "").lower()),
+                None
             )
+            if not untis_class_id:
+                await client.post(f"{base}/WebUntis/jsonrpc.do?school={school}",
+                    json={"id": "x", "method": "logout", "params": {}, "jsonrpc": "2.0"}, cookies=cookies)
+                raise HTTPException(400, f"Klasse '{cls.untis_class}' nicht in Untis gefunden")
 
-        untis_subjects = subj_resp.json().get("result", [])
+            # Get timetable for next 8 weeks to collect all subjects
+            end_date = monday + timedelta(weeks=8)
+            tt_resp = await client.post(
+                f"{base}/WebUntis/jsonrpc.do?school={school}",
+                json={"id": "3", "method": "getTimetable",
+                      "params": {"id": untis_class_id, "type": 1,
+                                 "startDate": int(monday.strftime("%Y%m%d")),
+                                 "endDate": int(end_date.strftime("%Y%m%d"))},
+                      "jsonrpc": "2.0"},
+                cookies=cookies,
+            )
+            await client.post(f"{base}/WebUntis/jsonrpc.do?school={school}",
+                json={"id": "4", "method": "logout", "params": {}, "jsonrpc": "2.0"}, cookies=cookies)
+
+        lessons = tt_resp.json().get("result", [])
+
+        # Extract unique subjects from timetable
+        seen = {}  # short -> longName
+        for l in lessons:
+            for su in (l.get("su") or []):
+                short = (su.get("name") or "").strip()
+                long_name = (su.get("longName") or "").strip() or short
+                if short and short not in seen:
+                    seen[short] = long_name
 
         # Load existing short_names for this class
         existing = await db.execute(select(Subject).where(Subject.class_id == class_id))
         existing_shorts = {s.short_name.upper() for s in existing.scalars().all() if s.short_name}
 
         imported = skipped = 0
-        for i, s in enumerate(untis_subjects):
-            short = (s.get("name") or "").strip()
-            long_name = (s.get("longName") or "").strip() or short
-            if not short:
-                continue
+        for i, (short, long_name) in enumerate(seen.items()):
             if short.upper() in existing_shorts:
                 skipped += 1
                 continue

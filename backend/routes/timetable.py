@@ -19,38 +19,53 @@ def decrypt_password(enc: str) -> str:
         return enc
     return Fernet(key.encode()).decrypt(enc.encode()).decode()
 
-def parse_untis_week(resp_json: dict) -> list:
-    try:
-        data = resp_json.get("data", {}).get("result", {}).get("data", {})
-        el_map = {}
-        for el in data.get("elements", []):
-            el_map[(el["type"], el["id"])] = el
-        lessons = []
-        for _, periods in data.get("elementPeriods", {}).items():
-            for p in periods:
-                subject = teacher = room = ""
-                for el in p.get("elements", []):
-                    entry = el_map.get((el["type"], el["id"]), {})
-                    if el["type"] == 3:
-                        subject = entry.get("name", "")
-                    elif el["type"] == 2:
-                        teacher = entry.get("name", "")
-                    elif el["type"] == 4:
-                        room = entry.get("name", "")
-                is_info = p.get("is", {})
-                lessons.append({
-                    "date": str(p.get("date", "")),
-                    "startTime": p.get("startTime", 0),
-                    "endTime": p.get("endTime", 0),
-                    "subject": subject or p.get("lessonText", ""),
-                    "teacher": teacher,
-                    "room": room,
-                    "cancelled": is_info.get("cancelled", False),
-                    "substituted": is_info.get("substituted", False),
-                })
-        return sorted(lessons, key=lambda x: (x["date"], x["startTime"]))
-    except Exception:
-        return []
+def date_int(d: date) -> int:
+    return int(d.strftime("%Y%m%d"))
+
+def parse_lessons(raw: list) -> list:
+    result = []
+    for l in raw:
+        su = l.get("su") or []
+        te = l.get("te") or []
+        ro = l.get("ro") or []
+        code = l.get("code", 0)
+        result.append({
+            "date": str(l.get("date", "")),
+            "startTime": l.get("startTime", 0),
+            "endTime": l.get("endTime", 0),
+            "subject": (su[0].get("longName") or su[0].get("name") or "") if su else "",
+            "subject_short": su[0].get("name", "") if su else "",
+            "teacher": te[0].get("name", "") if te else "",
+            "room": ro[0].get("name", "") if ro else "",
+            "cancelled": code == 1,
+            "substituted": code == 2,
+        })
+    return sorted(result, key=lambda x: (x["date"], x["startTime"]))
+
+async def untis_get_class_id(client: httpx.AsyncClient, base: str, school: str,
+                              cookies: dict, class_name: str) -> int | None:
+    resp = await client.post(
+        f"{base}/WebUntis/jsonrpc.do?school={school}",
+        json={"id": "cls", "method": "getClasses", "params": {}, "jsonrpc": "2.0"},
+        cookies=cookies,
+    )
+    classes = resp.json().get("result", [])
+    for c in classes:
+        if c.get("name", "").lower() == class_name.lower():
+            return c["id"]
+    return None
+
+async def untis_get_timetable(client: httpx.AsyncClient, base: str, school: str,
+                               cookies: dict, class_id: int, start: date, end: date) -> list:
+    resp = await client.post(
+        f"{base}/WebUntis/jsonrpc.do?school={school}",
+        json={"id": "tt", "method": "getTimetable",
+              "params": {"id": class_id, "type": 1,
+                         "startDate": date_int(start), "endDate": date_int(end)},
+              "jsonrpc": "2.0"},
+        cookies=cookies,
+    )
+    return resp.json().get("result", [])
 
 @router.get("/")
 async def get_timetable(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -83,28 +98,26 @@ async def get_timetable(db: AsyncSession = Depends(get_db), current_user: User =
             session_id = login_data["result"]["sessionId"]
             cookies = {"JSESSIONID": session_id}
 
-            def tt_url(monday: date) -> str:
-                return (f"{base}/WebUntis/api/public/timetable/weekly/data"
-                        f"?elementType=1&elementId=0&date={monday.isoformat()}&formatId=1")
+            untis_class_id = await untis_get_class_id(client, base, school, cookies, cls.untis_class or "")
+            if not untis_class_id:
+                await client.post(f"{base}/WebUntis/jsonrpc.do?school={school}",
+                    json={"id": "x", "method": "logout", "params": {}, "jsonrpc": "2.0"}, cookies=cookies)
+                return {"configured": True, "error": f"Klasse '{cls.untis_class}' nicht in Untis gefunden"}
 
-            this_resp, next_resp = await asyncio.gather(
-                client.get(tt_url(this_monday), cookies=cookies, headers={"school": school}),
-                client.get(tt_url(next_monday), cookies=cookies, headers={"school": school}),
+            this_raw, next_raw = await asyncio.gather(
+                untis_get_timetable(client, base, school, cookies, untis_class_id,
+                                    this_monday, this_monday + timedelta(days=4)),
+                untis_get_timetable(client, base, school, cookies, untis_class_id,
+                                    next_monday, next_monday + timedelta(days=4)),
             )
 
-            await client.post(
-                f"{base}/WebUntis/jsonrpc.do?school={school}",
-                json={"id": "2", "method": "logout", "params": {}, "jsonrpc": "2.0"},
-                cookies=cookies,
-            )
-
-        this_lessons = parse_untis_week(this_resp.json()) if this_resp.status_code == 200 else []
-        next_lessons = parse_untis_week(next_resp.json()) if next_resp.status_code == 200 else []
+            await client.post(f"{base}/WebUntis/jsonrpc.do?school={school}",
+                json={"id": "2", "method": "logout", "params": {}, "jsonrpc": "2.0"}, cookies=cookies)
 
         return {
             "configured": True,
-            "this_week": {"start": this_monday.isoformat(), "lessons": this_lessons},
-            "next_week": {"start": next_monday.isoformat(), "lessons": next_lessons},
+            "this_week": {"start": this_monday.isoformat(), "lessons": parse_lessons(this_raw)},
+            "next_week": {"start": next_monday.isoformat(), "lessons": parse_lessons(next_raw)},
         }
     except Exception as e:
         return {"configured": True, "error": str(e)}
