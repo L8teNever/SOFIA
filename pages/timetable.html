@@ -24,7 +24,7 @@
   <div id="tt-error" style="display:none;text-align:center;padding:40px 20px;color:#b3261e;"></div>
 
   <!-- Day view -->
-  <div id="tt-day-view" class="page-scroll no-scrollbar" style="display:none;padding-bottom:100px;">
+  <div id="tt-day-view" class="page-scroll-1col no-scrollbar" style="display:none;padding-bottom:100px;">
     <div id="tt-day-lessons" style="padding:0 20px;"></div>
   </div>
 
@@ -49,6 +49,28 @@ function _dateStr(d) {
   return d.getFullYear() + String(d.getMonth()+1).padStart(2,'0') + String(d.getDate()).padStart(2,'0');
 }
 function _fmtTime(t) { const s=String(t).padStart(4,'0'); return s.slice(0,2)+':'+s.slice(2); }
+function _toMin(t) { return Math.floor(t/100)*60 + (t%100); }
+
+function ttMerge(lessons) {
+  if (!lessons.length) return lessons;
+  const out = [];
+  let cur = {...lessons[0]};
+  for (let i = 1; i < lessons.length; i++) {
+    const l = lessons[i];
+    const gap = _toMin(l.startTime) - _toMin(cur.endTime);
+    if (l.subject_short && l.subject_short === cur.subject_short &&
+        l.date === cur.date && gap <= 5 &&
+        !l.cancelled && !cur.cancelled) {
+      cur = {...cur, endTime: l.endTime, _double: true};
+    } else {
+      out.push(cur);
+      cur = {...l};
+    }
+  }
+  out.push(cur);
+  return out;
+}
+
 function _thisMonday() {
   const t = _today();
   const dow = t.getDay();
@@ -112,7 +134,7 @@ function ttRenderDay() {
   sub.textContent = TT_DAYS_L[d.getDay()] + ', ' + d.getDate() + '. ' + TT_MONTHS[d.getMonth()] + ' ' + d.getFullYear()
     + (isToday ? ' · Heute' : '');
 
-  const lessons = ttLessons.filter(l => l.date === _dateStr(d));
+  const lessons = ttMerge(ttLessons.filter(l => l.date === _dateStr(d)));
   const el = document.getElementById('tt-day-lessons');
   if (!lessons.length) {
     el.innerHTML = '<div style="text-align:center;padding:60px 20px;opacity:0.4;">'
@@ -134,6 +156,7 @@ function ttRenderDay() {
       +(l.teacher?'<span style="font-size:0.68rem;font-weight:600;background:rgba(0,0,0,0.08);padding:2px 7px;border-radius:8px;">'+l.teacher+'</span>':'')
       +(l.room   ?'<span style="font-size:0.68rem;font-weight:600;background:rgba(0,0,0,0.08);padding:2px 7px;border-radius:8px;">'+l.room   +'</span>':'')
       +'</div></div>'
+      +(l._double    ?'<span style="background:rgba(0,0,0,0.08);color:inherit;padding:3px 8px;border-radius:8px;font-size:0.66rem;font-weight:700;flex-shrink:0;">2×</span>':'')
       +(l.cancelled  ?'<span style="background:#f9dedc;color:#b3261e;padding:3px 8px;border-radius:8px;font-size:0.66rem;font-weight:700;flex-shrink:0;">Ausfall</span>':'')
       +(l.substituted?'<span style="background:#ffdec1;color:#7d3c00;padding:3px 8px;border-radius:8px;font-size:0.66rem;font-weight:700;flex-shrink:0;">Vertr.</span>':'')
       +'</div>';
@@ -159,14 +182,14 @@ function ttRenderWeek() {
   }).join('');
 
   days.forEach(d => {
-    const lessons = ttLessons.filter(l => l.date === _dateStr(d));
+    const lessons = ttMerge(ttLessons.filter(l => l.date === _dateStr(d)));
     if (!lessons.length) { html += '<div></div>'; return; }
     html += '<div style="display:flex;flex-direction:column;gap:4px;">'
       + lessons.map(l => {
           const color = l.cancelled ? '#f9dedc' : (ttColorMap[l.subject_short]||'#eaddff');
           return '<div style="background:'+color+';border-radius:10px;padding:5px 6px;opacity:'+(l.cancelled?.6:1)+';">'
-            +'<div style="font-size:0.7rem;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;'+(l.cancelled?'text-decoration:line-through;':'')+'">'+( l.subject_short||l.subject||'–')+'</div>'
-            +'<div style="font-size:0.62rem;opacity:0.55;">'+_fmtTime(l.startTime)+'</div>'
+            +'<div style="font-size:0.7rem;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;'+(l.cancelled?'text-decoration:line-through;':'')+'">'+( l.subject_short||l.subject||'–')+(l._double?' <span style="font-size:0.58rem;opacity:0.6;">2×</span>':'')+'</div>'
+            +'<div style="font-size:0.62rem;opacity:0.55;">'+_fmtTime(l.startTime)+'–'+_fmtTime(l.endTime)+'</div>'
             +(l.room?'<div style="font-size:0.6rem;opacity:0.45;">'+l.room+'</div>':'')
             +'</div>';
         }).join('')
