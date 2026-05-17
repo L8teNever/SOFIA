@@ -1,44 +1,109 @@
-﻿<div class="page" id="page-notifications" style="background:#f5f3f9;">
+<div class="page" id="page-notifications" style="background:#f5f3f9;">
   <div class="page-header">
     <button class="back-btn"><i data-lucide="arrow-left" style="width:22px;height:22px;"></i></button>
     <span class="page-title">Benachrichtigungen</span>
+    <div style="flex:1;"></div>
+    <button id="notif-read-all-btn" onclick="markAllReadAndRefresh()" style="display:none;background:none;border:none;font-size:0.8rem;font-weight:600;color:#6750a4;cursor:pointer;padding:6px 10px;">Alle gelesen</button>
   </div>
-  <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px;text-align:center;">
-    <i data-lucide="bell" style="width:56px;height:56px;margin-bottom:16px;opacity:0.35;"></i>
-    <div style="font-weight:600;opacity:0.5;margin-bottom:28px;">Keine neuen Benachrichtigungen</div>
-    <div id="push-status" style="width:100%;max-width:320px;"></div>
+
+  <!-- Push-Status-Banner -->
+  <div id="push-status" style="padding:0 16px 8px 16px;"></div>
+
+  <!-- Notification list -->
+  <div style="flex:1;overflow-y:auto;padding:0 16px 80px 16px;">
+    <div id="notif-list"></div>
   </div>
 </div>
+
 <script>
 async function init_notifications() {
+  renderPushStatus();
+  loadNotifications();
+}
+
+async function renderPushStatus() {
   const el = document.getElementById('push-status');
   if (!el) return;
-
   if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {
-    el.innerHTML = '<div style="font-size:0.82rem;color:#79747e;text-align:center;">Push-Benachrichtigungen werden von diesem Browser nicht unterstützt.</div>';
+    el.innerHTML = '<div style="font-size:0.8rem;color:#79747e;padding:8px 0;">Push wird von diesem Browser nicht unterstützt.</div>';
     return;
   }
-
   const perm = Notification.permission;
   if (perm === 'denied') {
-    el.innerHTML = '<div style="font-size:0.82rem;color:#b3261e;text-align:center;">Benachrichtigungen wurden blockiert. Bitte in den Browser-Einstellungen erlauben.</div>';
+    el.innerHTML = '<div style="font-size:0.8rem;color:#b3261e;padding:8px 0;">Benachrichtigungen blockiert – bitte in Browser-Einstellungen erlauben.</div>';
+    return;
+  }
+  const reg = await navigator.serviceWorker.ready.catch(() => null);
+  const sub = reg ? await reg.pushManager.getSubscription().catch(() => null) : null;
+  if (sub) {
+    el.innerHTML = `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;">
+      <span style="color:#146c2e;font-size:0.82rem;font-weight:600;">✓ Push aktiv</span>
+      <button onclick="disablePush()" style="background:none;border:none;font-size:0.78rem;color:#79747e;cursor:pointer;text-decoration:underline;padding:0;">Deaktivieren</button>
+    </div>`;
+  } else {
+    el.innerHTML = `<div style="padding:8px 0;">
+      <button class="m3-btn-tonal" style="width:100%;" onclick="enablePush(this)">Push-Benachrichtigungen aktivieren</button>
+    </div>`;
+  }
+}
+
+async function loadNotifications() {
+  const list = document.getElementById('notif-list');
+  const readAllBtn = document.getElementById('notif-read-all-btn');
+  list.innerHTML = '<div style="text-align:center;padding:40px 0;opacity:0.4;font-size:0.9rem;">Wird geladen…</div>';
+
+  const items = await API.notifications().catch(() => []);
+
+  // Mark all as read
+  const hasUnread = items.some(n => !n.is_read);
+  if (readAllBtn) readAllBtn.style.display = hasUnread ? 'block' : 'none';
+
+  if (!items.length) {
+    list.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;text-align:center;opacity:0.35;">
+      <i data-lucide="bell-off" style="width:48px;height:48px;margin-bottom:12px;"></i>
+      <div style="font-weight:600;">Keine Benachrichtigungen</div>
+    </div>`;
+    lucide.createIcons();
     return;
   }
 
-  const reg = await navigator.serviceWorker.ready.catch(() => null);
-  const sub = reg ? await reg.pushManager.getSubscription().catch(() => null) : null;
+  list.innerHTML = items.map(n => {
+    const date = new Date(n.created_at);
+    const dateStr = date.toLocaleDateString('de-DE', { day:'2-digit', month:'short' });
+    const timeStr = date.toLocaleTimeString('de-DE', { hour:'2-digit', minute:'2-digit' });
+    return `<div onclick="markOneRead(${n.id}, this)"
+      style="background:${n.is_read ? '#fff' : '#eaddff'};border-radius:16px;padding:14px 16px;margin-bottom:8px;cursor:pointer;transition:background 0.3s;">
+      <div style="display:flex;align-items:flex-start;gap:10px;">
+        <div style="width:8px;height:8px;border-radius:50%;background:${n.is_read ? 'transparent' : '#6750a4'};flex-shrink:0;margin-top:6px;"></div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:${n.is_read ? '500' : '700'};font-size:0.92rem;margin-bottom:2px;">${escHtml(n.title)}</div>
+          ${n.body ? `<div style="font-size:0.82rem;color:#49454f;line-height:1.4;">${escHtml(n.body)}</div>` : ''}
+          <div style="font-size:0.72rem;color:#79747e;margin-top:6px;">${dateStr} · ${timeStr}</div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
 
-  if (sub) {
-    el.innerHTML = `
-      <div style="color:#146c2e;font-weight:600;font-size:0.85rem;margin-bottom:12px;">✓ Push-Benachrichtigungen aktiv</div>
-      <button class="m3-btn-tonal" style="width:100%;" onclick="disablePush()">Deaktivieren</button>`;
-  } else {
-    el.innerHTML = `
-      <button class="m3-btn-full" style="width:100%;" onclick="enablePush(this)">
-        <i data-lucide="bell" style="width:16px;height:16px;vertical-align:-3px;margin-right:6px;"></i>Push-Benachrichtigungen aktivieren
-      </button>`;
-    lucide.createIcons();
+async function markOneRead(id, el) {
+  await API.markRead(id).catch(() => {});
+  if (el) {
+    el.style.background = '#fff';
+    const dot = el.querySelector('div[style*="border-radius:50%"]');
+    if (dot) dot.style.background = 'transparent';
+    const title = el.querySelector('div[style*="font-weight"]');
+    if (title) title.style.fontWeight = '500';
   }
+  const readAllBtn = document.getElementById('notif-read-all-btn');
+  if (readAllBtn) {
+    const remaining = document.querySelectorAll('#notif-list [style*="background:#eaddff"]');
+    if (remaining.length === 0) readAllBtn.style.display = 'none';
+  }
+}
+
+async function markAllReadAndRefresh() {
+  await API.markAllRead().catch(() => {});
+  loadNotifications();
 }
 
 async function enablePush(btn) {
@@ -46,12 +111,16 @@ async function enablePush(btn) {
   const ok = await Push.subscribe().catch(() => false);
   if (ok) showToast('Push-Benachrichtigungen aktiviert');
   else showToast('Aktivierung fehlgeschlagen oder abgelehnt');
-  init_notifications();
+  renderPushStatus();
 }
 
 async function disablePush() {
   await Push.unsubscribe().catch(() => {});
   showToast('Push-Benachrichtigungen deaktiviert');
-  init_notifications();
+  renderPushStatus();
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 </script>

@@ -63,6 +63,7 @@ async function openPage(name, triggerEl) {
 function closePage() {
   const page = document.querySelector('.page.active');
   if (!page) return;
+  const wasNotifications = currentPage === 'notifications';
   page.classList.remove('active');
   page.classList.add('closing');
   setTimeout(() => page.remove(), 600);
@@ -70,6 +71,7 @@ function closePage() {
   currentPage = pageHistory[pageHistory.length - 1] || null;
   const prev = pageHistory[pageHistory.length - 1];
   history.pushState({ page: prev }, '', prev ? '/' + prev : '/');
+  if (wasNotifications) refreshNotifBadge();
 }
 
 document.addEventListener('click', e => { if (e.target.closest('.back-btn')) closePage(); });
@@ -309,7 +311,16 @@ async function boot() {
     navigator.serviceWorker.register('/sw.js').catch(function() {});
   }
   await Push.init();
+  refreshNotifBadge();
   runIntro();
+}
+
+async function refreshNotifBadge() {
+  try {
+    const { count } = await API.unreadCount();
+    const badge = document.getElementById('notif-badge');
+    if (badge) badge.style.display = count > 0 ? 'block' : 'none';
+  } catch {}
 }
 
 boot();

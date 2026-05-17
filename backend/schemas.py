@@ -143,3 +143,11 @@ class PushNotificationIn(BaseModel):
     title: str
     body: str
     target: str = "class"  # class | all | user:{id}
+
+class NotificationOut(BaseModel):
+    id: int
+    title: str
+    body: Optional[str]
+    is_read: bool
+    created_at: datetime
+    class Config: from_attributes = True
