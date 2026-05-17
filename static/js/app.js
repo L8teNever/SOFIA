@@ -32,7 +32,7 @@ async function openPage(name, triggerEl) {
   }
   let html;
   try {
-    const res = await fetch('/pages/' + name + '.html');
+    const res = await fetch('/pages/' + name + '.html', { cache: 'no-store' });
     if (!res.ok) throw new Error('not found');
     html = await res.text();
   } catch {
