@@ -92,16 +92,16 @@ function enhanceDropdowns(root) {
     sel.parentNode.insertBefore(wrap, sel);
     wrap.appendChild(sel);
 
-    const chevSvg = `<svg class="m3-dropdown-chev" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>`;
+    const chevSvg = '<svg class="m3-dropdown-chev" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'm3-dropdown-btn';
-    btn.innerHTML = `<span class="m3-dropdown-lbl"></span>${chevSvg}`;
+    btn.innerHTML = '<span class="m3-dropdown-lbl"></span>' + chevSvg;
     wrap.appendChild(btn);
 
+    // Panel lives outside the sheet (portaled to body) to escape overflow + transform clipping
     const panel = document.createElement('div');
     panel.className = 'm3-dropdown-panel';
-    wrap.appendChild(panel);
 
     let offHandler = null;
 
@@ -134,14 +134,44 @@ function enhanceDropdowns(root) {
       });
     }
 
+    function posPanel() {
+      const r = btn.getBoundingClientRect();
+      panel.style.left  = r.left + 'px';
+      panel.style.width = r.width + 'px';
+      panel.style.right = 'auto';
+      const below = window.innerHeight - r.bottom - 8;
+      if (below >= 120 || below >= r.top) {
+        panel.style.top    = (r.bottom + 5) + 'px';
+        panel.style.bottom = 'auto';
+        panel.style.transformOrigin = 'top';
+      } else {
+        panel.style.bottom = (window.innerHeight - r.top + 5) + 'px';
+        panel.style.top    = 'auto';
+        panel.style.transformOrigin = 'bottom';
+        panel.style.transform = panel.classList.contains('dd-open') ? 'none' : 'scaleY(0.9) translateY(6px)';
+      }
+    }
+
     function open() {
-      document.querySelectorAll('.m3-dropdown.dd-open').forEach(d => { if (d !== wrap) d.classList.remove('dd-open'); });
+      document.querySelectorAll('.m3-dropdown-panel.dd-open').forEach(p => {
+        p.classList.remove('dd-open');
+        if (p.parentNode) p.parentNode.removeChild(p);
+      });
+      document.querySelectorAll('.m3-dropdown.dd-open').forEach(d => d.classList.remove('dd-open'));
+
+      document.body.appendChild(panel);
+      posPanel();
       wrap.classList.add('dd-open');
-      offHandler = e => { if (!wrap.contains(e.target)) close(); };
+      requestAnimationFrame(() => panel.classList.add('dd-open'));
+
+      offHandler = e => { if (!wrap.contains(e.target) && !panel.contains(e.target)) close(); };
       setTimeout(() => document.addEventListener('click', offHandler), 0);
     }
+
     function close() {
       wrap.classList.remove('dd-open');
+      panel.classList.remove('dd-open');
+      setTimeout(() => { if (panel.parentNode) panel.parentNode.removeChild(panel); }, 150);
       if (offHandler) { document.removeEventListener('click', offHandler); offHandler = null; }
     }
 
@@ -158,9 +188,10 @@ function openSheet(html) {
   let sheet = document.querySelector('.bottom-sheet');
   if (!sheet) { sheet = document.createElement('div'); sheet.className = 'bottom-sheet'; document.body.appendChild(sheet); }
   sheet.innerHTML = '<div class="sheet-handle"></div>' + html;
-  document.getElementById('bottom-sheet-scrim').classList.add('active');
-  requestAnimationFrame(() => { sheet.classList.add('active'); enhanceDropdowns(sheet); });
+  enhanceDropdowns(sheet);
   if (window.lucide) lucide.createIcons();
+  document.getElementById('bottom-sheet-scrim').classList.add('active');
+  requestAnimationFrame(() => sheet.classList.add('active'));
 }
 function closeSheet() {
   const sheet = document.querySelector('.bottom-sheet');

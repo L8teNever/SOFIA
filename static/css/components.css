@@ -89,15 +89,16 @@
   transition: transform 0.2s ease;
 }
 .m3-dropdown.dd-open .m3-dropdown-chev { transform: rotate(180deg); }
+/* Panel portals to <body> to escape overflow/transform clipping */
 .m3-dropdown-panel {
-  position: absolute; top: calc(100% + 5px); left: 0; right: 0; z-index: 9999;
+  position: fixed; z-index: 9999;
   background: #fff; border-radius: 16px;
   box-shadow: 0 6px 28px rgba(0,0,0,0.13), 0 1px 6px rgba(0,0,0,0.07);
   overflow: hidden; max-height: 228px; overflow-y: auto;
   opacity: 0; transform: scaleY(0.9) translateY(-6px); transform-origin: top;
   pointer-events: none; transition: opacity 0.14s ease, transform 0.14s ease;
 }
-.m3-dropdown.dd-open .m3-dropdown-panel { opacity: 1; transform: none; pointer-events: all; }
+.m3-dropdown-panel.dd-open { opacity: 1; transform: none; pointer-events: all; }
 .m3-dropdown-opt {
   padding: 13px 16px; cursor: pointer; font-size: 0.93rem; color: #1c1b1f;
   display: flex; align-items: center; transition: background 0.1s;
