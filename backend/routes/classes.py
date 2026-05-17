@@ -163,7 +163,7 @@ async def import_untis_subjects(class_id: int, db: AsyncSession = Depends(get_db
     password = f.decrypt(cls.untis_password_enc.encode()).decode() if (f and cls.untis_password_enc) else (cls.untis_password_enc or "")
 
     try:
-        from backend.routes.timetable import _fetch_timetable, _strip_server
+        from backend.routes.timetable import _fetch_timetable, _strip_server  # noqa
         today = date.today()
         monday = today - timedelta(days=today.weekday())
         end_date = monday + timedelta(weeks=8)
