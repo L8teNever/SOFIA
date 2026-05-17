@@ -43,10 +43,10 @@ def parse_lessons(raw: list) -> list:
     return sorted(result, key=lambda x: (x["date"], x["startTime"]))
 
 async def untis_get_class_id(client: httpx.AsyncClient, base: str, school: str,
-                              cookies: dict, class_name: str) -> int | None:
+                              cookies: dict, class_name: str) -> tuple[int | None, list[str]]:
+    """Returns (class_id, all_found_names). class_id is None if not found."""
     name_clean = class_name.strip().lower()
 
-    # Try with current school year first (required by some Untis instances)
     syear_resp = await client.post(
         f"{base}/WebUntis/jsonrpc.do?school={school}",
         json={"id": "sy", "method": "getCurrentSchoolyear", "params": {}, "jsonrpc": "2.0"},
@@ -54,6 +54,7 @@ async def untis_get_class_id(client: httpx.AsyncClient, base: str, school: str,
     )
     syear_id = syear_resp.json().get("result", {}).get("id")
 
+    all_names: list[str] = []
     for params in ([{"schoolyearId": syear_id}] if syear_id else []) + [{}]:
         resp = await client.post(
             f"{base}/WebUntis/jsonrpc.do?school={school}",
@@ -61,13 +62,14 @@ async def untis_get_class_id(client: httpx.AsyncClient, base: str, school: str,
             cookies=cookies,
         )
         classes = resp.json().get("result", [])
-        for c in classes:
-            if c.get("name", "").strip().lower() == name_clean:
-                return c["id"]
         if classes:
-            break  # found classes but no name match — no point retrying
+            all_names = [c.get("name", "") for c in classes]
+            for c in classes:
+                if c.get("name", "").strip().lower() == name_clean:
+                    return c["id"], all_names
+            break  # got a list but no match — stop trying
 
-    return None
+    return None, all_names
 
 async def untis_get_timetable(client: httpx.AsyncClient, base: str, school: str,
                                cookies: dict, class_id: int, start: date, end: date) -> list:
@@ -112,11 +114,12 @@ async def get_timetable(db: AsyncSession = Depends(get_db), current_user: User =
             session_id = login_data["result"]["sessionId"]
             cookies = {"JSESSIONID": session_id}
 
-            untis_class_id = await untis_get_class_id(client, base, school, cookies, cls.untis_class or "")
+            untis_class_id, found_names = await untis_get_class_id(client, base, school, cookies, cls.untis_class or "")
             if not untis_class_id:
                 await client.post(f"{base}/WebUntis/jsonrpc.do?school={school}",
                     json={"id": "x", "method": "logout", "params": {}, "jsonrpc": "2.0"}, cookies=cookies)
-                return {"configured": True, "error": f"Klasse '{cls.untis_class}' nicht in Untis gefunden"}
+                hint = f" Verfügbare Klassen: {', '.join(found_names[:20])}" if found_names else " Keine Klassen gefunden."
+                return {"configured": True, "error": f"Klasse '{cls.untis_class}' nicht gefunden.{hint}"}
 
             this_raw, next_raw = await asyncio.gather(
                 untis_get_timetable(client, base, school, cookies, untis_class_id,
