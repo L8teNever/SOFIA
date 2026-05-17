@@ -55,6 +55,7 @@ async function openPage(name, triggerEl) {
   pageHistory.push(name);
   currentPage = name;
   if (window.lucide) lucide.createIcons();
+  enhanceDropdowns(page);
   const initFn = window['init_' + name];
   if (initFn) initFn();
 }
@@ -77,12 +78,86 @@ window.addEventListener('popstate', () => {
   if (page) { page.classList.remove('active'); page.classList.add('closing'); setTimeout(() => page.remove(), 600); currentPage = null; }
 });
 
+function enhanceDropdowns(root) {
+  (root || document).querySelectorAll('select.m3-select:not([data-dd])').forEach(sel => {
+    sel.setAttribute('data-dd', '1');
+
+    const wrap = document.createElement('div');
+    wrap.className = 'm3-dropdown';
+    ['flex','flexGrow','flexShrink','width','maxWidth','minWidth','margin','marginBottom','marginTop'].forEach(p => {
+      if (sel.style[p]) wrap.style[p] = sel.style[p];
+    });
+    sel.parentNode.insertBefore(wrap, sel);
+    wrap.appendChild(sel);
+
+    const chevSvg = `<svg class="m3-dropdown-chev" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>`;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'm3-dropdown-btn';
+    btn.innerHTML = `<span class="m3-dropdown-lbl"></span>${chevSvg}`;
+    wrap.appendChild(btn);
+
+    const panel = document.createElement('div');
+    panel.className = 'm3-dropdown-panel';
+    wrap.appendChild(panel);
+
+    let offHandler = null;
+
+    function buildOpts() {
+      panel.innerHTML = '';
+      Array.from(sel.options).forEach(opt => {
+        const div = document.createElement('div');
+        div.className = 'm3-dropdown-opt' + (opt.selected ? ' dd-sel' : '');
+        div.dataset.value = opt.value;
+        div.textContent = opt.text;
+        div.addEventListener('mousedown', e => e.preventDefault());
+        div.addEventListener('click', () => {
+          sel.value = opt.value;
+          sel.dispatchEvent(new Event('change', {bubbles: true}));
+          close();
+          syncLabel();
+          syncSel();
+        });
+        panel.appendChild(div);
+      });
+    }
+
+    function syncLabel() {
+      const i = sel.selectedIndex;
+      btn.querySelector('.m3-dropdown-lbl').textContent = i >= 0 && sel.options[i] ? sel.options[i].text : '';
+    }
+    function syncSel() {
+      panel.querySelectorAll('.m3-dropdown-opt').forEach((d, i) => {
+        d.classList.toggle('dd-sel', !!(sel.options[i] && sel.options[i].selected));
+      });
+    }
+
+    function open() {
+      document.querySelectorAll('.m3-dropdown.dd-open').forEach(d => { if (d !== wrap) d.classList.remove('dd-open'); });
+      wrap.classList.add('dd-open');
+      offHandler = e => { if (!wrap.contains(e.target)) close(); };
+      setTimeout(() => document.addEventListener('click', offHandler), 0);
+    }
+    function close() {
+      wrap.classList.remove('dd-open');
+      if (offHandler) { document.removeEventListener('click', offHandler); offHandler = null; }
+    }
+
+    btn.addEventListener('click', e => { e.stopPropagation(); wrap.classList.contains('dd-open') ? close() : open(); });
+    sel.addEventListener('change', () => { syncLabel(); syncSel(); });
+    new MutationObserver(() => { buildOpts(); syncLabel(); }).observe(sel, {childList: true});
+
+    buildOpts();
+    syncLabel();
+  });
+}
+
 function openSheet(html) {
   let sheet = document.querySelector('.bottom-sheet');
   if (!sheet) { sheet = document.createElement('div'); sheet.className = 'bottom-sheet'; document.body.appendChild(sheet); }
   sheet.innerHTML = '<div class="sheet-handle"></div>' + html;
   document.getElementById('bottom-sheet-scrim').classList.add('active');
-  requestAnimationFrame(() => sheet.classList.add('active'));
+  requestAnimationFrame(() => { sheet.classList.add('active'); enhanceDropdowns(sheet); });
   if (window.lucide) lucide.createIcons();
 }
 function closeSheet() {
@@ -95,6 +170,7 @@ document.getElementById('bottom-sheet-scrim').addEventListener('click', closeShe
 function openModal(html) {
   document.getElementById('modal-content').innerHTML = html;
   document.getElementById('modal-scrim').classList.add('active');
+  enhanceDropdowns(document.getElementById('modal-content'));
   if (window.lucide) lucide.createIcons();
 }
 function closeModal() { document.getElementById('modal-scrim').classList.remove('active'); }
