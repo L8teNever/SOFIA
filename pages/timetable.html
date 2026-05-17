@@ -1,10 +1,7 @@
-﻿<div class="page" id="page-timetable" style="background:#fff8ef;">
+<div class="page" id="page-timetable" style="background:#fff8ef;">
   <div class="page-header">
     <button class="back-btn"><i data-lucide="arrow-left" style="width:22px;height:22px;"></i></button>
-    <div style="flex:1;">
-      <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.5;color:#442b00;" id="tt-header-sub">Diese Woche</div>
-      <span class="page-title" style="color:#442b00;">Stundenplan</span>
-    </div>
+    <span class="page-title" style="color:#442b00;">Stundenplan</span>
   </div>
   <div class="page-scroll-1col"><div class="page-inner">
     <div id="tt-loading" style="text-align:center;padding:60px;opacity:0.5;">Stundenplan wird geladen…</div>
@@ -14,19 +11,19 @@
       <div style="opacity:0.6;font-size:0.9rem;">Der Klassen-Admin muss Untis-Zugangsdaten hinterlegen.</div>
     </div>
     <div id="tt-error" style="display:none;text-align:center;padding:40px 20px;color:#b3261e;"></div>
-    <div id="tt-week" style="display:none;">
-      <div id="tt-week-label" style="font-size:0.8rem;font-weight:700;opacity:0.5;margin-bottom:12px;text-align:center;"></div>
-      <div class="week-grid" id="tt-grid"></div>
-    </div>
-    <div id="tt-list" style="display:none;margin-top:16px;">
-      <div class="section-label">Heutige Stunden</div>
-      <div id="tt-today-list"></div>
+    <div id="tt-content" style="display:none;">
+      <div class="section-label" style="color:#442b00;" id="tt-this-week-label">Diese Woche</div>
+      <div id="tt-this-week"></div>
+      <div class="section-label" style="color:#442b00;margin-top:24px;" id="tt-next-week-label">Nächste Woche</div>
+      <div id="tt-next-week"></div>
     </div>
   </div></div>
 </div>
 
 <script>
-const LESSON_COLORS = ['#eaddff','#d3e3fd','#c4eed0','#ffdec1','#ffd8e4','#f9dedc','#e8def8'];
+const TT_COLORS = ['#eaddff','#d3e3fd','#c4eed0','#ffdec1','#ffd8e4','#e8def8','#cfe2ff'];
+const TT_DAYS = ['So','Mo','Di','Mi','Do','Fr','Sa'];
+const TT_MONTHS = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
 
 async function init_timetable() {
   try {
@@ -41,7 +38,10 @@ async function init_timetable() {
       document.getElementById('tt-error').textContent = 'Fehler: ' + data.error;
       return;
     }
-    renderTimetable(data);
+    document.getElementById('tt-content').style.display = 'block';
+    renderWeek(data.this_week, 'tt-this-week', 'tt-this-week-label', true);
+    renderWeek(data.next_week, 'tt-next-week', 'tt-next-week-label', false);
+    if (window.lucide) lucide.createIcons();
   } catch(e) {
     document.getElementById('tt-loading').style.display = 'none';
     document.getElementById('tt-error').style.display = 'block';
@@ -49,70 +49,83 @@ async function init_timetable() {
   }
 }
 
-function renderTimetable(data) {
-  // Try to render what we get — WebUntis API returns complex JSON
-  // For now show a placeholder week view if lessons array is available
-  const lessons = Array.isArray(data.lessons) ? data.lessons : (data.lessons?.data?.result?.data?.elementPeriods?.['1'] || []);
-  document.getElementById('tt-week').style.display = 'block';
-  document.getElementById('tt-list').style.display = 'block';
+function fmtTime(t) {
+  if (!t) return '';
+  const s = String(t).padStart(4, '0');
+  return s.slice(0, 2) + ':' + s.slice(2);
+}
 
-  const days = ['Mo','Di','Mi','Do','Fr'];
-  const today = new Date().getDay(); // 0=Sun,1=Mon...
-  const todayIdx = today >= 1 && today <= 5 ? today - 1 : -1;
+function fmtDate(dateStr) {
+  // dateStr like "20260513"
+  if (!dateStr || dateStr.length < 8) return dateStr;
+  const d = new Date(dateStr.slice(0,4) + '-' + dateStr.slice(4,6) + '-' + dateStr.slice(6,8) + 'T00:00');
+  return TT_DAYS[d.getDay()] + ', ' + d.getDate() + '. ' + TT_MONTHS[d.getMonth()];
+}
 
-  const grid = document.getElementById('tt-grid');
-  // Header row
-  const headerHtml = `<div class="week-time"></div>` + days.map((d,i) =>
-    `<div class="week-head${i===todayIdx?' today':''}">${d}</div>`
-  ).join('');
-  grid.innerHTML = headerHtml;
+function weekRangeLabel(startIso) {
+  if (!startIso) return '';
+  const monday = new Date(startIso + 'T00:00');
+  const friday = new Date(monday); friday.setDate(monday.getDate() + 4);
+  return monday.getDate() + '. – ' + friday.getDate() + '. ' + TT_MONTHS[friday.getMonth()] + ' ' + friday.getFullYear();
+}
 
+function renderWeek(week, containerId, labelId, isThisWeek) {
+  const container = document.getElementById(containerId);
+  const label = document.getElementById(labelId);
+  if (!week) { container.innerHTML = '<div style="opacity:0.4;text-align:center;padding:20px;">Keine Daten</div>'; return; }
+
+  if (label) label.textContent = (isThisWeek ? 'Diese Woche' : 'Nächste Woche') + ' · ' + weekRangeLabel(week.start);
+
+  const lessons = week.lessons || [];
   if (!lessons.length) {
-    grid.innerHTML += `<div style="grid-column:1/-1;padding:20px;text-align:center;opacity:0.5;">Keine Stunden diese Woche</div>`;
+    container.innerHTML = '<div style="background:#fff3e0;border-radius:20px;padding:24px;text-align:center;opacity:0.6;">Keine Stunden</div>';
+    return;
   }
 
-  // Simple week view from raw lessons
-  const subjectColors = {};
-  let colorIdx = 0;
-  lessons.slice(0, 40).forEach(l => {
-    const subName = l.su?.[0]?.name || l.name || '';
-    if (subName && !subjectColors[subName]) subjectColors[subName] = LESSON_COLORS[colorIdx++ % LESSON_COLORS.length];
+  // Build subject→color map
+  const colorMap = {};
+  let ci = 0;
+  lessons.forEach(l => { if (l.subject && !colorMap[l.subject]) colorMap[l.subject] = TT_COLORS[ci++ % TT_COLORS.length]; });
+
+  // Group by date
+  const byDay = {};
+  lessons.forEach(l => { (byDay[l.date] = byDay[l.date] || []).push(l); });
+
+  const todayStr = new Date().toISOString().slice(0,10).replace(/-/g,'');
+
+  let html = '';
+  Object.keys(byDay).sort().forEach(dateKey => {
+    const dayLessons = byDay[dateKey];
+    const isToday = dateKey === todayStr;
+    html += '<div style="margin-bottom:14px;">';
+    html += '<div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;'
+          + (isToday ? 'color:#6750a4;' : 'opacity:0.5;')
+          + 'margin-bottom:6px;padding-left:4px;">'
+          + fmtDate(dateKey)
+          + (isToday ? ' <span style="background:#6750a4;color:white;border-radius:6px;padding:1px 7px;font-size:0.65rem;margin-left:4px;">Heute</span>' : '')
+          + '</div>';
+    dayLessons.forEach(l => {
+      const color = l.cancelled ? '#f9dedc' : (colorMap[l.subject] || '#eaddff');
+      const textColor = l.cancelled ? '#b3261e' : 'inherit';
+      html += '<div class="tt-block" style="background:' + color + ';color:' + textColor + ';margin-bottom:7px;opacity:' + (l.cancelled ? '0.7' : '1') + ';">'
+            + '<div style="min-width:44px;text-align:center;">'
+            + '<div style="font-size:0.72rem;font-weight:700;font-variant-numeric:tabular-nums;">' + fmtTime(l.startTime) + '</div>'
+            + '<div style="font-size:0.65rem;opacity:0.5;">–</div>'
+            + '<div style="font-size:0.72rem;font-weight:700;font-variant-numeric:tabular-nums;">' + fmtTime(l.endTime) + '</div>'
+            + '</div>'
+            + '<div style="flex:1;min-width:0;">'
+            + '<div style="font-weight:700;font-size:0.95rem;' + (l.cancelled ? 'text-decoration:line-through;' : '') + '">' + (l.subject || '–') + '</div>'
+            + '<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:4px;">'
+            + (l.teacher ? '<span style="font-size:0.68rem;font-weight:600;background:rgba(0,0,0,0.08);padding:2px 7px;border-radius:8px;">' + l.teacher + '</span>' : '')
+            + (l.room ? '<span style="font-size:0.68rem;font-weight:600;background:rgba(0,0,0,0.08);padding:2px 7px;border-radius:8px;">' + l.room + '</span>' : '')
+            + '</div></div>'
+            + (l.cancelled ? '<span style="background:#f9dedc;color:#b3261e;padding:3px 9px;border-radius:8px;font-size:0.68rem;font-weight:700;flex-shrink:0;">Ausfall</span>' : '')
+            + (l.substituted ? '<span style="background:#ffdec1;color:#7d3c00;padding:3px 9px;border-radius:8px;font-size:0.68rem;font-weight:700;flex-shrink:0;">Vertretung</span>' : '')
+            + '</div>';
+    });
+    html += '</div>';
   });
 
-  // Today list
-  const todayLessons = lessons.filter(l => {
-    const d = l.date ? String(l.date) : '';
-    const todayStr = new Date().toISOString().slice(0,10).replace(/-/g,'');
-    return d === todayStr;
-  }).sort((a,b) => (a.startTime||0)-(b.startTime||0));
-
-  const todayList = document.getElementById('tt-today-list');
-  const sub = document.getElementById('tt-header-sub');
-  if (sub) sub.textContent = new Date().toLocaleDateString('de-DE',{weekday:'long',day:'numeric',month:'long'});
-
-  if (!todayLessons.length) {
-    todayList.innerHTML = '<div style="text-align:center;padding:40px 20px;opacity:0.4;">'
-      + '<div style="font-weight:600;">Keine Stunden heute</div></div>';
-  } else {
-    todayList.innerHTML = todayLessons.map(l => {
-      const subName = l.su?.[0]?.name || l.name || '?';
-      const teacher = l.te?.[0]?.name || '';
-      const room = l.ro?.[0]?.name || '';
-      const fmt = t => t ? String(t).padStart(4,'0').replace(/(\d{2})(\d{2})/,'$1:$2') : '';
-      const start = fmt(l.startTime); const end = fmt(l.endTime);
-      const color = subjectColors[subName] || '#eaddff';
-      const isSubst = l.code === 1;
-      return '<div class="tt-block" style="background:' + color + ';cursor:default;">'
-        + '<div class="tt-time" style="text-align:center;">' + start + '<br><span style="opacity:0.5;font-size:0.68rem;">–</span><br>' + end + '</div>'
-        + '<div style="flex:1;min-width:0;">'
-        + '<div style="font-weight:700;font-size:0.95rem;">' + subName + '</div>'
-        + '<div style="display:flex;gap:6px;margin-top:5px;flex-wrap:wrap;">'
-        + (teacher ? '<span style="font-size:0.7rem;font-weight:600;background:rgba(0,0,0,0.1);padding:2px 8px;border-radius:8px;">' + teacher + '</span>' : '')
-        + (room ? '<span style="font-size:0.7rem;font-weight:600;background:rgba(0,0,0,0.1);padding:2px 8px;border-radius:8px;">' + room + '</span>' : '')
-        + '</div></div>'
-        + (isSubst ? '<span style="background:#f9dedc;color:#410e0b;padding:4px 10px;border-radius:10px;font-size:0.7rem;font-weight:700;flex-shrink:0;">Vertretung</span>' : '')
-        + '</div>';
-    }).join('');
-  }
+  container.innerHTML = html;
 }
 </script>
