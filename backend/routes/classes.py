@@ -144,17 +144,28 @@ async def import_untis_subjects(class_id: int, db: AsyncSession = Depends(get_db
             session_id = login_data["result"]["sessionId"]
             cookies = {"JSESSIONID": session_id}
 
-            # Find actual Untis class ID
-            classes_resp = await client.post(
+            # Find actual Untis class ID (try with school year first)
+            name_clean = (cls.untis_class or "").strip().lower()
+            syear_resp = await client.post(
                 f"{base}/WebUntis/jsonrpc.do?school={school}",
-                json={"id": "2", "method": "getClasses", "params": {}, "jsonrpc": "2.0"},
+                json={"id": "sy", "method": "getCurrentSchoolyear", "params": {}, "jsonrpc": "2.0"},
                 cookies=cookies,
             )
-            untis_classes = classes_resp.json().get("result", [])
-            untis_class_id = next(
-                (c["id"] for c in untis_classes if c.get("name", "").lower() == (cls.untis_class or "").lower()),
-                None
-            )
+            syear_id = syear_resp.json().get("result", {}).get("id")
+            untis_class_id = None
+            for params in ([{"schoolyearId": syear_id}] if syear_id else []) + [{}]:
+                cr = await client.post(
+                    f"{base}/WebUntis/jsonrpc.do?school={school}",
+                    json={"id": "cls", "method": "getClasses", "params": params, "jsonrpc": "2.0"},
+                    cookies=cookies,
+                )
+                classes_list = cr.json().get("result", [])
+                untis_class_id = next(
+                    (c["id"] for c in classes_list if c.get("name", "").strip().lower() == name_clean),
+                    None
+                )
+                if untis_class_id or classes_list:
+                    break
             if not untis_class_id:
                 await client.post(f"{base}/WebUntis/jsonrpc.do?school={school}",
                     json={"id": "x", "method": "logout", "params": {}, "jsonrpc": "2.0"}, cookies=cookies)

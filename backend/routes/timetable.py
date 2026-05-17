@@ -44,15 +44,29 @@ def parse_lessons(raw: list) -> list:
 
 async def untis_get_class_id(client: httpx.AsyncClient, base: str, school: str,
                               cookies: dict, class_name: str) -> int | None:
-    resp = await client.post(
+    name_clean = class_name.strip().lower()
+
+    # Try with current school year first (required by some Untis instances)
+    syear_resp = await client.post(
         f"{base}/WebUntis/jsonrpc.do?school={school}",
-        json={"id": "cls", "method": "getClasses", "params": {}, "jsonrpc": "2.0"},
+        json={"id": "sy", "method": "getCurrentSchoolyear", "params": {}, "jsonrpc": "2.0"},
         cookies=cookies,
     )
-    classes = resp.json().get("result", [])
-    for c in classes:
-        if c.get("name", "").lower() == class_name.lower():
-            return c["id"]
+    syear_id = syear_resp.json().get("result", {}).get("id")
+
+    for params in ([{"schoolyearId": syear_id}] if syear_id else []) + [{}]:
+        resp = await client.post(
+            f"{base}/WebUntis/jsonrpc.do?school={school}",
+            json={"id": "cls", "method": "getClasses", "params": params, "jsonrpc": "2.0"},
+            cookies=cookies,
+        )
+        classes = resp.json().get("result", [])
+        for c in classes:
+            if c.get("name", "").strip().lower() == name_clean:
+                return c["id"]
+        if classes:
+            break  # found classes but no name match — no point retrying
+
     return None
 
 async def untis_get_timetable(client: httpx.AsyncClient, base: str, school: str,
