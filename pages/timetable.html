@@ -130,6 +130,7 @@ function ttNav(dir) {
 function ttRenderDay() {
   const d = _addDays(_today(), ttDayOffset);
   const isToday = ttDayOffset === 0;
+  const isPast  = d < _today();
   const sub = document.getElementById('tt-header-sub');
   sub.textContent = TT_DAYS_L[d.getDay()] + ', ' + d.getDate() + '. ' + TT_MONTHS[d.getMonth()] + ' ' + d.getFullYear()
     + (isToday ? ' · Heute' : '');
@@ -143,8 +144,8 @@ function ttRenderDay() {
     return;
   }
   el.innerHTML = lessons.map(l => {
-    const color = l.cancelled ? '#f9dedc' : (ttColorMap[l.subject_short]||'#eaddff');
-    return '<div class="tt-block" style="background:'+color+';margin-bottom:8px;opacity:'+(l.cancelled?.7:1)+';">'
+    const color = isPast ? '#ebebeb' : (l.cancelled ? '#f9dedc' : (ttColorMap[l.subject_short]||'#eaddff'));
+    return '<div class="tt-block" style="background:'+color+';margin-bottom:8px;opacity:'+(isPast?.55:(l.cancelled?.7:1))+';">'
       +'<div style="min-width:44px;text-align:center;">'
       +'<div style="font-size:0.72rem;font-weight:700;">'+_fmtTime(l.startTime)+'</div>'
       +'<div style="font-size:0.62rem;opacity:0.4;">–</div>'
@@ -183,11 +184,12 @@ function ttRenderWeek() {
 
   days.forEach(d => {
     const lessons = ttMerge(ttLessons.filter(l => l.date === _dateStr(d)));
+    const dayPast = d < _today();
     if (!lessons.length) { html += '<div></div>'; return; }
     html += '<div style="display:flex;flex-direction:column;gap:4px;">'
       + lessons.map(l => {
-          const color = l.cancelled ? '#f9dedc' : (ttColorMap[l.subject_short]||'#eaddff');
-          return '<div style="background:'+color+';border-radius:10px;padding:5px 6px;opacity:'+(l.cancelled?.6:1)+';">'
+          const color = dayPast ? '#ebebeb' : (l.cancelled ? '#f9dedc' : (ttColorMap[l.subject_short]||'#eaddff'));
+          return '<div style="background:'+color+';border-radius:10px;padding:5px 6px;opacity:'+(dayPast?.5:(l.cancelled?.6:1))+';">'
             +'<div style="font-size:0.7rem;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;'+(l.cancelled?'text-decoration:line-through;':'')+'">'+( l.subject_short||l.subject||'–')+(l._double?' <span style="font-size:0.58rem;opacity:0.6;">2×</span>':'')+'</div>'
             +'<div style="font-size:0.62rem;opacity:0.55;">'+_fmtTime(l.startTime)+'–'+_fmtTime(l.endTime)+'</div>'
             +(l.room?'<div style="font-size:0.6rem;opacity:0.45;">'+l.room+'</div>':'')
