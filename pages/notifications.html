@@ -3,9 +3,55 @@
     <button class="back-btn"><i data-lucide="arrow-left" style="width:22px;height:22px;"></i></button>
     <span class="page-title">Benachrichtigungen</span>
   </div>
-  <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px;text-align:center;opacity:0.4;">
-    <i data-lucide="bell" style="width:56px;height:56px;margin-bottom:16px;"></i>
-    <div style="font-weight:600;">Keine neuen Benachrichtigungen</div>
+  <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px;text-align:center;">
+    <i data-lucide="bell" style="width:56px;height:56px;margin-bottom:16px;opacity:0.35;"></i>
+    <div style="font-weight:600;opacity:0.5;margin-bottom:28px;">Keine neuen Benachrichtigungen</div>
+    <div id="push-status" style="width:100%;max-width:320px;"></div>
   </div>
 </div>
-<script>function init_notifications(){}</script>
+<script>
+async function init_notifications() {
+  const el = document.getElementById('push-status');
+  if (!el) return;
+
+  if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {
+    el.innerHTML = '<div style="font-size:0.82rem;color:#79747e;text-align:center;">Push-Benachrichtigungen werden von diesem Browser nicht unterstützt.</div>';
+    return;
+  }
+
+  const perm = Notification.permission;
+  if (perm === 'denied') {
+    el.innerHTML = '<div style="font-size:0.82rem;color:#b3261e;text-align:center;">Benachrichtigungen wurden blockiert. Bitte in den Browser-Einstellungen erlauben.</div>';
+    return;
+  }
+
+  const reg = await navigator.serviceWorker.ready.catch(() => null);
+  const sub = reg ? await reg.pushManager.getSubscription().catch(() => null) : null;
+
+  if (sub) {
+    el.innerHTML = `
+      <div style="color:#146c2e;font-weight:600;font-size:0.85rem;margin-bottom:12px;">✓ Push-Benachrichtigungen aktiv</div>
+      <button class="m3-btn-tonal" style="width:100%;" onclick="disablePush()">Deaktivieren</button>`;
+  } else {
+    el.innerHTML = `
+      <button class="m3-btn-full" style="width:100%;" onclick="enablePush(this)">
+        <i data-lucide="bell" style="width:16px;height:16px;vertical-align:-3px;margin-right:6px;"></i>Push-Benachrichtigungen aktivieren
+      </button>`;
+    lucide.createIcons();
+  }
+}
+
+async function enablePush(btn) {
+  if (btn) { btn.disabled = true; btn.textContent = 'Wird aktiviert…'; }
+  const ok = await Push.subscribe().catch(() => false);
+  if (ok) showToast('Push-Benachrichtigungen aktiviert');
+  else showToast('Aktivierung fehlgeschlagen oder abgelehnt');
+  init_notifications();
+}
+
+async function disablePush() {
+  await Push.unsubscribe().catch(() => {});
+  showToast('Push-Benachrichtigungen deaktiviert');
+  init_notifications();
+}
+</script>
