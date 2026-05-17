@@ -179,12 +179,15 @@ async def import_untis_subjects(class_id: int, db: AsyncSession = Depends(get_db
             session_id = login_data["result"]["sessionId"]
             cookies = {"JSESSIONID": session_id}
 
-            # Use getOwnTimetableForRange — no class ID lookup needed
+            # Use personId/personType from login to call getTimetable directly
+            person_id   = login_data["result"].get("personId", 0)
+            person_type = login_data["result"].get("personType", 5)
             end_date = monday + timedelta(weeks=8)
             tt_resp = await client.post(
                 f"{base}/WebUntis/jsonrpc.do?school={school}",
-                json={"id": "3", "method": "getOwnTimetableForRange",
-                      "params": {"startDate": int(monday.strftime("%Y%m%d")),
+                json={"id": "3", "method": "getTimetable",
+                      "params": {"id": person_id, "type": person_type,
+                                 "startDate": int(monday.strftime("%Y%m%d")),
                                  "endDate": int(end_date.strftime("%Y%m%d"))},
                       "jsonrpc": "2.0"},
                 cookies=cookies,
