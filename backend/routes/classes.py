@@ -12,6 +12,7 @@ from cryptography.fernet import Fernet
 from typing import List, Optional
 from pydantic import BaseModel
 from datetime import date, timedelta
+import asyncio
 import httpx
 
 router = APIRouter(prefix="/api/v1/classes", tags=["classes"])
@@ -160,52 +161,28 @@ async def import_untis_subjects(class_id: int, db: AsyncSession = Depends(get_db
 
     f = get_fernet()
     password = f.decrypt(cls.untis_password_enc.encode()).decode() if (f and cls.untis_password_enc) else (cls.untis_password_enc or "")
-    base = cls.untis_url.rstrip("/")
-    school = cls.untis_school
 
     try:
+        from backend.routes.timetable import _fetch_timetable, _strip_server
         today = date.today()
         monday = today - timedelta(days=today.weekday())
+        end_date = monday + timedelta(weeks=8)
+        server = _strip_server(cls.untis_url)
 
-        async with httpx.AsyncClient(timeout=15, verify=False) as client:
-            login = await client.post(
-                f"{base}/WebUntis/jsonrpc.do?school={school}",
-                json={"id": "1", "method": "authenticate",
-                      "params": {"user": cls.untis_user, "password": password, "client": "sofia"},
-                      "jsonrpc": "2.0"}
-            )
-            login_data = login.json()
-            if "error" in login_data:
-                raise HTTPException(400, "Untis-Login fehlgeschlagen")
-            session_id = login_data["result"]["sessionId"]
-            cookies = {"JSESSIONID": session_id}
+        loop = asyncio.get_event_loop()
+        lessons = await loop.run_in_executor(
+            None, _fetch_timetable, server, cls.untis_school,
+            cls.untis_user, password, cls.untis_class or "",
+            monday, end_date
+        )
 
-            # Use personId/personType from login to call getTimetable directly
-            person_id   = login_data["result"].get("personId", 0)
-            person_type = login_data["result"].get("personType", 5)
-            end_date = monday + timedelta(weeks=8)
-            tt_resp = await client.post(
-                f"{base}/WebUntis/jsonrpc.do?school={school}",
-                json={"id": "3", "method": "getTimetable",
-                      "params": {"id": person_id, "type": person_type,
-                                 "startDate": int(monday.strftime("%Y%m%d")),
-                                 "endDate": int(end_date.strftime("%Y%m%d"))},
-                      "jsonrpc": "2.0"},
-                cookies=cookies,
-            )
-            await client.post(f"{base}/WebUntis/jsonrpc.do?school={school}",
-                json={"id": "4", "method": "logout", "params": {}, "jsonrpc": "2.0"}, cookies=cookies)
-
-        lessons = tt_resp.json().get("result", [])
-
-        # Extract unique subjects from timetable
-        seen = {}  # short -> longName
+        # Extract unique subjects
+        seen = {}
         for l in lessons:
-            for su in (l.get("su") or []):
-                short = (su.get("name") or "").strip()
-                long_name = (su.get("longName") or "").strip() or short
-                if short and short not in seen:
-                    seen[short] = long_name
+            short = l.get("subject_short", "").strip()
+            long_name = l.get("subject", "").strip() or short
+            if short and short not in seen:
+                seen[short] = long_name
 
         # Load existing short_names for this class
         existing = await db.execute(select(Subject).where(Subject.class_id == class_id))
