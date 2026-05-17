@@ -143,9 +143,26 @@ function ttRenderDay() {
       + '<div style="font-weight:600;">Kein Unterricht</div></div>';
     return;
   }
-  el.innerHTML = lessons.map(l => {
+  // 1 card ≈ 68px content + 8px gap → double = 68*2+8 = 144px
+  const SINGLE_H = 68, GAP = 8;
+  let html = '';
+  for (let i = 0; i < lessons.length; i++) {
+    const l = lessons[i];
+    const prev = i > 0 ? lessons[i-1] : null;
+    if (prev) {
+      const gap = _toMin(l.startTime) - _toMin(prev.endTime);
+      if (gap > 5) {
+        const gStr = gap >= 60 ? Math.floor(gap/60)+'h'+(gap%60?' '+gap%60+' min':'') : gap+' min';
+        html += '<div style="display:flex;align-items:center;gap:8px;padding:2px 4px 10px;opacity:0.35;">'
+          +'<div style="flex:1;height:1px;background:currentColor;"></div>'
+          +'<span style="font-size:0.65rem;font-weight:700;">Pause · '+gStr+'</span>'
+          +'<div style="flex:1;height:1px;background:currentColor;"></div>'
+          +'</div>';
+      }
+    }
     const color = isPast ? '#ebebeb' : (l.cancelled ? '#f9dedc' : (ttColorMap[l.subject_short]||'#eaddff'));
-    return '<div class="tt-block" style="background:'+color+';margin-bottom:8px;opacity:'+(isPast?.55:(l.cancelled?.7:1))+(l._double?';min-height:130px;align-items:flex-start;padding-top:16px;':'')+'">'
+    const dblStyle = l._double ? 'min-height:'+(SINGLE_H*2+GAP)+'px;align-items:flex-start;padding-top:16px;' : '';
+    html += '<div class="tt-block" style="background:'+color+';margin-bottom:'+GAP+'px;opacity:'+(isPast?.55:(l.cancelled?.7:1))+';'+dblStyle+'">'
       +'<div style="min-width:44px;text-align:center;">'
       +'<div style="font-size:0.72rem;font-weight:700;">'+_fmtTime(l.startTime)+'</div>'
       +'<div style="font-size:0.62rem;opacity:0.4;">–</div>'
@@ -161,7 +178,8 @@ function ttRenderDay() {
       +(l.cancelled  ?'<span style="background:#f9dedc;color:#b3261e;padding:3px 8px;border-radius:8px;font-size:0.66rem;font-weight:700;flex-shrink:0;">Ausfall</span>':'')
       +(l.substituted?'<span style="background:#ffdec1;color:#7d3c00;padding:3px 8px;border-radius:8px;font-size:0.66rem;font-weight:700;flex-shrink:0;">Vertr.</span>':'')
       +'</div>';
-  }).join('');
+  }
+  el.innerHTML = html;
   if (window.lucide) lucide.createIcons();
 }
 
@@ -189,7 +207,7 @@ function ttRenderWeek() {
     html += '<div style="display:flex;flex-direction:column;gap:4px;">'
       + lessons.map(l => {
           const color = dayPast ? '#ebebeb' : (l.cancelled ? '#f9dedc' : (ttColorMap[l.subject_short]||'#eaddff'));
-          return '<div style="background:'+color+';border-radius:10px;padding:5px 6px;opacity:'+(dayPast?.5:(l.cancelled?.6:1))+(l._double?';min-height:88px;justify-content:flex-start;':'')+'">'
+          return '<div style="background:'+color+';border-radius:10px;padding:5px 6px;opacity:'+(dayPast?.5:(l.cancelled?.6:1))+(l._double?';min-height:88px;':'')+'">'
             +'<div style="font-size:0.7rem;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;'+(l.cancelled?'text-decoration:line-through;':'')+'">'+( l.subject_short||l.subject||'–')+(l._double?' <span style="font-size:0.58rem;opacity:0.6;">2×</span>':'')+'</div>'
             +'<div style="font-size:0.62rem;opacity:0.55;">'+_fmtTime(l.startTime)+'–'+_fmtTime(l.endTime)+'</div>'
             +(l.room?'<div style="font-size:0.6rem;opacity:0.45;">'+l.room+'</div>':'')
