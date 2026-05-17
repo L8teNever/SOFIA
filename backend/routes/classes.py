@@ -88,7 +88,7 @@ async def get_untis_status(class_id: int, db: AsyncSession = Depends(get_db), _:
 async def test_untis(class_id: int, data: UntisCredentials, _: User = Depends(require_admin)):
     base = data.url.rstrip("/")
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
+        async with httpx.AsyncClient(timeout=10, verify=False) as client:
             resp = await client.post(
                 f"{base}/WebUntis/jsonrpc.do?school={data.school}",
                 json={"id": "1", "method": "authenticate",
@@ -125,7 +125,7 @@ async def reconnect_untis(class_id: int, db: AsyncSession = Depends(get_db), cur
     base = cls.untis_url.rstrip("/")
     school = cls.untis_school
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
+        async with httpx.AsyncClient(timeout=10, verify=False) as client:
             resp = await client.post(
                 f"{base}/WebUntis/jsonrpc.do?school={school}",
                 json={"id": "1", "method": "authenticate",
@@ -167,7 +167,7 @@ async def import_untis_subjects(class_id: int, db: AsyncSession = Depends(get_db
         today = date.today()
         monday = today - timedelta(days=today.weekday())
 
-        async with httpx.AsyncClient(timeout=15) as client:
+        async with httpx.AsyncClient(timeout=15, verify=False) as client:
             login = await client.post(
                 f"{base}/WebUntis/jsonrpc.do?school={school}",
                 json={"id": "1", "method": "authenticate",

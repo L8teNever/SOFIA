@@ -51,7 +51,7 @@ class UntisSession:
         self.person_type = person_type
 
 async def untis_login(base: str, school: str, username: str, password: str) -> UntisSession:
-    client = httpx.AsyncClient(timeout=15)
+    client = httpx.AsyncClient(timeout=15, verify=False)
     login = await client.post(
         f"{base}/WebUntis/jsonrpc.do?school={school}",
         json={"id": "1", "method": "authenticate",
@@ -116,6 +116,11 @@ async def get_timetable(db: AsyncSession = Depends(get_db), current_user: User =
             )
         finally:
             await untis_logout(sess, base, school)
+
+        if not this_raw and not next_raw:
+            return {"configured": True, "error":
+                f"Keine Stunden zurückgegeben (personId={sess.person_id}, personType={sess.person_type}). "
+                f"Rohantwort leer – bitte prüfen ob der Untis-Account Schüler-Typ hat."}
 
         return {
             "configured": True,
