@@ -17,7 +17,19 @@ function showToast(msg, duration = 3000) {
 function runScripts(container) {
   container.querySelectorAll('script').forEach(function(old) {
     var s = document.createElement('script');
-    s.textContent = old.textContent;
+    if (old.src) {
+      for (var i = 0; i < old.attributes.length; i++) {
+        var a = old.attributes[i];
+        s.setAttribute(a.name, a.value);
+      }
+    } else {
+      // Rewrite top-level let/const to var: re-opening a page re-executes
+      // its <script>, and let/const in script-scope throw "already declared"
+      // on the second run. var allows redeclaration. Page-level onclick
+      // handlers and init_<page>() must stay on the global scope, so we
+      // can't wrap in an IIFE.
+      s.textContent = old.textContent.replace(/^(\s*)(?:let|const)\s+/gm, '$1var ');
+    }
     old.parentNode.replaceChild(s, old);
   });
 }
