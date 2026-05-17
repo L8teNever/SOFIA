@@ -7,6 +7,14 @@
   transition: background 0.15s, transform 0.15s;
 }
 .back-btn:active { background: #e8def8; transform: scale(0.95); }
+.icon-btn {
+  background: #f3edf7; border-radius: 20px;
+  width: 48px; height: 48px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; border: none; cursor: pointer;
+  transition: background 0.15s, transform 0.15s;
+}
+.icon-btn:active { background: #e8def8; transform: scale(0.95); }
 
 /* Cards */
 .m3-card { border-radius: 28px; padding: 20px; background: #fff; margin-bottom: 12px; border: 1px solid rgba(0,0,0,0.04); }
