@@ -50,7 +50,7 @@ class UntisCredentials(BaseModel):
     school: str
     class_name: str
     username: str
-    password: str
+    password: str = ""
 
 @router.post("/{class_id}/untis")
 async def save_untis(class_id: int, data: UntisCredentials, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_admin)):
@@ -61,11 +61,12 @@ async def save_untis(class_id: int, data: UntisCredentials, db: AsyncSession = D
     if not cls:
         raise HTTPException(404)
     f = get_fernet()
-    cls.untis_url = data.url
+    cls.untis_url    = data.url
     cls.untis_school = data.school
-    cls.untis_class = data.class_name
-    cls.untis_user = data.username
-    cls.untis_password_enc = f.encrypt(data.password.encode()).decode() if f else data.password
+    cls.untis_class  = data.class_name
+    cls.untis_user   = data.username
+    if data.password:  # only overwrite if a new password was entered
+        cls.untis_password_enc = f.encrypt(data.password.encode()).decode() if f else data.password
     await db.commit()
     return {"ok": True}
 

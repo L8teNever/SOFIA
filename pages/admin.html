@@ -303,7 +303,7 @@ async function deleteClass(id) {
   showToast('Gelöscht');
 }
 
-function openUntisSheet(classId) {
+async function openUntisSheet(classId) {
   openSheet(`
     <div class="sheet-title">Untis-Zugangsdaten</div>
     <input class="m3-input" id="ut-url" placeholder="Server-URL (z.B. https://niobe.webuntis.com)" autocomplete="off">
@@ -317,6 +317,17 @@ function openUntisSheet(classId) {
       <button class="m3-btn-full" style="flex:1;" onclick="saveUntis(${classId})">Speichern</button>
     </div>
   `);
+  // Pre-fill with saved data
+  try {
+    const d = await API.getUntis(classId);
+    if (d && d.url) {
+      document.getElementById('ut-url').value   = d.url        || '';
+      document.getElementById('ut-school').value = d.school    || '';
+      document.getElementById('ut-class').value  = d.class_name|| '';
+      document.getElementById('ut-user').value   = d.username  || '';
+      document.getElementById('ut-pass').placeholder = 'Passwort (unverändert lassen zum Beibehalten)';
+    }
+  } catch {}
 }
 
 async function testUntisConn(classId) {
