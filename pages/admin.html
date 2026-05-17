@@ -129,10 +129,15 @@ async function renderUntisTab() {
         </button>
       </div>
       <div id="untis-import-row-${c.id}" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid rgba(0,0,0,0.06);">
-        <button onclick="importUntisSubjects(${c.id})" id="untis-import-btn-${c.id}" style="background:#c4eed0;color:#072711;border:none;border-radius:12px;padding:9px 16px;font-size:0.82rem;font-weight:700;cursor:pointer;font-family:inherit;width:100%;">
-          <i data-lucide="download" style="width:14px;height:14px;vertical-align:-2px;margin-right:5px;"></i>Fächer von Untis importieren
-        </button>
-        <div id="untis-import-result-${c.id}" style="font-size:0.78rem;margin-top:6px;padding:0 4px;min-height:16px;"></div>
+        <div style="display:flex;gap:8px;margin-bottom:6px;">
+          <button onclick="reconnectUntis(${c.id})" id="untis-reconnect-btn-${c.id}" style="background:#d3e3fd;color:#041e49;border:none;border-radius:12px;padding:9px 14px;font-size:0.82rem;font-weight:700;cursor:pointer;font-family:inherit;flex:1;">
+            <i data-lucide="refresh-cw" style="width:14px;height:14px;vertical-align:-2px;margin-right:5px;"></i>Verbindung testen
+          </button>
+          <button onclick="importUntisSubjects(${c.id})" id="untis-import-btn-${c.id}" style="background:#c4eed0;color:#072711;border:none;border-radius:12px;padding:9px 14px;font-size:0.82rem;font-weight:700;cursor:pointer;font-family:inherit;flex:1;">
+            <i data-lucide="download" style="width:14px;height:14px;vertical-align:-2px;margin-right:5px;"></i>Fächer importieren
+          </button>
+        </div>
+        <div id="untis-import-result-${c.id}" style="font-size:0.78rem;padding:0 4px;min-height:16px;"></div>
       </div>
     </div>`).join('');
   lucide.createIcons();
@@ -336,6 +341,22 @@ async function testUntisConn(classId) {
     el.innerHTML = '<span style="color:#b3261e;">Fehler: ' + (e.message||'Unbekannt') + '</span>';
   }
   btn.disabled = false; btn.textContent = 'Verbindung testen';
+}
+
+async function reconnectUntis(classId) {
+  const btn = document.getElementById('untis-reconnect-btn-' + classId);
+  const res = document.getElementById('untis-import-result-' + classId);
+  if (btn) { btn.disabled = true; btn.textContent = 'Verbinde…'; }
+  if (res) res.innerHTML = '';
+  try {
+    const data = await API.reconnectUntis(classId);
+    if (res) res.innerHTML = data.ok
+      ? '<span style="color:#146c2e;font-weight:600;">✓ ' + data.message + '</span>'
+      : '<span style="color:#b3261e;font-weight:600;">✗ ' + data.message + '</span>';
+  } catch(e) {
+    if (res) res.innerHTML = '<span style="color:#b3261e;">Fehler: ' + (e.detail || e.message || 'Unbekannt') + '</span>';
+  }
+  if (btn) { btn.disabled = false; btn.innerHTML = '<i data-lucide="refresh-cw" style="width:14px;height:14px;vertical-align:-2px;margin-right:5px;"></i>Verbindung testen'; lucide.createIcons(); }
 }
 
 async function importUntisSubjects(classId) {

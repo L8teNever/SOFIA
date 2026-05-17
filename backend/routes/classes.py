@@ -111,6 +111,41 @@ async def test_untis(class_id: int, data: UntisCredentials, _: User = Depends(re
     except Exception as e:
         return {"ok": False, "message": str(e)}
 
+@router.post("/{class_id}/untis/reconnect")
+async def reconnect_untis(class_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_admin)):
+    if current_user.role != "super_admin" and current_user.class_id != class_id:
+        raise HTTPException(403, "Not your class")
+    result = await db.execute(select(ClassGroup).where(ClassGroup.id == class_id))
+    cls = result.scalar_one_or_none()
+    if not cls or not cls.untis_url:
+        return {"ok": False, "message": "Untis nicht konfiguriert"}
+    f = get_fernet()
+    password = f.decrypt(cls.untis_password_enc.encode()).decode() if (f and cls.untis_password_enc) else (cls.untis_password_enc or "")
+    base = cls.untis_url.rstrip("/")
+    school = cls.untis_school
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.post(
+                f"{base}/WebUntis/jsonrpc.do?school={school}",
+                json={"id": "1", "method": "authenticate",
+                      "params": {"user": cls.untis_user, "password": password, "client": "sofia"},
+                      "jsonrpc": "2.0"}
+            )
+            body = resp.json()
+            if "error" in body:
+                return {"ok": False, "message": body["error"].get("message", "Login fehlgeschlagen")}
+            session_id = body.get("result", {}).get("sessionId")
+            await client.post(
+                f"{base}/WebUntis/jsonrpc.do?school={school}",
+                json={"id": "2", "method": "logout", "params": {}, "jsonrpc": "2.0"},
+                cookies={"JSESSIONID": session_id}
+            )
+            return {"ok": True, "message": "Verbindung erfolgreich"}
+    except httpx.ConnectError:
+        return {"ok": False, "message": "Server nicht erreichbar"}
+    except Exception as e:
+        return {"ok": False, "message": str(e)}
+
 SUBJECT_COLORS = ['#eaddff','#d3e3fd','#c4eed0','#ffdec1','#ffd8e4','#e8def8','#cfe2ff','#fce4ec','#e8f5e9','#fff3e0']
 
 @router.post("/{class_id}/untis/import-subjects")
