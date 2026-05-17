@@ -2,45 +2,108 @@
   <div class="page-header">
     <button class="back-btn"><i data-lucide="arrow-left" style="width:22px;height:22px;"></i></button>
     <span class="page-title" style="color:#442b00;">Stundenplan</span>
+    <div style="flex:1;"></div>
+    <div style="display:flex;gap:4px;background:#ffdec1;border-radius:14px;padding:4px;">
+      <button id="tt-btn-day" onclick="ttSetMode('day')"
+        style="border:none;border-radius:10px;padding:6px 14px;font-size:0.82rem;font-weight:700;cursor:pointer;font-family:inherit;background:#442b00;color:#fff;transition:all 0.15s;">Tag</button>
+      <button id="tt-btn-week" onclick="ttSetMode('week')"
+        style="border:none;border-radius:10px;padding:6px 14px;font-size:0.82rem;font-weight:700;cursor:pointer;font-family:inherit;background:transparent;color:#442b00;transition:all 0.15s;">Woche</button>
+    </div>
   </div>
-  <div class="page-scroll-1col"><div class="page-inner">
-    <div id="tt-loading" style="text-align:center;padding:60px;opacity:0.5;">Stundenplan wird geladen…</div>
-    <div id="tt-not-configured" style="display:none;text-align:center;padding:60px 20px;">
-      <i data-lucide="settings" style="width:48px;height:48px;margin-bottom:16px;opacity:0.4;"></i>
-      <div style="font-weight:700;margin-bottom:8px;">Nicht konfiguriert</div>
-      <div style="opacity:0.6;font-size:0.9rem;">Der Klassen-Admin muss Untis-Zugangsdaten hinterlegen.</div>
+
+  <div id="tt-loading" style="text-align:center;padding:60px;opacity:0.5;">Stundenplan wird geladen…</div>
+  <div id="tt-not-configured" style="display:none;text-align:center;padding:60px 20px;">
+    <i data-lucide="settings" style="width:48px;height:48px;margin-bottom:16px;opacity:0.4;"></i>
+    <div style="font-weight:700;margin-bottom:8px;">Nicht konfiguriert</div>
+    <div style="opacity:0.6;font-size:0.9rem;">Der Klassen-Admin muss Untis-Zugangsdaten hinterlegen.</div>
+  </div>
+  <div id="tt-error" style="display:none;text-align:center;padding:40px 20px;color:#b3261e;"></div>
+
+  <!-- Day view -->
+  <div id="tt-day-view" style="display:none;flex-direction:column;flex:1;overflow:hidden;">
+    <div style="display:flex;align-items:center;gap:8px;padding:0 20px 12px 20px;flex-shrink:0;">
+      <button onclick="ttDayNav(-1)" class="icon-btn" style="background:#ffdec1;">
+        <i data-lucide="chevron-left" style="width:20px;height:20px;color:#442b00;"></i>
+      </button>
+      <div id="tt-day-label" style="flex:1;text-align:center;font-weight:700;font-size:1rem;color:#442b00;"></div>
+      <button onclick="ttDayNav(1)" class="icon-btn" style="background:#ffdec1;">
+        <i data-lucide="chevron-right" style="width:20px;height:20px;color:#442b00;"></i>
+      </button>
     </div>
-    <div id="tt-error" style="display:none;text-align:center;padding:40px 20px;color:#b3261e;"></div>
-    <div id="tt-content" style="display:none;">
-      <div class="section-label" style="color:#442b00;" id="tt-this-week-label">Diese Woche</div>
-      <div id="tt-this-week"></div>
-      <div class="section-label" style="color:#442b00;margin-top:24px;" id="tt-next-week-label">Nächste Woche</div>
-      <div id="tt-next-week"></div>
+    <div style="flex:1;overflow-y:auto;padding:0 20px 100px 20px;" id="tt-day-lessons"></div>
+  </div>
+
+  <!-- Week view -->
+  <div id="tt-week-view" style="display:none;flex-direction:column;flex:1;overflow:hidden;">
+    <div style="display:flex;align-items:center;gap:8px;padding:0 20px 12px 20px;flex-shrink:0;">
+      <button onclick="ttWeekNav(-1)" class="icon-btn" style="background:#ffdec1;">
+        <i data-lucide="chevron-left" style="width:20px;height:20px;color:#442b00;"></i>
+      </button>
+      <div id="tt-week-range-label" style="flex:1;text-align:center;font-weight:700;font-size:0.9rem;color:#442b00;"></div>
+      <button onclick="ttWeekNav(1)" class="icon-btn" style="background:#ffdec1;">
+        <i data-lucide="chevron-right" style="width:20px;height:20px;color:#442b00;"></i>
+      </button>
     </div>
-  </div></div>
+    <div style="flex:1;overflow:auto;padding:0 12px 100px 12px;">
+      <div id="tt-week-grid" style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;min-width:340px;"></div>
+    </div>
+  </div>
 </div>
 
 <script>
 const TT_COLORS = ['#eaddff','#d3e3fd','#c4eed0','#ffdec1','#ffd8e4','#e8def8','#cfe2ff'];
-const TT_DAYS = ['So','Mo','Di','Mi','Do','Fr','Sa'];
-const TT_MONTHS = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
+const TT_DAYS_SHORT = ['So','Mo','Di','Mi','Do','Fr','Sa'];
+const TT_DAYS_LONG  = ['Sonntag','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag'];
+const TT_MONTHS     = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
+
+let ttAllLessons = [];   // flat array of all lessons (both weeks)
+let ttColorMap   = {};
+let ttMode       = 'day';
+let ttDayOffset  = 0;    // offset in days from today
+let ttWeekOffset = 0;    // 0 = this week, 1 = next week
+
+function ttDate(offsetFromToday) {
+  const d = new Date();
+  d.setHours(0,0,0,0);
+  d.setDate(d.getDate() + offsetFromToday);
+  return d;
+}
+
+function ttDateStr(d) {
+  return d.getFullYear() + String(d.getMonth()+1).padStart(2,'0') + String(d.getDate()).padStart(2,'0');
+}
+
+function fmtTime(t) {
+  const s = String(t).padStart(4,'0');
+  return s.slice(0,2) + ':' + s.slice(2);
+}
 
 async function init_timetable() {
   try {
     const data = await API.timetable();
     document.getElementById('tt-loading').style.display = 'none';
-    if (!data.configured) {
-      document.getElementById('tt-not-configured').style.display = 'block';
-      return;
-    }
+    if (!data.configured) { document.getElementById('tt-not-configured').style.display = 'block'; return; }
     if (data.error) {
       document.getElementById('tt-error').style.display = 'block';
       document.getElementById('tt-error').textContent = 'Fehler: ' + data.error;
       return;
     }
-    document.getElementById('tt-content').style.display = 'block';
-    renderWeek(data.this_week, 'tt-this-week', 'tt-this-week-label', true);
-    renderWeek(data.next_week, 'tt-next-week', 'tt-next-week-label', false);
+    ttAllLessons = [...(data.this_week?.lessons || []), ...(data.next_week?.lessons || [])];
+
+    // Build color map
+    let ci = 0;
+    ttAllLessons.forEach(l => {
+      if (l.subject_short && !ttColorMap[l.subject_short])
+        ttColorMap[l.subject_short] = TT_COLORS[ci++ % TT_COLORS.length];
+    });
+
+    // Skip to today (skip weekends in day view)
+    const today = new Date(); today.setHours(0,0,0,0);
+    const dow = today.getDay();
+    if (dow === 0) ttDayOffset = 1;       // Sunday → Monday
+    else if (dow === 6) ttDayOffset = 2;  // Saturday → Monday
+
+    ttSetMode('day');
     if (window.lucide) lucide.createIcons();
   } catch(e) {
     document.getElementById('tt-loading').style.display = 'none';
@@ -49,83 +112,129 @@ async function init_timetable() {
   }
 }
 
-function fmtTime(t) {
-  if (!t) return '';
-  const s = String(t).padStart(4, '0');
-  return s.slice(0, 2) + ':' + s.slice(2);
+function ttSetMode(mode) {
+  ttMode = mode;
+  document.getElementById('tt-btn-day').style.background  = mode === 'day'  ? '#442b00' : 'transparent';
+  document.getElementById('tt-btn-day').style.color       = mode === 'day'  ? '#fff'    : '#442b00';
+  document.getElementById('tt-btn-week').style.background = mode === 'week' ? '#442b00' : 'transparent';
+  document.getElementById('tt-btn-week').style.color      = mode === 'week' ? '#fff'    : '#442b00';
+  document.getElementById('tt-day-view').style.display    = mode === 'day'  ? 'flex' : 'none';
+  document.getElementById('tt-week-view').style.display   = mode === 'week' ? 'flex' : 'none';
+  if (mode === 'day') ttRenderDay();
+  else ttRenderWeek();
 }
 
-function fmtDate(dateStr) {
-  // dateStr like "20260513"
-  if (!dateStr || dateStr.length < 8) return dateStr;
-  const d = new Date(dateStr.slice(0,4) + '-' + dateStr.slice(4,6) + '-' + dateStr.slice(6,8) + 'T00:00');
-  return TT_DAYS[d.getDay()] + ', ' + d.getDate() + '. ' + TT_MONTHS[d.getMonth()];
+function ttDayNav(dir) {
+  ttDayOffset += dir;
+  // Skip weekends
+  const d = ttDate(ttDayOffset);
+  const dow = d.getDay();
+  if (dow === 0) ttDayOffset += dir > 0 ? 1 : -2;
+  else if (dow === 6) ttDayOffset += dir > 0 ? 2 : -1;
+  ttRenderDay();
 }
 
-function weekRangeLabel(startIso) {
-  if (!startIso) return '';
-  const monday = new Date(startIso + 'T00:00');
-  const friday = new Date(monday); friday.setDate(monday.getDate() + 4);
-  return monday.getDate() + '. – ' + friday.getDate() + '. ' + TT_MONTHS[friday.getMonth()] + ' ' + friday.getFullYear();
-}
+function ttRenderDay() {
+  const d = ttDate(ttDayOffset);
+  const dateStr = ttDateStr(d);
+  const today = new Date(); today.setHours(0,0,0,0);
+  const isToday = d.getTime() === today.getTime();
 
-function renderWeek(week, containerId, labelId, isThisWeek) {
-  const container = document.getElementById(containerId);
-  const label = document.getElementById(labelId);
-  if (!week) { container.innerHTML = '<div style="opacity:0.4;text-align:center;padding:20px;">Keine Daten</div>'; return; }
+  const label = document.getElementById('tt-day-label');
+  label.textContent = TT_DAYS_LONG[d.getDay()] + ', ' + d.getDate() + '. ' + TT_MONTHS[d.getMonth()] + ' ' + d.getFullYear()
+    + (isToday ? ' · Heute' : '');
 
-  if (label) label.textContent = (isThisWeek ? 'Diese Woche' : 'Nächste Woche') + ' · ' + weekRangeLabel(week.start);
-
-  const lessons = week.lessons || [];
+  const lessons = ttAllLessons.filter(l => l.date === dateStr);
+  const container = document.getElementById('tt-day-lessons');
   if (!lessons.length) {
-    container.innerHTML = '<div style="background:#fff3e0;border-radius:20px;padding:24px;text-align:center;opacity:0.6;">Keine Stunden</div>';
+    container.innerHTML = '<div style="text-align:center;padding:60px 20px;opacity:0.4;">'
+      + '<div style="font-size:2rem;margin-bottom:8px;">🎉</div>'
+      + '<div style="font-weight:600;">Kein Unterricht</div></div>';
     return;
   }
+  container.innerHTML = lessons.map(l => ttLessonCard(l, true)).join('');
+  if (window.lucide) lucide.createIcons();
+}
 
-  // Build subject→color map
-  const colorMap = {};
-  let ci = 0;
-  lessons.forEach(l => { if (l.subject && !colorMap[l.subject]) colorMap[l.subject] = TT_COLORS[ci++ % TT_COLORS.length]; });
+function ttWeekNav(dir) {
+  ttWeekOffset = Math.max(0, Math.min(1, ttWeekOffset + dir));
+  ttRenderWeek();
+}
 
-  // Group by date
-  const byDay = {};
-  lessons.forEach(l => { (byDay[l.date] = byDay[l.date] || []).push(l); });
+function ttRenderWeek() {
+  const today = new Date(); today.setHours(0,0,0,0);
+  const thisMonday = new Date(today);
+  thisMonday.setDate(today.getDate() - today.getDay() + (today.getDay() === 0 ? -6 : 1));
+  const weekStart = new Date(thisMonday);
+  weekStart.setDate(thisMonday.getDate() + ttWeekOffset * 7);
 
-  const todayStr = new Date().toISOString().slice(0,10).replace(/-/g,'');
+  const months = TT_MONTHS;
+  const endDate = new Date(weekStart); endDate.setDate(weekStart.getDate() + 4);
+  document.getElementById('tt-week-range-label').textContent =
+    weekStart.getDate() + '. – ' + endDate.getDate() + '. ' + months[endDate.getMonth()] + ' ' + endDate.getFullYear();
 
-  let html = '';
-  Object.keys(byDay).sort().forEach(dateKey => {
-    const dayLessons = byDay[dateKey];
-    const isToday = dateKey === todayStr;
-    html += '<div style="margin-bottom:14px;">';
-    html += '<div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;'
-          + (isToday ? 'color:#6750a4;' : 'opacity:0.5;')
-          + 'margin-bottom:6px;padding-left:4px;">'
-          + fmtDate(dateKey)
-          + (isToday ? ' <span style="background:#6750a4;color:white;border-radius:6px;padding:1px 7px;font-size:0.65rem;margin-left:4px;">Heute</span>' : '')
-          + '</div>';
-    dayLessons.forEach(l => {
-      const color = l.cancelled ? '#f9dedc' : (colorMap[l.subject] || '#eaddff');
-      const textColor = l.cancelled ? '#b3261e' : 'inherit';
-      html += '<div class="tt-block" style="background:' + color + ';color:' + textColor + ';margin-bottom:7px;opacity:' + (l.cancelled ? '0.7' : '1') + ';">'
-            + '<div style="min-width:44px;text-align:center;">'
-            + '<div style="font-size:0.72rem;font-weight:700;font-variant-numeric:tabular-nums;">' + fmtTime(l.startTime) + '</div>'
-            + '<div style="font-size:0.65rem;opacity:0.5;">–</div>'
-            + '<div style="font-size:0.72rem;font-weight:700;font-variant-numeric:tabular-nums;">' + fmtTime(l.endTime) + '</div>'
-            + '</div>'
-            + '<div style="flex:1;min-width:0;">'
-            + '<div style="font-weight:700;font-size:0.95rem;' + (l.cancelled ? 'text-decoration:line-through;' : '') + '">' + (l.subject || '–') + '</div>'
-            + '<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:4px;">'
-            + (l.teacher ? '<span style="font-size:0.68rem;font-weight:600;background:rgba(0,0,0,0.08);padding:2px 7px;border-radius:8px;">' + l.teacher + '</span>' : '')
-            + (l.room ? '<span style="font-size:0.68rem;font-weight:600;background:rgba(0,0,0,0.08);padding:2px 7px;border-radius:8px;">' + l.room + '</span>' : '')
-            + '</div></div>'
-            + (l.cancelled ? '<span style="background:#f9dedc;color:#b3261e;padding:3px 9px;border-radius:8px;font-size:0.68rem;font-weight:700;flex-shrink:0;">Ausfall</span>' : '')
-            + (l.substituted ? '<span style="background:#ffdec1;color:#7d3c00;padding:3px 9px;border-radius:8px;font-size:0.68rem;font-weight:700;flex-shrink:0;">Vertretung</span>' : '')
-            + '</div>';
-    });
-    html += '</div>';
+  // Disable nav buttons at boundaries
+  document.querySelector('[onclick="ttWeekNav(-1)"]').style.opacity = ttWeekOffset === 0 ? '0.3' : '1';
+  document.querySelector('[onclick="ttWeekNav(1)"]').style.opacity  = ttWeekOffset === 1 ? '0.3' : '1';
+
+  const grid = document.getElementById('tt-week-grid');
+  const days = [];
+  for (let i = 0; i < 5; i++) {
+    const d = new Date(weekStart); d.setDate(weekStart.getDate() + i);
+    days.push(d);
+  }
+
+  const todayStr = ttDateStr(today);
+
+  let html = days.map(d => {
+    const isToday = ttDateStr(d) === todayStr;
+    return `<div style="font-size:0.72rem;font-weight:700;text-align:center;padding:6px 2px;border-radius:10px;`
+      + (isToday ? 'background:#442b00;color:#fff;' : 'opacity:0.6;') + '">'
+      + TT_DAYS_SHORT[d.getDay()] + ' ' + d.getDate() + '.'
+      + '</div>';
+  }).join('');
+
+  days.forEach(d => {
+    const dateStr = ttDateStr(d);
+    const lessons = ttAllLessons.filter(l => l.date === dateStr);
+    if (!lessons.length) {
+      html += '<div style="padding:4px 0;"></div>';
+    } else {
+      html += '<div style="display:flex;flex-direction:column;gap:4px;">'
+        + lessons.map(l => ttLessonCardCompact(l)).join('') + '</div>';
+    }
   });
 
-  container.innerHTML = html;
+  grid.innerHTML = html;
+  if (window.lucide) lucide.createIcons();
+}
+
+function ttLessonCard(l, showDate) {
+  const color = l.cancelled ? '#f9dedc' : (ttColorMap[l.subject_short] || '#eaddff');
+  return '<div class="tt-block" style="background:' + color + ';margin-bottom:8px;opacity:' + (l.cancelled?'0.7':'1') + ';">'
+    + '<div style="min-width:44px;text-align:center;">'
+    + '<div style="font-size:0.72rem;font-weight:700;">' + fmtTime(l.startTime) + '</div>'
+    + '<div style="font-size:0.62rem;opacity:0.45;">–</div>'
+    + '<div style="font-size:0.72rem;font-weight:700;">' + fmtTime(l.endTime) + '</div>'
+    + '</div>'
+    + '<div style="flex:1;min-width:0;">'
+    + '<div style="font-weight:700;font-size:0.95rem;' + (l.cancelled?'text-decoration:line-through;':'') + '">' + (l.subject||'–') + '</div>'
+    + '<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:4px;">'
+    + (l.teacher ? '<span style="font-size:0.68rem;font-weight:600;background:rgba(0,0,0,0.08);padding:2px 7px;border-radius:8px;">' + l.teacher + '</span>' : '')
+    + (l.room    ? '<span style="font-size:0.68rem;font-weight:600;background:rgba(0,0,0,0.08);padding:2px 7px;border-radius:8px;">' + l.room    + '</span>' : '')
+    + '</div></div>'
+    + (l.cancelled  ? '<span style="background:#f9dedc;color:#b3261e;padding:3px 8px;border-radius:8px;font-size:0.66rem;font-weight:700;">Ausfall</span>' : '')
+    + (l.substituted? '<span style="background:#ffdec1;color:#7d3c00;padding:3px 8px;border-radius:8px;font-size:0.66rem;font-weight:700;">Vertr.</span>' : '')
+    + '</div>';
+}
+
+function ttLessonCardCompact(l) {
+  const color = l.cancelled ? '#f9dedc' : (ttColorMap[l.subject_short] || '#eaddff');
+  return '<div style="background:' + color + ';border-radius:10px;padding:5px 6px;opacity:' + (l.cancelled?'0.6':'1') + ';">'
+    + '<div style="font-size:0.7rem;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;' + (l.cancelled?'text-decoration:line-through;':'') + '">'
+    + (l.subject_short || l.subject || '–') + '</div>'
+    + '<div style="font-size:0.62rem;opacity:0.6;">' + fmtTime(l.startTime) + '</div>'
+    + (l.room ? '<div style="font-size:0.6rem;opacity:0.5;">' + l.room + '</div>' : '')
+    + '</div>';
 }
 </script>

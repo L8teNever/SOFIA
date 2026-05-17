@@ -54,36 +54,41 @@ def _period_to_dict(p) -> dict:
         "substituted":   code == "irregular",
     }
 
-def _fetch_timetable(server: str, school: str, username: str, password: str,
-                     class_name: str, start: date, end: date) -> list:
-    session = webuntis.Session(
+def _fetch_two_weeks(server: str, school: str, username: str, password: str,
+                     class_name: str, this_monday: date) -> tuple[list, list]:
+    """Fetches both weeks in a single session to avoid concurrent login issues."""
+    next_monday = this_monday + timedelta(days=7)
+
+    sess = webuntis.Session(
         server=server, username=username, password=password,
         school=school, useragent="SofiaApp/1.0",
     )
-    session.login()
+    sess.login()
     try:
-        # Strategy 1: own timetable (works for students directly)
-        try:
-            periods = list(session.my_timetable(start=start, end=end))
-            if periods:
-                return sorted([_period_to_dict(p) for p in periods],
-                               key=lambda x: (x["date"], x["startTime"]))
-        except Exception:
-            pass
+        def fetch_week(start: date, end: date) -> list:
+            try:
+                periods = list(sess.my_timetable(start=start, end=end))
+                if periods:
+                    return sorted([_period_to_dict(p) for p in periods],
+                                   key=lambda x: (x["date"], x["startTime"]))
+            except Exception:
+                pass
+            klassen = list(sess.klassen())
+            if not klassen:
+                return []
+            matched = [k for k in klassen if k.name.lower() == class_name.lower()]
+            if not matched:
+                matched = [klassen[0]]
+            periods = list(sess.timetable(klasse=matched[0], start=start, end=end))
+            return sorted([_period_to_dict(p) for p in periods],
+                          key=lambda x: (x["date"], x["startTime"]))
 
-        # Strategy 2: via class name
-        klassen = list(session.klassen())
-        if not klassen:
-            raise Exception("Keine Klassen gefunden")
-        matched = [k for k in klassen if k.name.lower() == class_name.lower()]
-        if not matched:
-            matched = [klassen[0]]
-        periods = list(session.timetable(klasse=matched[0], start=start, end=end))
-        return sorted([_period_to_dict(p) for p in periods],
-                      key=lambda x: (x["date"], x["startTime"]))
+        this_lessons = fetch_week(this_monday, this_monday + timedelta(days=4))
+        next_lessons = fetch_week(next_monday, next_monday + timedelta(days=4))
+        return this_lessons, next_lessons
     finally:
         try:
-            session.logout()
+            sess.logout()
         except Exception:
             pass
 
@@ -104,13 +109,9 @@ async def get_timetable(db: AsyncSession = Depends(get_db), current_user: User =
         next_monday = this_monday + timedelta(days=7)
 
         loop = asyncio.get_event_loop()
-        this_lessons, next_lessons = await asyncio.gather(
-            loop.run_in_executor(None, _fetch_timetable, server, cls.untis_school,
-                                 cls.untis_user, password, cls.untis_class or "",
-                                 this_monday, this_monday + timedelta(days=4)),
-            loop.run_in_executor(None, _fetch_timetable, server, cls.untis_school,
-                                 cls.untis_user, password, cls.untis_class or "",
-                                 next_monday, next_monday + timedelta(days=4)),
+        this_lessons, next_lessons = await loop.run_in_executor(
+            None, _fetch_two_weeks, server, cls.untis_school,
+            cls.untis_user, password, cls.untis_class or "", this_monday,
         )
 
         return {
