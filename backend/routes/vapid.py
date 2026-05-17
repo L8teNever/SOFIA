@@ -6,8 +6,9 @@ from backend.auth import get_current_user, require_admin
 from backend.models.user import User
 from backend.schemas import PushSubscriptionIn, PushNotificationIn
 from backend.config import settings
-import json
+import json, asyncio, logging
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/push", tags=["push"])
 
 @router.get("/vapid-public-key")
@@ -42,16 +43,32 @@ async def send_notification(data: PushNotificationIn, db: AsyncSession = Depends
     result = await db.execute(query)
     users = result.scalars().all()
     sent = 0
+    expired_ids = []
+
     for u in users:
         try:
             sub = json.loads(u.push_subscription)
-            webpush(
+            await asyncio.to_thread(
+                webpush,
                 subscription_info=sub,
                 data=json.dumps({"title": data.title, "body": data.body}),
                 vapid_private_key=settings.vapid_private_key,
                 vapid_claims={"sub": settings.vapid_claim_email},
             )
             sent += 1
-        except Exception:
-            pass
+        except WebPushException as e:
+            # 410 Gone = subscription expired/unregistered → clean up
+            if e.response is not None and e.response.status_code in (404, 410):
+                expired_ids.append(u.id)
+            else:
+                logger.warning("Push failed for user %s: %s", u.id, e)
+        except Exception as e:
+            logger.warning("Push error for user %s: %s", u.id, e)
+
+    if expired_ids:
+        expired_result = await db.execute(select(User).where(User.id.in_(expired_ids)))
+        for u in expired_result.scalars().all():
+            u.push_subscription = None
+        await db.commit()
+
     return {"sent": sent}
