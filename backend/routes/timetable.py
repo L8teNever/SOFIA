@@ -11,15 +11,8 @@ from datetime import date, timedelta
 import asyncio
 import requests
 from urllib3.exceptions import InsecureRequestWarning
-import webuntis
 
-# Disable SSL verification globally for webuntis (uses requests internally)
 requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
-_original_send = requests.Session.send
-def _patched_send(self, request, **kwargs):
-    kwargs['verify'] = False
-    return _original_send(self, request, **kwargs)
-requests.Session.send = _patched_send
 
 router = APIRouter(prefix="/api/v1/timetable", tags=["timetable"])
 
@@ -36,53 +29,82 @@ def _strip_server(url: str) -> str:
         url = url.split("/")[0]
     return url
 
-def _fetch_timetable(server: str, school: str, username: str, password: str,
-                     class_name: str, monday: date, friday: date) -> list:
-    """Runs synchronously — call via run_in_executor."""
-    session = webuntis.Session(
-        server=server, username=username, password=password,
-        school=school, useragent="SofiaApp/1.0"
+def _rpc(session: requests.Session, base: str, school: str, method: str, params: dict, req_id="1"):
+    resp = session.post(
+        f"https://{base}/WebUntis/jsonrpc.do?school={school}",
+        json={"id": req_id, "method": method, "params": params, "jsonrpc": "2.0"},
+        verify=False, timeout=15,
     )
-    session.login()
-    try:
-        # Strategy 1: own timetable
-        try:
-            periods = list(session.my_timetable(start=monday, end=friday))
-        except Exception:
-            periods = None
+    return resp.json()
 
-        # Strategy 2: via class
+def _fetch_timetable(server: str, school: str, username: str, password: str,
+                     class_name: str, start: date, end: date) -> list:
+    start_int = int(start.strftime("%Y%m%d"))
+    end_int   = int(end.strftime("%Y%m%d"))
+
+    s = requests.Session()
+
+    # 1. Login
+    login = _rpc(s, server, school, "authenticate",
+                 {"user": username, "password": password, "client": "sofia"})
+    if "error" in login:
+        raise Exception("Login fehlgeschlagen: " + login["error"].get("message", ""))
+    result     = login["result"]
+    session_id = result["sessionId"]
+    person_id  = result.get("personId", 0)
+    person_type = result.get("personType", 5)
+    s.cookies.set("JSESSIONID", session_id)
+
+    try:
+        periods = None
+
+        # Strategy 1: own timetable via personId/personType
+        if person_id:
+            r = _rpc(s, server, school, "getTimetable",
+                     {"id": person_id, "type": person_type,
+                      "startDate": start_int, "endDate": end_int}, "tt1")
+            if not r.get("error") and r.get("result"):
+                periods = r["result"]
+
+        # Strategy 2: via class (getKlassen — German method name used by webuntis lib)
         if not periods:
-            klassen = list(session.klassen())
-            matched = [k for k in klassen if k.name.lower() == class_name.lower()]
+            klassen_resp = _rpc(s, server, school, "getKlassen", {}, "kl")
+            klassen = klassen_resp.get("result", [])
+            matched = [k for k in klassen if k.get("name", "").lower() == class_name.lower()]
             if not matched and klassen:
                 matched = [klassen[0]]
-            if not matched:
-                raise Exception("Keine Klasse gefunden")
-            periods = list(session.timetable(klasse=matched[0], start=monday, end=friday))
+            if matched:
+                r = _rpc(s, server, school, "getTimetable",
+                         {"id": matched[0]["id"], "type": 1,
+                          "startDate": start_int, "endDate": end_int}, "tt2")
+                if not r.get("error"):
+                    periods = r.get("result", [])
 
-        result = []
+        if periods is None:
+            periods = []
+
+        result_list = []
         for p in periods:
-            subjects = [s.name for s in p.subjects] if p.subjects else []
-            long_subjects = [getattr(s, 'long_name', s.name) for s in p.subjects] if p.subjects else []
-            teachers = [t.name for t in p.teachers] if p.teachers else []
-            rooms = [r.name for r in p.rooms] if p.rooms else []
-            code = getattr(p, 'code', None)
-            result.append({
-                "date": p.start.strftime("%Y%m%d"),
-                "startTime": int(p.start.strftime("%H%M")),
-                "endTime": int(p.end.strftime("%H%M")),
-                "subject": long_subjects[0] if long_subjects else (subjects[0] if subjects else ""),
-                "subject_short": subjects[0] if subjects else "",
-                "teacher": teachers[0] if teachers else "",
-                "room": rooms[0] if rooms else "",
-                "cancelled": code == "cancelled",
-                "substituted": code == "irregular",
+            su = p.get("su") or []
+            te = p.get("te") or []
+            ro = p.get("ro") or []
+            code = p.get("code", 0)
+            result_list.append({
+                "date": str(p.get("date", "")),
+                "startTime": p.get("startTime", 0),
+                "endTime":   p.get("endTime", 0),
+                "subject":       (su[0].get("longName") or su[0].get("name") or "") if su else "",
+                "subject_short": su[0].get("name", "") if su else "",
+                "teacher":   te[0].get("name", "") if te else "",
+                "room":      ro[0].get("name", "") if ro else "",
+                "cancelled":   code == 1,
+                "substituted": code == 2,
             })
-        return sorted(result, key=lambda x: (x["date"], x["startTime"]))
+        return sorted(result_list, key=lambda x: (x["date"], x["startTime"]))
+
     finally:
         try:
-            session.logout()
+            _rpc(s, server, school, "logout", {}, "out")
         except Exception:
             pass
 
@@ -103,7 +125,6 @@ async def get_timetable(db: AsyncSession = Depends(get_db), current_user: User =
         next_monday = this_monday + timedelta(days=7)
 
         loop = asyncio.get_event_loop()
-
         this_lessons, next_lessons = await asyncio.gather(
             loop.run_in_executor(None, _fetch_timetable, server, cls.untis_school,
                                  cls.untis_user, password, cls.untis_class or "",

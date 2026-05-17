@@ -173,10 +173,9 @@ async def import_untis_subjects(class_id: int, db: AsyncSession = Depends(get_db
         lessons = await loop.run_in_executor(
             None, _fetch_timetable, server, cls.untis_school,
             cls.untis_user, password, cls.untis_class or "",
-            monday, end_date
+            monday, end_date,
         )
 
-        # Extract unique subjects
         seen = {}
         for l in lessons:
             short = l.get("subject_short", "").strip()
