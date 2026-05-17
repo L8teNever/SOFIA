@@ -42,65 +42,34 @@ def parse_lessons(raw: list) -> list:
         })
     return sorted(result, key=lambda x: (x["date"], x["startTime"]))
 
-async def untis_get_class_id(client: httpx.AsyncClient, base: str, school: str,
-                              cookies: dict, class_name: str) -> tuple[int | None, list[str]]:
-    """Returns (class_id, debug_names). Tries multiple strategies."""
-    name_clean = class_name.strip().lower()
-
-    # Strategy 1: REST app/data — gives logged-in user's own classInfos directly
-    try:
-        r = await client.get(
-            f"{base}/WebUntis/api/rest/view/v1/app/data",
-            cookies=cookies, headers={"school": school},
-        )
-        if r.status_code == 200:
-            data = r.json()
-            user = data.get("user") or data.get("data", {}).get("user", {})
-            class_infos = user.get("classInfos") or user.get("klassenInfos") or []
-            names = [c.get("name", c.get("className", "")) for c in class_infos]
-            for c in class_infos:
-                cname = c.get("name") or c.get("className") or ""
-                if cname.strip().lower() == name_clean:
-                    cid = c.get("id") or c.get("classId")
-                    if cid:
-                        return cid, names
-            if names:
-                return None, names  # found infos but name mismatch
-    except Exception:
-        pass
-
-    # Strategy 2: getClasses JSON-RPC with and without schoolyear
-    syear_resp = await client.post(
+async def untis_login(base: str, school: str, username: str, password: str) -> tuple[httpx.AsyncClient, dict]:
+    client = httpx.AsyncClient(timeout=15)
+    login = await client.post(
         f"{base}/WebUntis/jsonrpc.do?school={school}",
-        json={"id": "sy", "method": "getCurrentSchoolyear", "params": {}, "jsonrpc": "2.0"},
-        cookies=cookies,
+        json={"id": "1", "method": "authenticate",
+              "params": {"user": username, "password": password, "client": "sofia"},
+              "jsonrpc": "2.0"}
     )
-    syear_id = syear_resp.json().get("result", {}).get("id")
+    login_data = login.json()
+    if "error" in login_data:
+        await client.aclose()
+        raise ValueError("Login fehlgeschlagen")
+    session_id = login_data["result"]["sessionId"]
+    return client, {"JSESSIONID": session_id}
 
-    all_names: list[str] = []
-    for params in ([{"schoolyearId": syear_id}] if syear_id else []) + [{}]:
-        resp = await client.post(
-            f"{base}/WebUntis/jsonrpc.do?school={school}",
-            json={"id": "cls", "method": "getClasses", "params": params, "jsonrpc": "2.0"},
-            cookies=cookies,
-        )
-        classes = resp.json().get("result", [])
-        if classes:
-            all_names = [c.get("name", "") for c in classes]
-            for c in classes:
-                if c.get("name", "").strip().lower() == name_clean:
-                    return c["id"], all_names
-            break
+async def untis_logout(client: httpx.AsyncClient, base: str, school: str, cookies: dict):
+    try:
+        await client.post(f"{base}/WebUntis/jsonrpc.do?school={school}",
+            json={"id": "x", "method": "logout", "params": {}, "jsonrpc": "2.0"}, cookies=cookies)
+    finally:
+        await client.aclose()
 
-    return None, all_names
-
-async def untis_get_timetable(client: httpx.AsyncClient, base: str, school: str,
-                               cookies: dict, class_id: int, start: date, end: date) -> list:
+async def untis_own_timetable(client: httpx.AsyncClient, base: str, school: str,
+                               cookies: dict, start: date, end: date) -> list:
     resp = await client.post(
         f"{base}/WebUntis/jsonrpc.do?school={school}",
-        json={"id": "tt", "method": "getTimetable",
-              "params": {"id": class_id, "type": 1,
-                         "startDate": date_int(start), "endDate": date_int(end)},
+        json={"id": "tt", "method": "getOwnTimetableForRange",
+              "params": {"startDate": date_int(start), "endDate": date_int(end)},
               "jsonrpc": "2.0"},
         cookies=cookies,
     )
@@ -124,40 +93,23 @@ async def get_timetable(db: AsyncSession = Depends(get_db), current_user: User =
         base = cls.untis_url.rstrip("/")
         school = cls.untis_school
 
-        async with httpx.AsyncClient(timeout=15) as client:
-            login = await client.post(
-                f"{base}/WebUntis/jsonrpc.do?school={school}",
-                json={"id": "1", "method": "authenticate",
-                      "params": {"user": cls.untis_user, "password": password, "client": "sofia"},
-                      "jsonrpc": "2.0"}
-            )
-            login_data = login.json()
-            if "error" in login_data:
-                return {"configured": True, "error": "Login fehlgeschlagen"}
-            session_id = login_data["result"]["sessionId"]
-            cookies = {"JSESSIONID": session_id}
-
-            untis_class_id, found_names = await untis_get_class_id(client, base, school, cookies, cls.untis_class or "")
-            if not untis_class_id:
-                await client.post(f"{base}/WebUntis/jsonrpc.do?school={school}",
-                    json={"id": "x", "method": "logout", "params": {}, "jsonrpc": "2.0"}, cookies=cookies)
-                hint = f" Verfügbare Klassen: {', '.join(found_names[:20])}" if found_names else " Keine Klassen gefunden."
-                return {"configured": True, "error": f"Klasse '{cls.untis_class}' nicht gefunden.{hint}"}
-
+        client, cookies = await untis_login(base, school, cls.untis_user, password)
+        try:
             this_raw, next_raw = await asyncio.gather(
-                untis_get_timetable(client, base, school, cookies, untis_class_id,
+                untis_own_timetable(client, base, school, cookies,
                                     this_monday, this_monday + timedelta(days=4)),
-                untis_get_timetable(client, base, school, cookies, untis_class_id,
+                untis_own_timetable(client, base, school, cookies,
                                     next_monday, next_monday + timedelta(days=4)),
             )
-
-            await client.post(f"{base}/WebUntis/jsonrpc.do?school={school}",
-                json={"id": "2", "method": "logout", "params": {}, "jsonrpc": "2.0"}, cookies=cookies)
+        finally:
+            await untis_logout(client, base, school, cookies)
 
         return {
             "configured": True,
             "this_week": {"start": this_monday.isoformat(), "lessons": parse_lessons(this_raw)},
             "next_week": {"start": next_monday.isoformat(), "lessons": parse_lessons(next_raw)},
         }
+    except ValueError as e:
+        return {"configured": True, "error": str(e)}
     except Exception as e:
         return {"configured": True, "error": str(e)}

@@ -179,23 +179,12 @@ async def import_untis_subjects(class_id: int, db: AsyncSession = Depends(get_db
             session_id = login_data["result"]["sessionId"]
             cookies = {"JSESSIONID": session_id}
 
-            # Find Untis class ID — use same multi-strategy logic as timetable route
-            from backend.routes.timetable import untis_get_class_id
-            name_clean = (cls.untis_class or "").strip().lower()
-            untis_class_id, found_names = await untis_get_class_id(client, base, school, cookies, name_clean)
-            if not untis_class_id:
-                await client.post(f"{base}/WebUntis/jsonrpc.do?school={school}",
-                    json={"id": "x", "method": "logout", "params": {}, "jsonrpc": "2.0"}, cookies=cookies)
-                hint = f" Verfügbare: {', '.join(found_names[:20])}" if found_names else ""
-                raise HTTPException(400, f"Klasse '{cls.untis_class}' nicht gefunden.{hint}")
-
-            # Get timetable for next 8 weeks to collect all subjects
+            # Use getOwnTimetableForRange — no class ID lookup needed
             end_date = monday + timedelta(weeks=8)
             tt_resp = await client.post(
                 f"{base}/WebUntis/jsonrpc.do?school={school}",
-                json={"id": "3", "method": "getTimetable",
-                      "params": {"id": untis_class_id, "type": 1,
-                                 "startDate": int(monday.strftime("%Y%m%d")),
+                json={"id": "3", "method": "getOwnTimetableForRange",
+                      "params": {"startDate": int(monday.strftime("%Y%m%d")),
                                  "endDate": int(end_date.strftime("%Y%m%d"))},
                       "jsonrpc": "2.0"},
                 cookies=cookies,
