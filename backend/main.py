@@ -1,6 +1,6 @@
 ﻿from fastapi import FastAPI, Request, Depends
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.exceptions import HTTPException
 from contextlib import asynccontextmanager
 from backend.database import init_db
@@ -8,7 +8,9 @@ from backend.config import settings
 from backend.auth import get_current_user
 from backend.models.user import User
 from backend.routes import auth_routes, users, classes, subjects, calendar, homework, grades, messages, files, vapid, admin, timetable
-import os
+import os, time
+
+BUILD_TS = str(int(time.time()))
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -42,7 +44,9 @@ async def service_worker():
     return FileResponse("static/sw.js", media_type="application/javascript",
                         headers={"Service-Worker-Allowed": "/"})
 
-# Serve frontend SPA — catch-all returns index.html for all non-API paths
+# Serve frontend SPA — inject build timestamp for cache busting
 @app.get("/{full_path:path}", include_in_schema=False)
 async def spa(full_path: str, request: Request):
-    return FileResponse("pages/index.html")
+    with open("pages/index.html", "r", encoding="utf-8") as f:
+        html = f.read().replace("__BUILD__", BUILD_TS)
+    return HTMLResponse(html)
