@@ -44,9 +44,32 @@ def parse_lessons(raw: list) -> list:
 
 async def untis_get_class_id(client: httpx.AsyncClient, base: str, school: str,
                               cookies: dict, class_name: str) -> tuple[int | None, list[str]]:
-    """Returns (class_id, all_found_names). class_id is None if not found."""
+    """Returns (class_id, debug_names). Tries multiple strategies."""
     name_clean = class_name.strip().lower()
 
+    # Strategy 1: REST app/data — gives logged-in user's own classInfos directly
+    try:
+        r = await client.get(
+            f"{base}/WebUntis/api/rest/view/v1/app/data",
+            cookies=cookies, headers={"school": school},
+        )
+        if r.status_code == 200:
+            data = r.json()
+            user = data.get("user") or data.get("data", {}).get("user", {})
+            class_infos = user.get("classInfos") or user.get("klassenInfos") or []
+            names = [c.get("name", c.get("className", "")) for c in class_infos]
+            for c in class_infos:
+                cname = c.get("name") or c.get("className") or ""
+                if cname.strip().lower() == name_clean:
+                    cid = c.get("id") or c.get("classId")
+                    if cid:
+                        return cid, names
+            if names:
+                return None, names  # found infos but name mismatch
+    except Exception:
+        pass
+
+    # Strategy 2: getClasses JSON-RPC with and without schoolyear
     syear_resp = await client.post(
         f"{base}/WebUntis/jsonrpc.do?school={school}",
         json={"id": "sy", "method": "getCurrentSchoolyear", "params": {}, "jsonrpc": "2.0"},
@@ -67,7 +90,7 @@ async def untis_get_class_id(client: httpx.AsyncClient, base: str, school: str,
             for c in classes:
                 if c.get("name", "").strip().lower() == name_clean:
                     return c["id"], all_names
-            break  # got a list but no match — stop trying
+            break
 
     return None, all_names
 
