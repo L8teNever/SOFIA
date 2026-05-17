@@ -128,6 +128,12 @@ async function renderUntisTab() {
           Konfigurieren
         </button>
       </div>
+      <div id="untis-import-row-${c.id}" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid rgba(0,0,0,0.06);">
+        <button onclick="importUntisSubjects(${c.id})" id="untis-import-btn-${c.id}" style="background:#c4eed0;color:#072711;border:none;border-radius:12px;padding:9px 16px;font-size:0.82rem;font-weight:700;cursor:pointer;font-family:inherit;width:100%;">
+          <i data-lucide="download" style="width:14px;height:14px;vertical-align:-2px;margin-right:5px;"></i>Fächer von Untis importieren
+        </button>
+        <div id="untis-import-result-${c.id}" style="font-size:0.78rem;margin-top:6px;padding:0 4px;min-height:16px;"></div>
+      </div>
     </div>`).join('');
   lucide.createIcons();
   // Load status for each class
@@ -137,6 +143,8 @@ async function renderUntisTab() {
       if (!el) return;
       if (d && d.url) {
         el.innerHTML = '<span style="color:#146c2e;font-weight:600;">✓ Konfiguriert</span> · ' + d.url;
+        const row = document.getElementById('untis-import-row-' + c.id);
+        if (row) { row.style.display = 'block'; lucide.createIcons(); }
       } else {
         el.innerHTML = '<span style="color:#b3261e;">Nicht konfiguriert</span>';
       }
@@ -330,6 +338,23 @@ async function testUntisConn(classId) {
   btn.disabled = false; btn.textContent = 'Verbindung testen';
 }
 
+async function importUntisSubjects(classId) {
+  const btn = document.getElementById('untis-import-btn-' + classId);
+  const res = document.getElementById('untis-import-result-' + classId);
+  if (btn) { btn.disabled = true; btn.textContent = 'Importiere…'; }
+  if (res) res.innerHTML = '';
+  try {
+    const data = await API.importSubjects(classId);
+    if (res) res.innerHTML = '<span style="color:#146c2e;font-weight:600;">✓ ' + data.imported + ' importiert</span>'
+      + (data.skipped ? ', ' + data.skipped + ' bereits vorhanden' : '');
+    adminSubjects = await API.subjects().catch(() => adminSubjects);
+    renderAdminSubjects();
+  } catch(e) {
+    if (res) res.innerHTML = '<span style="color:#b3261e;">Fehler: ' + (e.detail || e.message || 'Unbekannt') + '</span>';
+  }
+  if (btn) { btn.disabled = false; btn.innerHTML = '<i data-lucide="download" style="width:14px;height:14px;vertical-align:-2px;margin-right:5px;"></i>Fächer von Untis importieren'; lucide.createIcons(); }
+}
+
 async function saveUntis(classId) {
   const data = {
     url: document.getElementById('ut-url').value.trim(),
@@ -340,7 +365,7 @@ async function saveUntis(classId) {
   };
   await API.saveUntis(classId, data).catch(()=>{ showToast('Fehler'); return; });
   closeSheet();
-  renderUntisTab();
+  await renderUntisTab();
   showToast('Untis-Daten gespeichert');
 }
 

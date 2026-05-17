@@ -4,6 +4,7 @@ from sqlalchemy import select
 from backend.database import get_db
 from backend.auth import get_current_user, require_super_admin, require_admin
 from backend.models.class_group import ClassGroup
+from backend.models.subject import Subject
 from backend.models.user import User
 from backend.schemas import ClassGroupOut, ClassGroupCreate
 from backend.config import settings
@@ -108,3 +109,71 @@ async def test_untis(class_id: int, data: UntisCredentials, _: User = Depends(re
         return {"ok": False, "message": "Server nicht erreichbar"}
     except Exception as e:
         return {"ok": False, "message": str(e)}
+
+SUBJECT_COLORS = ['#eaddff','#d3e3fd','#c4eed0','#ffdec1','#ffd8e4','#e8def8','#cfe2ff','#fce4ec','#e8f5e9','#fff3e0']
+
+@router.post("/{class_id}/untis/import-subjects")
+async def import_untis_subjects(class_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_admin)):
+    if current_user.role != "super_admin" and current_user.class_id != class_id:
+        raise HTTPException(403, "Not your class")
+    result = await db.execute(select(ClassGroup).where(ClassGroup.id == class_id))
+    cls = result.scalar_one_or_none()
+    if not cls or not cls.untis_url:
+        raise HTTPException(400, "Untis nicht konfiguriert")
+
+    f = get_fernet()
+    password = f.decrypt(cls.untis_password_enc.encode()).decode() if (f and cls.untis_password_enc) else (cls.untis_password_enc or "")
+    base = cls.untis_url.rstrip("/")
+    school = cls.untis_school
+
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            login = await client.post(
+                f"{base}/WebUntis/jsonrpc.do?school={school}",
+                json={"id": "1", "method": "authenticate",
+                      "params": {"user": cls.untis_user, "password": password, "client": "sofia"},
+                      "jsonrpc": "2.0"}
+            )
+            login_data = login.json()
+            if "error" in login_data:
+                raise HTTPException(400, "Untis-Login fehlgeschlagen")
+            session_id = login_data["result"]["sessionId"]
+            cookies = {"JSESSIONID": session_id}
+
+            subj_resp = await client.post(
+                f"{base}/WebUntis/jsonrpc.do?school={school}",
+                json={"id": "2", "method": "getSubjects", "params": {}, "jsonrpc": "2.0"},
+                cookies=cookies,
+            )
+            await client.post(
+                f"{base}/WebUntis/jsonrpc.do?school={school}",
+                json={"id": "3", "method": "logout", "params": {}, "jsonrpc": "2.0"},
+                cookies=cookies,
+            )
+
+        untis_subjects = subj_resp.json().get("result", [])
+
+        # Load existing short_names for this class
+        existing = await db.execute(select(Subject).where(Subject.class_id == class_id))
+        existing_shorts = {s.short_name.upper() for s in existing.scalars().all() if s.short_name}
+
+        imported = skipped = 0
+        for i, s in enumerate(untis_subjects):
+            short = (s.get("name") or "").strip()
+            long_name = (s.get("longName") or "").strip() or short
+            if not short:
+                continue
+            if short.upper() in existing_shorts:
+                skipped += 1
+                continue
+            color = SUBJECT_COLORS[i % len(SUBJECT_COLORS)]
+            db.add(Subject(name=long_name, short_name=short, color=color, class_id=class_id, is_global=False))
+            existing_shorts.add(short.upper())
+            imported += 1
+
+        await db.commit()
+        return {"ok": True, "imported": imported, "skipped": skipped}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, str(e))
