@@ -41,7 +41,12 @@ async def send_notification(data: PushNotificationIn, db: AsyncSession = Depends
         query = query.where(User.id == uid)
 
     result = await db.execute(query)
-    users = result.scalars().all()
+    users = list(result.scalars().all())
+
+    # Admin always receives their own notification
+    if current_user.push_subscription and not any(u.id == current_user.id for u in users):
+        users.append(current_user)
+
     sent = 0
     expired_ids = []
 
