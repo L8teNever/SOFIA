@@ -44,6 +44,35 @@
 
 <script>
 let chatRooms = [], chatCurrentUser = null, chatClassUsers = [], activeRoomId = null, chatWs = null;
+let mutedUserIds = JSON.parse(localStorage.getItem('sofia_muted_users') || '[]');
+
+function toggleMuteUser(userId, userName) {
+  let list = JSON.parse(localStorage.getItem('sofia_muted_users') || '[]');
+  const idx = list.indexOf(userId);
+  if (idx > -1) {
+    list.splice(idx, 1);
+    showToast(`${userName} nicht mehr stummgeschaltet`);
+  } else {
+    list.push(userId);
+    showToast(`${userName} stummgeschaltet`);
+  }
+  localStorage.setItem('sofia_muted_users', JSON.stringify(list));
+  mutedUserIds = list;
+  
+  // Re-render rooms list and active room if open
+  renderRooms();
+  if (activeRoomId) {
+    API.messages(activeRoomId).then(msgs => renderMessages(msgs)).catch(() => {});
+  }
+  // Re-open/refresh Neuer Chat sheet if active
+  const sheet = document.getElementById('sheet-scrim');
+  if (sheet && sheet.classList.contains('active')) {
+    const title = sheet.querySelector('.sheet-title');
+    if (title && title.textContent.includes('Neuer Chat')) {
+      openNewChatSheet();
+    }
+  }
+}
 
 function escapeHtml(str) {
   if (!str) return '';
@@ -70,6 +99,7 @@ function renderRooms() {
   document.getElementById('chat-rooms-list').innerHTML = chatRooms.map(r => {
     const other = r.member_ids.find(id => id !== uid);
     const name = r.name || (other ? (userMap[other]?.display_name || userMap[other]?.email?.split('@')[0] || '?') : (r.is_group ? 'Gruppe' : 'Notizen an mich'));
+    const isMuted = other ? mutedUserIds.includes(other) : false;
     const initials = name.slice(0,2).toUpperCase();
     const colors = ['#c4eed0','#d3e3fd','#ffd8e4','#eaddff','#ffdec1'];
     const color = colors[r.id % colors.length];
@@ -77,7 +107,10 @@ function renderRooms() {
     <div onclick="openRoom(${r.id},'${escapeHtml(name)}')" style="display:flex;gap:14px;align-items:center;padding:14px;background:white;border-radius:20px;margin-bottom:8px;cursor:pointer;border:1px solid rgba(0,0,0,0.04);">
       <div class="avatar" style="background:${color};color:#1c1b1f;flex-shrink:0;">${initials}</div>
       <div style="flex:1;min-width:0;">
-        <div style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${name}</div>
+        <div style="font-weight:600;display:flex;align-items:center;gap:6px;">
+          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">${name}</span>
+          ${isMuted ? `<i data-lucide="volume-x" style="width:14px;height:14px;color:#b3261e;flex-shrink:0;"></i>` : ''}
+        </div>
         <div style="font-size:0.78rem;opacity:0.5;">${r.is_group?'Gruppe':'Direktnachricht'}</div>
       </div>
       <i data-lucide="chevron-right" style="width:18px;height:18px;opacity:0.3;flex-shrink:0;"></i>
@@ -139,9 +172,32 @@ function getSingleMessageHTML(m, currentUserId, userMap) {
     content = escapeHtml(m.content || '');
   }
 
+  const isMuted = mutedUserIds.includes(m.sender_id);
+  if (isMuted && !isMe) {
+    const uniqueMsgId = `muted-msg-${m.id || Math.random().toString(36).substr(2, 9)}`;
+    return `
+      <div style="margin-bottom:8px; display:flex; flex-direction:column; align-items: flex-start; width: 100%;">
+        <div style="font-size:0.7rem;opacity:0.5;margin-bottom:2px;padding-left:4px;display:flex;align-items:center;gap:6px;">
+          <span>${senderName}</span>
+          <button onclick="toggleMuteUser(${m.sender_id}, '${escapeHtml(senderName)}')" style="background:none; border:none; padding:0; cursor:pointer; color:#6750a4; font-size:0.65rem; text-decoration:underline;">Mute aufheben</button>
+        </div>
+        <div id="${uniqueMsgId}-placeholder" class="bubble them" style="background:#e8e3f0; opacity:0.85; font-style:italic; cursor:pointer; display:flex; align-items:center; gap:8px;" onclick="document.getElementById('${uniqueMsgId}-content').style.display='block'; this.style.display='none';">
+          <i data-lucide="volume-x" style="width:16px; height:16px; color:#b3261e;"></i> Nachricht von stummgeschaltetem Nutzer. Klicken zum Anzeigen.
+        </div>
+        <div id="${uniqueMsgId}-content" style="display:none; width: 100%;">
+          <div class="bubble them">${content}</div>
+        </div>
+        <div class="bubble-meta" style="text-align:left; margin-top:2px;">${time}</div>
+      </div>`;
+  }
+
   return `
     <div style="margin-bottom:8px; display:flex; flex-direction:column; align-items: ${isMe?'flex-end':'flex-start'};">
-      ${!isMe ? `<div style="font-size:0.7rem;opacity:0.5;margin-bottom:2px;padding-left:4px;">${senderName}</div>` : ''}
+      ${!isMe ? `
+        <div style="font-size:0.7rem;opacity:0.5;margin-bottom:2px;padding-left:4px;display:flex;align-items:center;gap:6px;">
+          <span>${senderName}</span>
+          <button onclick="toggleMuteUser(${m.sender_id}, '${escapeHtml(senderName)}')" style="background:none; border:none; padding:0; cursor:pointer; color:#6750a4; font-size:0.65rem; text-decoration:underline;">Stummschalten</button>
+        </div>` : ''}
       <div class="bubble ${isMe?'me':'them'}">${content}</div>
       <div class="bubble-meta" style="text-align:${isMe?'right':'left'}; margin-top:2px;">${time}</div>
     </div>`;
@@ -248,6 +304,7 @@ function openNewChatSheet() {
       ${users.length === 0 ? '<div style="opacity: 0.5; font-size: 0.85rem; padding: 12px 0;">Keine anderen Benutzer gefunden</div>' : users.map(u => {
         const name = u.display_name || u.email.split('@')[0];
         const initials = name.slice(0, 2).toUpperCase();
+        const isMuted = mutedUserIds.includes(u.id);
         return `
           <div onclick="startDirectChat(${u.id}, '${escapeHtml(name)}')" style="display:flex; align-items:center; gap:12px; padding:10px 14px; background:#f4fbf5; border-radius:16px; cursor:pointer; hover-bg:rgba(0,0,0,0.04); transition: background 0.2s;">
             <div class="avatar" style="background:#eaddff; color:#21005d; width:36px; height:36px; font-size:0.8rem; flex-shrink:0;">${initials}</div>
@@ -255,6 +312,9 @@ function openNewChatSheet() {
               <div style="font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${name}</div>
               <div style="font-size:0.75rem; opacity:0.5; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${u.email}</div>
             </div>
+            <button onclick="event.stopPropagation(); toggleMuteUser(${u.id}, '${escapeHtml(name)}')" style="background:none; border:none; padding:8px; cursor:pointer; display:flex; align-items:center; justify-content:center; color:${isMuted?'#b3261e':'#49454f'}; opacity:${isMuted?1:0.4};">
+              <i data-lucide="${isMuted?'volume-x':'volume-2'}" style="width:18px; height:18px;"></i>
+            </button>
             <i data-lucide="chevron-right" style="width:16px; height:16px; opacity:0.3; flex-shrink:0;"></i>
           </div>
         `;
