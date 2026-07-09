@@ -1,4 +1,4 @@
-﻿from fastapi import FastAPI, Request, Depends
+from fastapi import FastAPI, Request, Depends
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.exceptions import HTTPException
@@ -43,6 +43,11 @@ async def serve_page(page_name: str, _: User = Depends(get_current_user)):
 async def service_worker():
     return FileResponse("static/sw.js", media_type="application/javascript",
                         headers={"Service-Worker-Allowed": "/"})
+
+# Favicon handler to prevent catching by wildcard SPA route
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    return HTMLResponse(content="", status_code=204)
 
 # Serve frontend SPA — inject build timestamp for cache busting
 @app.get("/{full_path:path}", include_in_schema=False)

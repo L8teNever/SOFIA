@@ -73,6 +73,8 @@ async function openPage(name, triggerEl) {
 }
 
 function closePage() {
+  closeSheet(true);
+  closeModal(true);
   const page = document.querySelector('.page.active');
   if (!page) return;
   const wasNotifications = currentPage === 'notifications';
@@ -87,9 +89,26 @@ function closePage() {
 }
 
 document.addEventListener('click', e => { if (e.target.closest('.back-btn')) closePage(); });
-window.addEventListener('popstate', () => {
+window.addEventListener('popstate', (e) => {
+  const modalActive = document.getElementById('modal-scrim')?.classList.contains('active');
+  const sheetActive = document.querySelector('.bottom-sheet.active');
+  
+  if (modalActive) {
+    closeModal(true);
+    return;
+  }
+  if (sheetActive) {
+    closeSheet(true);
+    return;
+  }
+  
   const page = document.querySelector('.page.active');
-  if (page) { page.classList.remove('active'); page.classList.add('closing'); setTimeout(() => page.remove(), 600); currentPage = null; }
+  if (page) { 
+    page.classList.remove('active'); 
+    page.classList.add('closing'); 
+    setTimeout(() => page.remove(), 600); 
+    currentPage = null; 
+  }
 });
 
 function enhanceDropdowns(root) {
@@ -204,23 +223,37 @@ function openSheet(html) {
   if (window.lucide) lucide.createIcons();
   document.getElementById('bottom-sheet-scrim').classList.add('active');
   requestAnimationFrame(() => sheet.classList.add('active'));
+  
+  history.pushState({ page: currentPage, sheet: true }, '', window.location.pathname);
 }
-function closeSheet() {
+function closeSheet(isPopState = false) {
   const sheet = document.querySelector('.bottom-sheet');
   if (sheet) { sheet.classList.remove('active'); setTimeout(() => sheet.remove(), 400); }
   document.getElementById('bottom-sheet-scrim').classList.remove('active');
+  
+  if (!isPopState && history.state && history.state.sheet) {
+    history.back();
+  }
 }
-document.getElementById('bottom-sheet-scrim').addEventListener('click', closeSheet);
+document.getElementById('bottom-sheet-scrim').addEventListener('click', () => closeSheet(false));
 
 function openModal(html) {
   document.getElementById('modal-content').innerHTML = html;
   document.getElementById('modal-scrim').classList.add('active');
   enhanceDropdowns(document.getElementById('modal-content'));
   if (window.lucide) lucide.createIcons();
+  
+  history.pushState({ page: currentPage, modal: true }, '', window.location.pathname);
 }
-function closeModal() { document.getElementById('modal-scrim').classList.remove('active'); }
+function closeModal(isPopState = false) { 
+  document.getElementById('modal-scrim').classList.remove('active'); 
+  
+  if (!isPopState && history.state && history.state.modal) {
+    history.back();
+  }
+}
 document.getElementById('modal-scrim').addEventListener('click', e => {
-  if (e.target === document.getElementById('modal-scrim')) closeModal();
+  if (e.target === document.getElementById('modal-scrim')) closeModal(false);
 });
 
 async function loadDashboard() {

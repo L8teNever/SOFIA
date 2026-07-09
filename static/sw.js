@@ -24,7 +24,7 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
   const url = new URL(e.request.url);
-  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/pages/')) return; // never cache API or templates
+  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/pages/') || url.pathname === '/favicon.ico') return; // never cache API, templates or favicon
   e.respondWith(
     caches.match(e.request).then(cached => {
       const fresh = fetch(e.request).then(res => {
