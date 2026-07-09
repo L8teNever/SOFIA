@@ -19,6 +19,14 @@
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* Remove browser blue tap highlight and focus rings on interactive elements */
+* { -webkit-tap-highlight-color: transparent; }
+button, a, [onclick], [tabindex], input, select, textarea { outline: none; }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 2px solid var(--m3-prim);
+  outline-offset: 2px;
+}
+
 body {
   font-family: 'Google Sans', sans-serif;
   background-color: var(--m3-bg);
