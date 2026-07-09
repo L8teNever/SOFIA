@@ -365,6 +365,28 @@ function showApp() {
   if (urlPage && KNOWN_PAGES.includes(urlPage)) {
     setTimeout(function() { openPage(urlPage); }, 400);
   }
+
+  // Auto-hide header on scroll down, reveal on scroll up
+  const appEl = document.getElementById('app');
+  const headerEl = document.getElementById('dashboard-header');
+  let lastScrollY = 0;
+  let headerHidden = false;
+  appEl.addEventListener('scroll', function() {
+    const y = appEl.scrollTop;
+    const delta = y - lastScrollY;
+    if (delta > 6 && !headerHidden && y > 80) {
+      headerEl.style.transform = 'translateY(-110%)';
+      headerEl.style.opacity = '0';
+      headerEl.style.pointerEvents = 'none';
+      headerHidden = true;
+    } else if (delta < -6 && headerHidden) {
+      headerEl.style.transform = '';
+      headerEl.style.opacity = '';
+      headerEl.style.pointerEvents = '';
+      headerHidden = false;
+    }
+    lastScrollY = y;
+  }, { passive: true });
 }
 
 async function boot() {
