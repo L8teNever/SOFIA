@@ -1,4 +1,4 @@
-﻿let currentUser = null;
+let currentUser = null;
 let currentPage = null;
 let pageHistory = [];
 
@@ -364,6 +364,45 @@ async function refreshNotifBadge() {
     const badge = document.getElementById('notif-badge');
     if (badge) badge.style.display = count > 0 ? 'block' : 'none';
   } catch {}
+}
+
+function openImpressum() {
+  openModal(`
+    <div style="color:#1c1b1f;">
+      <h2 style="font-size:1.3rem;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px;">
+        <i data-lucide="file-text" style="width:24px;height:24px;color:#6750a4;"></i> Impressum & Datenschutz
+      </h2>
+      <div style="font-size:0.88rem;line-height:1.5;opacity:0.85;max-height:55vh;overflow-y:auto;padding-right:8px;" class="no-scrollbar">
+        <h3 style="font-size:1.05rem;font-weight:700;margin:16px 0 6px 0;">Impressum</h3>
+        <p><strong>Angaben gemäß § 5 TMG:</strong></p>
+        <p style="margin: 4px 0;">Sofia Schulbegleiter PWA</p>
+        <p style="margin: 4px 0;">Musterstraße 123<br>12345 Musterstadt</p>
+        
+        <h4 style="font-size:0.92rem;font-weight:700;margin:12px 0 4px 0;">Kontakt:</h4>
+        <p style="margin: 4px 0;">Telefon: +49 (0) 123 456789</p>
+        <p style="margin: 4px 0;">E-Mail: support@sofia.schule</p>
+        
+        <h4 style="font-size:0.92rem;font-weight:700;margin:12px 0 4px 0;">Vertretungsberechtigt:</h4>
+        <p style="margin: 4px 0;">Max Mustermann (Administrator)</p>
+        
+        <hr style="border:none;border-top:1px solid rgba(0,0,0,0.1);margin:16px 0;">
+        
+        <h3 style="font-size:1.05rem;font-weight:700;margin:16px 0 6px 0;">Datenschutzerklärung</h3>
+        <h4 style="font-size:0.92rem;font-weight:700;margin:12px 0 4px 0;">1. Datenschutz auf einen Blick</h4>
+        <p style="margin: 4px 0;">Diese App dient ausschließlich als schulischer Begleiter. Alle erhobenen Noten, Termine und Daten werden verschlüsselt in einer lokalen SQLite-Datenbank auf dem Server gespeichert.</p>
+        
+        <h4 style="font-size:0.92rem;font-weight:700;margin:12px 0 4px 0;">2. WebUntis-Verbindung</h4>
+        <p style="margin: 4px 0;">Wenn du die WebUntis-Integration nutzt, werden deine Zugangsdaten verschlüsselt gespeichert und ausschließlich zur Abfrage des Stundenplans an die offiziellen WebUntis-Server übertragen.</p>
+        
+        <h4 style="font-size:0.92rem;font-weight:700;margin:12px 0 4px 0;">3. Push-Benachrichtigungen</h4>
+        <p style="margin: 4px 0;">Für Push-Benachrichtigungen wird ein anonymer Token deines Browsers auf unserem Server hinterlegt. Es werden keine personenbezogenen Daten an Drittanbieter-Push-Dienste übertragen.</p>
+        
+        <h4 style="font-size:0.92rem;font-weight:700;margin:12px 0 4px 0;">4. Betroffenenrechte</h4>
+        <p style="margin: 4px 0;">Du hast jederzeit das Recht auf Auskunft, Berichtigung oder Löschung deiner in der App gespeicherten Daten. Wende dich hierzu an deinen Klassen-Administrator.</p>
+      </div>
+      <button class="m3-btn-full" onclick="closeModal()" style="margin-top:20px;background:#eaddff;color:#21005d;">Schließen</button>
+    </div>
+  `);
 }
 
 boot();

@@ -1,10 +1,10 @@
-﻿<div class="page" id="page-chat" style="background:#f4fbf5;">
+<div class="page" id="page-chat" style="background:#f4fbf5;">
   <div class="page-header">
     <button class="back-btn"><i data-lucide="arrow-left" style="width:22px;height:22px;"></i></button>
     <span class="page-title">Chat</span>
     <div style="flex:1;"></div>
-    <button onclick="openNewRoomSheet()" style="background:#c4eed0;border:none;border-radius:14px;padding:10px 16px;font-weight:600;cursor:pointer;font-size:0.85rem;font-family:inherit;">
-      + Gruppe
+    <button onclick="openNewChatSheet()" style="background:#c4eed0;border:none;border-radius:14px;padding:10px 16px;font-weight:600;cursor:pointer;font-size:0.85rem;font-family:inherit;display:flex;align-items:center;gap:6px;">
+      <i data-lucide="message-square-plus" style="width:16px;height:16px;"></i> + Neu
     </button>
   </div>
 
@@ -17,35 +17,38 @@
     </div>
   </div>
   </div>
+  <template id="tpl-chat-room">
+    <div class="page" id="page-chat-room" style="background:#f4fbf5;">
+      <div class="page-header" style="padding-bottom:12px;">
+        <button class="back-btn" onclick="closeChatRoom()"><i data-lucide="arrow-left" style="width:22px;height:22px;"></i></button>
+        <div class="avatar" id="room-avatar" style="background:#6750a4;width:36px;height:36px;font-size:0.8rem;"></div>
+        <span id="room-title" style="font-weight:700;font-size:1.1rem;"></span>
+      </div>
+      <div id="chat-messages" style="flex:1;overflow-y:auto;padding:0 16px 80px 16px;display:flex;flex-direction:column;"></div>
+      <div class="input-bar">
+        <button onclick="startRecording()" id="rec-btn" style="background:none;border:none;cursor:pointer;color:#49454f;padding:4px;">
+          <i data-lucide="mic" style="width:20px;height:20px;"></i>
+        </button>
+        <input id="chat-input" placeholder="Nachricht…" onkeydown="if(event.key==='Enter')sendMsg()">
+        <label style="cursor:pointer;padding:4px;color:#49454f;">
+          <i data-lucide="paperclip" style="width:20px;height:20px;"></i>
+          <input type="file" style="display:none;" onchange="sendFile(this.files[0])">
+        </label>
+        <button class="send-btn" onclick="sendMsg()">
+          <i data-lucide="send" style="width:18px;height:18px;"></i>
+        </button>
+      </div>
+    </div>
+  </template>
 </div>
-
-<!-- Chat Room View (injected on room open) -->
-<template id="tpl-chat-room">
-  <div class="page" id="page-chat-room" style="background:#f4fbf5;">
-    <div class="page-header" style="padding-bottom:12px;">
-      <button class="back-btn" onclick="closeChatRoom()"><i data-lucide="arrow-left" style="width:22px;height:22px;"></i></button>
-      <div class="avatar" id="room-avatar" style="background:#6750a4;width:36px;height:36px;font-size:0.8rem;"></div>
-      <span id="room-title" style="font-weight:700;font-size:1.1rem;"></span>
-    </div>
-    <div id="chat-messages" style="flex:1;overflow-y:auto;padding:0 16px 80px 16px;display:flex;flex-direction:column;"></div>
-    <div class="input-bar">
-      <button onclick="startRecording()" id="rec-btn" style="background:none;border:none;cursor:pointer;color:#49454f;padding:4px;">
-        <i data-lucide="mic" style="width:20px;height:20px;"></i>
-      </button>
-      <input id="chat-input" placeholder="Nachricht…" onkeydown="if(event.key==='Enter')sendMsg()">
-      <label style="cursor:pointer;padding:4px;color:#49454f;">
-        <i data-lucide="paperclip" style="width:20px;height:20px;"></i>
-        <input type="file" style="display:none;" onchange="sendFile(this.files[0])">
-      </label>
-      <button class="send-btn" onclick="sendMsg()">
-        <i data-lucide="send" style="width:18px;height:18px;"></i>
-      </button>
-    </div>
-  </div>
-</template>
 
 <script>
 let chatRooms = [], chatCurrentUser = null, chatClassUsers = [], activeRoomId = null, chatWs = null;
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+}
 
 async function init_chat() {
   [chatRooms, chatCurrentUser, chatClassUsers] = await Promise.all([
@@ -66,18 +69,18 @@ function renderRooms() {
   const uid = chatCurrentUser?.id;
   document.getElementById('chat-rooms-list').innerHTML = chatRooms.map(r => {
     const other = r.member_ids.find(id => id !== uid);
-    const name = r.name || (other ? (userMap[other]?.display_name || userMap[other]?.email?.split('@')[0] || '?') : 'Gruppe');
+    const name = r.name || (other ? (userMap[other]?.display_name || userMap[other]?.email?.split('@')[0] || '?') : (r.is_group ? 'Gruppe' : 'Notizen an mich'));
     const initials = name.slice(0,2).toUpperCase();
     const colors = ['#c4eed0','#d3e3fd','#ffd8e4','#eaddff','#ffdec1'];
     const color = colors[r.id % colors.length];
     return `
-    <div onclick="openRoom(${r.id},'${name}')" style="display:flex;gap:14px;align-items:center;padding:14px;background:white;border-radius:20px;margin-bottom:8px;cursor:pointer;border:1px solid rgba(0,0,0,0.04);">
-      <div class="avatar" style="background:${color};color:#1c1b1f;">${initials}</div>
-      <div style="flex:1;">
-        <div style="font-weight:600;">${name}</div>
+    <div onclick="openRoom(${r.id},'${escapeHtml(name)}')" style="display:flex;gap:14px;align-items:center;padding:14px;background:white;border-radius:20px;margin-bottom:8px;cursor:pointer;border:1px solid rgba(0,0,0,0.04);">
+      <div class="avatar" style="background:${color};color:#1c1b1f;flex-shrink:0;">${initials}</div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${name}</div>
         <div style="font-size:0.78rem;opacity:0.5;">${r.is_group?'Gruppe':'Direktnachricht'}</div>
       </div>
-      <i data-lucide="chevron-right" style="width:18px;height:18px;opacity:0.3;"></i>
+      <i data-lucide="chevron-right" style="width:18px;height:18px;opacity:0.3;flex-shrink:0;"></i>
     </div>`;
   }).join('');
   lucide.createIcons();
@@ -100,28 +103,57 @@ async function openRoom(roomId, roomName) {
   connectWs(roomId);
 }
 
+function getSingleMessageHTML(m, currentUserId, userMap) {
+  const isMe = m.sender_id === currentUserId;
+  const sender = userMap ? userMap[m.sender_id] : null;
+  const senderName = sender ? (sender.display_name || sender.email.split('@')[0]) : 'User';
+  const time = new Date(m.created_at).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+  
+  let content = '';
+  if (m.file_type === 'image' && m.file_url) {
+    content = `
+      <div style="position:relative;display:inline-block;">
+        <img src="${m.file_url}" style="max-width:200px;border-radius:12px;display:block;cursor:pointer;" onclick="window.open('${m.file_url}')">
+        <a href="${m.file_url}" download style="position:absolute;bottom:6px;right:6px;background:rgba(0,0,0,0.5);color:white;border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;text-decoration:none;">
+          <i data-lucide="download" style="width:16px;height:16px;"></i>
+        </a>
+      </div>`;
+  } else if (m.file_type === 'audio' && m.file_url) {
+    content = `<audio controls src="${m.file_url}" style="max-width:220px;display:block;outline:none;"></audio>`;
+  } else if (m.file_type === 'file' && m.file_url) {
+    const filename = m.content || 'Datei';
+    content = `
+      <div style="display:flex;align-items:center;gap:10px;padding:4px 0;">
+        <div style="background:rgba(0,0,0,0.06);padding:8px;border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+          <i data-lucide="file" style="width:20px;height:20px;color:#6750a4;"></i>
+        </div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:600;font-size:0.85rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${filename}</div>
+          <div style="font-size:0.7rem;opacity:0.5;">Dokument</div>
+        </div>
+        <a href="${m.file_url}" download style="background:#f3edf7;border-radius:12px;padding:8px;display:flex;align-items:center;justify-content:center;color:inherit;text-decoration:none;flex-shrink:0;">
+          <i data-lucide="download" style="width:16px;height:16px;"></i>
+        </a>
+      </div>`;
+  } else {
+    content = escapeHtml(m.content || '');
+  }
+
+  return `
+    <div style="margin-bottom:8px; display:flex; flex-direction:column; align-items: ${isMe?'flex-end':'flex-start'};">
+      ${!isMe ? `<div style="font-size:0.7rem;opacity:0.5;margin-bottom:2px;padding-left:4px;">${senderName}</div>` : ''}
+      <div class="bubble ${isMe?'me':'them'}">${content}</div>
+      <div class="bubble-meta" style="text-align:${isMe?'right':'left'}; margin-top:2px;">${time}</div>
+    </div>`;
+}
+
 function renderMessages(msgs) {
   const uid = chatCurrentUser?.id;
   const container = document.getElementById('chat-messages');
   const userMap = Object.fromEntries(chatClassUsers.map(u=>[u.id,u]));
-  container.innerHTML = msgs.map(m => {
-    const isMe = m.sender_id === uid;
-    const sender = userMap[m.sender_id];
-    const time = new Date(m.created_at).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
-    let content = '';
-    if (m.file_type === 'image' && m.file_url) {
-      content = `<img src="${m.file_url}" style="max-width:200px;border-radius:12px;">`;
-    } else if (m.file_type === 'audio' && m.file_url) {
-      content = `<audio controls src="${m.file_url}" style="max-width:220px;"></audio>`;
-    } else {
-      content = m.content || '';
-    }
-    return `
-    ${!isMe?`<div style="font-size:0.7rem;opacity:0.5;margin-bottom:2px;padding-left:4px;">${sender?.display_name||sender?.email?.split('@')[0]||'?'}</div>`:''}
-    <div class="bubble ${isMe?'me':'them'}">${content}</div>
-    <div class="bubble-meta" style="text-align:${isMe?'right':'left'};">${time}</div>`;
-  }).join('');
+  container.innerHTML = msgs.map(m => getSingleMessageHTML(m, uid, userMap)).join('');
   container.scrollTop = container.scrollHeight;
+  if (window.lucide) lucide.createIcons();
 }
 
 function connectWs(roomId) {
@@ -132,13 +164,14 @@ function connectWs(roomId) {
     const msg = JSON.parse(e.data);
     const container = document.getElementById('chat-messages');
     if (!container) return;
-    const isMe = msg.sender_id === chatCurrentUser?.id;
-    const time = new Date(msg.created_at).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
-    const div = document.createElement('div');
-    div.className = `bubble ${isMe?'me':'them'}`;
-    div.textContent = msg.content || '';
-    container.appendChild(div);
+    const uid = chatCurrentUser?.id;
+    const userMap = Object.fromEntries(chatClassUsers.map(u=>[u.id,u]));
+    
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = getSingleMessageHTML(msg, uid, userMap);
+    container.appendChild(tempDiv.firstElementChild);
     container.scrollTop = container.scrollHeight;
+    if (window.lucide) lucide.createIcons();
   };
 }
 
@@ -161,8 +194,9 @@ async function sendFile(file) {
     if (chatWs) {
       chatWs.send(JSON.stringify({
         sender_id: chatCurrentUser?.id,
+        content: file.name,
         file_url: `/api/v1/files/download/${uploaded.id}`,
-        file_type: file.type.startsWith('image') ? 'image' : 'file',
+        file_type: file.type.startsWith('image') ? 'image' : (file.type.startsWith('audio') ? 'audio' : 'file'),
       }));
     }
   } catch { showToast('Upload fehlgeschlagen'); }
@@ -170,12 +204,14 @@ async function sendFile(file) {
 
 let mediaRecorder, audioChunks = [];
 async function startRecording() {
+  const btn = document.getElementById('rec-btn');
   if (mediaRecorder?.state === 'recording') {
     mediaRecorder.stop();
-    document.getElementById('rec-btn').style.color = '';
+    btn.classList.remove('recording-active');
     return;
   }
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true }).catch(() => null);
+  if (!stream) { showToast('Mikrofonzugriff verweigert'); return; }
   mediaRecorder = new MediaRecorder(stream);
   audioChunks = [];
   mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
@@ -186,7 +222,7 @@ async function startRecording() {
     await sendFile(file);
   };
   mediaRecorder.start();
-  document.getElementById('rec-btn').style.color = '#b3261e';
+  btn.classList.add('recording-active');
 }
 
 function closeChatRoom() {
@@ -194,6 +230,61 @@ function closeChatRoom() {
   activeRoomId = null;
   const page = document.getElementById('page-chat-room');
   if (page) { page.classList.remove('active'); page.classList.add('closing'); setTimeout(() => page.remove(), 600); }
+}
+
+function openNewChatSheet() {
+  const users = chatClassUsers.filter(u => u.id !== chatCurrentUser?.id);
+  openSheet(`
+    <div class="sheet-title" style="margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">
+      <i data-lucide="message-square-plus" style="width: 22px; height: 22px; color: #6750a4;"></i> Neuer Chat
+    </div>
+    
+    <button class="m3-btn-tonal" onclick="openNewRoomSheet()" style="width:100%; margin-bottom: 20px; display:flex; align-items:center; justify-content:center; gap:8px;">
+      <i data-lucide="users" style="width:18px; height:18px;"></i> Neue Gruppe erstellen
+    </button>
+    
+    <div style="font-size:0.8rem; font-weight:700; opacity:0.5; margin-bottom:10px; text-transform: uppercase; letter-spacing: 0.5px;">Kontakte</div>
+    <div style="max-height: 250px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px;" class="no-scrollbar">
+      ${users.length === 0 ? '<div style="opacity: 0.5; font-size: 0.85rem; padding: 12px 0;">Keine anderen Benutzer gefunden</div>' : users.map(u => {
+        const name = u.display_name || u.email.split('@')[0];
+        const initials = name.slice(0, 2).toUpperCase();
+        return `
+          <div onclick="startDirectChat(${u.id}, '${escapeHtml(name)}')" style="display:flex; align-items:center; gap:12px; padding:10px 14px; background:#f4fbf5; border-radius:16px; cursor:pointer; hover-bg:rgba(0,0,0,0.04); transition: background 0.2s;">
+            <div class="avatar" style="background:#eaddff; color:#21005d; width:36px; height:36px; font-size:0.8rem; flex-shrink:0;">${initials}</div>
+            <div style="flex:1; min-width:0;">
+              <div style="font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${name}</div>
+              <div style="font-size:0.75rem; opacity:0.5; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${u.email}</div>
+            </div>
+            <i data-lucide="chevron-right" style="width:16px; height:16px; opacity:0.3; flex-shrink:0;"></i>
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `);
+  if (window.lucide) lucide.createIcons();
+}
+
+async function startDirectChat(userId, userName) {
+  closeSheet();
+  const currentUserId = chatCurrentUser?.id;
+  if (!currentUserId) return;
+  
+  let room = chatRooms.find(r => !r.is_group && r.member_ids.includes(currentUserId) && r.member_ids.includes(userId));
+  
+  if (room) {
+    openRoom(room.id, userName);
+  } else {
+    try {
+      showToast('Chat wird gestartet…');
+      room = await API.createRoom({ name: "", is_group: false, member_ids: [userId] });
+      chatRooms.push(room);
+      renderRooms();
+      openRoom(room.id, userName);
+    } catch (e) {
+      console.error(e);
+      showToast('Fehler beim Starten des Chats');
+    }
+  }
 }
 
 function openNewRoomSheet() {
@@ -210,6 +301,7 @@ function openNewRoomSheet() {
     </div>
     <button class="m3-btn-full" onclick="createRoom()">Gruppe erstellen</button>
   `);
+  if (window.lucide) lucide.createIcons();
 }
 
 async function createRoom() {

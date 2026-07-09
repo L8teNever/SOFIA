@@ -1,4 +1,4 @@
-﻿const CACHE = 'sofia-v1';
+const CACHE = 'sofia-v1';
 const PRECACHE = [
   '/',
   '/static/css/base.css',
@@ -24,7 +24,7 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
   const url = new URL(e.request.url);
-  if (url.pathname.startsWith('/api/')) return; // never cache API
+  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/pages/')) return; // never cache API or templates
   e.respondWith(
     caches.match(e.request).then(cached => {
       const fresh = fetch(e.request).then(res => {

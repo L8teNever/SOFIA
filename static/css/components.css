@@ -1,4 +1,4 @@
-﻿/* Back button */
+/* Back button */
 .back-btn {
   background: #f3edf7; border-radius: 20px;
   width: 48px; height: 48px;
@@ -234,7 +234,14 @@
 .admin-tab-btn:hover { background: rgba(103,80,164,0.08); color: #21005d; }
 .admin-tab-btn.active { background: #eaddff; color: #21005d; }
 
+.admin-main-layout {
+  flex-direction: column;
+}
+
 @media (min-width: 760px) {
+  .admin-main-layout {
+    flex-direction: row !important;
+  }
   #page-admin > div:has(#admin-stats-row) { padding: 0 28px 16px 28px; }
   #admin-stats-row { grid-template-columns: repeat(4, 1fr) !important; }
   #admin-nav { border-right: 1px solid rgba(0,0,0,0.06); width: 180px; }
@@ -258,3 +265,24 @@
 
 /* Grade chip */
 .grade-badge { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 14px; font-weight: 700; font-size: 1.1rem; }
+
+/* Tablet adjustments to prevent widget title truncation */
+@media (min-width: 700px) and (max-width: 900px) {
+  .w-compact, .w-half {
+    padding: 10px !important;
+    gap: 8px !important;
+  }
+  .w-compact .widget-title, .w-half .widget-title {
+    font-size: 0.78rem !important;
+  }
+}
+
+@keyframes rec-pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.25); opacity: 0.8; }
+  100% { transform: scale(1); }
+}
+.recording-active {
+  animation: rec-pulse 1s infinite;
+  color: #b3261e !important;
+}

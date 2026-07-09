@@ -1,4 +1,4 @@
-﻿<div class="page" id="page-admin" style="background:#f5f3f9;">
+<div class="page" id="page-admin" style="background:#f5f3f9;">
   <div class="page-header">
     <button class="back-btn"><i data-lucide="arrow-left" style="width:22px;height:22px;"></i></button>
     <span class="page-title">Admin</span>
@@ -10,7 +10,7 @@
   <div id="admin-stats-row" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:0 20px 16px 20px;flex-shrink:0;"></div>
 
   <!-- Desktop: sidebar + content / Mobile: stacked -->
-  <div style="display:flex;flex:1;overflow:hidden;">
+  <div class="admin-main-layout" style="display:flex;flex:1;overflow:hidden;">
 
     <!-- Sidebar nav (desktop) / top tabs (mobile) -->
     <div id="admin-nav" style="flex-shrink:0;">
@@ -120,20 +120,20 @@ async function renderUntisTab() {
         <div style="width:44px;height:44px;background:#ffdec1;border-radius:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
           <i data-lucide="calendar-days" style="width:20px;height:20px;color:#442b00;"></i>
         </div>
-        <div style="flex:1;">
-          <div style="font-weight:700;">${c.name}</div>
-          <div style="font-size:0.75rem;opacity:0.5;" id="untis-status-${c.id}">Status wird geladen…</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${c.name}</div>
+          <div style="font-size:0.75rem;opacity:0.5;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" id="untis-status-${c.id}">Status wird geladen…</div>
         </div>
-        <button onclick="openUntisSheet(${c.id})" style="background:#ffdec1;color:#442b00;border:none;border-radius:14px;padding:10px 16px;font-size:0.82rem;font-weight:700;cursor:pointer;font-family:inherit;">
+        <button onclick="openUntisSheet(${c.id})" style="background:#ffdec1;color:#442b00;border:none;border-radius:14px;padding:10px 16px;font-size:0.82rem;font-weight:700;cursor:pointer;font-family:inherit;flex-shrink:0;">
           Konfigurieren
         </button>
       </div>
       <div id="untis-import-row-${c.id}" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid rgba(0,0,0,0.06);">
-        <div style="display:flex;gap:8px;margin-bottom:6px;">
-          <button onclick="reconnectUntis(${c.id})" id="untis-reconnect-btn-${c.id}" style="background:#d3e3fd;color:#041e49;border:none;border-radius:12px;padding:9px 14px;font-size:0.82rem;font-weight:700;cursor:pointer;font-family:inherit;flex:1;">
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:6px;">
+          <button onclick="reconnectUntis(${c.id})" id="untis-reconnect-btn-${c.id}" style="background:#d3e3fd;color:#041e49;border:none;border-radius:12px;padding:9px 14px;font-size:0.82rem;font-weight:700;cursor:pointer;font-family:inherit;flex:1;min-width:130px;">
             <i data-lucide="refresh-cw" style="width:14px;height:14px;vertical-align:-2px;margin-right:5px;"></i>Verbindung testen
           </button>
-          <button onclick="importUntisSubjects(${c.id})" id="untis-import-btn-${c.id}" style="background:#c4eed0;color:#072711;border:none;border-radius:12px;padding:9px 14px;font-size:0.82rem;font-weight:700;cursor:pointer;font-family:inherit;flex:1;">
+          <button onclick="importUntisSubjects(${c.id})" id="untis-import-btn-${c.id}" style="background:#c4eed0;color:#072711;border:none;border-radius:12px;padding:9px 14px;font-size:0.82rem;font-weight:700;cursor:pointer;font-family:inherit;flex:1;min-width:130px;">
             <i data-lucide="download" style="width:14px;height:14px;vertical-align:-2px;margin-right:5px;"></i>Fächer importieren
           </button>
         </div>
@@ -166,16 +166,16 @@ function renderAdminUsers() {
   document.getElementById('admin-users-list').innerHTML = adminUsers.map(u => `
     <div class="m3-card" style="padding:14px;margin-bottom:8px;">
       <div style="display:flex;align-items:center;gap:12px;">
-        <div class="avatar" style="background:#6750a4;">${(u.display_name||u.email).slice(0,2).toUpperCase()}</div>
-        <div style="flex:1;">
-          <div style="font-weight:600;">${u.display_name||u.email.split('@')[0]}</div>
-          <div style="font-size:0.75rem;opacity:0.6;">${u.email}</div>
-          <div style="font-size:0.72rem;margin-top:4px;display:flex;gap:6px;">
-            <span style="background:#eaddff;color:#21005d;padding:2px 8px;border-radius:8px;">${roleLabel[u.role]||u.role}</span>
-            ${u.class_id?`<span style="background:#d3e3fd;color:#041e49;padding:2px 8px;border-radius:8px;">${classMap[u.class_id]?.name||'?'}</span>`:''}
+        <div class="avatar" style="background:#6750a4;flex-shrink:0;">${(u.display_name||u.email).slice(0,2).toUpperCase()}</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${u.display_name||u.email.split('@')[0]}</div>
+          <div style="font-size:0.75rem;opacity:0.6;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${u.email}</div>
+          <div style="font-size:0.72rem;margin-top:4px;display:flex;gap:6px;flex-wrap:wrap;">
+            <span style="background:#eaddff;color:#21005d;padding:2px 8px;border-radius:8px;white-space:nowrap;">${roleLabel[u.role]||u.role}</span>
+            ${u.class_id?`<span style="background:#d3e3fd;color:#041e49;padding:2px 8px;border-radius:8px;white-space:nowrap;">${classMap[u.class_id]?.name||'?'}</span>`:''}
           </div>
         </div>
-        <button onclick="openEditUserSheet(${u.id})" style="background:#f3edf7;border:none;border-radius:12px;width:36px;height:36px;display:flex;align-items:center;justify-content:center;cursor:pointer;">
+        <button onclick="openEditUserSheet(${u.id})" style="background:#f3edf7;border:none;border-radius:12px;width:36px;height:36px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;">
           <i data-lucide="edit-2" style="width:16px;height:16px;"></i>
         </button>
       </div>
@@ -186,10 +186,10 @@ function renderAdminUsers() {
 function renderAdminClasses() {
   document.getElementById('admin-classes-list').innerHTML = adminClasses.map(c => `
     <div class="m3-card" style="padding:14px;margin-bottom:8px;display:flex;align-items:center;gap:12px;">
-      <div style="background:#eaddff;border-radius:14px;padding:10px;"><i data-lucide="users" style="width:20px;height:20px;color:#21005d;"></i></div>
-      <div style="flex:1;font-weight:600;">${c.name}</div>
-      <button onclick="openUntisSheet(${c.id})" style="background:#ffdec1;border:none;border-radius:12px;padding:8px 12px;font-size:0.78rem;font-weight:600;cursor:pointer;font-family:inherit;">Untis</button>
-      <button onclick="deleteClass(${c.id})" style="background:none;border:none;cursor:pointer;opacity:0.4;padding:4px;"><i data-lucide="trash-2" style="width:16px;height:16px;"></i></button>
+      <div style="background:#eaddff;border-radius:14px;padding:10px;flex-shrink:0;"><i data-lucide="users" style="width:20px;height:20px;color:#21005d;"></i></div>
+      <div style="flex:1;font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${c.name}</div>
+      <button onclick="openUntisSheet(${c.id})" style="background:#ffdec1;border:none;border-radius:12px;padding:8px 12px;font-size:0.78rem;font-weight:600;cursor:pointer;font-family:inherit;flex-shrink:0;">Untis</button>
+      <button onclick="deleteClass(${c.id})" style="background:none;border:none;cursor:pointer;opacity:0.4;padding:4px;flex-shrink:0;"><i data-lucide="trash-2" style="width:16px;height:16px;"></i></button>
     </div>`).join('');
   lucide.createIcons();
 }
@@ -198,9 +198,9 @@ function renderAdminSubjects() {
   document.getElementById('admin-subjects-list').innerHTML = adminSubjects.map(s => `
     <div class="m3-card" style="padding:14px;margin-bottom:8px;display:flex;align-items:center;gap:12px;">
       <div style="width:16px;height:16px;border-radius:50%;background:${s.color||'#6750a4'};flex-shrink:0;"></div>
-      <div style="flex:1;font-weight:600;">${s.name}${s.short_name?` <span style="opacity:0.5;font-size:0.8rem;">(${s.short_name})</span>`:''}</div>
-      ${s.is_global?'<span style="background:#c4eed0;color:#072711;padding:3px 8px;border-radius:8px;font-size:0.72rem;font-weight:600;">Global</span>':''}
-      <button onclick="deleteSubject(${s.id})" style="background:none;border:none;cursor:pointer;opacity:0.4;padding:4px;"><i data-lucide="trash-2" style="width:16px;height:16px;"></i></button>
+      <div style="flex:1;font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${s.name}${s.short_name?` <span style="opacity:0.5;font-size:0.8rem;">(${s.short_name})</span>`:''}</div>
+      ${s.is_global?'<span style="background:#c4eed0;color:#072711;padding:3px 8px;border-radius:8px;font-size:0.72rem;font-weight:600;flex-shrink:0;">Global</span>':''}
+      <button onclick="deleteSubject(${s.id})" style="background:none;border:none;cursor:pointer;opacity:0.4;padding:4px;flex-shrink:0;"><i data-lucide="trash-2" style="width:16px;height:16px;"></i></button>
     </div>`).join('');
   lucide.createIcons();
 }

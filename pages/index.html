@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="de">
 <head>
   <meta charset="UTF-8">
@@ -10,11 +10,10 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
   <script src="https://unpkg.com/lucide@latest"></script>
-  <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&display=swap">
-  <link rel="stylesheet" href="/static/css/base.css">
-  <link rel="stylesheet" href="/static/css/components.css">
+  <link rel="stylesheet" href="/static/css/base.css?v=__BUILD__">
+  <link rel="stylesheet" href="/static/css/components.css?v=__BUILD__">
 </head>
 <body>
 
@@ -102,8 +101,8 @@
         <div class="icon-box" style="width:40px;height:40px;background:rgba(7,39,17,0.1);">
           <i data-lucide="message-square" style="width:20px;height:20px;"></i>
         </div>
-        <div style="overflow:hidden;flex:1;">
-          <div style="font-size:0.88rem;font-weight:700;">Chat</div>
+        <div style="overflow:hidden;flex:1;min-width:0;">
+          <div style="font-size:0.88rem;font-weight:700;" class="widget-title">Chat</div>
           <div style="font-size:0.72rem;opacity:0.65;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" id="w-chat-preview">Nachrichten</div>
         </div>
       </div>
@@ -111,9 +110,9 @@
         <div class="icon-box" style="width:40px;height:40px;background:rgba(29,25,43,0.1);">
           <i data-lucide="hard-drive" style="width:20px;height:20px;"></i>
         </div>
-        <div style="overflow:hidden;flex:1;">
-          <div style="font-size:0.88rem;font-weight:700;">Drive</div>
-          <div style="font-size:0.72rem;opacity:0.6;">Dateien</div>
+        <div style="overflow:hidden;flex:1;min-width:0;">
+          <div style="font-size:0.88rem;font-weight:700;" class="widget-title">Drive</div>
+          <div style="font-size:0.72rem;opacity:0.6;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Dateien</div>
         </div>
       </div>
     </div>
@@ -123,9 +122,9 @@
       <div class="icon-box" style="width:40px;height:40px;background:rgba(65,14,11,0.1);">
         <i data-lucide="share-2" style="width:20px;height:20px;"></i>
       </div>
-      <div style="overflow:hidden;">
-        <div style="font-size:0.88rem;font-weight:700;">Share</div>
-        <div style="font-size:0.72rem;opacity:0.6;"><span id="w-files-count">0</span> geteilt</div>
+      <div style="overflow:hidden;flex:1;min-width:0;">
+        <div style="font-size:0.88rem;font-weight:700;" class="widget-title">Share</div>
+        <div style="font-size:0.72rem;opacity:0.6;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><span id="w-files-count">0</span> geteilt</div>
       </div>
     </div>
 
@@ -134,8 +133,8 @@
       <div class="icon-box" style="width:40px;height:40px;background:rgba(255,255,255,0.1);">
         <i data-lucide="settings" style="width:20px;height:20px;"></i>
       </div>
-      <div style="overflow:hidden;">
-        <div style="font-size:0.88rem;font-weight:700;">Einstellungen</div>
+      <div style="overflow:hidden;flex:1;min-width:0;">
+        <div style="font-size:0.88rem;font-weight:700;" class="widget-title">Einstellungen</div>
         <div style="font-size:0.72rem;opacity:0.5;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" id="w-settings-name">–</div>
       </div>
     </div>
@@ -145,12 +144,17 @@
       <div class="icon-box" style="width:40px;height:40px;background:rgba(255,255,255,0.1);">
         <i data-lucide="shield" style="width:20px;height:20px;"></i>
       </div>
-      <div style="overflow:hidden;">
-        <div style="font-size:0.88rem;font-weight:700;">Admin</div>
-        <div style="font-size:0.72rem;opacity:0.5;">Panel</div>
+      <div style="overflow:hidden;flex:1;min-width:0;">
+        <div style="font-size:0.88rem;font-weight:700;" class="widget-title">Admin</div>
+        <div style="font-size:0.72rem;opacity:0.5;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Panel</div>
       </div>
     </div>
 
+  </div>
+
+  <!-- Footer -->
+  <div style="text-align:center;margin-top:24px;padding:16px 0;font-size:0.78rem;opacity:0.4;width:100%;flex-shrink:0;">
+    <button onclick="openImpressum()" style="background:none;border:none;color:inherit;font-family:inherit;font-size:inherit;font-weight:500;cursor:pointer;text-decoration:underline;">Impressum & Datenschutz</button>
   </div>
 </div>
 
