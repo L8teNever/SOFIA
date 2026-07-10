@@ -1,17 +1,21 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from backend.database import get_db
+from backend.database import get_db, AsyncSessionLocal
 from backend.auth import get_current_user
 from backend.models.class_group import ClassGroup
 from backend.models.user import User
 from backend.config import settings
+from backend.routes.vapid import push_to_users
 from cryptography.fernet import Fernet
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 import asyncio
+import logging
 import requests
 import webuntis
 from urllib3.exceptions import InsecureRequestWarning
+
+logger = logging.getLogger(__name__)
 
 # Disable SSL verification for webuntis (uses requests internally)
 requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
@@ -121,3 +125,67 @@ async def get_timetable(db: AsyncSession = Depends(get_db), current_user: User =
         }
     except Exception as e:
         return {"configured": True, "error": str(e)}
+
+
+# In-memory: class_id -> set of (date, startTime, subject_short) keys that were
+# cancelled as of the last poll. Used to detect newly-cancelled lessons so we
+# only notify once per cancellation, not on every poll.
+_cancelled_state: dict[int, set] = {}
+
+async def _check_class_cancellations(db: AsyncSession, cls: ClassGroup):
+    try:
+        password = decrypt_password(cls.untis_password_enc) if cls.untis_password_enc else ""
+        server = _strip_server(cls.untis_url)
+        today = date.today()
+        this_monday = today - timedelta(days=today.weekday())
+        loop = asyncio.get_event_loop()
+        this_lessons, _ = await loop.run_in_executor(
+            None, _fetch_two_weeks, server, cls.untis_school,
+            cls.untis_user, password, cls.untis_class or "", this_monday,
+        )
+    except Exception as e:
+        logger.warning("Cancelled-lesson poll failed for class %s: %s", cls.id, e)
+        return
+
+    today_str = today.strftime("%Y%m%d")
+    now_hhmm = int(datetime.now().strftime("%H%M"))
+    upcoming_cancelled = {
+        (l["date"], l["startTime"], l["subject_short"])
+        for l in this_lessons
+        if l["cancelled"] and (l["date"] > today_str or (l["date"] == today_str and l["startTime"] >= now_hhmm))
+    }
+
+    previous = _cancelled_state.get(cls.id)
+    _cancelled_state[cls.id] = upcoming_cancelled
+    if previous is None:
+        return  # first poll for this class — just establish a baseline, don't spam old cancellations
+
+    new_cancellations = upcoming_cancelled - previous
+    if not new_cancellations:
+        return
+
+    result = await db.execute(select(User).where(User.class_id == cls.id))
+    members = list(result.scalars().all())
+    if not members:
+        return
+
+    for lesson_date, start_time, subject in sorted(new_cancellations):
+        d = datetime.strptime(lesson_date, "%Y%m%d")
+        time_str = f"{start_time // 100:02d}:{start_time % 100:02d}"
+        title = f"{subject or 'Stunde'} fällt aus"
+        body = f"{d.strftime('%d.%m.')} um {time_str} Uhr"
+        await push_to_users(db, members, title, body)
+
+async def poll_cancelled_lessons_loop():
+    """Background loop: periodically re-fetches each configured class's
+    timetable and pushes a notification when a lesson newly turns up as
+    cancelled. Runs for the app's whole lifetime (started in main.py)."""
+    while True:
+        try:
+            async with AsyncSessionLocal() as db:
+                result = await db.execute(select(ClassGroup).where(ClassGroup.untis_url.isnot(None)))
+                for cls in result.scalars().all():
+                    await _check_class_cancellations(db, cls)
+        except Exception as e:
+            logger.warning("Cancelled-lesson poll loop error: %s", e)
+        await asyncio.sleep(900)

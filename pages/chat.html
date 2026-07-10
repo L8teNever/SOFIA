@@ -878,15 +878,13 @@ async function sendFile(file, waveform) {
   if (!file) return;
   const form = new FormData();
   form.append('file', file);
-  form.append('visibility', 'all');
-  form.append('expires_minutes', '120');
   try {
-    const uploaded = await API.uploadFile(form);
+    const uploaded = await API.uploadChatFile(form);
     if (chatWs) {
       chatWs.send(JSON.stringify({
         sender_id: chatCurrentUser?.id,
         content: file.name,
-        file_url: `/api/v1/files/download/${uploaded.id}`,
+        file_url: uploaded.url,
         file_type: file.type.startsWith('image') ? 'image' : (file.type.startsWith('audio') ? 'audio' : 'file'),
         reply_to_id: replyingTo?.id || null,
         waveform: waveform || null,

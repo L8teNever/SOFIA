@@ -3,6 +3,22 @@ let currentPage = null;
 let pageHistory = [];
 let isSelfPopping = false;
 
+// Keep --app-height in sync with the real visible viewport (visualViewport,
+// where available) instead of relying on vh/dvh alone. Mobile Safari doesn't
+// shrink vh when the keyboard opens, and dvh support/behavior is still
+// inconsistent across iOS versions — this covers both plus browser
+// chrome show/hide, so body always matches what's actually on screen.
+function updateAppHeight() {
+  const h = (window.visualViewport ? window.visualViewport.height : window.innerHeight);
+  document.documentElement.style.setProperty('--app-height', h + 'px');
+}
+updateAppHeight();
+window.addEventListener('resize', updateAppHeight);
+window.addEventListener('orientationchange', updateAppHeight);
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', updateAppHeight);
+}
+
 // Returns an inline-style fragment that paints a user's avatar_url as the
 // element's background (used on the existing .avatar circles instead of
 // swapping in <img> tags, so all the initials-based markup keeps working).

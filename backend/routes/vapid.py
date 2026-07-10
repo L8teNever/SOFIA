@@ -13,6 +13,44 @@ import json, asyncio, logging
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/push", tags=["push"])
 
+async def push_to_users(db: AsyncSession, users: List[User], title: str, body: str) -> int:
+    """Sends a web push to every subscribed user in `users`, persists a
+    Notification row for each (even unsubscribed ones, so it shows up in
+    their in-app notification list), and cleans up expired subscriptions."""
+    sent = 0
+    if settings.vapid_private_key:
+        from pywebpush import webpush, WebPushException
+        expired_ids = []
+        for u in users:
+            if not u.push_subscription:
+                continue
+            try:
+                sub = json.loads(u.push_subscription)
+                await asyncio.to_thread(
+                    webpush,
+                    subscription_info=sub,
+                    data=json.dumps({"title": title, "body": body}),
+                    vapid_private_key=settings.vapid_private_key,
+                    vapid_claims={"sub": settings.vapid_claim_email},
+                )
+                sent += 1
+            except WebPushException as e:
+                if e.response is not None and e.response.status_code in (404, 410):
+                    expired_ids.append(u.id)
+                else:
+                    logger.warning("Push failed for user %s: %s", u.id, e)
+            except Exception as e:
+                logger.warning("Push error for user %s: %s", u.id, e)
+        if expired_ids:
+            expired_result = await db.execute(select(User).where(User.id.in_(expired_ids)))
+            for u in expired_result.scalars().all():
+                u.push_subscription = None
+
+    for u in users:
+        db.add(Notification(user_id=u.id, title=title, body=body))
+    await db.commit()
+    return sent
+
 @router.get("/vapid-public-key")
 async def get_vapid_key():
     return {"public_key": settings.vapid_public_key}
@@ -33,55 +71,24 @@ async def unsubscribe(db: AsyncSession = Depends(get_db), current_user: User = D
 async def send_notification(data: PushNotificationIn, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_admin)):
     if not settings.vapid_private_key:
         raise HTTPException(503, "VAPID not configured")
-    from pywebpush import webpush, WebPushException
 
-    query = select(User).where(User.push_subscription.isnot(None))
+    query = select(User)
     if data.target == "class":
         query = query.where(User.class_id == current_user.class_id)
     elif data.target.startswith("user:"):
         uid = int(data.target.split(":")[1])
         query = query.where(User.id == uid)
+    else:
+        query = query.where(User.push_subscription.isnot(None))
 
     result = await db.execute(query)
     users = list(result.scalars().all())
 
     # Admin always receives their own notification
-    if current_user.push_subscription and not any(u.id == current_user.id for u in users):
+    if not any(u.id == current_user.id for u in users):
         users.append(current_user)
 
-    sent = 0
-    expired_ids = []
-
-    for u in users:
-        try:
-            sub = json.loads(u.push_subscription)
-            await asyncio.to_thread(
-                webpush,
-                subscription_info=sub,
-                data=json.dumps({"title": data.title, "body": data.body}),
-                vapid_private_key=settings.vapid_private_key,
-                vapid_claims={"sub": settings.vapid_claim_email},
-            )
-            sent += 1
-        except WebPushException as e:
-            # 410 Gone = subscription expired/unregistered → clean up
-            if e.response is not None and e.response.status_code in (404, 410):
-                expired_ids.append(u.id)
-            else:
-                logger.warning("Push failed for user %s: %s", u.id, e)
-        except Exception as e:
-            logger.warning("Push error for user %s: %s", u.id, e)
-
-    if expired_ids:
-        expired_result = await db.execute(select(User).where(User.id.in_(expired_ids)))
-        for u in expired_result.scalars().all():
-            u.push_subscription = None
-
-    # Persist notification in DB for every targeted user so they can review it later
-    for u in users:
-        db.add(Notification(user_id=u.id, title=data.title, body=data.body))
-    await db.commit()
-
+    sent = await push_to_users(db, users, data.title, data.body)
     return {"sent": sent}
 
 

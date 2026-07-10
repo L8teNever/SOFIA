@@ -61,6 +61,7 @@ const API = {
   muteUser:      (id)     => API.post(`/chat/users/${id}/mute`),
   unmuteUser:    (id)     => API.post(`/chat/users/${id}/unmute`),
   messages:      (id)     => API.get(`/chat/rooms/${id}/messages`),
+  uploadChatFile:(form)   => API.upload('/chat/upload', form),
   files:         ()       => API.get('/files/'),
   uploadFile:    (form)   => API.upload('/files/', form),
   deleteFile:    (id)     => API.delete(`/files/${id}`),

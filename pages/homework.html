@@ -23,7 +23,7 @@
   </button>
 </div>
 <script>
-let hwItems = [], hwSubjects = [], hwCurrentFilter = 'all', hwCurrentUser = null;
+let hwItems = [], hwSubjects = [], hwCurrentFilter = 'all', hwCurrentUser = null, hwTimetable = null;
 
 async function init_homework() {
   [hwItems, hwSubjects, hwCurrentUser] = await Promise.all([
@@ -32,6 +32,23 @@ async function init_homework() {
     API.me().catch(() => null),
   ]);
   renderHwStats(); renderHw();
+  API.timetable().then(tt => { hwTimetable = tt; }).catch(() => {});
+}
+
+// Finds the subject of whatever lesson is happening right now (per the
+// WebUntis timetable), so the "new homework" sheet can default to it
+// instead of always landing on the first subject in the list.
+function hwCurrentSubjectId() {
+  if (!hwTimetable || !hwTimetable.configured || hwTimetable.error) return null;
+  const lessons = hwTimetable.this_week?.lessons || [];
+  const now = new Date();
+  const todayStr = now.getFullYear() + String(now.getMonth() + 1).padStart(2, '0') + String(now.getDate()).padStart(2, '0');
+  const nowHHMM = now.getHours() * 100 + now.getMinutes();
+  const active = lessons.find(l => l.date === todayStr && !l.cancelled && nowHHMM >= l.startTime && nowHHMM <= l.endTime);
+  if (!active) return null;
+  const name = (active.subject_short || active.subject || '').toLowerCase();
+  const match = hwSubjects.find(s => (s.short_name || '').toLowerCase() === name || (s.name || '').toLowerCase() === name);
+  return match ? match.id : null;
 }
 
 function renderHwStats() {
@@ -131,8 +148,9 @@ async function deleteHw(id) {
 }
 
 function openHwSheet() {
+  const defaultSubId = hwCurrentSubjectId();
   openSheet('<div class="sheet-title">Neue Hausaufgabe</div>'
-    + '<select class="m3-select" id="hw-subject">' + hwSubjects.map(s=>'<option value="'+s.id+'">'+s.name+'</option>').join('') + '</select>'
+    + '<select class="m3-select" id="hw-subject">' + hwSubjects.map(s=>'<option value="'+s.id+'"'+(s.id===defaultSubId?' selected':'')+'>'+s.name+'</option>').join('') + '</select>'
     + '<textarea class="m3-input" id="hw-desc" placeholder="Beschreibung" rows="3" style="resize:none;height:auto;"></textarea>'
     + '<input class="m3-input" id="hw-due" type="date" value="' + new Date(Date.now()+86400000).toISOString().slice(0,10) + '">'
     + '<button class="m3-btn-full" onclick="saveHw()">Speichern</button>');

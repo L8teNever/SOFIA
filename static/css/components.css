@@ -63,7 +63,7 @@
 .m3-input {
   width: 100%; background: #f3edf7; border-radius: 14px;
   padding: 15px 16px; border: 1.5px solid transparent; outline: none; margin-bottom: 10px;
-  font-size: 0.95rem; font-family: inherit; color: #1c1b1f;
+  font-size: 16px; font-family: inherit; color: #1c1b1f;
   transition: border-color 0.15s, background 0.15s;
   box-sizing: border-box;
 }
@@ -243,7 +243,7 @@
   box-shadow: 0 4px 16px rgba(0,0,0,0.1);
   border: 1px solid rgba(0,0,0,0.06);
 }
-.input-bar input { flex: 1; border: none; outline: none; background: transparent; font-size: 0.95rem; font-family: inherit; color: #1c1b1f; }
+.input-bar input { flex: 1; border: none; outline: none; background: transparent; font-size: 16px; font-family: inherit; color: #1c1b1f; }
 .send-btn { width: 40px; height: 40px; background: var(--m3-on-prim-cont); color: white; border-radius: 14px; display: flex; align-items: center; justify-content: center; border: none; cursor: pointer; }
 
 /* File rows */

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_
 from backend.database import get_db, AsyncSessionLocal
@@ -9,11 +9,27 @@ from backend.models.notification import Notification
 from backend.schemas import ChatRoomOut, MessageOut
 from backend.config import settings
 from typing import List, Dict
-import json, asyncio, logging
+import json, asyncio, logging, os, uuid, aiofiles
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/chat", tags=["chat"])
+
+# Chat attachments (images, files, voice notes) get their own storage —
+# they must NOT go through the QuickShare endpoint, which lists uploads
+# publicly (visibility="all") and expires them after ~2h.
+@router.post("/upload")
+async def upload_chat_file(file: UploadFile = File(...), current_user: User = Depends(get_current_user)):
+    if file.size and file.size > settings.max_file_size:
+        raise HTTPException(413, "Datei zu groß")
+    ext = os.path.splitext(file.filename or "")[1]
+    filename = f"{uuid.uuid4().hex}{ext}"
+    chat_dir = os.path.join(settings.upload_dir, "chat")
+    os.makedirs(chat_dir, exist_ok=True)
+    async with aiofiles.open(os.path.join(chat_dir, filename), "wb") as out:
+        content = await file.read()
+        await out.write(content)
+    return {"url": f"/uploads/chat/{filename}", "name": file.filename}
 
 # In-memory WebSocket manager
 class ConnectionManager:

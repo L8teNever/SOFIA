@@ -8,7 +8,8 @@ from backend.config import settings
 from backend.auth import get_current_user
 from backend.models.user import User
 from backend.routes import auth_routes, users, classes, subjects, calendar, homework, grades, messages, files, vapid, admin, timetable
-import os, time, mimetypes
+from backend.routes.timetable import poll_cancelled_lessons_loop
+import os, time, mimetypes, asyncio
 
 BUILD_TS = str(int(time.time()))
 
@@ -20,7 +21,9 @@ mimetypes.add_type("image/webp", ".webp")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
+    poll_task = asyncio.create_task(poll_cancelled_lessons_loop())
     yield
+    poll_task.cancel()
 
 app = FastAPI(title="Sofia", lifespan=lifespan)
 
