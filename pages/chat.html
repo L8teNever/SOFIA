@@ -24,7 +24,7 @@
         <div class="avatar" id="room-avatar" style="background:#6750a4;width:36px;height:36px;font-size:0.8rem;"></div>
         <span id="room-title" style="font-weight:700;font-size:1.1rem;"></span>
       </div>
-      <div id="chat-messages" style="flex:1;overflow-y:auto;padding:0 16px 80px 16px;display:flex;flex-direction:column;"></div>
+      <div id="chat-messages" style="flex:1;overflow-y:auto;overflow-x:hidden;padding:0 16px 80px 16px;display:flex;flex-direction:column;"></div>
       <div class="composer-wrap" id="composer-wrap">
         <div class="composer-context" id="reply-edit-bar" style="display:none;"></div>
         <div class="input-bar" id="input-bar-normal" style="position:static;">
@@ -49,7 +49,19 @@
             <span id="rec-timer">0:00</span>
           </div>
           <div class="rec-wave" id="rec-wave"></div>
-          <button class="send-btn" onclick="stopRecording(true)">
+          <button id="rec-pause-btn" onclick="toggleRecordingPause()" style="background:none;border:none;cursor:pointer;color:#49454f;padding:4px;">
+            <i data-lucide="pause" style="width:18px;height:18px;"></i>
+          </button>
+          <button class="send-btn" onclick="finishRecordingToPreview()">
+            <i data-lucide="check" style="width:18px;height:18px;"></i>
+          </button>
+        </div>
+        <div class="input-bar preview-bar" id="preview-bar" style="position:static;display:none;">
+          <button onclick="discardPreview()" style="background:none;border:none;cursor:pointer;color:#b3261e;padding:4px;">
+            <i data-lucide="trash-2" style="width:20px;height:20px;"></i>
+          </button>
+          <div class="voice-msg" id="preview-voice-msg" style="flex:1;"></div>
+          <button class="send-btn" onclick="sendVoicePreview()">
             <i data-lucide="send" style="width:18px;height:18px;"></i>
           </button>
         </div>
@@ -122,7 +134,8 @@ function formatTime(sec) {
 
 function renderVoiceBubble(m) {
   const uid = `v${m.id || Math.random().toString(36).slice(2, 9)}`;
-  const barsHtml = waveformBars(m.file_url || uid).map(h => `<span style="height:${h}px;"></span>`).join('');
+  const heights = Array.isArray(m.waveform) && m.waveform.length ? m.waveform : waveformBars(m.file_url || uid);
+  const barsHtml = heights.map(h => `<span style="height:${h}px;"></span>`).join('');
   return `
     <div class="voice-msg">
       <audio id="${uid}" src="${m.file_url}" preload="metadata"></audio>
@@ -445,15 +458,18 @@ function scrollToMessage(id) {
   if (bubble) { bubble.classList.add('highlight-flash'); setTimeout(() => bubble.classList.remove('highlight-flash'), 1000); }
 }
 
-function getSingleMessageHTML(m, currentUserId, userMap) {
+function getSingleMessageHTML(m, currentUserId, userMap, isGroupStart = true, isGroupEnd = true, isGroupChat = false) {
   const isMe = m.sender_id === currentUserId;
   const sender = userMap ? userMap[m.sender_id] : null;
   const senderName = sender ? (sender.display_name || sender.email.split('@')[0]) : 'User';
   const time = new Date(m.created_at).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+  const rowClass = `msg-row${isGroupEnd ? ' group-end' : ''}`;
+  const rowDataAttrs = `data-msg-id="${m.id}" data-group-start="${isGroupStart ? 1 : 0}" data-group-end="${isGroupEnd ? 1 : 0}"`;
+  const showHeader = !isMe && isGroupStart && isGroupChat;
 
   if (m.deleted) {
     return `
-      <div style="margin-bottom:8px; display:flex; flex-direction:column; align-items: ${isMe?'flex-end':'flex-start'};">
+      <div class="${rowClass}" ${rowDataAttrs} style="display:flex; flex-direction:column; align-items: ${isMe?'flex-end':'flex-start'};">
         <div class="bubble ${isMe?'me':'them'}" style="opacity:0.6; font-style:italic; display:flex; align-items:center; gap:6px;">
           <i data-lucide="ban" style="width:14px;height:14px;"></i> Nachricht gelöscht
         </div>
@@ -467,7 +483,7 @@ function getSingleMessageHTML(m, currentUserId, userMap) {
         <div class="bubble-reply-quote-text">${escapeHtml(snippetForMessage(m.reply_preview))}</div>
       </div>` : '';
   const editedLabel = m.edited ? ' · bearbeitet' : '';
-  const swipeIconHtml = `<div class="msg-swipe-icon" style="${isMe ? 'right:-32px;' : 'left:-32px;'}"><i data-lucide="reply" style="width:16px;height:16px;"></i></div>`;
+  const swipeIconHtml = `<div class="msg-swipe-icon" style="${isMe ? 'right:8px;' : 'left:8px;'}"><i data-lucide="reply" style="width:16px;height:16px;"></i></div>`;
 
   let content = '';
   if (m.file_type === 'image' && m.file_url) {
@@ -503,12 +519,12 @@ function getSingleMessageHTML(m, currentUserId, userMap) {
   if (isMuted && !isMe) {
     const uniqueMsgId = `muted-msg-${m.id}`;
     return `
-      <div class="msg-row" data-msg-id="${m.id}" style="margin-bottom:8px; display:flex; flex-direction:column; align-items: flex-start; width: 100%; position:relative;">
+      <div class="${rowClass}" ${rowDataAttrs} style="display:flex; flex-direction:column; align-items: flex-start; width: 100%;">
         ${swipeIconHtml}
-        <div style="font-size:0.7rem;opacity:0.5;margin-bottom:2px;padding-left:4px;display:flex;align-items:center;gap:6px;">
+        ${isGroupStart ? `<div style="font-size:0.7rem;opacity:0.5;margin-bottom:2px;padding-left:4px;display:flex;align-items:center;gap:6px;">
           <span>${senderName}</span>
           <button onclick="toggleMuteUser(${m.sender_id}, '${escapeHtml(senderName)}')" style="background:none; border:none; padding:0; cursor:pointer; color:#6750a4; font-size:0.65rem; text-decoration:underline;">Mute aufheben</button>
-        </div>
+        </div>` : ''}
         <div id="${uniqueMsgId}-placeholder" class="bubble them" style="background:#e8e3f0; opacity:0.85; font-style:italic; cursor:pointer; display:flex; align-items:center; gap:8px;" onclick="document.getElementById('${uniqueMsgId}-content').style.display='block'; this.style.display='none';">
           <i data-lucide="volume-x" style="width:16px; height:16px; color:#b3261e;"></i> Nachricht von stummgeschaltetem Nutzer. Klicken zum Anzeigen.
         </div>
@@ -520,9 +536,9 @@ function getSingleMessageHTML(m, currentUserId, userMap) {
   }
 
   return `
-    <div class="msg-row" data-msg-id="${m.id}" style="margin-bottom:8px; display:flex; flex-direction:column; align-items: ${isMe?'flex-end':'flex-start'}; position:relative;">
+    <div class="${rowClass}" ${rowDataAttrs} style="display:flex; flex-direction:column; align-items: ${isMe?'flex-end':'flex-start'};">
       ${swipeIconHtml}
-      ${!isMe ? `
+      ${showHeader ? `
         <div style="font-size:0.7rem;opacity:0.5;margin-bottom:2px;padding-left:4px;display:flex;align-items:center;gap:6px;">
           <span>${senderName}</span>
           <button onclick="toggleMuteUser(${m.sender_id}, '${escapeHtml(senderName)}')" style="background:none; border:none; padding:0; cursor:pointer; color:#6750a4; font-size:0.65rem; text-decoration:underline;">Stummschalten</button>
@@ -538,7 +554,13 @@ function renderMessages(msgs) {
   const uid = chatCurrentUser?.id;
   const container = document.getElementById('chat-messages');
   const userMap = Object.fromEntries(chatClassUsers.map(u=>[u.id,u]));
-  container.innerHTML = msgs.map(m => getSingleMessageHTML(m, uid, userMap)).join('');
+  const room = chatRooms.find(r => r.id === activeRoomId);
+  const isGroupChat = !!room?.is_group;
+  container.innerHTML = msgs.map((m, i) => {
+    const isGroupStart = i === 0 || msgs[i - 1].sender_id !== m.sender_id || msgs[i - 1].deleted;
+    const isGroupEnd = i === msgs.length - 1 || msgs[i + 1].sender_id !== m.sender_id || msgs[i + 1].deleted;
+    return getSingleMessageHTML(m, uid, userMap, isGroupStart, isGroupEnd, isGroupChat);
+  }).join('');
   container.scrollTop = container.scrollHeight;
   if (window.lucide) lucide.createIcons();
 }
@@ -548,9 +570,13 @@ function rerenderSingleMessage(id) {
   if (!m) return;
   const uid = chatCurrentUser?.id;
   const userMap = Object.fromEntries(chatClassUsers.map(u=>[u.id,u]));
+  const room = chatRooms.find(r => r.id === activeRoomId);
+  const isGroupChat = !!room?.is_group;
   const row = document.querySelector(`.msg-row[data-msg-id="${id}"]`);
+  const isGroupStart = row ? row.dataset.groupStart === '1' : true;
+  const isGroupEnd = row ? row.dataset.groupEnd === '1' : true;
   const tempDiv = document.createElement('div');
-  tempDiv.innerHTML = getSingleMessageHTML(m, uid, userMap);
+  tempDiv.innerHTML = getSingleMessageHTML(m, uid, userMap, isGroupStart, isGroupEnd, isGroupChat);
   const newRow = tempDiv.firstElementChild;
   if (row) row.replaceWith(newRow);
   else document.getElementById('chat-messages')?.appendChild(newRow);
@@ -581,10 +607,18 @@ function connectWs(roomId) {
 
     const uid = chatCurrentUser?.id;
     const userMap = Object.fromEntries(chatClassUsers.map(u=>[u.id,u]));
+    const room = chatRooms.find(r => r.id === activeRoomId);
+    const isGroupChat = !!room?.is_group;
+    const prevLast = roomMessages[roomMessages.length - 1];
+    const isGroupStart = !prevLast || prevLast.sender_id !== msg.sender_id || prevLast.deleted;
+    if (!isGroupStart && prevLast) {
+      const prevRow = document.querySelector(`.msg-row[data-msg-id="${prevLast.id}"]`);
+      if (prevRow) { prevRow.classList.remove('group-end'); prevRow.dataset.groupEnd = '0'; }
+    }
     messagesById[msg.id] = msg;
     roomMessages.push(msg);
     const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = getSingleMessageHTML(msg, uid, userMap);
+    tempDiv.innerHTML = getSingleMessageHTML(msg, uid, userMap, isGroupStart, true, isGroupChat);
     container.appendChild(tempDiv.firstElementChild);
     container.scrollTop = container.scrollHeight;
     if (window.lucide) lucide.createIcons();
@@ -606,7 +640,7 @@ async function sendMsg() {
   input.value = '';
 }
 
-async function sendFile(file) {
+async function sendFile(file, waveform) {
   if (!file) return;
   const form = new FormData();
   form.append('file', file);
@@ -621,6 +655,7 @@ async function sendFile(file) {
         file_url: `/api/v1/files/download/${uploaded.id}`,
         file_type: file.type.startsWith('image') ? 'image' : (file.type.startsWith('audio') ? 'audio' : 'file'),
         reply_to_id: replyingTo?.id || null,
+        waveform: waveform || null,
       }));
       replyingTo = null;
       renderComposerContext();
@@ -628,47 +663,86 @@ async function sendFile(file) {
   } catch { showToast('Upload fehlgeschlagen'); }
 }
 
-let mediaRecorder, audioChunks = [], recAudioCtx = null, recRafId = null, recTimerInterval = null, recStartTime = 0, recCancelled = false;
+let mediaRecorder, audioChunks = [], recAudioCtx = null, recRafId = null, recTimerInterval = null,
+    recCancelled = false, recPaused = false, recLevels = [], recBlob = null, recBlobUrl = null;
 
 async function startRecording() {
-  if (mediaRecorder?.state === 'recording') return;
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') return;
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true }).catch(() => null);
   if (!stream) { showToast('Mikrofonzugriff verweigert'); return; }
   recCancelled = false;
+  recPaused = false;
+  recLevels = [];
   mediaRecorder = new MediaRecorder(stream);
   audioChunks = [];
   mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
-  mediaRecorder.onstop = async () => {
+  mediaRecorder.onstop = () => {
     stream.getTracks().forEach(t => t.stop());
-    stopRecordingUI();
-    if (recCancelled) return;
+    if (recAudioCtx) { recAudioCtx.close().catch(() => {}); recAudioCtx = null; }
+    clearInterval(recTimerInterval);
+    if (recRafId) cancelAnimationFrame(recRafId);
+    if (recCancelled) { resetComposerToNormal(); return; }
     const blob = new Blob(audioChunks, { type: 'audio/webm' });
-    if (blob.size < 800) return; // ignore accidental taps
-    const file = new File([blob], 'voice.webm', { type: 'audio/webm' });
-    await sendFile(file);
+    if (blob.size < 800) { resetComposerToNormal(); return; } // ignore accidental taps
+    recBlob = blob;
+    recBlobUrl = URL.createObjectURL(blob);
+    showPreviewUI();
   };
   mediaRecorder.start();
   startRecordingUI(stream);
 }
 
-function stopRecording(send) {
-  if (mediaRecorder?.state !== 'recording') return;
-  recCancelled = !send;
+function cancelRecording() {
+  if (!mediaRecorder || mediaRecorder.state === 'inactive') { resetComposerToNormal(); return; }
+  recCancelled = true;
   mediaRecorder.stop();
 }
 
-function cancelRecording() { stopRecording(false); }
+function finishRecordingToPreview() {
+  if (!mediaRecorder || mediaRecorder.state === 'inactive') return;
+  recCancelled = false;
+  mediaRecorder.stop();
+}
+
+function toggleRecordingPause() {
+  if (!mediaRecorder) return;
+  if (mediaRecorder.state === 'recording' && mediaRecorder.pause) {
+    mediaRecorder.pause();
+    recPaused = true;
+    updateRecordingPauseUI();
+  } else if (mediaRecorder.state === 'paused' && mediaRecorder.resume) {
+    mediaRecorder.resume();
+    recPaused = false;
+    updateRecordingPauseUI();
+  }
+}
+
+function updateRecordingPauseUI() {
+  const bar = document.getElementById('recording-bar');
+  const pauseBtn = document.getElementById('rec-pause-btn');
+  if (!bar || !pauseBtn) return;
+  bar.classList.toggle('paused', recPaused);
+  pauseBtn.innerHTML = recPaused
+    ? '<i data-lucide="mic" style="width:18px;height:18px;"></i>'
+    : '<i data-lucide="pause" style="width:18px;height:18px;"></i>';
+  if (window.lucide) lucide.createIcons();
+}
 
 function startRecordingUI(stream) {
   document.getElementById('input-bar-normal').style.display = 'none';
+  document.getElementById('preview-bar').style.display = 'none';
   const bar = document.getElementById('recording-bar');
+  bar.classList.remove('paused');
   bar.style.display = 'flex';
 
-  recStartTime = Date.now();
+  let elapsedMs = 0;
   const timerEl = document.getElementById('rec-timer');
   timerEl.textContent = '0:00';
   recTimerInterval = setInterval(() => {
-    timerEl.textContent = formatTime((Date.now() - recStartTime) / 1000);
+    if (mediaRecorder?.state === 'recording') {
+      elapsedMs += 200;
+      timerEl.textContent = formatTime(elapsedMs / 1000);
+    }
   }, 200);
 
   const waveEl = document.getElementById('rec-wave');
@@ -685,10 +759,13 @@ function startRecordingUI(stream) {
     const data = new Uint8Array(analyser.frequencyBinCount);
     let i = 0;
     const tick = () => {
-      analyser.getByteFrequencyData(data);
-      const level = data.reduce((a, b) => a + b, 0) / data.length; // 0-255
-      bars[i % barCount].style.height = `${4 + Math.min(24, (level / 255) * 28)}px`;
-      i++;
+      if (mediaRecorder?.state === 'recording') {
+        analyser.getByteFrequencyData(data);
+        const level = data.reduce((a, b) => a + b, 0) / data.length; // 0-255
+        recLevels.push(level);
+        bars[i % barCount].style.height = `${4 + Math.min(24, (level / 255) * 28)}px`;
+        i++;
+      }
       recRafId = requestAnimationFrame(tick);
     };
     tick();
@@ -697,19 +774,78 @@ function startRecordingUI(stream) {
   }
 }
 
-function stopRecordingUI() {
+function downsampleLevels(levels, count = 24) {
+  if (!levels.length) return Array.from({ length: count }, () => 6);
+  const bucket = levels.length / count;
+  const bars = [];
+  for (let i = 0; i < count; i++) {
+    const start = Math.floor(i * bucket);
+    const end = Math.max(start + 1, Math.floor((i + 1) * bucket));
+    const slice = levels.slice(start, end);
+    const avg = slice.reduce((a, b) => a + b, 0) / slice.length; // 0-255
+    bars.push(6 + Math.round((avg / 255) * 18));
+  }
+  return bars;
+}
+
+function showPreviewUI() {
+  document.getElementById('input-bar-normal').style.display = 'none';
+  document.getElementById('recording-bar').style.display = 'none';
+  const previewBar = document.getElementById('preview-bar');
+  previewBar.style.display = 'flex';
+
+  const heights = downsampleLevels(recLevels);
+  const barsHtml = heights.map(h => `<span style="height:${h}px;"></span>`).join('');
+  document.getElementById('preview-voice-msg').innerHTML = `
+    <audio id="v-preview" src="${recBlobUrl}" preload="metadata"></audio>
+    <button class="voice-play-btn" onclick="toggleVoicePlay('v-preview')">
+      <i data-lucide="play" style="width:16px;height:16px;"></i>
+    </button>
+    <div class="voice-wave-wrap" onclick="seekVoice(event,'v-preview')">
+      <div class="voice-wave">${barsHtml}</div>
+      <div class="voice-wave-progress" id="v-preview-progress">${barsHtml}</div>
+    </div>
+    <span class="voice-time" id="v-preview-time">0:00</span>`;
+  if (window.lucide) lucide.createIcons();
+}
+
+function discardPreview() {
+  const audio = document.getElementById('v-preview');
+  if (audio) audio.pause();
+  if (recBlobUrl) { URL.revokeObjectURL(recBlobUrl); recBlobUrl = null; }
+  recBlob = null;
+  recLevels = [];
+  resetComposerToNormal();
+}
+
+async function sendVoicePreview() {
+  if (!recBlob) return;
+  const waveform = downsampleLevels(recLevels);
+  const blob = recBlob, url = recBlobUrl;
+  recBlob = null; recBlobUrl = null; recLevels = [];
+  resetComposerToNormal();
+  const file = new File([blob], 'voice.webm', { type: 'audio/webm' });
+  await sendFile(file, waveform);
+  URL.revokeObjectURL(url);
+}
+
+function resetComposerToNormal() {
   clearInterval(recTimerInterval);
   if (recRafId) cancelAnimationFrame(recRafId);
   if (recAudioCtx) { recAudioCtx.close().catch(() => {}); recAudioCtx = null; }
-  const bar = document.getElementById('recording-bar');
-  if (bar) bar.style.display = 'none';
+  const recBar = document.getElementById('recording-bar');
+  const previewBar = document.getElementById('preview-bar');
   const normal = document.getElementById('input-bar-normal');
+  if (recBar) recBar.style.display = 'none';
+  if (previewBar) previewBar.style.display = 'none';
   if (normal) normal.style.display = 'flex';
+  mediaRecorder = null;
 }
 
 function closeChatRoom() {
   if (chatWs) { chatWs.close(); chatWs = null; }
-  if (mediaRecorder?.state === 'recording') cancelRecording();
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') cancelRecording();
+  if (recBlobUrl) discardPreview();
   replyingTo = null;
   editingMessageId = null;
   activeRoomId = null;

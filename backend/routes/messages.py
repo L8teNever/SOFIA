@@ -72,7 +72,7 @@ async def get_messages(room_id: int, db: AsyncSession = Depends(get_db), current
             "content": m.content, "file_url": m.file_url, "file_type": m.file_type,
             "created_at": m.created_at, "read_by": m.read_by,
             "reply_to_id": m.reply_to_id, "reply_preview": reply_preview,
-            "edited": bool(m.edited), "deleted": bool(m.deleted),
+            "edited": bool(m.edited), "deleted": bool(m.deleted), "waveform": m.waveform,
         })
     return out
 
@@ -120,6 +120,7 @@ async def ws_chat(room_id: int, ws: WebSocket):
                     file_type=data.get("file_type", "text"),
                     read_by=[sender_id],
                     reply_to_id=reply_to_id,
+                    waveform=data.get("waveform"),
                 )
                 db.add(msg)
                 await db.commit()
@@ -138,7 +139,7 @@ async def ws_chat(room_id: int, ws: WebSocket):
                     "file_url": msg.file_url, "file_type": msg.file_type,
                     "created_at": msg.created_at.isoformat(),
                     "reply_to_id": msg.reply_to_id, "reply_preview": reply_preview,
-                    "edited": False, "deleted": False,
+                    "edited": False, "deleted": False, "waveform": msg.waveform,
                 })
     except WebSocketDisconnect:
         manager.disconnect(room_id, ws)

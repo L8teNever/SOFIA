@@ -25,6 +25,7 @@ class Message(Base):
     reply_to_id = Column(Integer, ForeignKey("messages.id"), nullable=True)
     edited = Column(Boolean, default=False)
     deleted = Column(Boolean, default=False)
+    waveform = Column(JSON, nullable=True)
 
     room = relationship("ChatRoom", back_populates="messages")
     sender = relationship("User", back_populates="sent_messages", foreign_keys=[sender_id])

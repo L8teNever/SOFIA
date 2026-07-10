@@ -37,3 +37,5 @@ async def _migrate_columns(conn):
         await conn.execute(text("ALTER TABLE messages ADD COLUMN edited BOOLEAN DEFAULT 0"))
     if "deleted" not in existing:
         await conn.execute(text("ALTER TABLE messages ADD COLUMN deleted BOOLEAN DEFAULT 0"))
+    if "waveform" not in existing:
+        await conn.execute(text("ALTER TABLE messages ADD COLUMN waveform JSON"))

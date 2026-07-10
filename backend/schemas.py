@@ -123,6 +123,7 @@ class MessageOut(BaseModel):
     reply_preview: Optional[dict] = None
     edited: bool = False
     deleted: bool = False
+    waveform: Optional[List[int]] = None
     class Config: from_attributes = True
 
 # Shared Files
