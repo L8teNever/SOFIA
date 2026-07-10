@@ -181,10 +181,16 @@
 }
 
 /* Chat bubbles */
-.bubble { max-width: 78%; padding: 12px 16px; border-radius: 22px; font-size: 0.92rem; line-height: 1.4; margin-bottom: 4px; }
+.bubble { max-width: 76%; padding: 12px 16px; border-radius: 22px; font-size: 0.92rem; line-height: 1.4; margin-bottom: 4px; }
 .bubble.them { background: #f3edf7; color: #1c1b1f; border-bottom-left-radius: 6px; align-self: flex-start; }
 .bubble.me { background: var(--m3-on-prim-cont); color: white; border-bottom-right-radius: 6px; align-self: flex-end; }
 .bubble-meta { font-size: 0.68rem; opacity: 0.5; margin: 0 8px 2px 8px; }
+@media (min-width: 600px) {
+  .bubble { max-width: 65%; }
+}
+@media (min-width: 900px) {
+  .bubble { max-width: 55%; }
+}
 
 /* Message row gestures (swipe-to-reply, long-press actions) */
 .msg-row { position: relative; touch-action: pan-y; margin-bottom: 2px; }
@@ -207,8 +213,16 @@
   position: absolute; left: 16px; right: 16px; bottom: 20px;
   display: flex; flex-direction: column; gap: 8px;
 }
-@media (min-width: 760px) {
+@media (min-width: 600px) {
   .composer-wrap { left: 24px; right: 24px; bottom: 24px; }
+}
+@media (min-width: 760px) {
+  .composer-wrap {
+    left: 50%; right: auto;
+    transform: translateX(-50%);
+    bottom: 28px;
+    width: min(100% - 80px, 760px);
+  }
 }
 .composer-context {
   background: #fff; border-radius: 16px; padding: 8px 12px;
@@ -303,7 +317,7 @@
 .grade-badge { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 14px; font-weight: 700; font-size: 1.1rem; }
 
 /* Tablet adjustments to prevent widget title truncation */
-@media (min-width: 700px) and (max-width: 900px) {
+@media (min-width: 600px) and (max-width: 900px) {
   .w-compact, .w-half {
     padding: 10px !important;
     gap: 8px !important;
@@ -559,4 +573,86 @@
 #preview-voice-msg .voice-seek-thumb {
   background: #6750a4;
   opacity: 1;
+}
+
+/* ============================================================
+   Tablet / iPad responsive improvements for chat
+   ============================================================ */
+#chat-messages {
+  padding: 0 16px 130px 16px;
+}
+@media (min-width: 600px) {
+  #chat-messages {
+    padding: 0 28px 130px 28px;
+  }
+}
+@media (min-width: 760px) {
+  /* Center chat messages on wider screens */
+  #chat-messages {
+    padding: 0 0 130px 0;
+    align-items: stretch;
+  }
+  #chat-messages > * {
+    max-width: 760px;
+    width: 100%;
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: 0;
+    padding-right: 0;
+  }
+  /* Give the overall chat message area inner padding */
+  #page-chat-room #chat-messages {
+    padding-left: max(24px, calc(50% - 380px));
+    padding-right: max(24px, calc(50% - 380px));
+    padding-bottom: 100px;
+  }
+}
+
+/* Chat list page inner centering */
+@media (min-width: 600px) {
+  #chat-rooms-list {
+    max-width: 680px;
+    margin: 0 auto;
+  }
+}
+
+/* Timetable week grid improvements on tablet */
+@media (min-width: 600px) {
+  .week-grid {
+    gap: 8px;
+    grid-template-columns: 52px repeat(5, 1fr);
+  }
+  .week-cell {
+    min-height: 60px;
+    font-size: 0.72rem;
+    padding: 10px 8px;
+    border-radius: 14px;
+  }
+  .week-head { font-size: 0.82rem; }
+}
+
+/* Bottom sheet max width on tablet */
+@media (min-width: 600px) {
+  .bottom-sheet {
+    max-width: 600px;
+    border-radius: 32px 32px 0 0;
+  }
+}
+
+/* Modal wider on tablet */
+@media (min-width: 600px) {
+  .modal {
+    max-width: 480px;
+  }
+}
+
+/* FAB positioning on tablet */
+@media (min-width: 600px) {
+  .fab {
+    bottom: 40px;
+    right: 32px;
+    width: 60px;
+    height: 60px;
+    border-radius: 18px;
+  }
 }
