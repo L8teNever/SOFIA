@@ -300,6 +300,57 @@ async function loadDashboard() {
       document.getElementById('w-grade-avg').textContent = avg;
     }
     document.getElementById('w-files-count').textContent = files.length;
+    
+    // Fetch and update Timetable widget
+    API.timetable().then(ttData => {
+      if (ttData && ttData.configured && !ttData.error) {
+        const lessons = (ttData.this_week?.lessons || []).concat(ttData.next_week?.lessons || []);
+        const now = new Date();
+        const y = now.getFullYear();
+        const m = String(now.getMonth() + 1).padStart(2, '0');
+        const d = String(now.getDate()).padStart(2, '0');
+        const todayStr = `${y}${m}${d}`;
+        const currentHHMM = now.getHours() * 100 + now.getMinutes();
+        
+        // Find lessons for today
+        const todayLessons = lessons.filter(l => l.date === todayStr && !l.cancelled);
+        const widgetLessonEl = document.getElementById('w-current-lesson');
+        if (!widgetLessonEl) return;
+        const subLabel = widgetLessonEl.previousElementSibling;
+        
+        if (todayLessons.length) {
+          // Find current active lesson
+          const active = todayLessons.find(l => currentHHMM >= l.startTime && currentHHMM <= l.endTime);
+          
+          if (active) {
+            const subject = active.subject_short || active.subject || '–';
+            const room = active.room ? ` (${active.room})` : '';
+            widgetLessonEl.textContent = `${subject}${room}`;
+            if (subLabel) subLabel.textContent = 'Jetzt';
+          } else {
+            // Find next upcoming lesson today
+            const upcoming = todayLessons
+              .filter(l => l.startTime > currentHHMM)
+              .sort((a, b) => a.startTime - b.startTime);
+              
+            if (upcoming.length) {
+              const next = upcoming[0];
+              const subject = next.subject_short || next.subject || '–';
+              const startStr = String(next.startTime).padStart(4, '0');
+              const fmtStart = `${startStr.slice(0, 2)}:${startStr.slice(2)}`;
+              widgetLessonEl.textContent = `${subject}`;
+              if (subLabel) subLabel.textContent = `Ab ${fmtStart}`;
+            } else {
+              widgetLessonEl.textContent = 'Feierabend';
+              if (subLabel) subLabel.textContent = 'Heute';
+            }
+          }
+        } else {
+          widgetLessonEl.textContent = 'Keine Schule';
+          if (subLabel) subLabel.textContent = 'Heute';
+        }
+      }
+    }).catch(() => {});
   } catch (e) {}
 }
 

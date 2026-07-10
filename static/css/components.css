@@ -160,7 +160,12 @@
 .cal-day:not(.today):hover { background: rgba(103,80,164,0.1); }
 
 /* Timetable */
-.tt-block { border-radius: 20px; padding: 14px 16px; margin-bottom: 8px; display: flex; align-items: center; gap: 14px; }
+.tt-block {
+  border-radius: 20px; padding: 14px 16px; margin-bottom: 8px;
+  display: flex; align-items: center; gap: 14px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+}
 .tt-time { font-variant-numeric: tabular-nums; font-size: 0.78rem; opacity: 0.65; font-weight: 500; min-width: 44px; }
 .week-grid { display: grid; grid-template-columns: 40px repeat(5,1fr); gap: 5px; }
 .week-cell { border-radius: 12px; padding: 8px 6px; font-size: 0.66rem; line-height: 1.2; min-height: 52px; display: flex; flex-direction: column; justify-content: center; text-align: center; font-weight: 600; }
