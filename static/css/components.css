@@ -286,3 +286,29 @@
   animation: rec-pulse 1s infinite;
   color: #b3261e !important;
 }
+
+/* Voice recording bar (WhatsApp-style) */
+.rec-indicator { display: flex; align-items: center; gap: 8px; padding: 0 4px; flex-shrink: 0; }
+.rec-dot { width: 10px; height: 10px; border-radius: 50%; background: #b3261e; animation: rec-pulse 1.1s infinite; flex-shrink: 0; }
+#rec-timer { font-size: 0.85rem; font-weight: 600; color: #b3261e; font-variant-numeric: tabular-nums; }
+.rec-wave { flex: 1; display: flex; align-items: center; gap: 3px; height: 28px; overflow: hidden; padding: 0 4px; }
+.rec-wave span { width: 3px; min-height: 4px; height: 4px; border-radius: 2px; background: #b3261e; opacity: 0.75; transition: height 0.08s ease; flex-shrink: 0; }
+@keyframes rec-bar-fallback {
+  0%, 100% { height: 4px; }
+  50% { height: 20px; }
+}
+.rec-bar-fallback { animation: rec-bar-fallback 0.9s ease-in-out infinite; }
+
+/* Voice message bubble (WhatsApp-style) */
+.voice-msg { display: flex; align-items: center; gap: 8px; min-width: 190px; max-width: 100%; padding: 2px; }
+.voice-play-btn { width: 34px; height: 34px; border-radius: 50%; border: none; cursor: pointer; flex-shrink: 0; display: flex; align-items: center; justify-content: center; background: var(--m3-on-prim-cont); color: white; }
+.bubble.them .voice-play-btn { background: #6750a4; }
+.voice-play-btn i { margin-left: 1px; }
+.voice-wave-wrap { position: relative; flex: 1; height: 28px; cursor: pointer; }
+.voice-wave, .voice-wave-progress { position: absolute; inset: 0; display: flex; align-items: center; gap: 2px; }
+.voice-wave-progress { width: 0%; overflow: hidden; }
+.voice-wave span { width: 3px; border-radius: 2px; background: rgba(255,255,255,0.45); flex-shrink: 0; }
+.bubble.them .voice-wave span { background: rgba(103,80,164,0.3); }
+.voice-wave-progress span { background: white; }
+.bubble.them .voice-wave-progress span { background: #6750a4; }
+.voice-time { font-size: 0.68rem; opacity: 0.85; flex-shrink: 0; min-width: 34px; text-align: right; font-variant-numeric: tabular-nums; }
