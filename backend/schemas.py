@@ -127,6 +127,7 @@ class MessageOut(BaseModel):
     edited: bool = False
     deleted: bool = False
     waveform: Optional[List[int]] = None
+    poll_data: Optional[dict] = None
     class Config: from_attributes = True
 
 # Shared Files

@@ -146,6 +146,7 @@ async def get_messages(room_id: int, db: AsyncSession = Depends(get_db), current
             "created_at": m.created_at, "read_by": m.read_by,
             "reply_to_id": m.reply_to_id, "reply_preview": reply_preview,
             "edited": bool(m.edited), "deleted": bool(m.deleted), "waveform": m.waveform,
+            "poll_data": m.poll_data,
         })
     return out
 
@@ -184,6 +185,27 @@ async def ws_chat(room_id: int, ws: WebSocket):
                     await manager.broadcast(room_id, {"type": "delete", "id": msg.id})
                     continue
 
+                if action == "vote":
+                    msg_id = data.get("message_id")
+                    option_idx = str(data.get("option_index"))
+                    result = await db.execute(select(Message).where(Message.id == msg_id, Message.room_id == room_id))
+                    msg = result.scalar_one_or_none()
+                    if not msg or msg.deleted or msg.file_type != "poll" or not msg.poll_data:
+                        continue
+                    pdata = json.loads(json.dumps(msg.poll_data))
+                    votes = pdata.get("votes", {})
+                    if option_idx not in votes:
+                        votes[option_idx] = []
+                    if sender_id in votes[option_idx]:
+                        votes[option_idx].remove(sender_id)
+                    else:
+                        votes[option_idx].append(sender_id)
+                    pdata["votes"] = votes
+                    msg.poll_data = pdata
+                    await db.commit()
+                    await manager.broadcast(room_id, {"type": "vote", "id": msg.id, "poll_data": msg.poll_data})
+                    continue
+
                 reply_to_id = data.get("reply_to_id")
                 msg = Message(
                     room_id=room_id,
@@ -194,6 +216,7 @@ async def ws_chat(room_id: int, ws: WebSocket):
                     read_by=[sender_id],
                     reply_to_id=reply_to_id,
                     waveform=data.get("waveform"),
+                    poll_data=data.get("poll_data"),
                 )
                 db.add(msg)
                 await db.commit()
@@ -222,6 +245,8 @@ async def ws_chat(room_id: int, ws: WebSocket):
                             notif_body = "🎥 Video"
                         elif msg.file_type == "file":
                             notif_body = "📁 Datei"
+                        elif msg.file_type == "poll":
+                            notif_body = f"📊 Umfrage: {msg.content}"
                         else:
                             notif_body = msg.content or ""
                         
@@ -291,6 +316,7 @@ async def ws_chat(room_id: int, ws: WebSocket):
                     "created_at": msg.created_at.isoformat(),
                     "reply_to_id": msg.reply_to_id, "reply_preview": reply_preview,
                     "edited": False, "deleted": False, "waveform": msg.waveform,
+                    "poll_data": msg.poll_data,
                 })
     except WebSocketDisconnect:
         manager.disconnect(room_id, ws)

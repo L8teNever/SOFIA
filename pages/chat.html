@@ -39,6 +39,9 @@
             <i data-lucide="paperclip" style="width:20px;height:20px;"></i>
             <input type="file" style="display:none;" onchange="sendFile(this.files[0])">
           </label>
+          <button onclick="openPollCreatorSheet()" style="background:none;border:none;cursor:pointer;color:#49454f;padding:4px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+            <i data-lucide="bar-chart-2" style="width:20px;height:20px;"></i>
+          </button>
           <button class="send-btn" onclick="sendMsg()">
             <i data-lucide="send" style="width:18px;height:18px;"></i>
           </button>
@@ -186,6 +189,80 @@ function renderVoiceBubble(m) {
       </div>
       <span class="voice-time" id="${uid}-time">0:00</span>
     </div>`;
+}
+
+function renderPollBubble(m) {
+  if (!m.poll_data) return `<div>[Ungültige Umfrage]</div>`;
+  const pdata = m.poll_data;
+  const question = pdata.question || m.content || 'Umfrage';
+  const options = pdata.options || [];
+  const votes = pdata.votes || {};
+  
+  let totalVotes = 0;
+  options.forEach((opt, idx) => {
+    const vList = votes[idx.toString()] || [];
+    totalVotes += vList.length;
+  });
+  
+  const uid = chatCurrentUser?.id;
+  const optionsHtml = options.map((opt, idx) => {
+    const vList = votes[idx.toString()] || [];
+    const hasVoted = uid && vList.includes(uid);
+    const count = vList.length;
+    const percent = totalVotes > 0 ? Math.round((count / totalVotes) * 100) : 0;
+    
+    const userMap = Object.fromEntries(chatClassUsers.map(u => [u.id, u]));
+    const votersAvatars = vList.map(vid => {
+      const u = userMap[vid];
+      if (!u) return '';
+      const name = u.display_name || u.email.split('@')[0];
+      const initials = name.slice(0, 2).toUpperCase();
+      return `<span class="poll-voter-dot" title="${escapeHtml(name)}">${initials}</span>`;
+    }).slice(0, 3).join('');
+    
+    const plusMore = vList.length > 3 ? `<span class="poll-voter-more">+${vList.length - 3}</span>` : '';
+    
+    return `
+      <div class="poll-option-row ${hasVoted ? 'voted' : ''}" onclick="votePollOption(${m.id}, ${idx})">
+        <div class="poll-option-bg" style="width: ${percent}%;"></div>
+        <div class="poll-option-content">
+          <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;">
+            <i data-lucide="${hasVoted ? 'check-circle-2' : 'circle'}" class="poll-check-icon"></i>
+            <span class="poll-option-text" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">${escapeHtml(opt)}</span>
+          </div>
+          <div style="display:flex;align-items:center;flex-shrink:0;">
+            <span class="poll-option-percent">${percent}%</span>
+            <span class="poll-option-count">(${count})</span>
+          </div>
+        </div>
+        ${vList.length > 0 ? `
+        <div class="poll-option-voters">
+          <div class="poll-voters-list">${votersAvatars}${plusMore}</div>
+        </div>` : ''}
+      </div>
+    `;
+  }).join('');
+  
+  return `
+    <div class="poll-container" id="poll-${m.id}">
+      <div class="poll-question">
+        <i data-lucide="bar-chart-2" style="width:18px;height:18px;"></i>
+        <span style="flex:1;word-break:break-word;">${escapeHtml(question)}</span>
+      </div>
+      <div class="poll-options-list">${optionsHtml}</div>
+      <div class="poll-footer">Gesamtstimmen: ${totalVotes}</div>
+    </div>
+  `;
+}
+
+function votePollOption(msgId, optionIndex) {
+  if (!chatWs) return;
+  chatWs.send(JSON.stringify({
+    action: 'vote',
+    message_id: msgId,
+    sender_id: chatCurrentUser?.id,
+    option_index: optionIndex
+  }));
 }
 
 function initVoiceSeeking(wrapEl, audioId) {
@@ -635,6 +712,8 @@ function getSingleMessageHTML(m, currentUserId, userMap, isGroupStart = true, is
           <i data-lucide="download" style="width:16px;height:16px;"></i>
         </a>
       </div>`;
+  } else if (m.file_type === 'poll') {
+    content = renderPollBubble(m);
   } else {
     content = escapeHtml(m.content || '');
   }
@@ -739,6 +818,12 @@ function connectWs(roomId) {
     if (msg.type === 'delete') {
       const existing = messagesById[msg.id];
       if (existing) { existing.deleted = true; existing.content = null; existing.file_url = null; }
+      rerenderSingleMessage(msg.id);
+      return;
+    }
+    if (msg.type === 'vote') {
+      const existing = messagesById[msg.id];
+      if (existing) { existing.poll_data = msg.poll_data; }
       rerenderSingleMessage(msg.id);
       return;
     }
@@ -1115,5 +1200,108 @@ async function createRoom() {
     renderRooms();
     showToast('Gruppe erstellt');
   } catch { showToast('Fehler'); }
+}
+
+function openPollCreatorSheet() {
+  openSheet(`
+    <div class="sheet-title" style="margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">
+      <i data-lucide="bar-chart-2" style="width: 22px; height: 22px; color: #6750a4;"></i> Neue Umfrage erstellen
+    </div>
+    
+    <div style="display:flex; flex-direction:column; gap:16px;">
+      <div>
+        <label style="font-size:0.75rem; font-weight:700; opacity:0.6; display:block; margin-bottom:6px;">FRAGE</label>
+        <input class="m3-input" id="poll-question-input" placeholder="Stelle eine Frage..." style="width:100%;">
+      </div>
+      
+      <div>
+        <label style="font-size:0.75rem; font-weight:700; opacity:0.6; display:block; margin-bottom:6px;">ANTWORTOPTIONEN</label>
+        <div id="poll-options-container" style="display:flex; flex-direction:column; gap:8px; margin-bottom:8px;">
+          <div class="poll-option-input-row" style="display:flex; gap:8px; align-items:center;">
+            <input class="m3-input" placeholder="Option 1" style="flex:1;">
+          </div>
+          <div class="poll-option-input-row" style="display:flex; gap:8px; align-items:center;">
+            <input class="m3-input" placeholder="Option 2" style="flex:1;">
+          </div>
+        </div>
+        <button class="m3-btn-tonal" onclick="addPollOptionField()" style="width:100%; display:flex; align-items:center; justify-content:center; gap:6px; font-size:0.8rem; padding:8px;">
+          <i data-lucide="plus" style="width:16px; height:16px;"></i> Option hinzufügen
+        </button>
+      </div>
+      
+      <button class="m3-btn-full" onclick="submitPoll()" style="margin-top:8px;">Umfrage erstellen</button>
+    </div>
+  `);
+  if (window.lucide) lucide.createIcons();
+}
+
+function addPollOptionField() {
+  const container = document.getElementById('poll-options-container');
+  if (!container) return;
+  const count = container.children.length + 1;
+  const div = document.createElement('div');
+  div.className = 'poll-option-input-row';
+  div.style.display = 'flex';
+  div.style.gap = '8px';
+  div.style.alignItems = 'center';
+  div.innerHTML = `
+    <input class="m3-input" placeholder="Option ${count}" style="flex:1;">
+    <button class="icon-btn" onclick="this.parentElement.remove(); updatePollOptionPlaceholders();" style="color:#b3261e; padding:6px; flex-shrink:0;">
+      <i data-lucide="trash-2" style="width:18px; height:18px;"></i>
+    </button>
+  `;
+  container.appendChild(div);
+  if (window.lucide) lucide.createIcons();
+}
+
+function updatePollOptionPlaceholders() {
+  const container = document.getElementById('poll-options-container');
+  if (!container) return;
+  [...container.querySelectorAll('.poll-option-input-row')].forEach((row, idx) => {
+    const input = row.querySelector('input');
+    if (input) input.placeholder = `Option ${idx + 1}`;
+  });
+}
+
+async function submitPoll() {
+  const qInput = document.getElementById('poll-question-input');
+  const question = qInput ? qInput.value.trim() : '';
+  if (!question) {
+    showToast('Bitte gib eine Frage ein');
+    return;
+  }
+  
+  const container = document.getElementById('poll-options-container');
+  if (!container) return;
+  const optionInputs = [...container.querySelectorAll('input')];
+  const options = optionInputs.map(i => i.value.trim()).filter(val => val !== '');
+  
+  if (options.length < 2) {
+    showToast('Bitte gib mindestens 2 Optionen ein');
+    return;
+  }
+  
+  const votes = {};
+  options.forEach((_, idx) => {
+    votes[idx.toString()] = [];
+  });
+  
+  const poll_data = {
+    question,
+    options,
+    votes
+  };
+  
+  if (chatWs) {
+    chatWs.send(JSON.stringify({
+      sender_id: chatCurrentUser?.id,
+      content: question,
+      file_type: 'poll',
+      poll_data: poll_data
+    }));
+    closeSheet();
+  } else {
+    showToast('Verbindung unterbrochen');
+  }
 }
 </script>
