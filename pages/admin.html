@@ -166,7 +166,7 @@ function renderAdminUsers() {
   document.getElementById('admin-users-list').innerHTML = adminUsers.map(u => `
     <div class="m3-card" style="padding:14px;margin-bottom:8px;">
       <div style="display:flex;align-items:center;gap:12px;">
-        <div class="avatar" style="background:#6750a4;flex-shrink:0;">${(u.display_name||u.email).slice(0,2).toUpperCase()}</div>
+        <div class="avatar" style="background:#6750a4;flex-shrink:0;${avatarImgStyle(u)}">${u.avatar_url ? '' : (u.display_name||u.email).slice(0,2).toUpperCase()}</div>
         <div style="flex:1;min-width:0;">
           <div style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${u.display_name||u.email.split('@')[0]}</div>
           <div style="font-size:0.75rem;opacity:0.6;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${u.email}</div>

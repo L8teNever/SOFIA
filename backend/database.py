@@ -48,3 +48,5 @@ async def _migrate_columns(conn):
         await conn.execute(text("ALTER TABLE users ADD COLUMN muted_room_ids TEXT DEFAULT '[]'"))
     if "muted_user_ids" not in existing_users:
         await conn.execute(text("ALTER TABLE users ADD COLUMN muted_user_ids TEXT DEFAULT '[]'"))
+    if "avatar_url" not in existing_users:
+        await conn.execute(text("ALTER TABLE users ADD COLUMN avatar_url TEXT"))

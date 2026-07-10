@@ -9,7 +9,13 @@
     <div class="section-label">Profil</div>
     <div class="m3-card">
       <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px;">
-        <div class="avatar" id="settings-avatar" style="background:#6750a4;width:56px;height:56px;font-size:1.2rem;"></div>
+        <div style="position:relative;flex-shrink:0;">
+          <div class="avatar" id="settings-avatar" onclick="editAvatar()" style="background:#6750a4;width:56px;height:56px;font-size:1.2rem;cursor:pointer;"></div>
+          <div onclick="editAvatar()" style="position:absolute;bottom:-2px;right:-2px;width:22px;height:22px;background:#6750a4;border:2px solid white;border-radius:50%;display:flex;align-items:center;justify-content:center;color:white;cursor:pointer;">
+            <i data-lucide="camera" style="width:12px;height:12px;"></i>
+          </div>
+          <input type="file" id="avatar-file-input" accept="image/*" style="display:none;" onchange="onAvatarFileChosen(event)">
+        </div>
         <div>
           <div style="font-weight:700;" id="settings-name">–</div>
           <div style="font-size:0.8rem;opacity:0.5;" id="settings-email">–</div>
@@ -68,7 +74,7 @@ async function init_settings() {
   settingsUser = await API.me().catch(()=>null);
   if (!settingsUser) return;
   const name = settingsUser.display_name || settingsUser.email.split('@')[0];
-  document.getElementById('settings-avatar').textContent = name.slice(0,2).toUpperCase();
+  applyAvatarEl(document.getElementById('settings-avatar'), settingsUser, name.slice(0,2).toUpperCase());
   document.getElementById('settings-name').textContent = name;
   document.getElementById('settings-email').textContent = settingsUser.email;
   document.getElementById('settings-name-input').value = settingsUser.display_name || '';
@@ -99,9 +105,53 @@ async function saveName() {
   const name = document.getElementById('settings-name-input').value.trim();
   if (!name) return;
   await API.updateMe({ display_name: name }).catch(()=>{ showToast('Fehler'); return; });
+  settingsUser.display_name = name;
   document.getElementById('settings-name').textContent = name;
-  document.getElementById('settings-avatar').textContent = name.slice(0,2).toUpperCase();
+  applyAvatarEl(document.getElementById('settings-avatar'), settingsUser, name.slice(0,2).toUpperCase());
   showToast('Name gespeichert');
+}
+
+function editAvatar() {
+  const hasAvatar = !!(settingsUser && settingsUser.avatar_url);
+  openSheet(`
+    <div class="sheet-title" style="margin-bottom:16px;">Profilbild</div>
+    <button class="m3-btn-tonal" style="width:100%;margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:8px;" onclick="closeSheet();document.getElementById('avatar-file-input').click();">
+      <i data-lucide="camera" style="width:18px;height:18px;"></i> Foto auswählen
+    </button>
+    ${hasAvatar ? `<button class="m3-btn-tonal" style="width:100%;background:#ffdad6;color:#410002;display:flex;align-items:center;justify-content:center;gap:8px;" onclick="removeAvatar()">
+      <i data-lucide="trash-2" style="width:18px;height:18px;"></i> Entfernen
+    </button>` : ''}
+  `);
+}
+
+async function onAvatarFileChosen(e) {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  if (!file.type.startsWith('image/')) { showToast('Bitte ein Bild auswählen'); return; }
+  const form = new FormData();
+  form.append('file', file);
+  showToast('Wird hochgeladen…');
+  try {
+    settingsUser = await API.uploadAvatar(form);
+    if (currentUser) currentUser.avatar_url = settingsUser.avatar_url;
+    applyAvatarEl(document.getElementById('settings-avatar'), settingsUser, (settingsUser.display_name || settingsUser.email.split('@')[0]).slice(0,2).toUpperCase());
+    showToast('Profilbild aktualisiert');
+  } catch (err) {
+    showToast('Fehler beim Hochladen');
+  }
+}
+
+async function removeAvatar() {
+  closeSheet();
+  try {
+    settingsUser = await API.deleteAvatar();
+    if (currentUser) currentUser.avatar_url = null;
+    applyAvatarEl(document.getElementById('settings-avatar'), settingsUser, (settingsUser.display_name || settingsUser.email.split('@')[0]).slice(0,2).toUpperCase());
+    showToast('Profilbild entfernt');
+  } catch {
+    showToast('Fehler');
+  }
 }
 
 async function togglePush(sw) {

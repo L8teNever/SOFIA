@@ -8,9 +8,14 @@ from backend.config import settings
 from backend.auth import get_current_user
 from backend.models.user import User
 from backend.routes import auth_routes, users, classes, subjects, calendar, homework, grades, messages, files, vapid, admin, timetable
-import os, time
+import os, time, mimetypes
 
 BUILD_TS = str(int(time.time()))
+
+# Some platforms (notably Windows) don't have .webp registered in their
+# MIME registry, which makes StaticFiles fall back to text/plain and
+# breaks <img> rendering for compressed avatars.
+mimetypes.add_type("image/webp", ".webp")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

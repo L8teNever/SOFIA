@@ -409,6 +409,7 @@ function renderRooms() {
   const uid = chatCurrentUser?.id;
   document.getElementById('chat-rooms-list').innerHTML = chatRooms.map(r => {
     const other = r.member_ids.find(id => id !== uid);
+    const otherUser = (!r.is_group && other) ? userMap[other] : null;
     const name = r.name || (other ? (userMap[other]?.display_name || userMap[other]?.email?.split('@')[0] || '?') : (r.is_group ? 'Gruppe' : 'Notizen an mich'));
     const isMuted = r.is_muted || (!r.is_group && other && mutedUserIds.includes(other));
     const initials = name.slice(0,2).toUpperCase();
@@ -416,7 +417,7 @@ function renderRooms() {
     const color = colors[r.id % colors.length];
     return `
     <div onclick="openRoom(${r.id},'${escapeHtml(name)}')" style="display:flex;gap:14px;align-items:center;padding:14px;background:white;border-radius:20px;margin-bottom:8px;cursor:pointer;border:1px solid rgba(0,0,0,0.04);">
-      <div class="avatar" style="background:${color};color:#1c1b1f;flex-shrink:0;">${initials}</div>
+      <div class="avatar" style="background:${color};color:#1c1b1f;flex-shrink:0;${avatarImgStyle(otherUser)}">${otherUser && otherUser.avatar_url ? '' : initials}</div>
       <div style="flex:1;min-width:0;">
         <div style="font-weight:600;display:flex;align-items:center;gap:6px;">
           <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">${name}</span>
@@ -446,9 +447,11 @@ async function openRoom(roomId, roomName, preserveUrl = false) {
   roomPage.style.setProperty('--oy','50%');
   requestAnimationFrame(() => requestAnimationFrame(() => roomPage.classList.add('active')));
   document.getElementById('room-title').textContent = roomName;
-  document.getElementById('room-avatar').textContent = roomName.slice(0,2).toUpperCase();
-  
   const room = chatRooms.find(r => r.id === roomId);
+  const roomUid = chatCurrentUser?.id;
+  const roomOtherId = room && !room.is_group ? room.member_ids.find(id => id !== roomUid) : null;
+  const roomOtherUser = roomOtherId ? chatClassUsers.find(u => u.id === roomOtherId) : null;
+  applyAvatarEl(document.getElementById('room-avatar'), roomOtherUser, roomName.slice(0,2).toUpperCase());
   updateRoomMuteUI(room ? !!room.is_muted : false);
   
   initMessageGestures(document.getElementById('chat-messages'));
@@ -1132,7 +1135,7 @@ function openNewChatSheet() {
         const isMuted = mutedUserIds.includes(u.id);
         return `
           <div onclick="startDirectChat(${u.id}, '${escapeHtml(name)}')" style="display:flex; align-items:center; gap:12px; padding:10px 14px; background:#f4fbf5; border-radius:16px; cursor:pointer; hover-bg:rgba(0,0,0,0.04); transition: background 0.2s;">
-            <div class="avatar" style="background:#eaddff; color:#21005d; width:36px; height:36px; font-size:0.8rem; flex-shrink:0;">${initials}</div>
+            <div class="avatar" style="background:#eaddff; color:#21005d; width:36px; height:36px; font-size:0.8rem; flex-shrink:0;${avatarImgStyle(u)}">${u.avatar_url ? '' : initials}</div>
             <div style="flex:1; min-width:0;">
               <div style="font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${name}</div>
               <div style="font-size:0.75rem; opacity:0.5; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${u.email}</div>

@@ -11,6 +11,7 @@ class UserOut(BaseModel):
     class_id: Optional[int]
     muted_user_ids: Optional[str] = "[]"
     muted_room_ids: Optional[str] = "[]"
+    avatar_url: Optional[str] = None
     class Config: from_attributes = True
 
 class UserUpdate(BaseModel):

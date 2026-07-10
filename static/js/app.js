@@ -3,6 +3,25 @@ let currentPage = null;
 let pageHistory = [];
 let isSelfPopping = false;
 
+// Returns an inline-style fragment that paints a user's avatar_url as the
+// element's background (used on the existing .avatar circles instead of
+// swapping in <img> tags, so all the initials-based markup keeps working).
+function avatarImgStyle(user) {
+  return (user && user.avatar_url) ? `background-image:url('${user.avatar_url}');background-size:cover;background-position:center;` : '';
+}
+function applyAvatarEl(el, user, fallbackText) {
+  if (!el) return;
+  if (user && user.avatar_url) {
+    el.style.backgroundImage = `url('${user.avatar_url}')`;
+    el.style.backgroundSize = 'cover';
+    el.style.backgroundPosition = 'center';
+    el.textContent = '';
+  } else {
+    el.style.backgroundImage = '';
+    el.textContent = fallbackText || '';
+  }
+}
+
 function showToast(msg, duration = 3000) {
   const t = document.getElementById('toast');
   t.textContent = msg;
