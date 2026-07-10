@@ -529,3 +529,29 @@
   color: #ffffff;
   opacity: 0.7;
 }
+
+/* Voice preview bar custom styling (WhatsApp-style) */
+#preview-voice-msg {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+}
+#preview-voice-msg .voice-play-btn {
+  background: #6750a4;
+  color: white;
+}
+#preview-voice-msg .voice-wave span {
+  background: rgba(103, 80, 164, 0.25);
+}
+#preview-voice-msg .voice-wave-progress span {
+  background: #6750a4;
+}
+#preview-voice-msg .voice-time {
+  color: #1d1b20;
+}
+#preview-voice-msg .voice-seek-thumb {
+  background: #6750a4;
+  opacity: 1;
+}
