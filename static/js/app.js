@@ -406,11 +406,69 @@ async function boot() {
   const sn = document.getElementById('w-settings-name');
   if (sn) sn.textContent = (currentUser.display_name || currentUser.email.split('@')[0]) + ' · ' + (currentUser.class_name || '');
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js').catch(function() {});
+    navigator.serviceWorker.register('/sw.js').then(function(reg) {
+      // If a new SW is already waiting right after registration (rare but possible)
+      if (reg.waiting) showUpdateBanner(reg.waiting);
+
+      // A new SW downloaded and installed — waiting for activation
+      reg.addEventListener('updatefound', function() {
+        const newSW = reg.installing;
+        if (!newSW) return;
+        newSW.addEventListener('statechange', function() {
+          if (newSW.state === 'installed' && navigator.serviceWorker.controller) {
+            // New version waiting — show banner
+            showUpdateBanner(newSW);
+          }
+        });
+      });
+    }).catch(function() {});
+
+    // SW sends SW_UPDATED after it claims all clients → reload to get fresh assets
+    navigator.serviceWorker.addEventListener('message', function(e) {
+      if (e.data && e.data.type === 'SW_UPDATED') {
+        window.location.reload();
+      }
+    });
   }
   await Push.init();
   refreshNotifBadge();
   runIntro();
+}
+
+function showUpdateBanner(swWaiting) {
+  // Remove any existing banner
+  const existing = document.getElementById('update-banner');
+  if (existing) existing.remove();
+
+  const banner = document.createElement('div');
+  banner.id = 'update-banner';
+  banner.style.cssText = [
+    'position:fixed', 'bottom:80px', 'left:50%', 'transform:translateX(-50%) translateY(20px)',
+    'background:#21005d', 'color:#eaddff', 'padding:14px 20px',
+    'border-radius:20px', 'font-size:0.85rem', 'font-weight:500',
+    'display:flex', 'align-items:center', 'gap:12px',
+    'z-index:2000', 'box-shadow:0 8px 32px rgba(0,0,0,0.4)',
+    'opacity:0', 'transition:all 0.4s cubic-bezier(0.2,0.8,0.2,1)',
+    'white-space:nowrap', 'pointer-events:all',
+  ].join(';');
+  banner.innerHTML =
+    '<span>🚀 Update verfügbar</span>' +
+    '<button id="update-reload-btn" style="background:#d0bcff;color:#21005d;border:none;border-radius:12px;' +
+    'padding:6px 16px;font-size:0.82rem;font-weight:700;cursor:pointer;">Neu laden</button>';
+  document.body.appendChild(banner);
+
+  requestAnimationFrame(() => {
+    banner.style.opacity = '1';
+    banner.style.transform = 'translateX(-50%) translateY(0)';
+  });
+
+  document.getElementById('update-reload-btn').addEventListener('click', function() {
+    banner.style.opacity = '0';
+    // Tell the waiting SW to take over
+    swWaiting.postMessage({ type: 'SKIP_WAITING' });
+    // Reload will be triggered by the SW_UPDATED message above
+    setTimeout(() => window.location.reload(), 800);
+  });
 }
 
 async function refreshNotifBadge() {

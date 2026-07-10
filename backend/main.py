@@ -41,8 +41,10 @@ async def serve_page(page_name: str, _: User = Depends(get_current_user)):
 # Service Worker at root so it controls all pages (default scope = /)
 @app.get("/sw.js", include_in_schema=False)
 async def service_worker():
-    return FileResponse("static/sw.js", media_type="application/javascript",
-                        headers={"Service-Worker-Allowed": "/"})
+    with open("static/sw.js", "r", encoding="utf-8") as f:
+        content = f.read().replace("__BUILD__", BUILD_TS)
+    return HTMLResponse(content, media_type="application/javascript",
+                        headers={"Service-Worker-Allowed": "/", "Cache-Control": "no-store"})
 
 # Favicon handler to prevent catching by wildcard SPA route
 @app.get("/favicon.ico", include_in_schema=False)
