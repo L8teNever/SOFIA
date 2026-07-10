@@ -39,3 +39,10 @@ async def _migrate_columns(conn):
         await conn.execute(text("ALTER TABLE messages ADD COLUMN deleted BOOLEAN DEFAULT 0"))
     if "waveform" not in existing:
         await conn.execute(text("ALTER TABLE messages ADD COLUMN waveform JSON"))
+        
+    result_users = await conn.execute(text("PRAGMA table_info(users)"))
+    existing_users = {row[1] for row in result_users.fetchall()}
+    if "muted_room_ids" not in existing_users:
+        await conn.execute(text("ALTER TABLE users ADD COLUMN muted_room_ids TEXT DEFAULT '[]'"))
+    if "muted_user_ids" not in existing_users:
+        await conn.execute(text("ALTER TABLE users ADD COLUMN muted_user_ids TEXT DEFAULT '[]'"))

@@ -325,6 +325,7 @@
 .rec-wave { flex: 1; display: flex; align-items: center; gap: 3px; height: 28px; overflow: hidden; padding: 0 4px; }
 .rec-wave span { width: 3px; min-height: 4px; height: 4px; border-radius: 2px; background: #b3261e; opacity: 0.75; transition: height 0.08s ease; flex-shrink: 0; }
 .recording-bar.paused .rec-dot { animation: none; background: #9a9a9a; }
+.recording-bar.paused .rec-wave span { background: #9a9a9a; opacity: 0.5; }
 .preview-bar .voice-msg { min-width: 0; }
 @keyframes rec-bar-fallback {
   0%, 100% { height: 4px; }
@@ -345,3 +346,25 @@
 .voice-wave-progress span { background: white; }
 .bubble.them .voice-wave-progress span { background: #6750a4; }
 .voice-time { font-size: 0.68rem; opacity: 0.85; flex-shrink: 0; min-width: 34px; text-align: right; font-variant-numeric: tabular-nums; }
+
+.voice-seek-thumb {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: white;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+  opacity: 0;
+  z-index: 10;
+}
+.voice-wave-wrap:hover .voice-seek-thumb,
+.voice-wave-wrap:active .voice-seek-thumb {
+  opacity: 1;
+}
+.bubble.them .voice-seek-thumb {
+  background: #6750a4;
+}

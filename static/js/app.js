@@ -1,6 +1,7 @@
 let currentUser = null;
 let currentPage = null;
 let pageHistory = [];
+let isSelfPopping = false;
 
 function showToast(msg, duration = 3000) {
   const t = document.getElementById('toast');
@@ -34,7 +35,7 @@ function runScripts(container) {
   });
 }
 
-async function openPage(name, triggerEl) {
+async function openPage(name, triggerEl, preserveUrl = false) {
   if (currentPage === name) return;
   let ox = '50%', oy = '50%';
   if (triggerEl) {
@@ -63,7 +64,12 @@ async function openPage(name, triggerEl) {
   document.body.appendChild(page);
   container.innerHTML = '';
   requestAnimationFrame(() => requestAnimationFrame(() => page.classList.add('active')));
-  history.pushState({ page: name }, '', '/' + name);
+  
+  if (!preserveUrl) {
+    history.pushState({ page: name }, '', '/' + name);
+  } else {
+    history.replaceState({ page: name }, '', window.location.pathname);
+  }
   pageHistory.push(name);
   currentPage = name;
   if (window.lucide) lucide.createIcons();
@@ -90,6 +96,10 @@ function closePage() {
 
 document.addEventListener('click', e => { if (e.target.closest('.back-btn')) closePage(); });
 window.addEventListener('popstate', (e) => {
+  if (isSelfPopping) {
+    isSelfPopping = false;
+    return;
+  }
   const modalActive = document.getElementById('modal-scrim')?.classList.contains('active');
   const sheetActive = document.querySelector('.bottom-sheet.active');
   
@@ -99,6 +109,12 @@ window.addEventListener('popstate', (e) => {
   }
   if (sheetActive) {
     closeSheet(true);
+    return;
+  }
+
+  // If a chat room is open, close it instead of the whole page
+  if (typeof closeChatRoom === 'function' && document.getElementById('page-chat-room')) {
+    closeChatRoom(true);
     return;
   }
   
@@ -232,11 +248,12 @@ function closeSheet(isPopState = false) {
   document.getElementById('bottom-sheet-scrim').classList.remove('active');
   
   if (!isPopState && history.state && history.state.sheet) {
+    isSelfPopping = true;
     history.back();
   }
 }
 document.getElementById('bottom-sheet-scrim').addEventListener('click', () => closeSheet(false));
-
+ 
 function openModal(html) {
   document.getElementById('modal-content').innerHTML = html;
   document.getElementById('modal-scrim').classList.add('active');
@@ -249,6 +266,7 @@ function closeModal(isPopState = false) {
   document.getElementById('modal-scrim').classList.remove('active'); 
   
   if (!isPopState && history.state && history.state.modal) {
+    isSelfPopping = true;
     history.back();
   }
 }

@@ -5,9 +5,13 @@ from backend.database import get_db, AsyncSessionLocal
 from backend.auth import get_current_user
 from backend.models.message import ChatRoom, Message
 from backend.models.user import User
+from backend.models.notification import Notification
 from backend.schemas import ChatRoomOut, MessageOut
+from backend.config import settings
 from typing import List, Dict
-import json
+import json, asyncio, logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/chat", tags=["chat"])
 
@@ -37,7 +41,22 @@ manager = ConnectionManager()
 async def list_rooms(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     result = await db.execute(select(ChatRoom))
     rooms = result.scalars().all()
-    return [r for r in rooms if current_user.id in (r.member_ids or [])]
+    user_rooms = [r for r in rooms if current_user.id in (r.member_ids or [])]
+    try:
+        muted_ids = json.loads(current_user.muted_room_ids or "[]")
+    except:
+        muted_ids = []
+    
+    out = []
+    for r in user_rooms:
+        out.append(ChatRoomOut(
+            id=r.id,
+            name=r.name,
+            is_group=r.is_group,
+            member_ids=r.member_ids,
+            is_muted=r.id in muted_ids
+        ))
+    return out
 
 @router.post("/rooms", response_model=ChatRoomOut)
 async def create_room(data: dict, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -48,7 +67,61 @@ async def create_room(data: dict, db: AsyncSession = Depends(get_db), current_us
     db.add(room)
     await db.commit()
     await db.refresh(room)
-    return room
+    return ChatRoomOut(
+        id=room.id,
+        name=room.name,
+        is_group=room.is_group,
+        member_ids=room.member_ids,
+        is_muted=False
+    )
+
+@router.post("/rooms/{room_id}/mute")
+async def mute_room(room_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    try:
+        muted = json.loads(current_user.muted_room_ids or "[]")
+    except:
+        muted = []
+    if room_id not in muted:
+        muted.append(room_id)
+        current_user.muted_room_ids = json.dumps(muted)
+        await db.commit()
+    return {"ok": True}
+
+@router.post("/rooms/{room_id}/unmute")
+async def unmute_room(room_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    try:
+        muted = json.loads(current_user.muted_room_ids or "[]")
+    except:
+        muted = []
+    if room_id in muted:
+        muted.remove(room_id)
+        current_user.muted_room_ids = json.dumps(muted)
+        await db.commit()
+    return {"ok": True}
+
+@router.post("/users/{user_id}/mute")
+async def mute_user(user_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    try:
+        muted = json.loads(current_user.muted_user_ids or "[]")
+    except:
+        muted = []
+    if user_id not in muted:
+        muted.append(user_id)
+        current_user.muted_user_ids = json.dumps(muted)
+        await db.commit()
+    return {"ok": True}
+
+@router.post("/users/{user_id}/unmute")
+async def unmute_user(user_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    try:
+        muted = json.loads(current_user.muted_user_ids or "[]")
+    except:
+        muted = []
+    if user_id in muted:
+        muted.remove(user_id)
+        current_user.muted_user_ids = json.dumps(muted)
+        await db.commit()
+    return {"ok": True}
 
 def _reply_preview(msg: Message) -> dict:
     return {
@@ -125,6 +198,84 @@ async def ws_chat(room_id: int, ws: WebSocket):
                 db.add(msg)
                 await db.commit()
                 await db.refresh(msg)
+
+                # Create and persist notification, and trigger push for each member of the room
+                try:
+                    result_room = await db.execute(select(ChatRoom).where(ChatRoom.id == room_id))
+                    room = result_room.scalar_one_or_none()
+                    if room:
+                        sender_res = await db.execute(select(User).where(User.id == sender_id))
+                        sender_user = sender_res.scalar_one_or_none()
+                        sender_name = sender_user.name if sender_user else "Jemand"
+                        
+                        # Notification title
+                        notif_title = f"{sender_name} (in {room.name})" if room.is_group and room.name else sender_name
+                        
+                        # Notification body
+                        if msg.file_type == "voice":
+                            notif_body = "🎤 Sprachnachricht"
+                        elif msg.file_type == "audio":
+                            notif_body = "🎤 Sprachnachricht"
+                        elif msg.file_type == "image":
+                            notif_body = "📷 Bild"
+                        elif msg.file_type == "video":
+                            notif_body = "🎥 Video"
+                        elif msg.file_type == "file":
+                            notif_body = "📁 Datei"
+                        else:
+                            notif_body = msg.content or ""
+                        
+                        for member_id in room.member_ids:
+                            if member_id == sender_id:
+                                continue
+                            
+                            member_res = await db.execute(select(User).where(User.id == member_id))
+                            member = member_res.scalar_one_or_none()
+                            if not member:
+                                continue
+                            
+                            try:
+                                muted_rooms = json.loads(member.muted_room_ids or "[]")
+                            except:
+                                muted_rooms = []
+                            try:
+                                muted_users = json.loads(member.muted_user_ids or "[]")
+                            except:
+                                muted_users = []
+                            
+                            if room_id in muted_rooms or sender_id in muted_users:
+                                continue
+                            
+                            # Add notification to database
+                            db_notif = Notification(user_id=member_id, title=notif_title, body=notif_body, is_read=False)
+                            db.add(db_notif)
+                            
+                            # Trigger Web Push if subscribed
+                            if member.push_subscription:
+                                from pywebpush import webpush, WebPushException
+                                try:
+                                    sub = json.loads(member.push_subscription)
+                                    async def send_webpush_bg(sub_info, t, b, r_id):
+                                        try:
+                                            await asyncio.to_thread(
+                                                webpush,
+                                                subscription_info=sub_info,
+                                                data=json.dumps({
+                                                    "title": t,
+                                                    "body": b,
+                                                    "url": f"/chat/{r_id}"
+                                                }),
+                                                vapid_private_key=settings.vapid_private_key,
+                                                vapid_claims={"sub": settings.vapid_claim_email},
+                                            )
+                                        except Exception as e:
+                                            logger.warning("Webpush background send failed: %s", e)
+                                    asyncio.create_task(send_webpush_bg(sub, notif_title, notif_body, room_id))
+                                except Exception as e:
+                                    logger.warning("Failed to start webpush task for user %s: %s", member_id, e)
+                        await db.commit()
+                except Exception as e:
+                    logger.error("Failed to process notifications for message: %s", e)
 
                 reply_preview = None
                 if reply_to_id:

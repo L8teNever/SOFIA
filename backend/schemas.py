@@ -9,6 +9,8 @@ class UserOut(BaseModel):
     display_name: Optional[str]
     role: str
     class_id: Optional[int]
+    muted_user_ids: Optional[str] = "[]"
+    muted_room_ids: Optional[str] = "[]"
     class Config: from_attributes = True
 
 class UserUpdate(BaseModel):
@@ -108,6 +110,7 @@ class ChatRoomOut(BaseModel):
     name: Optional[str]
     is_group: bool
     member_ids: List[int]
+    is_muted: bool = False
     class Config: from_attributes = True
 
 class MessageOut(BaseModel):

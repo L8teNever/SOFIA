@@ -19,10 +19,13 @@
   </div>
   <template id="tpl-chat-room">
     <div class="page" id="page-chat-room" style="background:#f4fbf5;">
-      <div class="page-header" style="padding-bottom:12px;">
-        <button class="back-btn" onclick="closeChatRoom()"><i data-lucide="arrow-left" style="width:22px;height:22px;"></i></button>
+      <div class="page-header" style="padding-bottom:12px; display:flex; align-items:center; gap:8px;">
+        <button class="icon-btn" onclick="event.stopPropagation(); event.preventDefault(); roomBack();"><i data-lucide="arrow-left" style="width:22px;height:22px;"></i></button>
         <div class="avatar" id="room-avatar" style="background:#6750a4;width:36px;height:36px;font-size:0.8rem;"></div>
-        <span id="room-title" style="font-weight:700;font-size:1.1rem;"></span>
+        <span id="room-title" style="font-weight:700;font-size:1.1rem; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></span>
+        <button id="room-mute-btn" onclick="toggleMuteActiveRoom()" class="icon-btn" style="color:#49454f; display:flex; align-items:center; justify-content:center; padding:8px;">
+          <i data-lucide="volume-2" style="width:20px;height:20px;"></i>
+        </button>
       </div>
       <div id="chat-messages" style="flex:1;overflow-y:auto;overflow-x:hidden;padding:0 16px 80px 16px;display:flex;flex-direction:column;"></div>
       <div class="composer-wrap" id="composer-wrap">
@@ -72,34 +75,68 @@
 
 <script>
 let chatRooms = [], chatCurrentUser = null, chatClassUsers = [], activeRoomId = null, chatWs = null;
-let mutedUserIds = JSON.parse(localStorage.getItem('sofia_muted_users') || '[]');
+let mutedUserIds = [];
 let roomMessages = [], messagesById = {}, replyingTo = null, editingMessageId = null;
 
-function toggleMuteUser(userId, userName) {
-  let list = JSON.parse(localStorage.getItem('sofia_muted_users') || '[]');
-  const idx = list.indexOf(userId);
-  if (idx > -1) {
-    list.splice(idx, 1);
-    showToast(`${userName} nicht mehr stummgeschaltet`);
-  } else {
-    list.push(userId);
-    showToast(`${userName} stummgeschaltet`);
-  }
-  localStorage.setItem('sofia_muted_users', JSON.stringify(list));
-  mutedUserIds = list;
-  
-  // Re-render rooms list and active room if open
-  renderRooms();
-  if (activeRoomId) {
-    API.messages(activeRoomId).then(msgs => renderMessages(msgs)).catch(() => {});
-  }
-  // Re-open/refresh Neuer Chat sheet if active
-  const sheet = document.getElementById('sheet-scrim');
-  if (sheet && sheet.classList.contains('active')) {
-    const title = sheet.querySelector('.sheet-title');
-    if (title && title.textContent.includes('Neuer Chat')) {
+async function toggleMuteUser(userId, userName) {
+  const isCurrentlyMuted = mutedUserIds.includes(userId);
+  try {
+    if (isCurrentlyMuted) {
+      await API.unmuteUser(userId);
+      mutedUserIds = mutedUserIds.filter(id => id !== userId);
+      showToast(`${userName} nicht mehr stummgeschaltet`);
+    } else {
+      await API.muteUser(userId);
+      mutedUserIds.push(userId);
+      showToast(`${userName} stummgeschaltet`);
+    }
+    if (chatCurrentUser) {
+      chatCurrentUser.muted_user_ids = JSON.stringify(mutedUserIds);
+    }
+    
+    // Re-render rooms list and active room if open
+    renderRooms();
+    if (activeRoomId) {
+      const msgs = await API.messages(activeRoomId).catch(() => []);
+      renderMessages(msgs);
+    }
+    // Re-open/refresh Neuer Chat sheet if active
+    const sheet = document.querySelector('.bottom-sheet');
+    if (sheet && sheet.classList.contains('active')) {
       openNewChatSheet();
     }
+  } catch (err) {
+    showToast('Aktion fehlgeschlagen');
+  }
+}
+
+function updateRoomMuteUI(isMuted) {
+  const btn = document.getElementById('room-mute-btn');
+  if (!btn) return;
+  btn.innerHTML = `<i data-lucide="${isMuted ? 'volume-x' : 'volume-2'}" style="width:20px;height:20px;"></i>`;
+  btn.style.color = isMuted ? '#b3261e' : '#49454f';
+  if (window.lucide) lucide.createIcons();
+}
+
+async function toggleMuteActiveRoom() {
+  if (!activeRoomId) return;
+  const room = chatRooms.find(r => r.id === activeRoomId);
+  if (!room) return;
+  const isCurrentlyMuted = !!room.is_muted;
+  try {
+    if (isCurrentlyMuted) {
+      await API.unmuteRoom(activeRoomId);
+      room.is_muted = false;
+      showToast('Chat nicht mehr stummgeschaltet');
+    } else {
+      await API.muteRoom(activeRoomId);
+      room.is_muted = true;
+      showToast('Chat stummgeschaltet');
+    }
+    updateRoomMuteUI(room.is_muted);
+    renderRooms();
+  } catch (err) {
+    showToast('Aktion fehlgeschlagen');
   }
 }
 
@@ -142,12 +179,47 @@ function renderVoiceBubble(m) {
       <button class="voice-play-btn" onclick="toggleVoicePlay('${uid}')">
         <i data-lucide="play" style="width:16px;height:16px;"></i>
       </button>
-      <div class="voice-wave-wrap" onclick="seekVoice(event,'${uid}')">
+      <div class="voice-wave-wrap">
         <div class="voice-wave">${barsHtml}</div>
         <div class="voice-wave-progress" id="${uid}-progress">${barsHtml}</div>
+        <div class="voice-seek-thumb" id="${uid}-thumb" style="left:0%;"></div>
       </div>
       <span class="voice-time" id="${uid}-time">0:00</span>
     </div>`;
+}
+
+function initVoiceSeeking(wrapEl, audioId) {
+  let isDragging = false;
+  
+  function handleSeek(clientX) {
+    const audio = document.getElementById(audioId);
+    if (!audio || !isFinite(audio.duration) || !audio.duration) return;
+    const rect = wrapEl.getBoundingClientRect();
+    const pct = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+    audio.currentTime = pct * audio.duration;
+  }
+  
+  wrapEl.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    isDragging = true;
+    wrapEl.setPointerCapture(e.pointerId);
+    handleSeek(e.clientX);
+  });
+  
+  wrapEl.addEventListener('pointermove', e => {
+    if (!isDragging) return;
+    handleSeek(e.clientX);
+  });
+  
+  wrapEl.addEventListener('pointerup', e => {
+    if (!isDragging) return;
+    isDragging = false;
+    wrapEl.releasePointerCapture(e.pointerId);
+  });
+  
+  wrapEl.addEventListener('pointercancel', e => {
+    isDragging = false;
+  });
 }
 
 let currentVoiceAudio = null;
@@ -160,14 +232,6 @@ function toggleVoicePlay(id) {
   } else {
     audio.pause();
   }
-}
-
-function seekVoice(e, id) {
-  const audio = document.getElementById(id);
-  if (!audio || !isFinite(audio.duration) || !audio.duration) return;
-  const rect = e.currentTarget.getBoundingClientRect();
-  const pct = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
-  audio.currentTime = pct * audio.duration;
 }
 
 function fixVoiceDuration(audio) {
@@ -205,9 +269,11 @@ document.addEventListener('timeupdate', e => {
   const audio = e.target;
   if (!audio.id?.startsWith('v')) return;
   const progress = document.getElementById(`${audio.id}-progress`);
+  const thumb = document.getElementById(`${audio.id}-thumb`);
   const timeEl = document.getElementById(`${audio.id}-time`);
   const dur = isFinite(audio.duration) ? audio.duration : 0;
   if (progress && dur) progress.style.width = `${(audio.currentTime / dur) * 100}%`;
+  if (thumb && dur) thumb.style.left = `${(audio.currentTime / dur) * 100}%`;
   if (timeEl && dur) timeEl.textContent = formatTime(audio.currentTime);
 }, true);
 document.addEventListener('ended', e => {
@@ -216,6 +282,8 @@ document.addEventListener('ended', e => {
   audio.currentTime = 0;
   const progress = document.getElementById(`${audio.id}-progress`);
   if (progress) progress.style.width = '0%';
+  const thumb = document.getElementById(`${audio.id}-thumb`);
+  if (thumb) thumb.style.left = '0%';
   const timeEl = document.getElementById(`${audio.id}-time`);
   if (timeEl && isFinite(audio.duration)) timeEl.textContent = formatTime(audio.duration);
 }, true);
@@ -226,7 +294,32 @@ async function init_chat() {
     API.me().catch(() => null),
     API.classUsers().catch(() => []),
   ]);
+  
+  if (chatCurrentUser) {
+    try {
+      mutedUserIds = JSON.parse(chatCurrentUser.muted_user_ids || '[]');
+    } catch(e) {
+      mutedUserIds = [];
+    }
+  }
+  
   renderRooms();
+  
+  // Check if a room ID is present in the URL path, e.g., /chat/5
+  const pathParts = window.location.pathname.replace(/^\//, '').split('/');
+  if (pathParts[0] === 'chat' && pathParts[1]) {
+    const roomId = parseInt(pathParts[1]);
+    if (roomId) {
+      const room = chatRooms.find(r => r.id === roomId);
+      if (room) {
+        const uid = chatCurrentUser?.id;
+        const other = room.member_ids.find(id => id !== uid);
+        const userMap = Object.fromEntries(chatClassUsers.map(u=>[u.id, u]));
+        const name = room.name || (other ? (userMap[other]?.display_name || userMap[other]?.email?.split('@')[0] || '?') : (room.is_group ? 'Gruppe' : 'Notizen an mich'));
+        openRoom(roomId, name, true);
+      }
+    }
+  }
 }
 
 function renderRooms() {
@@ -240,7 +333,7 @@ function renderRooms() {
   document.getElementById('chat-rooms-list').innerHTML = chatRooms.map(r => {
     const other = r.member_ids.find(id => id !== uid);
     const name = r.name || (other ? (userMap[other]?.display_name || userMap[other]?.email?.split('@')[0] || '?') : (r.is_group ? 'Gruppe' : 'Notizen an mich'));
-    const isMuted = other ? mutedUserIds.includes(other) : false;
+    const isMuted = r.is_muted || (!r.is_group && other && mutedUserIds.includes(other));
     const initials = name.slice(0,2).toUpperCase();
     const colors = ['#c4eed0','#d3e3fd','#ffd8e4','#eaddff','#ffdec1'];
     const color = colors[r.id % colors.length];
@@ -260,10 +353,15 @@ function renderRooms() {
   lucide.createIcons();
 }
 
-async function openRoom(roomId, roomName) {
+async function openRoom(roomId, roomName, preserveUrl = false) {
   activeRoomId = roomId;
   replyingTo = null;
   editingMessageId = null;
+
+  // Clean up any existing room page to avoid duplicates
+  const existing = document.getElementById('page-chat-room');
+  if (existing) existing.remove();
+
   const tpl = document.getElementById('tpl-chat-room').content.cloneNode(true);
   document.body.appendChild(tpl);
   const roomPage = document.getElementById('page-chat-room');
@@ -272,8 +370,18 @@ async function openRoom(roomId, roomName) {
   requestAnimationFrame(() => requestAnimationFrame(() => roomPage.classList.add('active')));
   document.getElementById('room-title').textContent = roomName;
   document.getElementById('room-avatar').textContent = roomName.slice(0,2).toUpperCase();
+  
+  const room = chatRooms.find(r => r.id === roomId);
+  updateRoomMuteUI(room ? !!room.is_muted : false);
+  
   initMessageGestures(document.getElementById('chat-messages'));
   lucide.createIcons();
+
+  if (!preserveUrl) {
+    history.pushState({ page: 'chat', roomId: roomId }, '', '/chat/' + roomId);
+  } else {
+    history.replaceState({ page: 'chat', roomId: roomId }, '', '/chat/' + roomId);
+  }
 
   const msgs = await API.messages(roomId).catch(() => []);
   renderMessages(msgs);
@@ -304,11 +412,23 @@ function initMessageGestures(container) {
       swipeState.moved = true;
       clearTimeout(swipeState.timer);
     }
-    if (swipeState.moved && !swipeState.longFired && dx > 0 && Math.abs(dy) < 40 && swipeState.bubble) {
-      const clamped = Math.min(dx, 70);
-      swipeState.bubble.style.transform = `translateX(${clamped}px)`;
-      const icon = swipeState.row.querySelector('.msg-swipe-icon');
-      if (icon) icon.style.opacity = Math.min(1, clamped / 60);
+    if (swipeState.moved && !swipeState.longFired && Math.abs(dy) < 40 && swipeState.bubble) {
+      const isMe = swipeState.bubble.classList.contains('me');
+      if (isMe) {
+        if (dx < 0) {
+          const clamped = Math.max(dx, -70);
+          swipeState.bubble.style.transform = `translateX(${clamped}px)`;
+          const icon = swipeState.row.querySelector('.msg-swipe-icon');
+          if (icon) icon.style.opacity = Math.min(1, Math.abs(clamped) / 60);
+        }
+      } else {
+        if (dx > 0) {
+          const clamped = Math.min(dx, 70);
+          swipeState.bubble.style.transform = `translateX(${clamped}px)`;
+          const icon = swipeState.row.querySelector('.msg-swipe-icon');
+          if (icon) icon.style.opacity = Math.min(1, clamped / 60);
+        }
+      }
     }
   });
   const endSwipe = e => {
@@ -323,7 +443,11 @@ function initMessageGestures(container) {
     }
     const icon = row?.querySelector('.msg-swipe-icon');
     if (icon) icon.style.opacity = 0;
-    if (moved && !longFired && dx > 60) setReplyTo(msgId);
+    if (moved && !longFired) {
+      const isMe = bubble.classList.contains('me');
+      if (isMe && dx < -60) setReplyTo(msgId);
+      if (!isMe && dx > 60) setReplyTo(msgId);
+    }
     swipeState = null;
   };
   container.addEventListener('pointerup', endSwipe);
@@ -561,6 +685,13 @@ function renderMessages(msgs) {
     const isGroupEnd = i === msgs.length - 1 || msgs[i + 1].sender_id !== m.sender_id || msgs[i + 1].deleted;
     return getSingleMessageHTML(m, uid, userMap, isGroupStart, isGroupEnd, isGroupChat);
   }).join('');
+
+  // Init voice seeking
+  container.querySelectorAll('.voice-wave-wrap').forEach(wrap => {
+    const audioEl = wrap.parentElement.querySelector('audio');
+    if (audioEl) initVoiceSeeking(wrap, audioEl.id);
+  });
+
   container.scrollTop = container.scrollHeight;
   if (window.lucide) lucide.createIcons();
 }
@@ -580,6 +711,13 @@ function rerenderSingleMessage(id) {
   const newRow = tempDiv.firstElementChild;
   if (row) row.replaceWith(newRow);
   else document.getElementById('chat-messages')?.appendChild(newRow);
+
+  // Init voice seeking
+  newRow.querySelectorAll('.voice-wave-wrap').forEach(wrap => {
+    const audioEl = wrap.parentElement.querySelector('audio');
+    if (audioEl) initVoiceSeeking(wrap, audioEl.id);
+  });
+
   if (window.lucide) lucide.createIcons();
 }
 
@@ -619,7 +757,15 @@ function connectWs(roomId) {
     roomMessages.push(msg);
     const tempDiv = document.createElement('div');
     tempDiv.innerHTML = getSingleMessageHTML(msg, uid, userMap, isGroupStart, true, isGroupChat);
-    container.appendChild(tempDiv.firstElementChild);
+    const newEl = tempDiv.firstElementChild;
+    container.appendChild(newEl);
+
+    // Init voice seeking
+    newEl.querySelectorAll('.voice-wave-wrap').forEach(wrap => {
+      const audioEl = wrap.parentElement.querySelector('audio');
+      if (audioEl) initVoiceSeeking(wrap, audioEl.id);
+    });
+
     container.scrollTop = container.scrollHeight;
     if (window.lucide) lucide.createIcons();
   };
@@ -664,7 +810,7 @@ async function sendFile(file, waveform) {
 }
 
 let mediaRecorder, audioChunks = [], recAudioCtx = null, recRafId = null, recTimerInterval = null,
-    recCancelled = false, recPaused = false, recLevels = [], recBlob = null, recBlobUrl = null;
+    recCancelled = false, recPaused = false, recLevels = [], recBlob = null, recBlobUrl = null, elapsedMs = 0;
 
 async function startRecording() {
   if (mediaRecorder && mediaRecorder.state !== 'inactive') return;
@@ -683,7 +829,15 @@ async function startRecording() {
     if (recRafId) cancelAnimationFrame(recRafId);
     if (recCancelled) { resetComposerToNormal(); return; }
     const blob = new Blob(audioChunks, { type: 'audio/webm' });
-    if (blob.size < 800) { resetComposerToNormal(); return; } // ignore accidental taps
+    const avgLevel = recLevels.length ? (recLevels.reduce((a, b) => a + b, 0) / recLevels.length) : 0;
+    
+    // Check if the recording is empty (size too small, duration too short, or average audio level is silent)
+    if (blob.size < 1000 || elapsedMs < 800 || avgLevel < 1.0) {
+      showToast('Sprachnachricht ist leer oder zu kurz');
+      resetComposerToNormal();
+      return;
+    }
+    
     recBlob = blob;
     recBlobUrl = URL.createObjectURL(blob);
     showPreviewUI();
@@ -723,7 +877,7 @@ function updateRecordingPauseUI() {
   if (!bar || !pauseBtn) return;
   bar.classList.toggle('paused', recPaused);
   pauseBtn.innerHTML = recPaused
-    ? '<i data-lucide="mic" style="width:18px;height:18px;"></i>'
+    ? '<i data-lucide="play" style="width:18px;height:18px;"></i>'
     : '<i data-lucide="pause" style="width:18px;height:18px;"></i>';
   if (window.lucide) lucide.createIcons();
 }
@@ -735,7 +889,7 @@ function startRecordingUI(stream) {
   bar.classList.remove('paused');
   bar.style.display = 'flex';
 
-  let elapsedMs = 0;
+  elapsedMs = 0;
   const timerEl = document.getElementById('rec-timer');
   timerEl.textContent = '0:00';
   recTimerInterval = setInterval(() => {
@@ -796,16 +950,24 @@ function showPreviewUI() {
 
   const heights = downsampleLevels(recLevels);
   const barsHtml = heights.map(h => `<span style="height:${h}px;"></span>`).join('');
-  document.getElementById('preview-voice-msg').innerHTML = `
+  const msgEl = document.getElementById('preview-voice-msg');
+  msgEl.innerHTML = `
     <audio id="v-preview" src="${recBlobUrl}" preload="metadata"></audio>
     <button class="voice-play-btn" onclick="toggleVoicePlay('v-preview')">
       <i data-lucide="play" style="width:16px;height:16px;"></i>
     </button>
-    <div class="voice-wave-wrap" onclick="seekVoice(event,'v-preview')">
+    <div class="voice-wave-wrap">
       <div class="voice-wave">${barsHtml}</div>
       <div class="voice-wave-progress" id="v-preview-progress">${barsHtml}</div>
+      <div class="voice-seek-thumb" id="v-preview-thumb" style="left:0%;"></div>
     </div>
     <span class="voice-time" id="v-preview-time">0:00</span>`;
+  
+  const wrap = msgEl.querySelector('.voice-wave-wrap');
+  if (wrap) {
+    initVoiceSeeking(wrap, 'v-preview');
+  }
+
   if (window.lucide) lucide.createIcons();
 }
 
@@ -842,7 +1004,7 @@ function resetComposerToNormal() {
   mediaRecorder = null;
 }
 
-function closeChatRoom() {
+function closeChatRoom(isPopState = false) {
   if (chatWs) { chatWs.close(); chatWs = null; }
   if (mediaRecorder && mediaRecorder.state !== 'inactive') cancelRecording();
   if (recBlobUrl) discardPreview();
@@ -851,6 +1013,19 @@ function closeChatRoom() {
   activeRoomId = null;
   const page = document.getElementById('page-chat-room');
   if (page) { page.classList.remove('active'); page.classList.add('closing'); setTimeout(() => page.remove(), 600); }
+  
+  if (!isPopState) {
+    history.pushState({ page: 'chat' }, '', '/chat');
+  }
+}
+
+function roomBack() {
+  if (pageHistory.length > 1 || (history.state && history.state.roomId)) {
+    history.back();
+  } else {
+    history.pushState({ page: 'chat' }, '', '/chat');
+    closeChatRoom(true);
+  }
 }
 
 function openNewChatSheet() {
