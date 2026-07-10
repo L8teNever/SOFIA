@@ -50,14 +50,31 @@ async def create_room(data: dict, db: AsyncSession = Depends(get_db), current_us
     await db.refresh(room)
     return room
 
+def _reply_preview(msg: Message) -> dict:
+    return {
+        "id": msg.id, "sender_id": msg.sender_id, "content": msg.content,
+        "file_type": msg.file_type, "deleted": bool(msg.deleted),
+    }
+
 @router.get("/rooms/{room_id}/messages", response_model=List[MessageOut])
 async def get_messages(room_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     result = await db.execute(select(ChatRoom).where(ChatRoom.id == room_id))
     room = result.scalar_one_or_none()
     if not room or current_user.id not in (room.member_ids or []):
         raise HTTPException(403)
-    msgs = await db.execute(select(Message).where(Message.room_id == room_id).order_by(Message.created_at))
-    return msgs.scalars().all()
+    msgs = (await db.execute(select(Message).where(Message.room_id == room_id).order_by(Message.created_at))).scalars().all()
+    by_id = {m.id: m for m in msgs}
+    out = []
+    for m in msgs:
+        reply_preview = _reply_preview(by_id[m.reply_to_id]) if m.reply_to_id and m.reply_to_id in by_id else None
+        out.append({
+            "id": m.id, "room_id": m.room_id, "sender_id": m.sender_id,
+            "content": m.content, "file_url": m.file_url, "file_type": m.file_type,
+            "created_at": m.created_at, "read_by": m.read_by,
+            "reply_to_id": m.reply_to_id, "reply_preview": reply_preview,
+            "edited": bool(m.edited), "deleted": bool(m.deleted),
+        })
+    return out
 
 @router.websocket("/ws/{room_id}")
 async def ws_chat(room_id: int, ws: WebSocket):
@@ -66,21 +83,62 @@ async def ws_chat(room_id: int, ws: WebSocket):
         async with AsyncSessionLocal() as db:
             while True:
                 data = await ws.receive_json()
+                action = data.get("action", "send")
+                sender_id = data.get("sender_id")
+
+                if action == "edit":
+                    msg_id = data.get("message_id")
+                    result = await db.execute(select(Message).where(Message.id == msg_id, Message.room_id == room_id))
+                    msg = result.scalar_one_or_none()
+                    if not msg or msg.sender_id != sender_id or msg.deleted or msg.file_type not in (None, "text"):
+                        continue
+                    msg.content = data.get("content")
+                    msg.edited = True
+                    await db.commit()
+                    await manager.broadcast(room_id, {"type": "edit", "id": msg.id, "content": msg.content, "edited": True})
+                    continue
+
+                if action == "delete":
+                    msg_id = data.get("message_id")
+                    result = await db.execute(select(Message).where(Message.id == msg_id, Message.room_id == room_id))
+                    msg = result.scalar_one_or_none()
+                    if not msg or msg.sender_id != sender_id:
+                        continue
+                    msg.deleted = True
+                    msg.content = None
+                    msg.file_url = None
+                    await db.commit()
+                    await manager.broadcast(room_id, {"type": "delete", "id": msg.id})
+                    continue
+
+                reply_to_id = data.get("reply_to_id")
                 msg = Message(
                     room_id=room_id,
-                    sender_id=data.get("sender_id"),
+                    sender_id=sender_id,
                     content=data.get("content"),
                     file_url=data.get("file_url"),
                     file_type=data.get("file_type", "text"),
-                    read_by=[data.get("sender_id")],
+                    read_by=[sender_id],
+                    reply_to_id=reply_to_id,
                 )
                 db.add(msg)
                 await db.commit()
                 await db.refresh(msg)
+
+                reply_preview = None
+                if reply_to_id:
+                    r = await db.execute(select(Message).where(Message.id == reply_to_id))
+                    rm = r.scalar_one_or_none()
+                    if rm:
+                        reply_preview = _reply_preview(rm)
+
                 await manager.broadcast(room_id, {
+                    "type": "new",
                     "id": msg.id, "sender_id": msg.sender_id, "content": msg.content,
                     "file_url": msg.file_url, "file_type": msg.file_type,
                     "created_at": msg.created_at.isoformat(),
+                    "reply_to_id": msg.reply_to_id, "reply_preview": reply_preview,
+                    "edited": False, "deleted": False,
                 })
     except WebSocketDisconnect:
         manager.disconnect(room_id, ws)

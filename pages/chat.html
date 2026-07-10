@@ -25,31 +25,34 @@
         <span id="room-title" style="font-weight:700;font-size:1.1rem;"></span>
       </div>
       <div id="chat-messages" style="flex:1;overflow-y:auto;padding:0 16px 80px 16px;display:flex;flex-direction:column;"></div>
-      <div class="input-bar" id="input-bar-normal">
-        <button onclick="startRecording()" id="rec-btn" style="background:none;border:none;cursor:pointer;color:#49454f;padding:4px;">
-          <i data-lucide="mic" style="width:20px;height:20px;"></i>
-        </button>
-        <input id="chat-input" placeholder="Nachricht…" onkeydown="if(event.key==='Enter')sendMsg()">
-        <label style="cursor:pointer;padding:4px;color:#49454f;">
-          <i data-lucide="paperclip" style="width:20px;height:20px;"></i>
-          <input type="file" style="display:none;" onchange="sendFile(this.files[0])">
-        </label>
-        <button class="send-btn" onclick="sendMsg()">
-          <i data-lucide="send" style="width:18px;height:18px;"></i>
-        </button>
-      </div>
-      <div class="input-bar recording-bar" id="recording-bar" style="display:none;">
-        <button onclick="cancelRecording()" style="background:none;border:none;cursor:pointer;color:#b3261e;padding:4px;">
-          <i data-lucide="trash-2" style="width:20px;height:20px;"></i>
-        </button>
-        <div class="rec-indicator">
-          <span class="rec-dot"></span>
-          <span id="rec-timer">0:00</span>
+      <div class="composer-wrap" id="composer-wrap">
+        <div class="composer-context" id="reply-edit-bar" style="display:none;"></div>
+        <div class="input-bar" id="input-bar-normal" style="position:static;">
+          <button onclick="startRecording()" id="rec-btn" style="background:none;border:none;cursor:pointer;color:#49454f;padding:4px;">
+            <i data-lucide="mic" style="width:20px;height:20px;"></i>
+          </button>
+          <input id="chat-input" placeholder="Nachricht…" onkeydown="if(event.key==='Enter')sendMsg(); if(event.key==='Escape'){cancelReply();cancelEdit();}">
+          <label style="cursor:pointer;padding:4px;color:#49454f;">
+            <i data-lucide="paperclip" style="width:20px;height:20px;"></i>
+            <input type="file" style="display:none;" onchange="sendFile(this.files[0])">
+          </label>
+          <button class="send-btn" onclick="sendMsg()">
+            <i data-lucide="send" style="width:18px;height:18px;"></i>
+          </button>
         </div>
-        <div class="rec-wave" id="rec-wave"></div>
-        <button class="send-btn" onclick="stopRecording(true)">
-          <i data-lucide="send" style="width:18px;height:18px;"></i>
-        </button>
+        <div class="input-bar recording-bar" id="recording-bar" style="position:static;display:none;">
+          <button onclick="cancelRecording()" style="background:none;border:none;cursor:pointer;color:#b3261e;padding:4px;">
+            <i data-lucide="trash-2" style="width:20px;height:20px;"></i>
+          </button>
+          <div class="rec-indicator">
+            <span class="rec-dot"></span>
+            <span id="rec-timer">0:00</span>
+          </div>
+          <div class="rec-wave" id="rec-wave"></div>
+          <button class="send-btn" onclick="stopRecording(true)">
+            <i data-lucide="send" style="width:18px;height:18px;"></i>
+          </button>
+        </div>
       </div>
     </div>
   </template>
@@ -58,6 +61,7 @@
 <script>
 let chatRooms = [], chatCurrentUser = null, chatClassUsers = [], activeRoomId = null, chatWs = null;
 let mutedUserIds = JSON.parse(localStorage.getItem('sofia_muted_users') || '[]');
+let roomMessages = [], messagesById = {}, replyingTo = null, editingMessageId = null;
 
 function toggleMuteUser(userId, userName) {
   let list = JSON.parse(localStorage.getItem('sofia_muted_users') || '[]');
@@ -245,6 +249,8 @@ function renderRooms() {
 
 async function openRoom(roomId, roomName) {
   activeRoomId = roomId;
+  replyingTo = null;
+  editingMessageId = null;
   const tpl = document.getElementById('tpl-chat-room').content.cloneNode(true);
   document.body.appendChild(tpl);
   const roomPage = document.getElementById('page-chat-room');
@@ -253,6 +259,7 @@ async function openRoom(roomId, roomName) {
   requestAnimationFrame(() => requestAnimationFrame(() => roomPage.classList.add('active')));
   document.getElementById('room-title').textContent = roomName;
   document.getElementById('room-avatar').textContent = roomName.slice(0,2).toUpperCase();
+  initMessageGestures(document.getElementById('chat-messages'));
   lucide.createIcons();
 
   const msgs = await API.messages(roomId).catch(() => []);
@@ -260,12 +267,208 @@ async function openRoom(roomId, roomName) {
   connectWs(roomId);
 }
 
+// --- Message gestures: swipe-right to reply, long-press / right-click for actions menu ---
+let swipeState = null;
+function initMessageGestures(container) {
+  if (!container) return;
+  container.addEventListener('pointerdown', e => {
+    const row = e.target.closest('.msg-row');
+    if (!row || e.button) return;
+    const bubble = row.querySelector('.bubble');
+    swipeState = { row, bubble, msgId: parseInt(row.dataset.msgId), startX: e.clientX, startY: e.clientY, moved: false, longFired: false };
+    swipeState.timer = setTimeout(() => {
+      if (swipeState && !swipeState.moved) {
+        swipeState.longFired = true;
+        if (navigator.vibrate) navigator.vibrate(15);
+        openMessageActions(swipeState.msgId);
+      }
+    }, 480);
+  });
+  container.addEventListener('pointermove', e => {
+    if (!swipeState) return;
+    const dx = e.clientX - swipeState.startX, dy = e.clientY - swipeState.startY;
+    if (!swipeState.moved && (Math.abs(dx) > 8 || Math.abs(dy) > 8)) {
+      swipeState.moved = true;
+      clearTimeout(swipeState.timer);
+    }
+    if (swipeState.moved && !swipeState.longFired && dx > 0 && Math.abs(dy) < 40 && swipeState.bubble) {
+      const clamped = Math.min(dx, 70);
+      swipeState.bubble.style.transform = `translateX(${clamped}px)`;
+      const icon = swipeState.row.querySelector('.msg-swipe-icon');
+      if (icon) icon.style.opacity = Math.min(1, clamped / 60);
+    }
+  });
+  const endSwipe = e => {
+    if (!swipeState) return;
+    clearTimeout(swipeState.timer);
+    const { row, bubble, msgId, moved, longFired, startX } = swipeState;
+    const dx = (e.clientX ?? startX) - startX;
+    if (bubble) {
+      bubble.style.transition = 'transform 0.2s ease';
+      bubble.style.transform = 'translateX(0)';
+      setTimeout(() => { bubble.style.transition = ''; }, 200);
+    }
+    const icon = row?.querySelector('.msg-swipe-icon');
+    if (icon) icon.style.opacity = 0;
+    if (moved && !longFired && dx > 60) setReplyTo(msgId);
+    swipeState = null;
+  };
+  container.addEventListener('pointerup', endSwipe);
+  container.addEventListener('pointercancel', endSwipe);
+  container.addEventListener('pointerleave', endSwipe);
+  container.addEventListener('contextmenu', e => {
+    const row = e.target.closest('.msg-row');
+    if (!row) return;
+    e.preventDefault();
+    openMessageActions(parseInt(row.dataset.msgId));
+  });
+}
+
+function openMessageActions(msgId) {
+  const m = messagesById[msgId];
+  if (!m || m.deleted) return;
+  const isMe = m.sender_id === chatCurrentUser?.id;
+  const canEdit = isMe && (!m.file_type || m.file_type === 'text');
+  openSheet(`
+    <div class="sheet-title" style="margin-bottom:12px;display:flex;align-items:center;gap:8px;">
+      <i data-lucide="message-square" style="width:20px;height:20px;color:#6750a4;"></i> Nachricht
+    </div>
+    <div style="display:flex;flex-direction:column;gap:4px;">
+      <button class="msg-action-btn" onclick="closeSheet(); setReplyTo(${msgId});">
+        <i data-lucide="reply" style="width:18px;height:18px;"></i> Antworten
+      </button>
+      ${canEdit ? `<button class="msg-action-btn" onclick="closeSheet(); startEditMessage(${msgId});">
+        <i data-lucide="pencil" style="width:18px;height:18px;"></i> Bearbeiten
+      </button>` : ''}
+      ${isMe ? `<button class="msg-action-btn" style="color:#b3261e;" onclick="closeSheet(); deleteMessage(${msgId});">
+        <i data-lucide="trash-2" style="width:18px;height:18px;"></i> Löschen
+      </button>` : ''}
+    </div>
+  `);
+  if (window.lucide) lucide.createIcons();
+}
+
+function snippetForMessage(m) {
+  if (!m) return '';
+  if (m.deleted) return 'Nachricht gelöscht';
+  if (m.file_type === 'image') return '📷 Foto';
+  if (m.file_type === 'audio') return '🎤 Sprachnachricht';
+  if (m.file_type === 'file') return '📎 ' + (m.content || 'Datei');
+  return m.content || '';
+}
+
+function senderNameFor(m) {
+  if (!m) return '';
+  if (m.sender_id === chatCurrentUser?.id) return 'Dir';
+  const u = chatClassUsers.find(u => u.id === m.sender_id);
+  return u ? (u.display_name || u.email.split('@')[0]) : 'User';
+}
+
+function renderComposerContext() {
+  const bar = document.getElementById('reply-edit-bar');
+  if (!bar) return;
+  const messagesEl = document.getElementById('chat-messages');
+  if (replyingTo) {
+    bar.style.display = 'flex';
+    bar.innerHTML = `
+      <div class="composer-context-bar"></div>
+      <div class="composer-context-body">
+        <div class="composer-context-title">Antwort an ${escapeHtml(senderNameFor(replyingTo))}</div>
+        <div class="composer-context-snippet">${escapeHtml(snippetForMessage(replyingTo))}</div>
+      </div>
+      <button class="composer-context-close" onclick="cancelReply()"><i data-lucide="x" style="width:16px;height:16px;"></i></button>`;
+  } else if (editingMessageId) {
+    const m = messagesById[editingMessageId];
+    bar.style.display = 'flex';
+    bar.innerHTML = `
+      <div class="composer-context-bar" style="background:#7d5260;"></div>
+      <div class="composer-context-body">
+        <div class="composer-context-title" style="color:#7d5260;">Nachricht bearbeiten</div>
+        <div class="composer-context-snippet">${escapeHtml(snippetForMessage(m))}</div>
+      </div>
+      <button class="composer-context-close" onclick="cancelEdit()"><i data-lucide="x" style="width:16px;height:16px;"></i></button>`;
+  } else {
+    bar.style.display = 'none';
+    bar.innerHTML = '';
+    if (messagesEl) messagesEl.style.paddingBottom = '80px';
+    return;
+  }
+  if (messagesEl) { messagesEl.style.paddingBottom = '130px'; messagesEl.scrollTop = messagesEl.scrollHeight; }
+  if (window.lucide) lucide.createIcons();
+}
+
+function setReplyTo(msgId) {
+  const m = messagesById[msgId];
+  if (!m || m.deleted) return;
+  editingMessageId = null;
+  replyingTo = m;
+  renderComposerContext();
+  document.getElementById('chat-input')?.focus();
+}
+
+function cancelReply() {
+  if (!replyingTo) return;
+  replyingTo = null;
+  renderComposerContext();
+}
+
+function startEditMessage(msgId) {
+  const m = messagesById[msgId];
+  if (!m || m.deleted || (m.file_type && m.file_type !== 'text')) return;
+  replyingTo = null;
+  editingMessageId = msgId;
+  const input = document.getElementById('chat-input');
+  if (input) { input.value = m.content || ''; input.focus(); }
+  renderComposerContext();
+}
+
+function cancelEdit() {
+  if (!editingMessageId) return;
+  editingMessageId = null;
+  const input = document.getElementById('chat-input');
+  if (input) input.value = '';
+  renderComposerContext();
+}
+
+function deleteMessage(msgId) {
+  const m = messagesById[msgId];
+  if (!m || m.deleted) return;
+  if (!confirm('Nachricht wirklich löschen?')) return;
+  if (chatWs) chatWs.send(JSON.stringify({ action: 'delete', message_id: msgId, sender_id: chatCurrentUser?.id }));
+}
+
+function scrollToMessage(id) {
+  const row = document.querySelector(`.msg-row[data-msg-id="${id}"]`);
+  if (!row) { showToast('Nachricht nicht mehr sichtbar'); return; }
+  row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  const bubble = row.querySelector('.bubble');
+  if (bubble) { bubble.classList.add('highlight-flash'); setTimeout(() => bubble.classList.remove('highlight-flash'), 1000); }
+}
+
 function getSingleMessageHTML(m, currentUserId, userMap) {
   const isMe = m.sender_id === currentUserId;
   const sender = userMap ? userMap[m.sender_id] : null;
   const senderName = sender ? (sender.display_name || sender.email.split('@')[0]) : 'User';
   const time = new Date(m.created_at).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
-  
+
+  if (m.deleted) {
+    return `
+      <div style="margin-bottom:8px; display:flex; flex-direction:column; align-items: ${isMe?'flex-end':'flex-start'};">
+        <div class="bubble ${isMe?'me':'them'}" style="opacity:0.6; font-style:italic; display:flex; align-items:center; gap:6px;">
+          <i data-lucide="ban" style="width:14px;height:14px;"></i> Nachricht gelöscht
+        </div>
+        <div class="bubble-meta" style="text-align:${isMe?'right':'left'}; margin-top:2px;">${time}</div>
+      </div>`;
+  }
+
+  const replyHtml = m.reply_preview ? `
+      <div class="bubble-reply-quote" onclick="scrollToMessage(${m.reply_preview.id})">
+        <div class="bubble-reply-quote-name">${escapeHtml(senderNameFor(m.reply_preview))}</div>
+        <div class="bubble-reply-quote-text">${escapeHtml(snippetForMessage(m.reply_preview))}</div>
+      </div>` : '';
+  const editedLabel = m.edited ? ' · bearbeitet' : '';
+  const swipeIconHtml = `<div class="msg-swipe-icon" style="${isMe ? 'right:-32px;' : 'left:-32px;'}"><i data-lucide="reply" style="width:16px;height:16px;"></i></div>`;
+
   let content = '';
   if (m.file_type === 'image' && m.file_url) {
     content = `
@@ -298,9 +501,10 @@ function getSingleMessageHTML(m, currentUserId, userMap) {
 
   const isMuted = mutedUserIds.includes(m.sender_id);
   if (isMuted && !isMe) {
-    const uniqueMsgId = `muted-msg-${m.id || Math.random().toString(36).substr(2, 9)}`;
+    const uniqueMsgId = `muted-msg-${m.id}`;
     return `
-      <div style="margin-bottom:8px; display:flex; flex-direction:column; align-items: flex-start; width: 100%;">
+      <div class="msg-row" data-msg-id="${m.id}" style="margin-bottom:8px; display:flex; flex-direction:column; align-items: flex-start; width: 100%; position:relative;">
+        ${swipeIconHtml}
         <div style="font-size:0.7rem;opacity:0.5;margin-bottom:2px;padding-left:4px;display:flex;align-items:center;gap:6px;">
           <span>${senderName}</span>
           <button onclick="toggleMuteUser(${m.sender_id}, '${escapeHtml(senderName)}')" style="background:none; border:none; padding:0; cursor:pointer; color:#6750a4; font-size:0.65rem; text-decoration:underline;">Mute aufheben</button>
@@ -309,30 +513,47 @@ function getSingleMessageHTML(m, currentUserId, userMap) {
           <i data-lucide="volume-x" style="width:16px; height:16px; color:#b3261e;"></i> Nachricht von stummgeschaltetem Nutzer. Klicken zum Anzeigen.
         </div>
         <div id="${uniqueMsgId}-content" style="display:none; width: 100%;">
-          <div class="bubble them">${content}</div>
+          <div class="bubble them">${replyHtml}${content}</div>
         </div>
-        <div class="bubble-meta" style="text-align:left; margin-top:2px;">${time}</div>
+        <div class="bubble-meta" style="text-align:left; margin-top:2px;">${time}${editedLabel}</div>
       </div>`;
   }
 
   return `
-    <div style="margin-bottom:8px; display:flex; flex-direction:column; align-items: ${isMe?'flex-end':'flex-start'};">
+    <div class="msg-row" data-msg-id="${m.id}" style="margin-bottom:8px; display:flex; flex-direction:column; align-items: ${isMe?'flex-end':'flex-start'}; position:relative;">
+      ${swipeIconHtml}
       ${!isMe ? `
         <div style="font-size:0.7rem;opacity:0.5;margin-bottom:2px;padding-left:4px;display:flex;align-items:center;gap:6px;">
           <span>${senderName}</span>
           <button onclick="toggleMuteUser(${m.sender_id}, '${escapeHtml(senderName)}')" style="background:none; border:none; padding:0; cursor:pointer; color:#6750a4; font-size:0.65rem; text-decoration:underline;">Stummschalten</button>
         </div>` : ''}
-      <div class="bubble ${isMe?'me':'them'}">${content}</div>
-      <div class="bubble-meta" style="text-align:${isMe?'right':'left'}; margin-top:2px;">${time}</div>
+      <div class="bubble ${isMe?'me':'them'}">${replyHtml}${content}</div>
+      <div class="bubble-meta" style="text-align:${isMe?'right':'left'}; margin-top:2px;">${time}${editedLabel}</div>
     </div>`;
 }
 
 function renderMessages(msgs) {
+  roomMessages = msgs;
+  messagesById = Object.fromEntries(msgs.map(m => [m.id, m]));
   const uid = chatCurrentUser?.id;
   const container = document.getElementById('chat-messages');
   const userMap = Object.fromEntries(chatClassUsers.map(u=>[u.id,u]));
   container.innerHTML = msgs.map(m => getSingleMessageHTML(m, uid, userMap)).join('');
   container.scrollTop = container.scrollHeight;
+  if (window.lucide) lucide.createIcons();
+}
+
+function rerenderSingleMessage(id) {
+  const m = messagesById[id];
+  if (!m) return;
+  const uid = chatCurrentUser?.id;
+  const userMap = Object.fromEntries(chatClassUsers.map(u=>[u.id,u]));
+  const row = document.querySelector(`.msg-row[data-msg-id="${id}"]`);
+  const tempDiv = document.createElement('div');
+  tempDiv.innerHTML = getSingleMessageHTML(m, uid, userMap);
+  const newRow = tempDiv.firstElementChild;
+  if (row) row.replaceWith(newRow);
+  else document.getElementById('chat-messages')?.appendChild(newRow);
   if (window.lucide) lucide.createIcons();
 }
 
@@ -344,9 +565,24 @@ function connectWs(roomId) {
     const msg = JSON.parse(e.data);
     const container = document.getElementById('chat-messages');
     if (!container) return;
+
+    if (msg.type === 'edit') {
+      const existing = messagesById[msg.id];
+      if (existing) { existing.content = msg.content; existing.edited = true; }
+      rerenderSingleMessage(msg.id);
+      return;
+    }
+    if (msg.type === 'delete') {
+      const existing = messagesById[msg.id];
+      if (existing) { existing.deleted = true; existing.content = null; existing.file_url = null; }
+      rerenderSingleMessage(msg.id);
+      return;
+    }
+
     const uid = chatCurrentUser?.id;
     const userMap = Object.fromEntries(chatClassUsers.map(u=>[u.id,u]));
-    
+    messagesById[msg.id] = msg;
+    roomMessages.push(msg);
     const tempDiv = document.createElement('div');
     tempDiv.innerHTML = getSingleMessageHTML(msg, uid, userMap);
     container.appendChild(tempDiv.firstElementChild);
@@ -359,7 +595,14 @@ async function sendMsg() {
   const input = document.getElementById('chat-input');
   const text = input.value.trim();
   if (!text || !chatWs) return;
-  chatWs.send(JSON.stringify({ sender_id: chatCurrentUser?.id, content: text, file_type: 'text' }));
+  if (editingMessageId) {
+    chatWs.send(JSON.stringify({ action: 'edit', message_id: editingMessageId, sender_id: chatCurrentUser?.id, content: text }));
+    editingMessageId = null;
+  } else {
+    chatWs.send(JSON.stringify({ sender_id: chatCurrentUser?.id, content: text, file_type: 'text', reply_to_id: replyingTo?.id || null }));
+    replyingTo = null;
+  }
+  renderComposerContext();
   input.value = '';
 }
 
@@ -377,7 +620,10 @@ async function sendFile(file) {
         content: file.name,
         file_url: `/api/v1/files/download/${uploaded.id}`,
         file_type: file.type.startsWith('image') ? 'image' : (file.type.startsWith('audio') ? 'audio' : 'file'),
+        reply_to_id: replyingTo?.id || null,
       }));
+      replyingTo = null;
+      renderComposerContext();
     }
   } catch { showToast('Upload fehlgeschlagen'); }
 }
@@ -464,6 +710,8 @@ function stopRecordingUI() {
 function closeChatRoom() {
   if (chatWs) { chatWs.close(); chatWs = null; }
   if (mediaRecorder?.state === 'recording') cancelRecording();
+  replyingTo = null;
+  editingMessageId = null;
   activeRoomId = null;
   const page = document.getElementById('page-chat-room');
   if (page) { page.classList.remove('active'); page.classList.add('closing'); setTimeout(() => page.remove(), 600); }

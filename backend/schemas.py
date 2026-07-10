@@ -119,6 +119,10 @@ class MessageOut(BaseModel):
     file_type: Optional[str]
     created_at: datetime
     read_by: List[int]
+    reply_to_id: Optional[int] = None
+    reply_preview: Optional[dict] = None
+    edited: bool = False
+    deleted: bool = False
     class Config: from_attributes = True
 
 # Shared Files

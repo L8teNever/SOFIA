@@ -181,17 +181,47 @@
 .bubble.me { background: var(--m3-on-prim-cont); color: white; border-bottom-right-radius: 6px; align-self: flex-end; }
 .bubble-meta { font-size: 0.68rem; opacity: 0.5; margin: 0 8px 12px 8px; }
 
+/* Message row gestures (swipe-to-reply, long-press actions) */
+.msg-row { position: relative; touch-action: pan-y; }
+.msg-row .bubble { will-change: transform; }
+.msg-swipe-icon { position: absolute; top: 50%; transform: translateY(-50%); opacity: 0; color: var(--m3-on-prim-cont); pointer-events: none; transition: opacity 0.1s; }
+.bubble-reply-quote { background: rgba(0,0,0,0.06); border-left: 3px solid var(--m3-on-prim-cont); border-radius: 8px; padding: 6px 10px; margin-bottom: 6px; cursor: pointer; }
+.bubble.me .bubble-reply-quote { background: rgba(255,255,255,0.15); border-left-color: white; }
+.bubble-reply-quote-name { font-size: 0.7rem; font-weight: 700; opacity: 0.85; }
+.bubble-reply-quote-text { font-size: 0.78rem; opacity: 0.75; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@keyframes bubble-flash { 0%, 100% { filter: brightness(1); } 30% { filter: brightness(1.25); } }
+.highlight-flash { animation: bubble-flash 0.9s ease; }
+
+/* Message actions bottom-sheet buttons */
+.msg-action-btn { display: flex; align-items: center; gap: 12px; padding: 14px 12px; border-radius: 14px; background: none; border: none; cursor: pointer; font-size: 0.95rem; font-weight: 500; color: inherit; font-family: inherit; text-align: left; width: 100%; }
+.msg-action-btn:hover { background: rgba(0,0,0,0.04); }
+
+/* Composer wrap (input bar + reply/edit context bar) */
+.composer-wrap {
+  position: absolute; left: 16px; right: 16px; bottom: 20px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+@media (min-width: 760px) {
+  .composer-wrap { left: 24px; right: 24px; bottom: 24px; }
+}
+.composer-context {
+  background: #fff; border-radius: 16px; padding: 8px 12px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.1); border: 1px solid rgba(0,0,0,0.06);
+  align-items: center; gap: 10px;
+}
+.composer-context-bar { width: 3px; align-self: stretch; border-radius: 2px; background: var(--m3-on-prim-cont); flex-shrink: 0; }
+.composer-context-body { flex: 1; min-width: 0; }
+.composer-context-title { font-size: 0.72rem; font-weight: 700; color: var(--m3-on-prim-cont); }
+.composer-context-snippet { font-size: 0.8rem; opacity: 0.7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.composer-context-close { background: none; border: none; cursor: pointer; opacity: 0.5; padding: 4px; flex-shrink: 0; }
+
 /* Input bar (chat) */
 .input-bar {
-  position: absolute; left: 16px; right: 16px; bottom: 20px;
   display: flex; gap: 8px; align-items: center;
   background: #fff; border-radius: 28px;
   padding: 8px 8px 8px 18px;
   box-shadow: 0 4px 16px rgba(0,0,0,0.1);
   border: 1px solid rgba(0,0,0,0.06);
-}
-@media (min-width: 760px) {
-  .input-bar { left: 24px; right: 24px; bottom: 24px; }
 }
 .input-bar input { flex: 1; border: none; outline: none; background: transparent; font-size: 0.95rem; font-family: inherit; color: #1c1b1f; }
 .send-btn { width: 40px; height: 40px; background: var(--m3-on-prim-cont); color: white; border-radius: 14px; display: flex; align-items: center; justify-content: center; border: none; cursor: pointer; }

@@ -22,6 +22,9 @@ class Message(Base):
     file_type = Column(String, nullable=True)  # text|image|audio|file
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     read_by = Column(JSON, default=list)
+    reply_to_id = Column(Integer, ForeignKey("messages.id"), nullable=True)
+    edited = Column(Boolean, default=False)
+    deleted = Column(Boolean, default=False)
 
     room = relationship("ChatRoom", back_populates="messages")
     sender = relationship("User", back_populates="sent_messages", foreign_keys=[sender_id])
