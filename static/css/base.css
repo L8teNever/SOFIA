@@ -111,6 +111,32 @@ body {
 }
 .app-container.ready { opacity: 1; }
 
+/* Dashboard header — top padding is generous on mobile to clear the status
+   bar / notch, but the app-container already adds its own 28-36px of
+   breathing room on tablet/desktop, so keeping the mobile padding there
+   stacked into a big empty dark strip above the greeting. Shrink it once
+   the container itself has padding to spare. */
+.dashboard-header {
+  position: sticky; top: 0; z-index: 50;
+  backdrop-filter: blur(12px);
+  background: rgba(28,27,31,0.8);
+  margin: 0 -16px;
+  padding: 40px 20px 16px 20px;
+  transition: transform 0.35s cubic-bezier(0.2,0.8,0.2,1), opacity 0.35s;
+  will-change: transform;
+}
+.dashboard-header-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding-top: 16px; max-width: 1148px; margin: 0 auto;
+}
+@media (min-width: 780px) {
+  .dashboard-header { margin: 0 -28px; padding: 20px 20px 16px 20px; }
+  .dashboard-header-row { padding-top: 0; }
+}
+@media (min-width: 1100px) {
+  .dashboard-header { margin: 0 -36px; padding: 22px 24px 16px 24px; }
+}
+
 /* Widget grid */
 .widget-grid {
   display: grid;

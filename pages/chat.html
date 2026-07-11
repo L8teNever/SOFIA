@@ -149,21 +149,39 @@ function escapeHtml(str) {
 }
 
 // --- Voice messages (WhatsApp-style bubble) ---
-function strHash(str) {
-  let h = 0;
-  for (let i = 0; i < str.length; i++) { h = (h << 5) - h + str.charCodeAt(i); h |= 0; }
-  return Math.abs(h) || 1;
-}
+// Real per-message waveforms only: recorded voice notes get theirs from live
+// mic levels (see recLevels/downsampleLevels below); anything else (a picked
+// audio file, or an older message stored before waveforms existed) gets its
+// bars from actually decoding the audio's PCM peaks — never a fake/decorative
+// pattern that has nothing to do with what was said.
+let waveformCache = {};
 
-function waveformBars(seedStr, count = 24) {
-  const seed = strHash(seedStr);
-  const bars = [];
-  for (let i = 0; i < count; i++) {
-    const v = Math.sin(seed * (i + 1) * 12.9898) * 43758.5453;
-    const frac = v - Math.floor(v);
-    bars.push(6 + Math.round(frac * 18)); // 6-24px
+async function decodeAudioWaveform(source, count = 24) {
+  const cacheKey = typeof source === 'string' ? source : null;
+  if (cacheKey && waveformCache[cacheKey]) return waveformCache[cacheKey];
+  try {
+    const arrayBuffer = await (source instanceof Blob ? source.arrayBuffer() : fetch(source).then(r => r.arrayBuffer()));
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+    const raw = audioBuffer.getChannelData(0);
+    const bucketSize = Math.max(1, Math.floor(raw.length / count));
+    const bars = [];
+    for (let i = 0; i < count; i++) {
+      const start = i * bucketSize;
+      const end = i === count - 1 ? raw.length : start + bucketSize;
+      let peak = 0;
+      for (let j = start; j < end; j++) {
+        const abs = Math.abs(raw[j]);
+        if (abs > peak) peak = abs;
+      }
+      bars.push(6 + Math.round(Math.min(1, peak * 1.6) * 18)); // 6-24px, matches the live-recording scale
+    }
+    audioCtx.close().catch(() => {});
+    if (cacheKey) waveformCache[cacheKey] = bars;
+    return bars;
+  } catch {
+    return null;
   }
-  return bars;
 }
 
 function formatTime(sec) {
@@ -174,8 +192,22 @@ function formatTime(sec) {
 
 function renderVoiceBubble(m) {
   const uid = `v${m.id || Math.random().toString(36).slice(2, 9)}`;
-  const heights = Array.isArray(m.waveform) && m.waveform.length ? m.waveform : waveformBars(m.file_url || uid);
+  const hasRealWaveform = Array.isArray(m.waveform) && m.waveform.length;
+  const cached = !hasRealWaveform && m.file_url ? waveformCache[m.file_url] : null;
+  const heights = hasRealWaveform ? m.waveform : (cached || Array(24).fill(6));
   const barsHtml = heights.map(h => `<span style="height:${h}px;"></span>`).join('');
+
+  if (!hasRealWaveform && !cached && m.file_url) {
+    decodeAudioWaveform(m.file_url).then(bars => {
+      if (!bars) return;
+      const bars_html = bars.map(h => `<span style="height:${h}px;"></span>`).join('');
+      const waveEl = document.getElementById(uid)?.parentElement.querySelector('.voice-wave');
+      const progEl = document.getElementById(`${uid}-progress`);
+      if (waveEl) waveEl.innerHTML = bars_html;
+      if (progEl) progEl.innerHTML = bars_html;
+    });
+  }
+
   return `
     <div class="voice-msg">
       <audio id="${uid}" src="${m.file_url}" preload="metadata"></audio>
@@ -876,6 +908,9 @@ async function sendMsg() {
 
 async function sendFile(file, waveform) {
   if (!file) return;
+  if (!waveform && file.type.startsWith('audio')) {
+    waveform = await decodeAudioWaveform(file).catch(() => null);
+  }
   const form = new FormData();
   form.append('file', file);
   try {
