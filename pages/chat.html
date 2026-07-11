@@ -513,7 +513,7 @@ function initMessageGestures(container) {
       if (swipeState && !swipeState.moved) {
         swipeState.longFired = true;
         if (navigator.vibrate) navigator.vibrate(15);
-        openMessageActions(swipeState.msgId);
+        openMessageActions(swipeState.msgId, swipeState.bubble);
       }
     }, 480);
   });
@@ -569,32 +569,107 @@ function initMessageGestures(container) {
     const row = e.target.closest('.msg-row');
     if (!row) return;
     e.preventDefault();
-    openMessageActions(parseInt(row.dataset.msgId));
+    openMessageActions(parseInt(row.dataset.msgId), row.querySelector('.bubble'));
   });
 }
 
-function openMessageActions(msgId) {
+// Quick-reaction emoji set shown atop the message context menu
+const QUICK_REACTIONS = ['😂', '👍', '❤️', '🔥', '✅', '😊'];
+
+function myReactionFor(m) {
+  const uid = chatCurrentUser?.id;
+  if (!m?.reactions || uid == null) return null;
+  return Object.keys(m.reactions).find(e => (m.reactions[e] || []).includes(uid)) || null;
+}
+
+function openMessageActions(msgId, anchorEl) {
   const m = messagesById[msgId];
   if (!m || m.deleted) return;
   const isMe = m.sender_id === chatCurrentUser?.id;
   const canEdit = isMe && (!m.file_type || m.file_type === 'text');
-  openSheet(`
-    <div class="sheet-title" style="margin-bottom:12px;display:flex;align-items:center;gap:8px;">
-      <i data-lucide="message-square" style="width:20px;height:20px;color:#6750a4;"></i> Nachricht
+  const canCopy = !m.file_type || m.file_type === 'text';
+  const myReaction = myReactionFor(m);
+
+  closeMessageActions();
+
+  const scrim = document.createElement('div');
+  scrim.className = 'msg-ctx-scrim';
+  scrim.onclick = closeMessageActions;
+
+  const menu = document.createElement('div');
+  menu.className = 'msg-ctx-menu';
+  menu.innerHTML = `
+    <div class="msg-ctx-emojis">
+      ${QUICK_REACTIONS.map(e => `<button class="msg-ctx-emoji${e === myReaction ? ' active' : ''}" onclick="reactToMessage(${msgId}, '${e}')">${e}</button>`).join('')}
     </div>
-    <div style="display:flex;flex-direction:column;gap:4px;">
-      <button class="msg-action-btn" onclick="closeSheet(); setReplyTo(${msgId});">
-        <i data-lucide="reply" style="width:18px;height:18px;"></i> Antworten
+    <div class="msg-ctx-actions">
+      <button class="msg-ctx-item" onclick="closeMessageActions(); setReplyTo(${msgId});">
+        <span>Antworten</span><i data-lucide="reply" style="width:18px;height:18px;"></i>
       </button>
-      ${canEdit ? `<button class="msg-action-btn" onclick="closeSheet(); startEditMessage(${msgId});">
-        <i data-lucide="pencil" style="width:18px;height:18px;"></i> Bearbeiten
+      ${canEdit ? `<button class="msg-ctx-item" onclick="closeMessageActions(); startEditMessage(${msgId});">
+        <span>Bearbeiten</span><i data-lucide="pencil" style="width:18px;height:18px;"></i>
       </button>` : ''}
-      ${isMe ? `<button class="msg-action-btn" style="color:#b3261e;" onclick="closeSheet(); deleteMessage(${msgId});">
-        <i data-lucide="trash-2" style="width:18px;height:18px;"></i> Löschen
+      ${canCopy ? `<button class="msg-ctx-item" onclick="closeMessageActions(); copyMessageText(${msgId});">
+        <span>Kopieren</span><i data-lucide="copy" style="width:18px;height:18px;"></i>
+      </button>` : ''}
+      ${isMe ? `<button class="msg-ctx-item msg-ctx-item-danger" onclick="closeMessageActions(); deleteMessage(${msgId});">
+        <span>Löschen</span><i data-lucide="trash-2" style="width:18px;height:18px;"></i>
       </button>` : ''}
     </div>
-  `);
+  `;
+
+  document.body.appendChild(scrim);
+  document.body.appendChild(menu);
+  positionMsgCtxMenu(menu, anchorEl);
   if (window.lucide) lucide.createIcons();
+  requestAnimationFrame(() => { scrim.classList.add('active'); menu.classList.add('active'); });
+}
+
+function positionMsgCtxMenu(menu, anchorEl) {
+  const margin = 12;
+  const anchorRect = anchorEl ? anchorEl.getBoundingClientRect() : { top: window.innerHeight / 2, bottom: window.innerHeight / 2, left: window.innerWidth / 2, right: window.innerWidth / 2, width: 0 };
+  const menuRect = menu.getBoundingClientRect();
+
+  let top = anchorRect.top - menuRect.height - margin;
+  if (top < margin) top = Math.min(anchorRect.bottom + margin, window.innerHeight - menuRect.height - margin);
+  top = Math.max(margin, top);
+
+  let left = anchorRect.left + anchorRect.width / 2 - menuRect.width / 2;
+  left = Math.min(Math.max(margin, left), window.innerWidth - menuRect.width - margin);
+
+  menu.style.top = `${top}px`;
+  menu.style.left = `${left}px`;
+}
+
+function closeMessageActions() {
+  document.querySelectorAll('.msg-ctx-menu, .msg-ctx-scrim').forEach(el => {
+    el.classList.remove('active');
+    setTimeout(() => el.remove(), 180);
+  });
+}
+
+function reactToMessage(msgId, emoji) {
+  closeMessageActions();
+  if (!chatWs) return;
+  chatWs.send(JSON.stringify({ action: 'react', message_id: msgId, sender_id: chatCurrentUser?.id, emoji }));
+}
+
+function copyMessageText(msgId) {
+  const m = messagesById[msgId];
+  if (!m) return;
+  const text = snippetForMessage(m);
+  if (!text || !navigator.clipboard) { showToast('Nichts zu kopieren'); return; }
+  navigator.clipboard.writeText(text).then(() => showToast('Kopiert')).catch(() => showToast('Fehler'));
+}
+
+function renderReactions(m) {
+  if (!m.reactions || !Object.keys(m.reactions).length) return '';
+  const uid = chatCurrentUser?.id;
+  const chips = Object.entries(m.reactions)
+    .filter(([, ids]) => ids && ids.length)
+    .map(([emoji, ids]) => `<span class="msg-reaction-chip${ids.includes(uid) ? ' mine' : ''}" onclick="reactToMessage(${m.id}, '${emoji}')">${emoji} ${ids.length}</span>`)
+    .join('');
+  return chips ? `<div class="msg-reactions">${chips}</div>` : '';
 }
 
 function snippetForMessage(m) {
@@ -782,6 +857,7 @@ function getSingleMessageHTML(m, currentUserId, userMap, isGroupStart = true, is
           <button onclick="toggleMuteUser(${m.sender_id}, '${escapeHtml(senderName)}')" style="background:none; border:none; padding:0; cursor:pointer; color:#6750a4; font-size:0.65rem; text-decoration:underline;">Stummschalten</button>
         </div>` : ''}
       <div class="bubble ${isMe?'me':'them'}">${replyHtml}${content}</div>
+      ${renderReactions(m)}
       <div class="bubble-meta" style="text-align:${isMe?'right':'left'}; margin-top:2px;">${time}${editedLabel}</div>
     </div>`;
 }
@@ -859,6 +935,12 @@ function connectWs(roomId) {
     if (msg.type === 'vote') {
       const existing = messagesById[msg.id];
       if (existing) { existing.poll_data = msg.poll_data; }
+      rerenderSingleMessage(msg.id);
+      return;
+    }
+    if (msg.type === 'reaction') {
+      const existing = messagesById[msg.id];
+      if (existing) { existing.reactions = msg.reactions; }
       rerenderSingleMessage(msg.id);
       return;
     }

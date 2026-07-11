@@ -204,9 +204,57 @@
 @keyframes bubble-flash { 0%, 100% { filter: brightness(1); } 30% { filter: brightness(1.25); } }
 .highlight-flash { animation: bubble-flash 0.9s ease; }
 
-/* Message actions bottom-sheet buttons */
-.msg-action-btn { display: flex; align-items: center; gap: 12px; padding: 14px 12px; border-radius: 14px; background: none; border: none; cursor: pointer; font-size: 0.95rem; font-weight: 500; color: inherit; font-family: inherit; text-align: left; width: 100%; }
-.msg-action-btn:hover { background: rgba(0,0,0,0.04); }
+/* Message context menu (long-press / right-click) — anchored near the
+   tapped bubble instead of a full-width bottom sheet, with a quick-reaction
+   emoji row above the action list. */
+.msg-ctx-scrim {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.25); z-index: 400;
+  opacity: 0; pointer-events: none; transition: opacity 0.18s ease;
+}
+.msg-ctx-scrim.active { opacity: 1; pointer-events: all; }
+
+.msg-ctx-menu {
+  position: fixed; z-index: 410; width: 240px;
+  background: #fef7ff; border-radius: 22px;
+  box-shadow: 0 12px 36px rgba(0,0,0,0.22), 0 2px 8px rgba(0,0,0,0.1);
+  padding: 10px;
+  opacity: 0; transform: scale(0.9); transition: opacity 0.16s ease, transform 0.16s ease;
+  pointer-events: none;
+}
+.msg-ctx-menu.active { opacity: 1; transform: scale(1); pointer-events: all; }
+
+.msg-ctx-emojis {
+  display: flex; justify-content: space-between; gap: 2px;
+  background: #fff; border-radius: 999px; padding: 6px 8px; margin-bottom: 8px;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.05);
+}
+.msg-ctx-emoji {
+  border: none; background: none; cursor: pointer; font-size: 1.25rem;
+  width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  transition: background 0.12s, transform 0.12s;
+}
+.msg-ctx-emoji:hover { background: rgba(103,80,164,0.1); transform: scale(1.15); }
+.msg-ctx-emoji.active { background: var(--m3-prim-cont); }
+
+.msg-ctx-actions { display: flex; flex-direction: column; gap: 2px; }
+.msg-ctx-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 12px 14px; border-radius: 14px; background: none; border: none;
+  cursor: pointer; font-size: 0.92rem; font-weight: 500; color: #1c1b1f;
+  font-family: inherit; text-align: left; width: 100%;
+}
+.msg-ctx-item:hover { background: rgba(0,0,0,0.05); }
+.msg-ctx-item-danger { color: #b3261e; }
+
+/* Reaction badges under a bubble */
+.msg-reactions { display: flex; gap: 4px; flex-wrap: wrap; margin-top: -8px; margin-bottom: 4px; }
+.msg-reaction-chip {
+  display: inline-flex; align-items: center; gap: 3px;
+  background: #fff; border: 1px solid rgba(0,0,0,0.08);
+  border-radius: 999px; padding: 2px 8px; font-size: 0.72rem; font-weight: 600;
+  cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+.msg-reaction-chip.mine { background: var(--m3-prim-cont); border-color: transparent; color: var(--m3-on-prim-cont); }
 
 /* Composer wrap (input bar + reply/edit context bar) */
 .composer-wrap {

@@ -162,7 +162,7 @@ async def get_messages(room_id: int, db: AsyncSession = Depends(get_db), current
             "created_at": m.created_at, "read_by": m.read_by,
             "reply_to_id": m.reply_to_id, "reply_preview": reply_preview,
             "edited": bool(m.edited), "deleted": bool(m.deleted), "waveform": m.waveform,
-            "poll_data": m.poll_data,
+            "poll_data": m.poll_data, "reactions": m.reactions,
         })
     return out
 
@@ -199,6 +199,28 @@ async def ws_chat(room_id: int, ws: WebSocket):
                     msg.file_url = None
                     await db.commit()
                     await manager.broadcast(room_id, {"type": "delete", "id": msg.id})
+                    continue
+
+                if action == "react":
+                    msg_id = data.get("message_id")
+                    emoji = data.get("emoji")
+                    result = await db.execute(select(Message).where(Message.id == msg_id, Message.room_id == room_id))
+                    msg = result.scalar_one_or_none()
+                    if not msg or msg.deleted or not emoji:
+                        continue
+                    rdata = json.loads(json.dumps(msg.reactions or {}))
+                    # One reaction per user: clear any of their existing reactions first
+                    was_set = sender_id in rdata.get(emoji, [])
+                    for other_emoji in list(rdata.keys()):
+                        if sender_id in rdata[other_emoji]:
+                            rdata[other_emoji].remove(sender_id)
+                            if not rdata[other_emoji]:
+                                del rdata[other_emoji]
+                    if not was_set:
+                        rdata.setdefault(emoji, []).append(sender_id)
+                    msg.reactions = rdata
+                    await db.commit()
+                    await manager.broadcast(room_id, {"type": "reaction", "id": msg.id, "reactions": msg.reactions})
                     continue
 
                 if action == "vote":
@@ -332,7 +354,7 @@ async def ws_chat(room_id: int, ws: WebSocket):
                     "created_at": msg.created_at.isoformat(),
                     "reply_to_id": msg.reply_to_id, "reply_preview": reply_preview,
                     "edited": False, "deleted": False, "waveform": msg.waveform,
-                    "poll_data": msg.poll_data,
+                    "poll_data": msg.poll_data, "reactions": msg.reactions,
                 })
     except WebSocketDisconnect:
         manager.disconnect(room_id, ws)
