@@ -525,6 +525,15 @@ async function boot() {
           }
         });
       });
+
+      // The browser only re-fetches sw.js on its own when the page navigates,
+      // so a tab left open for a while would never notice a new deploy until
+      // the user manually reloads. Poll for updates ourselves so the banner
+      // shows up while the app is still open, not just after a reload.
+      setInterval(function() { reg.update().catch(function() {}); }, 60 * 1000);
+      document.addEventListener('visibilitychange', function() {
+        if (document.visibilityState === 'visible') reg.update().catch(function() {});
+      });
     }).catch(function() {});
 
     // SW sends SW_UPDATED after it claims all clients → reload to get fresh assets
