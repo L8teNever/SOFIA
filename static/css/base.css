@@ -102,7 +102,11 @@ body {
 @media (min-width: 780px) {
   .app-container {
     max-width: 960px; padding: 0 28px 32px 28px; margin: auto;
-    background: rgba(255,255,255,0.02);
+    /* Flat and matched to .dashboard-header's background (both var(--m3-bg))
+       instead of a near-transparent overlay on the body gradient — that let
+       the gradient bleed through unevenly depending on scroll position,
+       making the card look like two different colors stitched together. */
+    background: var(--m3-bg);
     border-radius: 32px; height: auto; min-height: 100%;
   }
 }
@@ -118,8 +122,11 @@ body {
    the container itself has padding to spare. */
 .dashboard-header {
   position: sticky; top: 0; z-index: 50;
-  backdrop-filter: blur(12px);
-  background: rgba(28,27,31,0.8);
+  /* Opaque and matched to the app's base color — a translucent/blurred
+     background here let the body's radial gradient bleed through unevenly
+     depending on scroll position, showing up as a visible seam against the
+     rest of the (equally dark, but not gradient-tinted) card. */
+  background: var(--m3-bg);
   margin: 0 -16px;
   padding: 40px 20px 16px 20px;
   transition: transform 0.35s cubic-bezier(0.2,0.8,0.2,1), opacity 0.35s;
