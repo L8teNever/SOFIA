@@ -317,12 +317,26 @@
 
   /* Desktop Split Pane Interface */
   @media (min-width: 900px) {
+    /* base.css floats every .page as a centered, rounded, inset card once the
+       viewport hits 1100px — override it here so chat always fills the full
+       browser width/height on tablet and desktop instead of shrinking into
+       a card with margins around it. */
+    #page-chat, #page-chat-room {
+      top: 0 !important;
+      left: 0 !important;
+      right: 0 !important;
+      bottom: 0 !important;
+      border-radius: 0 !important;
+      box-shadow: none !important;
+      border: none !important;
+    }
+
     #page-chat {
       display: flex !important;
       flex-direction: row !important;
       padding: 0 !important;
     }
-    
+
     .chat-layout-wrapper {
       display: flex;
       width: 100%;
