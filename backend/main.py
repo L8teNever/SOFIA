@@ -7,7 +7,7 @@ from backend.database import init_db
 from backend.config import settings
 from backend.auth import get_current_user
 from backend.models.user import User
-from backend.routes import auth_routes, users, classes, subjects, calendar, homework, grades, messages, files, vapid, admin, timetable
+from backend.routes import auth_routes, users, classes, subjects, calendar, homework, grades, files, vapid, admin, timetable
 from backend.routes.timetable import poll_cancelled_lessons_loop
 import os, time, mimetypes, asyncio
 
@@ -28,7 +28,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Sofia", lifespan=lifespan)
 
 # API routes
-for r in [auth_routes, users, classes, subjects, calendar, homework, grades, messages, files, vapid, admin, timetable]:
+for r in [auth_routes, users, classes, subjects, calendar, homework, grades, files, vapid, admin, timetable]:
     app.include_router(r.router)
 
 # Static files

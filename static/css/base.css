@@ -221,8 +221,10 @@ body.has-update-banner { padding-top: 52px; transition: padding-top 0.3s ease; }
   transform: scale(0.05);
   transition: transform 0.55s var(--m3-easing), opacity 0.35s var(--m3-easing), border-radius 0.5s var(--m3-easing);
 }
-/* Tablet (landscape + portrait): full-screen pages, no card floating */
-@media (min-width: 700px) and (max-width: 1099px) {
+/* Tablet and desktop: full-screen pages, no floating popup card — a
+   subpage should use the whole window, not shrink into an inset card with
+   dark margins around it. */
+@media (min-width: 700px) {
   .page {
     top: 0; bottom: 0;
     left: 0; right: 0;
@@ -231,19 +233,6 @@ body.has-update-banner { padding-top: 52px; transition: padding-top 0.3s ease; }
   }
   .page.active  { border-radius: 0; }
   .page.closing { border-radius: 0; }
-}
-/* Desktop: floating card style */
-@media (min-width: 1100px) {
-  .page {
-    top: 24px; bottom: 24px;
-    left: max(24px, calc(50% - 600px));
-    right: max(24px, calc(50% - 600px));
-    border-radius: 32px;
-    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
-    border: 1px solid rgba(0, 0, 0, 0.06);
-  }
-  .page.active  { border-radius: 32px; }
-  .page.closing { border-radius: 32px; }
 }
 .page.active  { transform: scale(1); opacity: 1; pointer-events: all; }
 .page.closing { transform: scale(0.05); opacity: 0; }
@@ -261,6 +250,12 @@ body.has-update-banner { padding-top: 52px; transition: padding-top 0.3s ease; }
     column-count: 2; column-gap: 24px;
   }
   .page-scroll > * { break-inside: avoid; -webkit-column-break-inside: avoid; }
+  /* The list wrapper itself (.page-scroll's direct child, e.g. #hw-list)
+     is usually far taller than one column, so the browser can't honor
+     break-inside:avoid on it and falls back to splitting mid-card instead.
+     Apply the same avoid rule one level deeper, on the actual cards, so
+     each card stays intact even when its wrapper has to break. */
+  .page-scroll > * > * { break-inside: avoid; -webkit-column-break-inside: avoid; }
   .page-scroll .section-label,
   .page-scroll > .full-span { column-span: all; }
   /* Limit column width for readability on wide tablets */

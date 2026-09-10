@@ -8,7 +8,6 @@ Eine Progressive Web App (PWA) fuer Schulklassen mit FastAPI-Backend.
 - **Hausaufgaben** – Eintragen, abhaken, Erinnerungen
 - **Noten** – Private Notenverwaltung mit Durchschnitt
 - **Stundenplan** – WebUntis-Integration
-- **Chat** – Echtzeit-Chat mit Sprachnachrichten
 - **QuickShare** – Temporaeres Datei-Teilen
 - **Push-Benachrichtigungen** – Erinnerungen per Browser-Push
 - **PWA** – Installierbar auf Mobil & Desktop

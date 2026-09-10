@@ -147,12 +147,6 @@ window.addEventListener('popstate', (e) => {
     return;
   }
 
-  // If a chat room is open, close it instead of the whole page
-  if (typeof closeChatRoom === 'function' && document.getElementById('page-chat-room')) {
-    closeChatRoom(true);
-    return;
-  }
-  
   const page = document.querySelector('.page.active');
   if (page) { 
     page.classList.remove('active'); 
@@ -455,7 +449,7 @@ function runIntro() {
   }, charIdx * 45 + 700);
 }
 
-const KNOWN_PAGES = ['calendar','homework','grades','timetable','chat','drive','quickshare','settings','admin','notifications'];
+const KNOWN_PAGES = ['calendar','homework','grades','timetable','drive','quickshare','settings','admin','notifications'];
 
 function showApp() {
   document.getElementById('app').classList.add('ready');

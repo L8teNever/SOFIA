@@ -19,13 +19,10 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     push_subscription = Column(String, nullable=True)
     avatar_url = Column(String, nullable=True)
-    muted_room_ids = Column(String, default="[]", server_default="[]")
-    muted_user_ids = Column(String, default="[]", server_default="[]")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     class_group = relationship("ClassGroup", back_populates="members")
     grades = relationship("Grade", back_populates="user", cascade="all, delete-orphan")
-    sent_messages = relationship("Message", foreign_keys="Message.sender_id", back_populates="sender")
     shared_files = relationship("SharedFile", back_populates="uploader", cascade="all, delete-orphan")
 
     @property

@@ -22,33 +22,14 @@ async def get_db():
         yield session
 
 async def init_db():
-    from backend.models import user, class_group, subject, calendar_event, homework, grade, message, shared_file, notification
+    from backend.models import user, class_group, subject, calendar_event, homework, grade, shared_file, notification
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         await _migrate_columns(conn)
 
 async def _migrate_columns(conn):
     from sqlalchemy import text
-    result = await conn.execute(text("PRAGMA table_info(messages)"))
-    existing = {row[1] for row in result.fetchall()}
-    if "reply_to_id" not in existing:
-        await conn.execute(text("ALTER TABLE messages ADD COLUMN reply_to_id INTEGER"))
-    if "edited" not in existing:
-        await conn.execute(text("ALTER TABLE messages ADD COLUMN edited BOOLEAN DEFAULT 0"))
-    if "deleted" not in existing:
-        await conn.execute(text("ALTER TABLE messages ADD COLUMN deleted BOOLEAN DEFAULT 0"))
-    if "waveform" not in existing:
-        await conn.execute(text("ALTER TABLE messages ADD COLUMN waveform JSON"))
-    if "poll_data" not in existing:
-        await conn.execute(text("ALTER TABLE messages ADD COLUMN poll_data JSON"))
-    if "reactions" not in existing:
-        await conn.execute(text("ALTER TABLE messages ADD COLUMN reactions JSON"))
-
     result_users = await conn.execute(text("PRAGMA table_info(users)"))
     existing_users = {row[1] for row in result_users.fetchall()}
-    if "muted_room_ids" not in existing_users:
-        await conn.execute(text("ALTER TABLE users ADD COLUMN muted_room_ids TEXT DEFAULT '[]'"))
-    if "muted_user_ids" not in existing_users:
-        await conn.execute(text("ALTER TABLE users ADD COLUMN muted_user_ids TEXT DEFAULT '[]'"))
     if "avatar_url" not in existing_users:
         await conn.execute(text("ALTER TABLE users ADD COLUMN avatar_url TEXT"))

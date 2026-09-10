@@ -9,8 +9,6 @@ class UserOut(BaseModel):
     display_name: Optional[str]
     role: str
     class_id: Optional[int]
-    muted_user_ids: Optional[str] = "[]"
-    muted_room_ids: Optional[str] = "[]"
     avatar_url: Optional[str] = None
     class Config: from_attributes = True
 
@@ -104,33 +102,6 @@ class GradeCreate(BaseModel):
     label: Optional[str] = None
     note: Optional[str] = None
     date: Optional[str] = None
-
-# Chat
-class ChatRoomOut(BaseModel):
-    id: int
-    name: Optional[str]
-    is_group: bool
-    member_ids: List[int]
-    is_muted: bool = False
-    class Config: from_attributes = True
-
-class MessageOut(BaseModel):
-    id: int
-    room_id: int
-    sender_id: int
-    content: Optional[str]
-    file_url: Optional[str]
-    file_type: Optional[str]
-    created_at: datetime
-    read_by: List[int]
-    reply_to_id: Optional[int] = None
-    reply_preview: Optional[dict] = None
-    edited: bool = False
-    deleted: bool = False
-    waveform: Optional[List[int]] = None
-    poll_data: Optional[dict] = None
-    reactions: Optional[dict] = None
-    class Config: from_attributes = True
 
 # Shared Files
 class SharedFileOut(BaseModel):
