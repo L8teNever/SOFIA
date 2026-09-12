@@ -176,14 +176,17 @@ body.has-update-banner { padding-top: 52px; transition: padding-top 0.3s ease; }
   .dashboard-header { margin: 0 -36px; padding: 16px 24px 12px 24px; }
 }
 
-/* Widget grid */
+/* Widget grid — 2 columns on mobile, 4 from tablet up (unchanged at
+   desktop: every widget below is a plain 1x1 square or a 2-wide calendar
+   banner, so 4 columns divides them evenly at every width from 600px on;
+   see the .w-full-span comment below for the exact math). */
 .widget-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 14px; --gg: 14px;
 }
 @media (min-width: 600px)  { .widget-grid { grid-template-columns: repeat(4, 1fr); gap: 18px; --gg: 18px; } }
-@media (min-width: 1100px) { .widget-grid { grid-template-columns: repeat(6, 1fr); gap: 20px; --gg: 20px; } }
+@media (min-width: 1100px) { .widget-grid { gap: 20px; --gg: 20px; } }
 /* Grid items default to min-width:auto, which lets a widget's own content
    (e.g. a longer subject/file name) refuse to shrink below its min-content
    width — with equal 1fr tracks that shows up as some columns rendering
@@ -206,51 +209,49 @@ body.has-update-banner { padding-top: 52px; transition: padding-top 0.3s ease; }
 .w-big-square { grid-column: span 1; aspect-ratio: 1/1; flex-direction: column; justify-content: space-between; padding: 26px; }
 .w-square     { aspect-ratio: 1/1; flex-direction: column; justify-content: space-between; padding: 20px; }
 .w-half    { aspect-ratio: 2/1; flex-direction: row; align-items: center; padding: 14px; gap: 12px; }
-.w-compact { aspect-ratio: 2.1/1; flex-direction: row; align-items: center; padding: 14px; gap: 14px; }
-@media (min-width: 600px)  { .w-full-span { grid-column: span 4; aspect-ratio: 3/1; } }
-/* At 6 desktop columns, a full-width banner leaves the row below it one
-   widget short of filling the grid (5 single-width widgets in 6 columns).
-   Narrowing the calendar banner to 2 columns — same height as a normal
-   widget row, not the tall banner shape — makes it sit alongside the first
-   two square widgets instead, so calendar(2) + 4 more single-width widgets
-   (with Drive/Share kept stacked as one, see .w-stack below) adds up to
-   exactly 6 and fills the row completely. Below 1100px the row already
-   divides evenly (4 = 4, 2+2 = 2+2), so the full-width banner stays as is. */
-@media (min-width: 1100px) { .w-full-span { grid-column: span 2; aspect-ratio: 2/1; } }
+/* Calendar banner: 2 columns wide, same height as a normal square widget
+   row (not the tall 3/1 banner shape) from tablet up. At 4 columns that's
+   calendar(2) + 2 single-width widgets filling row one, then the other 4
+   single-width widgets filling row two exactly. Below 600px the row
+   already divides evenly (calendar spans the full 2-column row on its
+   own), so the tall banner shape stays there.
+   Height: a fixed aspect-ratio here (e.g. 2/1) is only an approximation —
+   it ignores the column gap, so a 2-column-wide box always comes out a bit
+   taller than a 1-column-wide square (whose aspect-ratio:1/1 height already
+   nets out the gap for that column). Dropping the aspect-ratio and letting
+   the item use the grid's default stretch sizing instead makes it match
+   its square row-mates' height exactly, since they always share a row with
+   it and their aspect-ratio:1/1 height sets the row's height. */
+@media (min-width: 600px) { .w-full-span { grid-column: span 2; aspect-ratio: auto; } }
 
-/* Stack: two half-widgets vertically in the same square footprint. Kept
-   stacked at every breakpoint (including desktop) so the grid always adds
-   up to a whole number of columns — see the .w-full-span comment above for
-   the exact math this and the calendar banner's width are tuned against. */
-.w-stack { display: grid; grid-template-rows: 1fr 1fr; gap: var(--gg, 14px); aspect-ratio: 1/1; }
-.w-stack > .widget {
-  aspect-ratio: auto;
-  flex-direction: row;
-  align-items: center;
-}
-.w-stack > .widget .icon-box { width: 40px !important; height: 40px !important; }
-/* .w-square's own justify-content:space-between (meant for its normal
-   column layout: icon on top, text at the bottom) survives the flip to
-   row above since this override never touched that property — pushing the
-   text all the way to the far edge of the row instead of next to the icon.
-   Only .w-square needs this; .w-half/.w-compact already lay out with a
-   gap and no space-between. */
-.w-stack > .widget.w-square {
-  justify-content: flex-start;
-  gap: 12px;
-}
-/* The text wrapper next to the icon had no width limit of its own — fine
-   in the widget's normal column layout (full column width available), but
-   in the cramped stacked row it let long labels ("Stundenplan") overflow
-   past the box edge instead of truncating. */
-.w-stack > .widget.w-square > div:not(.icon-box) {
-  flex: 1;
-  min-width: 0;
-}
-.w-stack > .widget.w-square > div:not(.icon-box) > div {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+/* Drive + Share: same 1x1 square as every other widget from tablet up, but
+   a short half-height bar on mobile — their content is a single short line
+   each, not enough to justify a full square on the narrowest screens. Each
+   stays its own separate grid item (not merged into a shared cell), so the
+   two sit side by side in the same row, just shorter — not stacked. */
+@media (max-width: 599.98px) {
+  .w-mobile-half {
+    aspect-ratio: 2/1;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 12px;
+    padding: 14px;
+  }
+  .w-mobile-half .icon-box { width: 40px !important; height: 40px !important; }
+  /* The text wrapper next to the icon had no width limit of its own — fine
+     in the widget's normal column layout (full column width available),
+     but in this cramped row it would let a longer label overflow past the
+     box edge instead of truncating. */
+  .w-mobile-half > div:not(.icon-box) {
+    flex: 1;
+    min-width: 0;
+  }
+  .w-mobile-half > div:not(.icon-box) > div {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 }
 
 .icon-box {

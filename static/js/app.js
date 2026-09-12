@@ -435,7 +435,7 @@ function showNotActivated(email) {
     '</div>';
 }
 
-function runIntro() {
+function runIntro(deepLinkPromise) {
   const name = currentUser && (currentUser.display_name || currentUser.email.split('@')[0]);
   const lines = name ? ['Willkommen zurück,', name] : ['Willkommen zurück'];
   const container = document.getElementById('intro-text');
@@ -463,7 +463,16 @@ function runIntro() {
       c.style.transform = 'scale(1) translateY(0)';
     });
   });
-  setTimeout(function() {
+  setTimeout(async function() {
+    // If we're deep-linking straight to a subpage, wait for it to actually
+    // be open before the intro fades — it was kicked off back in boot(), in
+    // parallel with everything else, and sits at z-index 100 (well under
+    // the intro overlay's 2000) so it's invisible regardless of timing. In
+    // practice a same-origin page fetch finishes long before this animation
+    // does, so this normally resolves instantly; it's just a safety net for
+    // a slow connection so the dashboard never gets a chance to show through
+    // once the overlay actually starts fading.
+    if (deepLinkPromise) { try { await deepLinkPromise; } catch (e) {} }
     const overlay = document.getElementById('intro-overlay');
     overlay.style.opacity = '0';
     overlay.style.pointerEvents = 'none';
@@ -481,11 +490,10 @@ function showApp() {
   });
   if (window.lucide) lucide.createIcons();
   loadDashboard();
-  // Auto-open page if URL path matches a known page (e.g. navigating to /homework directly)
-  const urlPage = window.location.pathname.replace(/^\//, '').split('/')[0];
-  if (urlPage && KNOWN_PAGES.includes(urlPage)) {
-    setTimeout(function() { openPage(urlPage); }, 400);
-  }
+  // A deep link straight to a subpage (e.g. reloading on /homework) is
+  // already opened by now — kicked off back in boot(), before the intro
+  // even finished — so there's nothing to auto-open here anymore; see
+  // runIntro()/boot() for that.
 
   // Auto-hide header on scroll down, reveal on scroll up
   const appEl = document.getElementById('app');
@@ -519,6 +527,16 @@ async function boot() {
     showNotActivated(email);
     return;
   }
+
+  // If we're landing directly on a known subpage's URL (e.g. reloading on
+  // /homework), start opening it now instead of waiting until after the
+  // intro animation and the dashboard's own reveal — it renders behind the
+  // intro overlay (z-index 100 vs. the overlay's 2000), so starting early
+  // is invisible either way, and it gives the fetch the whole rest of
+  // boot() + the intro animation to finish before anything becomes visible.
+  const urlPage = window.location.pathname.replace(/^\//, '').split('/')[0];
+  const deepLinkPromise = (urlPage && KNOWN_PAGES.includes(urlPage)) ? openPage(urlPage, null, true) : null;
+
   const didOnboard = await checkAndRunOnboarding();
   updateGreeting();
   if ('serviceWorker' in navigator) {
@@ -557,7 +575,7 @@ async function boot() {
   }
   await Push.init();
   refreshNotifBadge();
-  runIntro();
+  runIntro(deepLinkPromise);
 }
 
 function showUpdateBanner(swWaiting) {

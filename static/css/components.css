@@ -250,17 +250,6 @@
 /* Grade chip */
 .grade-badge { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 14px; font-weight: 700; font-size: 1.1rem; }
 
-/* Tablet adjustments to prevent widget title truncation */
-@media (min-width: 600px) and (max-width: 900px) {
-  .w-compact, .w-half {
-    padding: 10px !important;
-    gap: 8px !important;
-  }
-  .w-compact .widget-title, .w-half .widget-title {
-    font-size: 0.78rem !important;
-  }
-}
-
 /* Timetable week grid improvements on tablet */
 @media (min-width: 600px) {
   .week-grid {
