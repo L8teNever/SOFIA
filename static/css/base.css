@@ -50,7 +50,12 @@ body {
     background: radial-gradient(circle at 20% 0%, #2a2235 0%, #1c1b1f 60%);
     padding: 24px;
     align-items: center;
-    height: auto; min-height: 100vh;
+    /* 100vh is the largest the viewport could ever be, ignoring a tablet
+       browser's address/tab bar when it's showing — sizing to that made
+       the page a few px taller than what's actually visible, just enough
+       to force a scroll despite everything otherwise fitting. dvh tracks
+       the real visible viewport instead. */
+    height: auto; min-height: 100dvh;
     overflow: auto;
   }
 }
