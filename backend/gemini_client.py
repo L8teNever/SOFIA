@@ -12,7 +12,7 @@ GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:ge
 
 PROMPT = """This image is a school cafeteria's weekly lunch menu ("Speiseplan"), in German.
 
-Extract ONLY the LUNCH ("Mittagessen") items for each day. If the image also
+Extract the lunch items ("Mittagessen") for each day shown. If the image also
 shows breakfast or dinner ("Abendessen") sections, ignore those entirely.
 
 For each day shown, read its actual calendar date directly from the image
@@ -21,16 +21,31 @@ For each day shown, read its actual calendar date directly from the image
 "Speiseplan vom 13.07. bis 19.07." header) or assume the current year if
 nothing else indicates otherwise. Today's date is {today} — use that only as
 a fallback reference for inferring an ambiguous year, not as the date of any
-specific day.
+specific day. Skip weekend columns only if they carry no menu at all.
 
-If a day offers multiple menu options (e.g. "Menü 1"/"Menü 2", or dietary
-variants like vegetarian/diabetic/halal), combine them into one short, readable
-description separated by " / ". Keep soup and dessert out of the description
-unless there is nothing else for that day. Skip weekend columns only if they
-carry no menu at all (e.g. just "WE MENÜ" placeholders with no actual dish).
+For each day, carefully identify the dishes and categorize them into:
+- soup: Suppe / Tagessuppe / Vorspeise (if available)
+- main: Hauptgericht / Menü 1 / Vollkost / Normal
+- vegetarian: Vegetarisches Gericht / Menü 2 / Veggie (if available)
+- muslim: Muslimisch / Schweinefleischfrei / Geflügel / Rind / Halal (if specifically indicated or offered as an alternative)
+- diabetic: Diabetiker / Schonkost / Leichte Vollkost / Vital (if indicated)
+- dessert: Dessert / Nachspeise / Obst / Pudding (if available)
+
+If multiple components belong to one meal (e.g. main dish + side dishes), combine them into a clear description (e.g. "Cordon bleu vom Schwein mit Pommes frites und Salatteller"). If a category is not present on that day, omit it or set it to null.
 
 Respond with ONLY a JSON array (no markdown fences, no commentary), like:
-[{{"date": "2026-07-20", "meal": "Cordon bleu vom Schwein, Pommes frites, Salatteller"}}, ...]
+[
+  {{
+    "date": "2026-07-20",
+    "soup": "Grießnockerlsuppe",
+    "main": "Cordon bleu vom Schwein mit Pommes frites",
+    "vegetarian": "Gemüselasagne mit Beilagensalat",
+    "muslim": "Puten-Cordon-bleu mit Pommes frites",
+    "diabetic": "Gegrillte Hähnchenbrust mit Brokkoli",
+    "dessert": "Obstsalat"
+  }},
+  ...
+]
 """
 
 class GeminiError(Exception):
@@ -147,13 +162,37 @@ async def extract_meal_days(image_bytes: bytes, mime_type: str) -> list[dict]:
 
     days = []
     for item in parsed if isinstance(parsed, list) else []:
-        d, m = item.get("date"), item.get("meal")
-        if d and m:
-            d_str = str(d).strip()
-            if re.match(r'^\d{2}\.\d{2}\.\d{4}$', d_str):
-                parts = d_str.split(".")
-                d_str = f"{parts[2]}-{parts[1]}-{parts[0]}"
-            days.append({"date": d_str, "meal": str(m).strip()})
+        if not isinstance(item, dict):
+            continue
+        d = item.get("date")
+        if not d:
+            continue
+        d_str = str(d).strip()
+        if re.match(r'^\d{2}\.\d{2}\.\d{4}$', d_str):
+            parts = d_str.split(".")
+            d_str = f"{parts[2]}-{parts[1]}-{parts[0]}"
+
+        lines = []
+        if item.get("soup"):
+            lines.append(f"Suppe: {str(item['soup']).strip()}")
+        if item.get("main"):
+            lines.append(f"Hauptgericht: {str(item['main']).strip()}")
+        elif item.get("meal"):
+            lines.append(f"Hauptgericht: {str(item['meal']).strip()}")
+        if item.get("vegetarian"):
+            lines.append(f"Vegetarisch: {str(item['vegetarian']).strip()}")
+        if item.get("muslim"):
+            lines.append(f"Muslimisch: {str(item['muslim']).strip()}")
+        if item.get("diabetic"):
+            lines.append(f"Diabetiker: {str(item['diabetic']).strip()}")
+        if item.get("dessert"):
+            lines.append(f"Dessert: {str(item['dessert']).strip()}")
+
+        if not lines and item.get("meal"):
+            lines.append(str(item["meal"]).strip())
+
+        if lines:
+            days.append({"date": d_str, "meal": "\n".join(lines)})
 
     if not days:
         raise GeminiError("Es konnten keine Tage aus dem Bild erkannt werden")

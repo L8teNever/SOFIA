@@ -79,12 +79,87 @@
     background: rgba(0,0,0,0.05); border: none; border-radius: 10px; width: 30px; height: 30px;
     display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0;
   }
-  .meal-edited-badge { font-size: 0.65rem; opacity: 0.45; margin-top: 4px; }
+  .meal-edited-badge { font-size: 0.65rem; opacity: 0.45; margin-top: 6px; }
+  .meal-cat-item { margin-bottom: 8px; }
+  .meal-cat-item:last-child { margin-bottom: 0; }
+  .meal-cat-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 0.68rem; font-weight: 700; padding: 2px 7px;
+    border-radius: 6px; margin-bottom: 2px; letter-spacing: 0.02em;
+  }
+  .meal-cat-desc {
+    font-size: 0.88rem; color: #1c1b1f; line-height: 1.35; padding-left: 2px;
+  }
   </style>
 </div>
 <script>
 let mealPlan = null;
 let mealCanDelete = false;
+
+const MEAL_CATEGORY_CONFIG = {
+  'suppe':        { label: 'Suppe',        bg: '#fff3e0', color: '#b26a00', icon: '🍲' },
+  'hauptgericht': { label: 'Menü 1',       bg: '#e8f0fe', color: '#1a73e8', icon: '🍽️' },
+  'menü':         { label: 'Menü',         bg: '#e8f0fe', color: '#1a73e8', icon: '🍽️' },
+  'menü 1':       { label: 'Menü 1',       bg: '#e8f0fe', color: '#1a73e8', icon: '🍽️' },
+  'menü 2':       { label: 'Menü 2',       bg: '#e8f5e9', color: '#2e7d32', icon: '🌱' },
+  'vegetarisch':  { label: 'Vegetarisch',  bg: '#e8f5e9', color: '#2e7d32', icon: '🌱' },
+  'veggie':       { label: 'Veggie',       bg: '#e8f5e9', color: '#2e7d32', icon: '🌱' },
+  'muslimisch':   { label: 'Muslimisch',   bg: '#e0f2f1', color: '#00695c', icon: '🌙' },
+  'halal':        { label: 'Halal',        bg: '#e0f2f1', color: '#00695c', icon: '🌙' },
+  'diabetiker':   { label: 'Diabetiker',   bg: '#ede7f6', color: '#512da8', icon: '🩺' },
+  'schonkost':    { label: 'Schonkost',    bg: '#ede7f6', color: '#512da8', icon: '🩺' },
+  'vital':        { label: 'Vital',        bg: '#ede7f6', color: '#512da8', icon: '🩺' },
+  'dessert':      { label: 'Dessert',      bg: '#fce4ec', color: '#c2185b', icon: '🍨' },
+  'nachtisch':    { label: 'Dessert',      bg: '#fce4ec', color: '#c2185b', icon: '🍨' },
+};
+
+function formatMealDayHtml(rawMeal) {
+  if (!rawMeal) return '<span style="opacity:0.5;">Keine Angaben</span>';
+  const lines = rawMeal.split('\n').map(l => l.trim()).filter(Boolean);
+
+  let hasCategories = false;
+  const parsed = lines.map(line => {
+    const match = line.match(/^([^:]+):\s*(.*)$/);
+    if (match) {
+      const key = match[1].toLowerCase().trim();
+      if (MEAL_CATEGORY_CONFIG[key]) {
+        hasCategories = true;
+        return { cfg: MEAL_CATEGORY_CONFIG[key], text: match[2].trim() };
+      }
+    }
+    return { cfg: null, text: line };
+  });
+
+  if (!hasCategories) {
+    if (rawMeal.includes(' / ')) {
+      const parts = rawMeal.split(' / ').map(p => p.trim()).filter(Boolean);
+      return parts.map((p, idx) => `
+        <div class="meal-cat-item">
+          <div class="meal-cat-badge" style="background:rgba(7,39,17,0.06);color:#072711;">
+            Gericht ${idx + 1}
+          </div>
+          <div class="meal-cat-desc">${escapeHtml(p)}</div>
+        </div>
+      `).join('');
+    }
+    return `<div class="meal-cat-desc">${escapeHtml(rawMeal)}</div>`;
+  }
+
+  return parsed.map(item => {
+    if (item.cfg) {
+      return `
+        <div class="meal-cat-item">
+          <div class="meal-cat-badge" style="background:${item.cfg.bg};color:${item.cfg.color};">
+            <span>${item.cfg.icon}</span>
+            <span>${item.cfg.label}</span>
+          </div>
+          <div class="meal-cat-desc">${escapeHtml(item.text)}</div>
+        </div>
+      `;
+    }
+    return `<div class="meal-cat-desc" style="margin-bottom:4px;">${escapeHtml(item.text)}</div>`;
+  }).join('');
+}
 
 async function init_mealplan() {
   const me = await API.me().catch(() => null);
@@ -126,7 +201,19 @@ function renderMealPlan(res) {
   if (deleteBtn) deleteBtn.style.display = mealCanDelete ? 'flex' : 'none';
 
   const todayMeal = (res && res.today && res.today.meal) || null;
-  if (sub) sub.textContent = todayMeal ? 'Heute: ' + todayMeal : 'Kein Essen für heute im Plan';
+  if (sub) {
+    if (!todayMeal) {
+      sub.textContent = 'Kein Essen für heute im Plan';
+    } else {
+      const lines = todayMeal.split('\n').map(l => l.trim()).filter(Boolean);
+      let found = null;
+      for (const l of lines) {
+        const m = l.match(/^(?:hauptgericht|menü|menü 1):\s*(.*)/i);
+        if (m) { found = m[1]; break; }
+      }
+      sub.textContent = 'Heute: ' + (found || (lines[0] ? lines[0].replace(/^[^:]+:\s*/, '') : todayMeal));
+    }
+  }
 
   const days = [...mealPlan.days].sort((a, b) => a.date.localeCompare(b.date));
   document.getElementById('meal-days-list').innerHTML = days.map(d => {
@@ -137,7 +224,7 @@ function renderMealPlan(res) {
         <div class="meal-day-num">${num}.</div>
       </div>
       <div class="meal-day-text">
-        ${escapeHtml(d.meal)}
+        ${formatMealDayHtml(d.meal)}
         ${d.edited ? '<div class="meal-edited-badge">✓ Manuell angepasst</div>' : ''}
       </div>
       <button class="meal-day-edit-btn" onclick="editMealDay(${d.id})"><i data-lucide="pencil" style="width:14px;height:14px;"></i></button>
@@ -174,7 +261,11 @@ function editMealDay(dayId) {
   const { weekday, num } = mealFormatDate(day.date);
   openSheet(`
     <div class="sheet-title">${weekday}, ${num}. — Essen bearbeiten</div>
-    <textarea class="m3-input" id="meal-edit-text" rows="4" style="resize:none;height:auto;">${escapeHtml(day.meal)}</textarea>
+    <div style="font-size:0.75rem;opacity:0.6;margin-bottom:8px;line-height:1.4;">
+      Tipp: Zeilen können mit einer Kategorie beginnen, z.&nbsp;B.:<br>
+      <code>Suppe: ...</code>, <code>Hauptgericht: ...</code>, <code>Vegetarisch: ...</code>, <code>Muslimisch: ...</code>, <code>Diabetiker: ...</code>, <code>Dessert: ...</code>
+    </div>
+    <textarea class="m3-input" id="meal-edit-text" rows="6" style="resize:none;height:auto;font-family:inherit;line-height:1.4;">${escapeHtml(day.meal)}</textarea>
     <button class="m3-btn-full" onclick="saveMealDay(${dayId})">Speichern</button>
   `);
 }

@@ -401,7 +401,17 @@ async function loadDashboard() {
     API.mealplanCurrent().then(res => {
       const el = document.getElementById('w-meal-today');
       if (!el) return;
-      el.textContent = (res && res.today && res.today.meal) ? res.today.meal : 'Kein Plan für heute';
+      if (!res || !res.today || !res.today.meal) {
+        el.textContent = 'Kein Plan für heute';
+        return;
+      }
+      const lines = res.today.meal.split('\n').map(l => l.trim()).filter(Boolean);
+      let found = null;
+      for (const l of lines) {
+        const m = l.match(/^(?:hauptgericht|menü|menü 1):\s*(.*)/i);
+        if (m) { found = m[1]; break; }
+      }
+      el.textContent = (found || (lines[0] ? lines[0].replace(/^[^:]+:\s*/, '') : res.today.meal)).trim();
     }).catch(() => {});
   } catch (e) {}
 }
