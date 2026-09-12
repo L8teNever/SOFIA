@@ -3,7 +3,8 @@ day-by-day table. Uses plain httpx instead of the google-generativeai SDK to
 avoid an extra dependency for what's a single API call."""
 from backend.config import settings
 from datetime import date
-import httpx, json, logging
+from PIL import Image, ImageOps
+import httpx, json, logging, base64, io, re
 
 logger = logging.getLogger(__name__)
 
@@ -35,16 +36,41 @@ Respond with ONLY a JSON array (no markdown fences, no commentary), like:
 class GeminiError(Exception):
     pass
 
+def _optimize_image(image_bytes: bytes) -> tuple[bytes, str]:
+    """Ensures image is in a supported format (JPEG), auto-rotated according to EXIF,
+    and downscaled if oversized to stay within payload limits and ensure fast OCR."""
+    try:
+        img = Image.open(io.BytesIO(image_bytes))
+        img = ImageOps.exif_transpose(img)
+        if img.mode not in ("RGB", "L"):
+            img = img.convert("RGB")
+        max_dim = 2048
+        w, h = img.size
+        if max(w, h) > max_dim:
+            scale = max_dim / max(w, h)
+            new_size = (int(w * scale), int(h * scale))
+            img = img.resize(new_size, Image.Resampling.LANCZOS)
+
+        out = io.BytesIO()
+        img.save(out, format="JPEG", quality=85, optimize=True)
+        return out.getvalue(), "image/jpeg"
+    except Exception as e:
+        logger.warning("Konnte Bild nicht via Pillow vorverarbeiten: %s", e)
+        return image_bytes, "image/jpeg"
+
 async def extract_meal_days(image_bytes: bytes, mime_type: str) -> list[dict]:
     if not settings.gemini_api_key:
-        raise GeminiError("Gemini ist nicht konfiguriert (GEMINI_API_KEY fehlt)")
+        logger.error("Gemini API key is missing. Set GEMINI_API_KEY in your .env and recreate container.")
+        raise GeminiError("Gemini ist nicht konfiguriert (GEMINI_API_KEY fehlt in Umgebungsvariablen)")
 
-    import base64
+    # Optimize and normalize image (JPEG format, proper rotation, reasonable size)
+    optimized_bytes, target_mime = _optimize_image(image_bytes)
+
     body = {
         "contents": [{
             "parts": [
                 {"text": PROMPT.format(today=date.today().isoformat())},
-                {"inline_data": {"mime_type": mime_type, "data": base64.b64encode(image_bytes).decode()}},
+                {"inline_data": {"mime_type": target_mime, "data": base64.b64encode(optimized_bytes).decode()}},
             ]
         }],
         "generationConfig": {"temperature": 0.1, "responseMimeType": "application/json"},
@@ -55,18 +81,42 @@ async def extract_meal_days(image_bytes: bytes, mime_type: str) -> list[dict]:
         resp = await client.post(url, params={"key": settings.gemini_api_key}, json=body)
 
     if resp.status_code != 200:
-        logger.warning("Gemini request failed: %s %s", resp.status_code, resp.text[:500])
-        raise GeminiError(f"Gemini-Anfrage fehlgeschlagen ({resp.status_code})")
+        err_msg = ""
+        try:
+            err_json = resp.json()
+            err_msg = err_json.get("error", {}).get("message", "")
+        except Exception:
+            err_msg = resp.text[:200]
+        logger.warning("Gemini request failed (%s): %s", resp.status_code, err_msg or resp.text[:500])
+        detail = f"Gemini-Anfrage fehlgeschlagen ({resp.status_code})"
+        if err_msg:
+            detail += f": {err_msg}"
+        raise GeminiError(detail)
 
     data = resp.json()
+    candidates = data.get("candidates", [])
+    if not candidates:
+        prompt_feedback = data.get("promptFeedback", {})
+        block_reason = prompt_feedback.get("blockReason", "Keine Antwort")
+        raise GeminiError(f"Gemini hat die Bilderkennung blockiert ({block_reason})")
+
+    first_cand = candidates[0]
+    finish_reason = first_cand.get("finishReason")
+    if finish_reason and finish_reason not in ("STOP", "MAX_TOKENS"):
+        raise GeminiError(f"Gemini-Verarbeitung abgebrochen ({finish_reason})")
+
     try:
-        text = data["candidates"][0]["content"]["parts"][0]["text"]
+        text = first_cand["content"]["parts"][0]["text"]
     except (KeyError, IndexError):
         logger.warning("Unexpected Gemini response shape: %s", str(data)[:500])
         raise GeminiError("Gemini hat keine verwertbare Antwort geliefert")
 
     text = text.strip()
-    if text.startswith("```"):
+    # Extract JSON array using regex in case model wraps it in commentary or markdown
+    array_match = re.search(r'\[[\s\S]*\]', text)
+    if array_match:
+        text = array_match.group(0)
+    elif text.startswith("```"):
         text = text.strip("`")
         if text.startswith("json"):
             text = text[4:]
@@ -76,13 +126,18 @@ async def extract_meal_days(image_bytes: bytes, mime_type: str) -> list[dict]:
         parsed = json.loads(text)
     except json.JSONDecodeError:
         logger.warning("Could not parse Gemini JSON: %s", text[:500])
-        raise GeminiError("Konnte die Antwort von Gemini nicht lesen")
+        raise GeminiError("Konnte die Antwort von Gemini nicht als JSON lesen")
 
     days = []
     for item in parsed if isinstance(parsed, list) else []:
         d, m = item.get("date"), item.get("meal")
         if d and m:
-            days.append({"date": d, "meal": m})
+            d_str = str(d).strip()
+            if re.match(r'^\d{2}\.\d{2}\.\d{4}$', d_str):
+                parts = d_str.split(".")
+                d_str = f"{parts[2]}-{parts[1]}-{parts[0]}"
+            days.append({"date": d_str, "meal": str(m).strip()})
+
     if not days:
         raise GeminiError("Es konnten keine Tage aus dem Bild erkannt werden")
     return days

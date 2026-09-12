@@ -9,7 +9,12 @@ from backend.auth import get_current_user
 from backend.models.user import User
 from backend.routes import auth_routes, users, classes, subjects, calendar, homework, grades, files, vapid, admin, timetable, mealplan
 from backend.routes.timetable import poll_cancelled_lessons_loop
-import os, time, mimetypes, asyncio
+import os, time, mimetypes, asyncio, logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
 
 BUILD_TS = str(int(time.time()))
 
