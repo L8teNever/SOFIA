@@ -441,6 +441,11 @@ async function loadDashboard() {
     API.mealplanCurrent().then(res => {
       const el = document.getElementById('w-meal-today');
       if (!el) return;
+      const dayOfWeek = new Date().getDay();
+      if (dayOfWeek === 0 || dayOfWeek === 6) {
+        el.textContent = 'Wochenende';
+        return;
+      }
       if (!res || !res.today || !res.today.meal) {
         el.textContent = 'Kein Plan für heute';
         return;

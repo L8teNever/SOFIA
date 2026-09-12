@@ -9,7 +9,7 @@ from backend.models.user import User
 from backend.schemas import MealPlanOut, MealPlanDayOut, MealPlanDayUpdate
 from backend.config import settings
 from backend.gemini_client import extract_meal_days, GeminiError
-from datetime import date
+from datetime import date, datetime, timedelta
 from typing import Optional
 import os, uuid, aiofiles
 
@@ -51,6 +51,11 @@ async def upload_meal_plan(
     db.add(plan)
     await db.flush()
     for d in parsed_days:
+        try:
+            if datetime.fromisoformat(d["date"]).weekday() >= 5:
+                continue
+        except Exception:
+            pass
         db.add(MealPlanDay(plan_id=plan.id, date=d["date"], meal=d["meal"], edited=False))
     await db.commit()
     return await _get_plan(db, plan.id)
@@ -58,25 +63,57 @@ async def upload_meal_plan(
 
 @router.get("/current")
 async def current_meal_plan(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
-    today = date.today().isoformat()
+    today = date.today()
+    this_monday = today - timedelta(days=today.weekday())
+    this_sunday = this_monday + timedelta(days=6)
+    today_str = today.isoformat()
+    this_monday_str = this_monday.isoformat()
+    this_sunday_str = this_sunday.isoformat()
 
-    # Newest plan whose table includes today wins on overlap (e.g. next
-    # week's plan uploaded a few days early while this week's is still live).
+    # Find plans covering the current week (Monday - Sunday)
     result = await db.execute(
         select(MealPlanDay)
         .join(MealPlan)
-        .where(MealPlanDay.date == today)
+        .where(MealPlanDay.date >= this_monday_str, MealPlanDay.date <= this_sunday_str)
         .order_by(MealPlan.created_at.desc())
-        .limit(1)
     )
-    today_day = result.scalar_one_or_none()
+    current_week_days = result.scalars().all()
 
-    plan_id = today_day.plan_id if today_day else None
-    if plan_id is None:
-        latest = await db.execute(select(MealPlan.id).order_by(MealPlan.created_at.desc()).limit(1))
-        plan_id = latest.scalar_one_or_none()
+    plan_id = None
+    today_day = None
 
+    if current_week_days:
+        plan_id = current_week_days[0].plan_id
+        if today.weekday() < 5:
+            for d in current_week_days:
+                if d.plan_id == plan_id and d.date == today_str:
+                    today_day = d
+                    break
+    elif today.weekday() >= 5:
+        # On weekends (Sat/Sun), check if next week's plan was already uploaded
+        next_monday = this_monday + timedelta(days=7)
+        next_sunday = this_monday + timedelta(days=13)
+        res_next = await db.execute(
+            select(MealPlanDay)
+            .join(MealPlan)
+            .where(MealPlanDay.date >= next_monday.isoformat(), MealPlanDay.date <= next_sunday.isoformat())
+            .order_by(MealPlan.created_at.desc())
+            .limit(1)
+        )
+        next_day = res_next.scalar_one_or_none()
+        if next_day:
+            plan_id = next_day.plan_id
+
+    # If no plan exists for this week (or upcoming week on weekends), plan is None (resets!)
     plan = await _get_plan(db, plan_id) if plan_id else None
+
+    # Filter out Saturday and Sunday from the returned plan days
+    if plan and plan.days:
+        plan.days = [
+            d for d in plan.days
+            if datetime.fromisoformat(d.date).weekday() < 5
+        ]
+
     return {
         "today": MealPlanDayOut.model_validate(today_day) if today_day else None,
         "plan": MealPlanOut.model_validate(plan) if plan else None,

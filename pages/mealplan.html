@@ -13,8 +13,8 @@
   <div class="page-scroll-1col no-scrollbar"><div class="page-inner">
     <div id="meal-empty" style="display:none;text-align:center;padding:60px 20px;opacity:0.5;">
       <i data-lucide="utensils" style="width:48px;height:48px;margin-bottom:12px;display:block;margin-left:auto;margin-right:auto;"></i>
-      <div style="font-weight:600;">Noch kein Essensplan hochgeladen</div>
-      <div style="font-size:0.85rem;margin-top:4px;">Tippe unten auf Plus, um ein Foto hinzuzufügen.</div>
+      <div style="font-weight:600;" id="meal-empty-title">Noch kein Essensplan für diese Woche hochgeladen</div>
+      <div style="font-size:0.85rem;margin-top:4px;" id="meal-empty-sub">Tippe unten auf Plus, um den neuen Wochenplan hinzuzufügen.</div>
     </div>
 
     <!-- Active AI Loading State -->
@@ -187,11 +187,23 @@ function renderMealPlan(res) {
   const sub = document.getElementById('meal-header-sub');
 
   const deleteBtn = document.getElementById('meal-delete-btn');
+  const dayOfWeek = new Date().getDay(); // 0 = Sun, 6 = Sat
+  const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
 
-  if (!mealPlan || !mealPlan.days || !mealPlan.days.length) {
+  // Filter out Saturday and Sunday from the days list
+  const days = mealPlan && mealPlan.days
+    ? [...mealPlan.days]
+        .filter(d => {
+          const w = new Date(d.date + 'T00:00').getDay();
+          return w !== 0 && w !== 6;
+        })
+        .sort((a, b) => a.date.localeCompare(b.date))
+    : [];
+
+  if (!mealPlan || !days.length) {
     document.getElementById('meal-empty').style.display = 'block';
     document.getElementById('meal-content').style.display = 'none';
-    if (sub) sub.textContent = 'Kein Plan vorhanden';
+    if (sub) sub.textContent = isWeekend ? 'Wochenende – Noch kein Plan für nächste Woche' : 'Kein Plan für diese Woche vorhanden';
     if (deleteBtn) deleteBtn.style.display = 'none';
     return;
   }
@@ -202,8 +214,10 @@ function renderMealPlan(res) {
 
   const todayMeal = (res && res.today && res.today.meal) || null;
   if (sub) {
-    if (!todayMeal) {
-      sub.textContent = 'Kein Essen für heute im Plan';
+    if (isWeekend) {
+      sub.textContent = 'Wochenende – kein Mensa-Betrieb';
+    } else if (!todayMeal) {
+      sub.textContent = 'Heute kein Essen im Plan eingetragen';
     } else {
       const lines = todayMeal.split('\n').map(l => l.trim()).filter(Boolean);
       let found = null;
@@ -214,8 +228,6 @@ function renderMealPlan(res) {
       sub.textContent = 'Heute: ' + (found || (lines[0] ? lines[0].replace(/^[^:]+:\s*/, '') : todayMeal));
     }
   }
-
-  const days = [...mealPlan.days].sort((a, b) => a.date.localeCompare(b.date));
   document.getElementById('meal-days-list').innerHTML = days.map(d => {
     const { weekday, num } = mealFormatDate(d.date);
     return `<div class="meal-day-row ${d.date === today ? 'today' : ''}">

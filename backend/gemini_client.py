@@ -21,7 +21,7 @@ For each day shown, read its actual calendar date directly from the image
 "Speiseplan vom 13.07. bis 19.07." header) or assume the current year if
 nothing else indicates otherwise. Today's date is {today} — use that only as
 a fallback reference for inferring an ambiguous year, not as the date of any
-specific day. Skip weekend columns only if they carry no menu at all.
+specific day. Ignore weekend columns (Samstag / Sonntag, Saturday / Sunday) completely — only extract Monday through Friday ("Montag" bis "Freitag").
 
 For each day, carefully identify the dishes and categorize them into:
 - soup: Suppe / Tagessuppe / Vorspeise (if available)
@@ -171,6 +171,13 @@ async def extract_meal_days(image_bytes: bytes, mime_type: str) -> list[dict]:
         if re.match(r'^\d{2}\.\d{2}\.\d{4}$', d_str):
             parts = d_str.split(".")
             d_str = f"{parts[2]}-{parts[1]}-{parts[0]}"
+
+        # Skip Saturday (5) and Sunday (6)
+        try:
+            if date.fromisoformat(d_str).weekday() >= 5:
+                continue
+        except Exception:
+            pass
 
         lines = []
         if item.get("soup"):
