@@ -10,10 +10,72 @@ from backend.schemas import MealPlanOut, MealPlanDayOut, MealPlanDayUpdate
 from backend.config import settings
 from backend.gemini_client import extract_meal_days, GeminiError
 from datetime import date, datetime, timedelta
+import os, uuid, aiofiles, asyncio, logging
 from typing import Optional
-import os, uuid, aiofiles
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/mealplan", tags=["mealplan"])
+
+# In-memory background processing state
+upload_status = {
+    "status": "idle",  # "idle" | "processing" | "ready" | "error"
+    "message": "",
+    "started_at": None,
+    "error": None,
+    "plan_id": None,
+}
+
+
+async def _process_meal_plan_background(raw: bytes, content_type: str, filename: str, user_id: int):
+    global upload_status
+    try:
+        parsed_days = await extract_meal_days(raw, content_type)
+        from backend.database import AsyncSessionLocal
+        from backend.routes.vapid import push_to_users
+        from backend.models.user import User
+
+        async with AsyncSessionLocal() as db:
+            plan = MealPlan(image_url=f"/uploads/mealplan/{filename}", uploaded_by=user_id)
+            db.add(plan)
+            await db.flush()
+            for d in parsed_days:
+                try:
+                    if datetime.fromisoformat(d["date"]).weekday() >= 5:
+                        continue
+                except Exception:
+                    pass
+                db.add(MealPlanDay(plan_id=plan.id, date=d["date"], meal=d["meal"], edited=False))
+            await db.commit()
+
+            # Push notification to all users about the new meal plan
+            try:
+                res_users = await db.execute(select(User))
+                all_users = res_users.scalars().all()
+                if all_users:
+                    await push_to_users(
+                        db,
+                        all_users,
+                        "Neuer Speiseplan",
+                        "Der neue Speiseplan für die Woche ist jetzt verfügbar.",
+                    )
+            except Exception as e:
+                logger.warning("Konnte Push-Benachrichtigung für Speiseplan nicht versenden: %s", e)
+
+            upload_status["status"] = "ready"
+            upload_status["plan_id"] = plan.id
+            upload_status["message"] = "Speiseplan erfolgreich erkannt!"
+            upload_status["error"] = None
+            logger.info("Speiseplan erfolgreich im Hintergrund verarbeitet (Plan ID %s)", plan.id)
+    except GeminiError as e:
+        logger.error("Hintergrund-Verarbeitung Speiseplan fehlgeschlagen: %s", e)
+        upload_status["status"] = "error"
+        upload_status["error"] = str(e)
+        upload_status["message"] = f"Fehler bei KI-Erkennung: {e}"
+    except Exception as e:
+        logger.exception("Unerwarteter Fehler bei Hintergrund-Verarbeitung Speiseplan: %s", e)
+        upload_status["status"] = "error"
+        upload_status["error"] = "Unerwarteter Fehler bei der Bilderkennung"
+        upload_status["message"] = "Unerwarteter Fehler bei der Bilderkennung"
 
 
 async def _get_plan(db: AsyncSession, plan_id: int) -> Optional[MealPlan]:
@@ -23,22 +85,26 @@ async def _get_plan(db: AsyncSession, plan_id: int) -> Optional[MealPlan]:
     return result.scalar_one_or_none()
 
 
-@router.post("/upload", response_model=MealPlanOut)
+@router.post("/upload")
 async def upload_meal_plan(
     file: UploadFile = File(...),
-    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    global upload_status
     if not (file.content_type or "").startswith("image/"):
         raise HTTPException(400, "Nur Bilddateien erlaubt")
     raw = await file.read()
     if len(raw) > settings.max_file_size:
         raise HTTPException(413, "Datei zu groß")
 
-    try:
-        parsed_days = await extract_meal_days(raw, file.content_type)
-    except GeminiError as e:
-        raise HTTPException(422, str(e))
+    # If already processing within the last 90 seconds, reject concurrent uploads
+    if upload_status["status"] == "processing" and upload_status.get("started_at"):
+        try:
+            started = datetime.fromisoformat(upload_status["started_at"])
+            if (datetime.now() - started).total_seconds() < 90:
+                raise HTTPException(409, "Ein Speiseplan wird gerade bereits im Hintergrund verarbeitet.")
+        except Exception:
+            pass
 
     plan_dir = os.path.join(settings.upload_dir, "mealplan")
     os.makedirs(plan_dir, exist_ok=True)
@@ -47,76 +113,79 @@ async def upload_meal_plan(
     async with aiofiles.open(os.path.join(plan_dir, filename), "wb") as out:
         await out.write(raw)
 
-    plan = MealPlan(image_url=f"/uploads/mealplan/{filename}", uploaded_by=current_user.id)
-    db.add(plan)
-    await db.flush()
-    for d in parsed_days:
-        try:
-            if datetime.fromisoformat(d["date"]).weekday() >= 5:
-                continue
-        except Exception:
-            pass
-        db.add(MealPlanDay(plan_id=plan.id, date=d["date"], meal=d["meal"], edited=False))
-    await db.commit()
-    return await _get_plan(db, plan.id)
+    upload_status["status"] = "processing"
+    upload_status["message"] = "KI analysiert den Speiseplan im Hintergrund..."
+    upload_status["started_at"] = datetime.now().isoformat()
+    upload_status["error"] = None
+    upload_status["plan_id"] = None
+
+    asyncio.create_task(_process_meal_plan_background(raw, file.content_type, filename, current_user.id))
+
+    return {
+        "ok": True,
+        "status": "processing",
+        "message": "Foto hochgeladen! Die KI verarbeitet den Plan im Hintergrund.",
+    }
+
+
+@router.get("/status")
+async def meal_plan_status(current_user: User = Depends(get_current_user)):
+    return upload_status
 
 
 @router.get("/current")
 async def current_meal_plan(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     today = date.today()
     this_monday = today - timedelta(days=today.weekday())
-    this_sunday = this_monday + timedelta(days=6)
     today_str = today.isoformat()
     this_monday_str = this_monday.isoformat()
-    this_sunday_str = this_sunday.isoformat()
 
-    # Find plans covering the current week (Monday - Sunday)
-    result = await db.execute(
-        select(MealPlanDay)
-        .join(MealPlan)
-        .where(MealPlanDay.date >= this_monday_str, MealPlanDay.date <= this_sunday_str)
-        .order_by(MealPlan.created_at.desc())
+    # Find the most recently uploaded plan
+    res_latest = await db.execute(
+        select(MealPlan).order_by(MealPlan.created_at.desc()).limit(1)
     )
-    current_week_days = result.scalars().all()
+    latest_plan = res_latest.scalar_one_or_none()
 
-    plan_id = None
+    plan = None
     today_day = None
 
-    if current_week_days:
-        plan_id = current_week_days[0].plan_id
-        if today.weekday() < 5:
-            for d in current_week_days:
-                if d.plan_id == plan_id and d.date == today_str:
-                    today_day = d
-                    break
-    elif today.weekday() >= 5:
-        # On weekends (Sat/Sun), check if next week's plan was already uploaded
-        next_monday = this_monday + timedelta(days=7)
-        next_sunday = this_monday + timedelta(days=13)
-        res_next = await db.execute(
-            select(MealPlanDay)
-            .join(MealPlan)
-            .where(MealPlanDay.date >= next_monday.isoformat(), MealPlanDay.date <= next_sunday.isoformat())
-            .order_by(MealPlan.created_at.desc())
-            .limit(1)
-        )
-        next_day = res_next.scalar_one_or_none()
-        if next_day:
-            plan_id = next_day.plan_id
+    if latest_plan:
+        candidate_plan = await _get_plan(db, latest_plan.id)
+        if candidate_plan and candidate_plan.days:
+            created_recently = True
+            if latest_plan.created_at:
+                try:
+                    cat = latest_plan.created_at.replace(tzinfo=None)
+                    created_recently = (datetime.utcnow() - cat).days < 7
+                except Exception:
+                    created_recently = True
 
-    # If no plan exists for this week (or upcoming week on weekends), plan is None (resets!)
-    plan = await _get_plan(db, plan_id) if plan_id else None
+            max_date = max(d.date for d in candidate_plan.days)
+            # Show plan if uploaded recently or covers current/upcoming dates
+            if created_recently or max_date >= this_monday_str:
+                plan = candidate_plan
+                for d in plan.days:
+                    if d.date == today_str:
+                        today_day = d
+                        break
 
-    # Filter out Saturday and Sunday from the returned plan days
+    # Filter out Saturday and Sunday from the returned plan days safely
     if plan and plan.days:
-        plan.days = [
-            d for d in plan.days
-            if datetime.fromisoformat(d.date).weekday() < 5
-        ]
+        clean_days = []
+        for d in plan.days:
+            try:
+                if datetime.fromisoformat(d.date).weekday() < 5:
+                    clean_days.append(d)
+            except Exception:
+                clean_days.append(d)
+        plan.days = clean_days
 
     return {
         "today": MealPlanDayOut.model_validate(today_day) if today_day else None,
         "plan": MealPlanOut.model_validate(plan) if plan else None,
+        "status": upload_status["status"],
+        "status_message": upload_status["message"],
+        "status_error": upload_status["error"],
     }
 
 

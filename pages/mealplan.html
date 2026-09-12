@@ -1,8 +1,8 @@
-<div class="page" id="page-mealplan" style="background:#eafbf1;">
+<div class="page" id="page-mealplan" style="background:#f6faf7;">
   <div class="page-header">
     <button class="back-btn"><i data-lucide="arrow-left" style="width:22px;height:22px;"></i></button>
     <div style="flex:1;">
-      <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.5;color:#072711;" id="meal-header-sub">Essensplan</div>
+      <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.5;color:#072711;" id="meal-header-sub">Mensa Speiseplan</div>
       <span class="page-title" style="color:#072711;">Essensplan</span>
     </div>
     <button class="icon-btn" id="meal-delete-btn" onclick="deleteMealPlanConfirm()" style="display:none;color:#b3261e;">
@@ -10,43 +10,54 @@
     </button>
   </div>
 
+  <!-- Day selector chips for quick, clean navigation -->
+  <div style="padding:0 20px 10px;display:flex;gap:8px;overflow-x:auto;flex-shrink:0;" class="no-scrollbar" id="meal-day-chips">
+    <button onclick="mealFilter('all',this)" class="chip active" id="meal-chip-all">Ganze Woche</button>
+    <button onclick="mealFilter('today',this)" class="chip" id="meal-chip-today">Heute</button>
+    <button onclick="mealFilter('1',this)" class="chip" id="meal-chip-1">Mo</button>
+    <button onclick="mealFilter('2',this)" class="chip" id="meal-chip-2">Di</button>
+    <button onclick="mealFilter('3',this)" class="chip" id="meal-chip-3">Mi</button>
+    <button onclick="mealFilter('4',this)" class="chip" id="meal-chip-4">Do</button>
+    <button onclick="mealFilter('5',this)" class="chip" id="meal-chip-5">Fr</button>
+  </div>
+
   <div class="page-scroll-1col no-scrollbar"><div class="page-inner">
     <div id="meal-empty" style="display:none;text-align:center;padding:60px 20px;opacity:0.5;">
       <i data-lucide="utensils" style="width:48px;height:48px;margin-bottom:12px;display:block;margin-left:auto;margin-right:auto;"></i>
-      <div style="font-weight:600;" id="meal-empty-title">Noch kein Essensplan für diese Woche hochgeladen</div>
-      <div style="font-size:0.85rem;margin-top:4px;" id="meal-empty-sub">Tippe unten auf Plus, um den neuen Wochenplan hinzuzufügen.</div>
+      <div style="font-weight:700;font-size:1.05rem;" id="meal-empty-title">Noch kein Essensplan für diese Woche hochgeladen</div>
+      <div style="font-size:0.85rem;margin-top:4px;" id="meal-empty-sub">Tippe unten auf das Plus-Symbol, um ein Foto des Speiseplans hochzuladen.</div>
     </div>
 
-    <!-- Active AI Loading State -->
-    <div id="meal-loading" style="display:none;text-align:center;padding:40px 16px;">
-      <div class="m3-card" style="background:#ffffff;padding:28px 20px;border-radius:24px;border:1px solid rgba(7,39,17,0.08);max-width:360px;margin:0 auto;box-shadow:0 8px 24px rgba(7,39,17,0.06);">
+    <!-- Active AI Background Loading State -->
+    <div id="meal-loading" style="display:none;padding:24px 4px;">
+      <div class="m3-card" style="background:#ffffff;padding:28px 20px;border-radius:24px;border:1.5px solid #2e7d32;box-shadow:0 8px 24px rgba(7,39,17,0.08);text-align:center;">
         <div class="meal-spinner"></div>
-        <div style="font-weight:700;font-size:1.15rem;color:#072711;">Foto wird verarbeitet…</div>
-        <div style="font-size:0.86rem;color:#072711;opacity:0.75;margin-top:8px;line-height:1.45;">
-          Gemini liest die Wochentage und Gerichte aus dem Speiseplan. Bitte einen Moment Geduld…
+        <div style="font-weight:800;font-size:1.18rem;color:#072711;">KI analysiert im Hintergrund…</div>
+        <div style="font-size:0.88rem;color:#072711;opacity:0.85;margin-top:10px;line-height:1.5;">
+          Gemini liest den Speiseplan auf dem Server aus.<br>
+          <b>Du kannst diesen Tab oder die Seite jederzeit verlassen</b> – der Plan wird automatisch für alle gespeichert und freigeschaltet!
         </div>
       </div>
     </div>
 
     <div id="meal-content" style="display:none;">
-      <div class="section-label">Diese Woche</div>
       <div id="meal-days-list"></div>
 
-      <div class="section-label" style="margin-top:20px;">Original-Bild</div>
-      <div class="m3-card" style="padding:8px;cursor:pointer;" onclick="toggleMealImage()">
-        <div id="meal-image-toggle-row" style="display:flex;align-items:center;gap:10px;padding:6px;">
-          <div class="icon-box" style="width:36px;height:36px;background:rgba(7,39,17,0.08);flex-shrink:0;">
+      <div class="section-label" style="margin-top:24px;opacity:0.7;">Original-Aushang</div>
+      <div class="m3-card" style="padding:10px;cursor:pointer;background:#fff;border-radius:18px;" onclick="toggleMealImage()">
+        <div id="meal-image-toggle-row" style="display:flex;align-items:center;gap:10px;padding:4px 6px;">
+          <div class="icon-box" style="width:38px;height:38px;background:rgba(7,39,17,0.08);flex-shrink:0;">
             <i data-lucide="image" style="width:18px;height:18px;color:#072711;"></i>
           </div>
-          <span style="flex:1;font-weight:600;font-size:0.85rem;">Foto anzeigen, falls etwas falsch erkannt wurde</span>
+          <span style="flex:1;font-weight:600;font-size:0.88rem;color:#072711;">Foto des Speiseplans anzeigen</span>
           <i data-lucide="chevron-down" style="width:18px;height:18px;opacity:0.5;" id="meal-image-chevron"></i>
         </div>
-        <img id="meal-image" style="display:none;width:100%;border-radius:16px;margin-top:6px;">
+        <img id="meal-image" style="display:none;width:100%;border-radius:14px;margin-top:10px;">
       </div>
     </div>
   </div></div>
 
-  <label class="fab" id="meal-fab" style="cursor:pointer;">
+  <label class="fab" id="meal-fab" style="cursor:pointer;" title="Neuen Speiseplan hochladen">
     <i data-lucide="plus" style="width:24px;height:24px;"></i>
     <input type="file" id="meal-upload-input" accept="image/*" style="display:none;" onchange="mealFileSelected(this)">
   </label>
@@ -65,57 +76,170 @@
     animation: spin-meal 0.85s linear infinite;
     margin: 0 auto 16px auto;
   }
-  .meal-day-row {
-    display: flex; align-items: flex-start; gap: 12px;
-    background: #fff; border-radius: 20px; padding: 14px 16px; margin-bottom: 10px;
-    border: 1px solid rgba(0,0,0,0.04);
+  .meal-day-card {
+    background: #ffffff;
+    border-radius: 20px;
+    padding: 16px;
+    margin-bottom: 14px;
+    box-shadow: 0 4px 16px rgba(7,39,17,0.04);
+    border: 1px solid rgba(0,0,0,0.05);
   }
-  .meal-day-row.today { border: 1.5px solid #2e7d32; background: #f1faf3; }
-  .meal-day-date { flex-shrink: 0; width: 56px; }
-  .meal-day-weekday { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; opacity: 0.5; }
-  .meal-day-num { font-size: 1.3rem; font-weight: 800; color: #072711; line-height: 1.1; }
-  .meal-day-text { flex: 1; min-width: 0; font-size: 0.88rem; line-height: 1.4; padding-top: 2px; }
+  .meal-day-card.is-today {
+    border: 2px solid #2e7d32;
+    box-shadow: 0 6px 20px rgba(46,125,50,0.12);
+  }
+  .meal-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(0,0,0,0.05);
+  }
+  .meal-card-title-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .meal-card-weekday {
+    font-size: 1.15rem;
+    font-weight: 800;
+    color: #072711;
+  }
+  .meal-card-date {
+    font-size: 0.88rem;
+    font-weight: 600;
+    opacity: 0.55;
+    color: #072711;
+  }
+  .meal-today-badge {
+    background: #c4eed0;
+    color: #072711;
+    font-weight: 800;
+    font-size: 0.7rem;
+    padding: 3px 8px;
+    border-radius: 10px;
+    letter-spacing: 0.04em;
+  }
   .meal-day-edit-btn {
-    background: rgba(0,0,0,0.05); border: none; border-radius: 10px; width: 30px; height: 30px;
-    display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0;
+    background: rgba(0,0,0,0.05);
+    border: none;
+    border-radius: 10px;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    flex-shrink: 0;
   }
-  .meal-edited-badge { font-size: 0.65rem; opacity: 0.45; margin-top: 6px; }
-  .meal-cat-item { margin-bottom: 8px; }
-  .meal-cat-item:last-child { margin-bottom: 0; }
-  .meal-cat-badge {
-    display: inline-flex; align-items: center; gap: 4px;
-    font-size: 0.68rem; font-weight: 700; padding: 2px 7px;
-    border-radius: 6px; margin-bottom: 2px; letter-spacing: 0.02em;
+  .meal-dish-box {
+    border-radius: 12px;
+    padding: 10px 14px;
+    margin-bottom: 9px;
   }
-  .meal-cat-desc {
-    font-size: 0.88rem; color: #1c1b1f; line-height: 1.35; padding-left: 2px;
+  .meal-dish-box:last-child {
+    margin-bottom: 0;
+  }
+  .meal-dish-tag {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.72rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 4px;
+  }
+  .meal-dish-title {
+    font-size: 1rem;
+    font-weight: 600;
+    line-height: 1.4;
+  }
+  .meal-dish-box.main {
+    background: #f0f7ff;
+    border-left: 4px solid #1a73e8;
+  }
+  .meal-dish-box.main .meal-dish-tag { color: #1a73e8; }
+  .meal-dish-box.main .meal-dish-title { color: #0f172a; font-weight: 700; font-size: 1.05rem; }
+
+  .meal-dish-box.veggie {
+    background: #f0fdf4;
+    border-left: 4px solid #16a34a;
+  }
+  .meal-dish-box.veggie .meal-dish-tag { color: #16a34a; }
+  .meal-dish-box.veggie .meal-dish-title { color: #14532d; font-weight: 600; }
+
+  .meal-dish-box.muslim {
+    background: #f0fdfa;
+    border-left: 4px solid #0d9488;
+  }
+  .meal-dish-box.muslim .meal-dish-tag { color: #0d9488; }
+  .meal-dish-box.muslim .meal-dish-title { color: #134e4a; font-weight: 600; }
+
+  .meal-dish-box.soup {
+    background: #fffbeb;
+    border-left: 4px solid #d97706;
+  }
+  .meal-dish-box.soup .meal-dish-tag { color: #b45309; }
+  .meal-dish-box.soup .meal-dish-title { color: #451a03; font-size: 0.94rem; font-weight: 600; }
+
+  .meal-dish-box.dessert {
+    background: #fdf2f8;
+    border-left: 4px solid #db2777;
+  }
+  .meal-dish-box.dessert .meal-dish-tag { color: #be185d; }
+  .meal-dish-box.dessert .meal-dish-title { color: #701a75; font-size: 0.94rem; font-weight: 600; }
+
+  .meal-dish-box.default {
+    background: #f8fafc;
+    border-left: 4px solid #64748b;
+  }
+  .meal-dish-box.default .meal-dish-tag { color: #475569; }
+  .meal-dish-box.default .meal-dish-title { color: #1e293b; font-weight: 600; }
+  .meal-edited-badge {
+    font-size: 0.68rem;
+    opacity: 0.5;
+    margin-top: 8px;
+    font-weight: 600;
   }
   </style>
 </div>
+
 <script>
 let mealPlan = null;
 let mealCanDelete = false;
+let mealActiveFilter = 'all';
+let mealPollInterval = null;
 
 const MEAL_CATEGORY_CONFIG = {
-  'suppe':        { label: 'Suppe',        bg: '#fff3e0', color: '#b26a00', icon: '🍲' },
-  'hauptgericht': { label: 'Menü 1',       bg: '#e8f0fe', color: '#1a73e8', icon: '🍽️' },
-  'menü':         { label: 'Menü',         bg: '#e8f0fe', color: '#1a73e8', icon: '🍽️' },
-  'menü 1':       { label: 'Menü 1',       bg: '#e8f0fe', color: '#1a73e8', icon: '🍽️' },
-  'menü 2':       { label: 'Menü 2',       bg: '#e8f5e9', color: '#2e7d32', icon: '🌱' },
-  'vegetarisch':  { label: 'Vegetarisch',  bg: '#e8f5e9', color: '#2e7d32', icon: '🌱' },
-  'veggie':       { label: 'Veggie',       bg: '#e8f5e9', color: '#2e7d32', icon: '🌱' },
-  'muslimisch':   { label: 'Muslimisch',   bg: '#e0f2f1', color: '#00695c', icon: '🌙' },
-  'halal':        { label: 'Halal',        bg: '#e0f2f1', color: '#00695c', icon: '🌙' },
-  'diabetiker':   { label: 'Diabetiker',   bg: '#ede7f6', color: '#512da8', icon: '🩺' },
-  'schonkost':    { label: 'Schonkost',    bg: '#ede7f6', color: '#512da8', icon: '🩺' },
-  'vital':        { label: 'Vital',        bg: '#ede7f6', color: '#512da8', icon: '🩺' },
-  'dessert':      { label: 'Dessert',      bg: '#fce4ec', color: '#c2185b', icon: '🍨' },
-  'nachtisch':    { label: 'Dessert',      bg: '#fce4ec', color: '#c2185b', icon: '🍨' },
+  'suppe':        { label: 'Tagessuppe',           cls: 'soup',    icon: '🍲' },
+  'vorspeise':    { label: 'Vorspeise',            cls: 'soup',    icon: '🍲' },
+  'hauptgericht': { label: 'Menü 1 (Hauptgang)',   cls: 'main',    icon: '🍽️' },
+  'menü':         { label: 'Menü 1 (Hauptgang)',   cls: 'main',    icon: '🍽️' },
+  'menü 1':       { label: 'Menü 1 (Hauptgang)',   cls: 'main',    icon: '🍽️' },
+  'menü 2':       { label: 'Vegetarisch (Menü 2)', cls: 'veggie',  icon: '🌱' },
+  'vegetarisch':  { label: 'Vegetarisch (Menü 2)', cls: 'veggie',  icon: '🌱' },
+  'veggie':       { label: 'Vegetarisch (Menü 2)', cls: 'veggie',  icon: '🌱' },
+  'muslimisch':   { label: 'Muslimisch / Geflügel',cls: 'muslim',  icon: '🌙' },
+  'halal':        { label: 'Muslimisch / Halal',   cls: 'muslim',  icon: '🌙' },
+  'dessert':      { label: 'Dessert',              cls: 'dessert', icon: '🍨' },
+  'nachtisch':    { label: 'Dessert',              cls: 'dessert', icon: '🍨' },
 };
 
 function formatMealDayHtml(rawMeal) {
-  if (!rawMeal) return '<span style="opacity:0.5;">Keine Angaben</span>';
-  const lines = rawMeal.split('\n').map(l => l.trim()).filter(Boolean);
+  if (!rawMeal) return '<div class="meal-dish-box default"><div class="meal-dish-title" style="opacity:0.5;">Keine Angaben für diesen Tag</div></div>';
+
+  const lines = rawMeal.split('\n')
+    .map(l => l.trim())
+    .filter(Boolean)
+    // Completely remove/ignore Diabetiker, Schonkost, Vital as requested
+    .filter(l => !/^(?:diabetiker|schonkost|vital):/i.test(l));
+
+  if (!lines.length) {
+    return '<div class="meal-dish-box default"><div class="meal-dish-title" style="opacity:0.5;">Keine Angaben für diesen Tag</div></div>';
+  }
 
   let hasCategories = false;
   const parsed = lines.map(line => {
@@ -134,31 +258,72 @@ function formatMealDayHtml(rawMeal) {
     if (rawMeal.includes(' / ')) {
       const parts = rawMeal.split(' / ').map(p => p.trim()).filter(Boolean);
       return parts.map((p, idx) => `
-        <div class="meal-cat-item">
-          <div class="meal-cat-badge" style="background:rgba(7,39,17,0.06);color:#072711;">
-            Gericht ${idx + 1}
-          </div>
-          <div class="meal-cat-desc">${escapeHtml(p)}</div>
+        <div class="meal-dish-box default">
+          <div class="meal-dish-tag">🍽️ Gericht ${idx + 1}</div>
+          <div class="meal-dish-title">${escapeHtml(p)}</div>
         </div>
       `).join('');
     }
-    return `<div class="meal-cat-desc">${escapeHtml(rawMeal)}</div>`;
+    return lines.map(l => `
+      <div class="meal-dish-box default">
+        <div class="meal-dish-title">${escapeHtml(l)}</div>
+      </div>
+    `).join('');
   }
 
   return parsed.map(item => {
     if (item.cfg) {
       return `
-        <div class="meal-cat-item">
-          <div class="meal-cat-badge" style="background:${item.cfg.bg};color:${item.cfg.color};">
-            <span>${item.cfg.icon}</span>
-            <span>${item.cfg.label}</span>
-          </div>
-          <div class="meal-cat-desc">${escapeHtml(item.text)}</div>
+        <div class="meal-dish-box ${item.cfg.cls}">
+          <div class="meal-dish-tag"><span>${item.cfg.icon}</span><span>${item.cfg.label}</span></div>
+          <div class="meal-dish-title">${escapeHtml(item.text)}</div>
         </div>
       `;
     }
-    return `<div class="meal-cat-desc" style="margin-bottom:4px;">${escapeHtml(item.text)}</div>`;
+    return `
+      <div class="meal-dish-box default">
+        <div class="meal-dish-title">${escapeHtml(item.text)}</div>
+      </div>
+    `;
   }).join('');
+}
+
+function mealFormatDate(iso) {
+  const d = new Date(iso + 'T00:00');
+  return {
+    weekday: d.toLocaleDateString('de-DE', { weekday: 'long' }),
+    weekdayShort: d.toLocaleDateString('de-DE', { weekday: 'short' }),
+    dayNum: d.getDate(),
+    monthName: d.toLocaleDateString('de-DE', { month: 'long' }),
+    dow: d.getDay(), // 1 = Monday ... 5 = Friday
+  };
+}
+
+function mealFilter(mode, btn) {
+  mealActiveFilter = mode;
+  document.querySelectorAll('#meal-day-chips .chip').forEach(c => c.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+
+  const cards = document.querySelectorAll('.meal-day-card');
+  cards.forEach(card => {
+    if (mode === 'all') {
+      card.style.display = 'block';
+    } else if (mode === 'today') {
+      card.style.display = card.classList.contains('is-today') ? 'block' : 'none';
+    } else {
+      const dow = card.getAttribute('data-dow');
+      card.style.display = (dow === String(mode)) ? 'block' : 'none';
+    }
+  });
+
+  // If today filter is active but no today card exists (e.g. weekend)
+  if (mode === 'today') {
+    const todayCard = document.querySelector('.meal-day-card.is-today');
+    if (!todayCard && cards.length > 0) {
+      showToast('Heute ist kein regulärer Schultag – ganzer Plan wird angezeigt');
+      cards.forEach(c => c.style.display = 'block');
+    }
+  }
 }
 
 async function init_mealplan() {
@@ -171,26 +336,56 @@ async function refreshMealPlan() {
   let res;
   try { res = await API.mealplanCurrent(); } catch { res = null; }
   mealPlan = res && res.plan;
-  renderMealPlan(res);
+
+  const loadingEl = document.getElementById('meal-loading');
+  if (res && res.status === 'processing') {
+    if (loadingEl) loadingEl.style.display = 'block';
+    document.getElementById('meal-empty').style.display = 'none';
+    document.getElementById('meal-content').style.display = 'none';
+    startMealStatusPolling();
+  } else {
+    if (loadingEl) loadingEl.style.display = 'none';
+    stopMealStatusPolling();
+    renderMealPlan(res);
+  }
 }
 
-function mealFormatDate(iso) {
-  const d = new Date(iso + 'T00:00');
-  return {
-    weekday: d.toLocaleDateString('de-DE', { weekday: 'short' }),
-    num: d.getDate(),
-  };
+function startMealStatusPolling() {
+  if (mealPollInterval) return;
+  mealPollInterval = setInterval(async () => {
+    try {
+      const res = await API.mealplanCurrent();
+      if (res.status === 'ready' || (res.plan && res.status !== 'processing')) {
+        stopMealStatusPolling();
+        document.getElementById('meal-loading').style.display = 'none';
+        mealPlan = res.plan;
+        renderMealPlan(res);
+        showToast('Neuer Speiseplan ist jetzt für alle verfügbar!');
+      } else if (res.status === 'error') {
+        stopMealStatusPolling();
+        document.getElementById('meal-loading').style.display = 'none';
+        mealPlan = res.plan;
+        renderMealPlan(res);
+        showToast(res.status_error || 'KI-Erkennung fehlgeschlagen');
+      }
+    } catch (e) {}
+  }, 2500);
+}
+
+function stopMealStatusPolling() {
+  if (mealPollInterval) {
+    clearInterval(mealPollInterval);
+    mealPollInterval = null;
+  }
 }
 
 function renderMealPlan(res) {
   const today = new Date().toISOString().slice(0, 10);
   const sub = document.getElementById('meal-header-sub');
-
   const deleteBtn = document.getElementById('meal-delete-btn');
   const dayOfWeek = new Date().getDay(); // 0 = Sun, 6 = Sat
   const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
 
-  // Filter out Saturday and Sunday from the days list
   const days = mealPlan && mealPlan.days
     ? [...mealPlan.days]
         .filter(d => {
@@ -228,22 +423,36 @@ function renderMealPlan(res) {
       sub.textContent = 'Heute: ' + (found || (lines[0] ? lines[0].replace(/^[^:]+:\s*/, '') : todayMeal));
     }
   }
+
   document.getElementById('meal-days-list').innerHTML = days.map(d => {
-    const { weekday, num } = mealFormatDate(d.date);
-    return `<div class="meal-day-row ${d.date === today ? 'today' : ''}">
-      <div class="meal-day-date">
-        <div class="meal-day-weekday">${weekday}</div>
-        <div class="meal-day-num">${num}.</div>
-      </div>
-      <div class="meal-day-text">
-        ${formatMealDayHtml(d.meal)}
+    const { weekday, dayNum, monthName, dow } = mealFormatDate(d.date);
+    const isToday = (d.date === today);
+
+    return `
+      <div class="meal-day-card ${isToday ? 'is-today' : ''}" data-dow="${dow}" data-date="${d.date}">
+        <div class="meal-card-header">
+          <div class="meal-card-title-wrap">
+            <span class="meal-card-weekday">${weekday}</span>
+            <span class="meal-card-date">${dayNum}. ${monthName}</span>
+            ${isToday ? '<span class="meal-today-badge">🌟 HEUTE</span>' : ''}
+          </div>
+          <button class="meal-day-edit-btn" onclick="editMealDay(${d.id})" title="Bearbeiten">
+            <i data-lucide="pencil" style="width:14px;height:14px;"></i>
+          </button>
+        </div>
+        <div class="meal-card-body">
+          ${formatMealDayHtml(d.meal)}
+        </div>
         ${d.edited ? '<div class="meal-edited-badge">✓ Manuell angepasst</div>' : ''}
       </div>
-      <button class="meal-day-edit-btn" onclick="editMealDay(${d.id})"><i data-lucide="pencil" style="width:14px;height:14px;"></i></button>
-    </div>`;
+    `;
   }).join('');
 
   document.getElementById('meal-image').src = mealPlan.image_url;
+
+  // Re-apply active day filter
+  mealFilter(mealActiveFilter, document.querySelector(`#meal-day-chips .chip.active`));
+
   if (window.lucide) lucide.createIcons();
 }
 
@@ -255,7 +464,7 @@ async function deleteMealPlanConfirm() {
     renderMealPlan(null);
     showToast('Essensplan gelöscht');
   } catch {
-    showToast('Fehler');
+    showToast('Fehler beim Löschen');
   }
 }
 
@@ -270,12 +479,12 @@ function toggleMealImage() {
 function editMealDay(dayId) {
   const day = mealPlan.days.find(d => d.id === dayId);
   if (!day) return;
-  const { weekday, num } = mealFormatDate(day.date);
+  const { weekday, dayNum } = mealFormatDate(day.date);
   openSheet(`
-    <div class="sheet-title">${weekday}, ${num}. — Essen bearbeiten</div>
+    <div class="sheet-title">${weekday}, ${dayNum}. — Essen bearbeiten</div>
     <div style="font-size:0.75rem;opacity:0.6;margin-bottom:8px;line-height:1.4;">
       Tipp: Zeilen können mit einer Kategorie beginnen, z.&nbsp;B.:<br>
-      <code>Suppe: ...</code>, <code>Hauptgericht: ...</code>, <code>Vegetarisch: ...</code>, <code>Muslimisch: ...</code>, <code>Diabetiker: ...</code>, <code>Dessert: ...</code>
+      <code>Suppe: ...</code>, <code>Hauptgericht: ...</code>, <code>Vegetarisch: ...</code>, <code>Muslimisch: ...</code>, <code>Dessert: ...</code>
     </div>
     <textarea class="m3-input" id="meal-edit-text" rows="6" style="resize:none;height:auto;font-family:inherit;line-height:1.4;">${escapeHtml(day.meal)}</textarea>
     <button class="m3-btn-full" onclick="saveMealDay(${dayId})">Speichern</button>
@@ -293,7 +502,7 @@ async function saveMealDay(dayId) {
     renderMealPlan({ plan: mealPlan, today: mealPlan.days.find(d => d.date === new Date().toISOString().slice(0,10)) });
     showToast('Gespeichert');
   } catch {
-    showToast('Fehler');
+    showToast('Fehler beim Speichern');
   }
 }
 
@@ -305,29 +514,25 @@ async function mealFileSelected(inputEl) {
   const emptyEl = document.getElementById('meal-empty');
   const contentEl = document.getElementById('meal-content');
   const loadingEl = document.getElementById('meal-loading');
-  const fab = document.getElementById('meal-fab');
   const sub = document.getElementById('meal-header-sub');
 
   if (emptyEl) emptyEl.style.display = 'none';
   if (contentEl) contentEl.style.display = 'none';
   if (loadingEl) loadingEl.style.display = 'block';
-  if (fab) { fab.style.pointerEvents = 'none'; fab.style.opacity = '0.4'; }
-  if (sub) sub.textContent = 'Wird analysiert…';
+  if (sub) sub.textContent = 'Upload läuft…';
 
-  showToast('Bild wird analysiert… bitte kurz warten', 60000);
+  showToast('Foto wird hochgeladen…', 2500);
 
   try {
     const form = new FormData();
     form.append('file', file);
-    mealPlan = await API.uploadMealPlan(form);
-    renderMealPlan({ plan: mealPlan, today: mealPlan.days.find(d => d.date === new Date().toISOString().slice(0,10)) });
-    showToast('Essensplan erfolgreich erkannt!');
+    await API.uploadMealPlan(form);
+    showToast('Foto empfangen! Die KI analysiert den Plan im Hintergrund. Du kannst den Tab verlassen.', 7000);
+    startMealStatusPolling();
   } catch (err) {
-    renderMealPlan({ plan: mealPlan, today: mealPlan && mealPlan.days ? mealPlan.days.find(d => d.date === new Date().toISOString().slice(0,10)) : null });
-    showToast(err.detail || 'Erkennung fehlgeschlagen');
-  } finally {
     if (loadingEl) loadingEl.style.display = 'none';
-    if (fab) { fab.style.pointerEvents = 'auto'; fab.style.opacity = '1'; }
+    showToast(err.detail || 'Upload fehlgeschlagen');
+    await refreshMealPlan();
   }
 }
 </script>

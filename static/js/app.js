@@ -467,7 +467,7 @@ async function loadDashboard() {
         const m = l.match(/^(?:hauptgericht|menü|menü 1):\s*(.*)/i);
         if (m) { mainDish = m[1]; continue; }
         if (/^(?:vegetarisch|veggie|menü 2):/i.test(l)) { hasVeggie = true; continue; }
-        if (/^(?:muslimisch|halal|diabetiker|suppe|dessert):/i.test(l)) { extraCount++; }
+        if (/^(?:muslimisch|halal|suppe|dessert):/i.test(l)) { extraCount++; }
       }
 
       if (!mainDish && lines.length > 0) {

@@ -28,7 +28,6 @@ For each day, carefully identify the dishes and categorize them into:
 - main: Hauptgericht / Menü 1 / Vollkost / Normal
 - vegetarian: Vegetarisches Gericht / Menü 2 / Veggie (if available)
 - muslim: Muslimisch / Schweinefleischfrei / Geflügel / Rind / Halal (if specifically indicated or offered as an alternative)
-- diabetic: Diabetiker / Schonkost / Leichte Vollkost / Vital (if indicated)
 - dessert: Dessert / Nachspeise / Obst / Pudding (if available)
 
 If multiple components belong to one meal (e.g. main dish + side dishes), combine them into a clear description (e.g. "Cordon bleu vom Schwein mit Pommes frites und Salatteller"). If a category is not present on that day, omit it or set it to null.
@@ -41,7 +40,6 @@ Respond with ONLY a JSON array (no markdown fences, no commentary), like:
     "main": "Cordon bleu vom Schwein mit Pommes frites",
     "vegetarian": "Gemüselasagne mit Beilagensalat",
     "muslim": "Puten-Cordon-bleu mit Pommes frites",
-    "diabetic": "Gegrillte Hähnchenbrust mit Brokkoli",
     "dessert": "Obstsalat"
   }},
   ...
@@ -190,8 +188,6 @@ async def extract_meal_days(image_bytes: bytes, mime_type: str) -> list[dict]:
             lines.append(f"Vegetarisch: {str(item['vegetarian']).strip()}")
         if item.get("muslim"):
             lines.append(f"Muslimisch: {str(item['muslim']).strip()}")
-        if item.get("diabetic"):
-            lines.append(f"Diabetiker: {str(item['diabetic']).strip()}")
         if item.get("dessert"):
             lines.append(f"Dessert: {str(item['dessert']).strip()}")
 
