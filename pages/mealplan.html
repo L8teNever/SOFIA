@@ -17,6 +17,17 @@
       <div style="font-size:0.85rem;margin-top:4px;">Tippe unten auf Plus, um ein Foto hinzuzufügen.</div>
     </div>
 
+    <!-- Active AI Loading State -->
+    <div id="meal-loading" style="display:none;text-align:center;padding:40px 16px;">
+      <div class="m3-card" style="background:#ffffff;padding:28px 20px;border-radius:24px;border:1px solid rgba(7,39,17,0.08);max-width:360px;margin:0 auto;box-shadow:0 8px 24px rgba(7,39,17,0.06);">
+        <div class="meal-spinner"></div>
+        <div style="font-weight:700;font-size:1.15rem;color:#072711;">Foto wird verarbeitet…</div>
+        <div style="font-size:0.86rem;color:#072711;opacity:0.75;margin-top:8px;line-height:1.45;">
+          Gemini liest die Wochentage und Gerichte aus dem Speiseplan. Bitte einen Moment Geduld…
+        </div>
+      </div>
+    </div>
+
     <div id="meal-content" style="display:none;">
       <div class="section-label">Diese Woche</div>
       <div id="meal-days-list"></div>
@@ -35,12 +46,25 @@
     </div>
   </div></div>
 
-  <label class="fab" style="cursor:pointer;">
+  <label class="fab" id="meal-fab" style="cursor:pointer;">
     <i data-lucide="plus" style="width:24px;height:24px;"></i>
     <input type="file" id="meal-upload-input" accept="image/*" style="display:none;" onchange="mealFileSelected(this)">
   </label>
 
   <style>
+  @keyframes spin-meal {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+  .meal-spinner {
+    width: 44px;
+    height: 44px;
+    border: 4px solid rgba(7,39,17,0.12);
+    border-top-color: #1b5e20;
+    border-radius: 50%;
+    animation: spin-meal 0.85s linear infinite;
+    margin: 0 auto 16px auto;
+  }
   .meal-day-row {
     display: flex; align-items: flex-start; gap: 12px;
     background: #fff; border-radius: 20px; padding: 14px 16px; margin-bottom: 10px;
@@ -174,15 +198,33 @@ async function mealFileSelected(inputEl) {
   const file = inputEl.files[0];
   inputEl.value = '';
   if (!file) return;
-  showToast('Bild wird analysiert…', 6000);
+
+  const emptyEl = document.getElementById('meal-empty');
+  const contentEl = document.getElementById('meal-content');
+  const loadingEl = document.getElementById('meal-loading');
+  const fab = document.getElementById('meal-fab');
+  const sub = document.getElementById('meal-header-sub');
+
+  if (emptyEl) emptyEl.style.display = 'none';
+  if (contentEl) contentEl.style.display = 'none';
+  if (loadingEl) loadingEl.style.display = 'block';
+  if (fab) { fab.style.pointerEvents = 'none'; fab.style.opacity = '0.4'; }
+  if (sub) sub.textContent = 'Wird analysiert…';
+
+  showToast('Bild wird analysiert… bitte kurz warten', 60000);
+
   try {
     const form = new FormData();
     form.append('file', file);
     mealPlan = await API.uploadMealPlan(form);
     renderMealPlan({ plan: mealPlan, today: mealPlan.days.find(d => d.date === new Date().toISOString().slice(0,10)) });
-    showToast('Essensplan aktualisiert');
+    showToast('Essensplan erfolgreich erkannt!');
   } catch (err) {
+    renderMealPlan({ plan: mealPlan, today: mealPlan && mealPlan.days ? mealPlan.days.find(d => d.date === new Date().toISOString().slice(0,10)) : null });
     showToast(err.detail || 'Erkennung fehlgeschlagen');
+  } finally {
+    if (loadingEl) loadingEl.style.display = 'none';
+    if (fab) { fab.style.pointerEvents = 'auto'; fab.style.opacity = '1'; }
   }
 }
 </script>
