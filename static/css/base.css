@@ -133,7 +133,7 @@ body.has-update-banner { padding-top: 52px; transition: padding-top 0.3s ease; }
 }
 @media (min-width: 780px) {
   .app-container {
-    max-width: 960px; padding: 0 28px 32px 28px; margin: auto;
+    max-width: 960px; padding: 0 28px 22px 28px; margin: auto;
     /* Flat and matched to .dashboard-header's background (both var(--m3-bg))
        instead of a near-transparent overlay on the body gradient — that let
        the gradient bleed through unevenly depending on scroll position,
@@ -143,7 +143,7 @@ body.has-update-banner { padding-top: 52px; transition: padding-top 0.3s ease; }
   }
 }
 @media (min-width: 1100px) {
-  .app-container { max-width: 1240px; padding: 0 36px 40px 36px; }
+  .app-container { max-width: 1240px; padding: 0 36px 30px 36px; }
 }
 .app-container.ready { opacity: 1; }
 
@@ -169,11 +169,11 @@ body.has-update-banner { padding-top: 52px; transition: padding-top 0.3s ease; }
   padding-top: 16px; max-width: 1148px; margin: 0 auto;
 }
 @media (min-width: 780px) {
-  .dashboard-header { margin: 0 -28px; padding: 20px 20px 16px 20px; }
+  .dashboard-header { margin: 0 -28px; padding: 14px 20px 12px 20px; }
   .dashboard-header-row { padding-top: 0; }
 }
 @media (min-width: 1100px) {
-  .dashboard-header { margin: 0 -36px; padding: 22px 24px 16px 24px; }
+  .dashboard-header { margin: 0 -36px; padding: 16px 24px 12px 24px; }
 }
 
 /* Widget grid */
@@ -238,6 +238,19 @@ body.has-update-banner { padding-top: 52px; transition: padding-top 0.3s ease; }
 .w-stack > .widget.w-square {
   justify-content: flex-start;
   gap: 12px;
+}
+/* The text wrapper next to the icon had no width limit of its own — fine
+   in the widget's normal column layout (full column width available), but
+   in the cramped stacked row it let long labels ("Stundenplan") overflow
+   past the box edge instead of truncating. */
+.w-stack > .widget.w-square > div:not(.icon-box) {
+  flex: 1;
+  min-width: 0;
+}
+.w-stack > .widget.w-square > div:not(.icon-box) > div {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .icon-box {
