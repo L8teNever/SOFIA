@@ -83,22 +83,33 @@
       </div>
     </div>
 
-    <!-- Timetable -->
-    <div class="widget w-square" style="background:#ffdec1;color:#442b00;" onclick="openPage('timetable',this)" data-page="timetable">
-      <div class="icon-box" style="width:48px;height:48px;background:rgba(68,43,0,0.1);">
-        <i data-lucide="clock" style="width:24px;height:24px;"></i>
+    <!-- Timetable + Essensplan, and Drive + Share below: each pair stacks
+         into one square footprint so the grid always divides evenly (see
+         the .w-full-span comment in base.css for the exact math) instead
+         of a lone widget spilling into its own near-empty row. -->
+    <div class="w-stack">
+      <div class="widget w-square" style="background:#ffdec1;color:#442b00;" onclick="openPage('timetable',this)" data-page="timetable">
+        <div class="icon-box" style="width:48px;height:48px;background:rgba(68,43,0,0.1);">
+          <i data-lucide="clock" style="width:24px;height:24px;"></i>
+        </div>
+        <div>
+          <div style="font-size:1.1rem;font-weight:700;">Stundenplan</div>
+          <div style="font-size:0.8rem;opacity:0.65;margin-top:2px;">Jetzt</div>
+          <div style="font-size:1.25rem;font-weight:700;" id="w-current-lesson">–</div>
+        </div>
       </div>
-      <div>
-        <div style="font-size:1.1rem;font-weight:700;">Stundenplan</div>
-        <div style="font-size:0.8rem;opacity:0.65;margin-top:2px;">Jetzt</div>
-        <div style="font-size:1.25rem;font-weight:700;" id="w-current-lesson">–</div>
+
+      <div class="widget w-compact" style="background:#c4eed0;color:#072711;" onclick="openPage('mealplan',this)" data-page="mealplan">
+        <div class="icon-box" style="width:40px;height:40px;background:rgba(7,39,17,0.1);">
+          <i data-lucide="utensils" style="width:20px;height:20px;"></i>
+        </div>
+        <div style="overflow:hidden;flex:1;min-width:0;">
+          <div style="font-size:0.88rem;font-weight:700;" class="widget-title">Essen</div>
+          <div style="font-size:0.72rem;opacity:0.6;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" id="w-meal-today">Lade…</div>
+        </div>
       </div>
     </div>
 
-    <!-- Drive + Share: stacked into one square footprint on mobile/tablet
-         (where a lone 5th item would otherwise spill into its own
-         near-empty row and force scrolling), unstacked into two normal
-         full-size widgets once desktop has a 6th grid column to spare. -->
     <div class="w-stack">
       <div class="widget w-square" style="background:#e8def8;color:#1d192b;" onclick="openPage('drive',this)" data-page="drive">
         <div class="icon-box" style="width:48px;height:48px;background:rgba(29,25,43,0.1);">

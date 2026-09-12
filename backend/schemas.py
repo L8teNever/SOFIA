@@ -121,6 +121,24 @@ class SharedFileOut(BaseModel):
     created_at: datetime
     class Config: from_attributes = True
 
+# Meal plan
+class MealPlanDayOut(BaseModel):
+    id: int
+    date: str
+    meal: str
+    edited: bool
+    class Config: from_attributes = True
+
+class MealPlanDayUpdate(BaseModel):
+    meal: str
+
+class MealPlanOut(BaseModel):
+    id: int
+    image_url: str
+    created_at: datetime
+    days: List[MealPlanDayOut]
+    class Config: from_attributes = True
+
 # Push
 class PushSubscriptionIn(BaseModel):
     subscription: Any

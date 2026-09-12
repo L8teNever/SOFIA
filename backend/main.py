@@ -7,7 +7,7 @@ from backend.database import init_db
 from backend.config import settings
 from backend.auth import get_current_user
 from backend.models.user import User
-from backend.routes import auth_routes, users, classes, subjects, calendar, homework, grades, files, vapid, admin, timetable
+from backend.routes import auth_routes, users, classes, subjects, calendar, homework, grades, files, vapid, admin, timetable, mealplan
 from backend.routes.timetable import poll_cancelled_lessons_loop
 import os, time, mimetypes, asyncio
 
@@ -28,7 +28,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Sofia", lifespan=lifespan)
 
 # API routes
-for r in [auth_routes, users, classes, subjects, calendar, homework, grades, files, vapid, admin, timetable]:
+for r in [auth_routes, users, classes, subjects, calendar, homework, grades, files, vapid, admin, timetable, mealplan]:
     app.include_router(r.router)
 
 # Static files
@@ -37,6 +37,17 @@ if os.path.exists("static"):
 
 if os.path.exists("uploads"):
     app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+
+# Legal contact info, kept out of the repo and set per-deployment via .env
+@app.get("/api/v1/config/impressum", include_in_schema=False)
+async def impressum_config():
+    return {
+        "business_name": settings.impressum_business_name,
+        "name": settings.impressum_name,
+        "address": settings.impressum_address,
+        "phone": settings.impressum_phone,
+        "email": settings.impressum_email,
+    }
 
 # Page fragments — only accessible when authenticated
 @app.get("/pages/{page_name}.html", include_in_schema=False)

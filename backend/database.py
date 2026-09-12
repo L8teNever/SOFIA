@@ -35,7 +35,7 @@ async def get_db():
         yield session
 
 async def init_db():
-    from backend.models import user, class_group, subject, calendar_event, homework, grade, shared_file, notification
+    from backend.models import user, class_group, subject, calendar_event, homework, grade, shared_file, notification, meal_plan
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         await _migrate_columns(conn)

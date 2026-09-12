@@ -396,6 +396,13 @@ async function loadDashboard() {
         }
       }
     }).catch(() => {});
+
+    // Fetch and update Essensplan widget
+    API.mealplanCurrent().then(res => {
+      const el = document.getElementById('w-meal-today');
+      if (!el) return;
+      el.textContent = (res && res.today && res.today.meal) ? res.today.meal : 'Kein Plan für heute';
+    }).catch(() => {});
   } catch (e) {}
 }
 
@@ -465,7 +472,7 @@ function runIntro() {
   }, charIdx * 45 + 700);
 }
 
-const KNOWN_PAGES = ['calendar','homework','grades','timetable','drive','quickshare','settings','admin','notifications'];
+const KNOWN_PAGES = ['calendar','homework','grades','timetable','mealplan','drive','quickshare','settings','admin','notifications'];
 
 function showApp() {
   document.getElementById('app').classList.add('ready');
@@ -587,7 +594,19 @@ async function refreshNotifBadge() {
   } catch {}
 }
 
-function openImpressum() {
+async function openImpressum() {
+  let cfg = {
+    business_name: "Sofia Schulbegleiter PWA",
+    address: "Musterstraße 123<br>12345 Musterstadt",
+    phone: "+49 (0) 123 456789",
+    email: "support@sofia.schule",
+    name: "Max Mustermann",
+  };
+  try {
+    const res = await fetch('/api/v1/config/impressum');
+    if (res.ok) cfg = { ...cfg, ...(await res.json()) };
+  } catch {}
+
   openModal(`
     <div style="color:#1c1b1f;">
       <h2 style="font-size:1.3rem;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px;">
@@ -596,16 +615,16 @@ function openImpressum() {
       <div style="font-size:0.88rem;line-height:1.5;opacity:0.85;max-height:55vh;overflow-y:auto;padding-right:8px;" class="no-scrollbar">
         <h3 style="font-size:1.05rem;font-weight:700;margin:16px 0 6px 0;">Impressum</h3>
         <p><strong>Angaben gemäß § 5 TMG:</strong></p>
-        <p style="margin: 4px 0;">Sofia Schulbegleiter PWA</p>
-        <p style="margin: 4px 0;">Musterstraße 123<br>12345 Musterstadt</p>
-        
+        <p style="margin: 4px 0;">${cfg.business_name}</p>
+        <p style="margin: 4px 0;">${cfg.address}</p>
+
         <h4 style="font-size:0.92rem;font-weight:700;margin:12px 0 4px 0;">Kontakt:</h4>
-        <p style="margin: 4px 0;">Telefon: +49 (0) 123 456789</p>
-        <p style="margin: 4px 0;">E-Mail: support@sofia.schule</p>
-        
+        <p style="margin: 4px 0;">Telefon: ${cfg.phone}</p>
+        <p style="margin: 4px 0;">E-Mail: ${cfg.email}</p>
+
         <h4 style="font-size:0.92rem;font-weight:700;margin:12px 0 4px 0;">Vertretungsberechtigt:</h4>
-        <p style="margin: 4px 0;">Max Mustermann (Administrator)</p>
-        
+        <p style="margin: 4px 0;">${cfg.name} (Administrator)</p>
+
         <hr style="border:none;border-top:1px solid rgba(0,0,0,0.1);margin:16px 0;">
         
         <h3 style="font-size:1.05rem;font-weight:700;margin:16px 0 6px 0;">Datenschutzerklärung</h3>

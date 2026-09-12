@@ -1,0 +1,166 @@
+<div class="page" id="page-mealplan" style="background:#eafbf1;">
+  <div class="page-header">
+    <button class="back-btn"><i data-lucide="arrow-left" style="width:22px;height:22px;"></i></button>
+    <div style="flex:1;">
+      <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.5;color:#072711;" id="meal-header-sub">Essensplan</div>
+      <span class="page-title" style="color:#072711;">Essensplan</span>
+    </div>
+  </div>
+
+  <div class="page-scroll-1col no-scrollbar"><div class="page-inner">
+    <div id="meal-empty" style="display:none;text-align:center;padding:60px 20px;opacity:0.5;">
+      <i data-lucide="utensils" style="width:48px;height:48px;margin-bottom:12px;display:block;margin-left:auto;margin-right:auto;"></i>
+      <div style="font-weight:600;">Noch kein Essensplan hochgeladen</div>
+      <div style="font-size:0.85rem;margin-top:4px;">Tippe unten auf Plus, um ein Foto hinzuzufügen.</div>
+    </div>
+
+    <div id="meal-content" style="display:none;">
+      <div class="section-label">Diese Woche</div>
+      <div id="meal-days-list"></div>
+
+      <div class="section-label" style="margin-top:20px;">Original-Bild</div>
+      <div class="m3-card" style="padding:8px;cursor:pointer;" onclick="toggleMealImage()">
+        <div id="meal-image-toggle-row" style="display:flex;align-items:center;gap:10px;padding:6px;">
+          <div class="icon-box" style="width:36px;height:36px;background:rgba(7,39,17,0.08);flex-shrink:0;">
+            <i data-lucide="image" style="width:18px;height:18px;color:#072711;"></i>
+          </div>
+          <span style="flex:1;font-weight:600;font-size:0.85rem;">Foto anzeigen, falls etwas falsch erkannt wurde</span>
+          <i data-lucide="chevron-down" style="width:18px;height:18px;opacity:0.5;" id="meal-image-chevron"></i>
+        </div>
+        <img id="meal-image" style="display:none;width:100%;border-radius:16px;margin-top:6px;">
+      </div>
+    </div>
+  </div></div>
+
+  <label class="fab" style="cursor:pointer;">
+    <i data-lucide="plus" style="width:24px;height:24px;"></i>
+    <input type="file" id="meal-upload-input" accept="image/*" style="display:none;" onchange="mealFileSelected(this)">
+  </label>
+
+  <style>
+  .meal-day-row {
+    display: flex; align-items: flex-start; gap: 12px;
+    background: #fff; border-radius: 20px; padding: 14px 16px; margin-bottom: 10px;
+    border: 1px solid rgba(0,0,0,0.04);
+  }
+  .meal-day-row.today { border: 1.5px solid #2e7d32; background: #f1faf3; }
+  .meal-day-date { flex-shrink: 0; width: 56px; }
+  .meal-day-weekday { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; opacity: 0.5; }
+  .meal-day-num { font-size: 1.3rem; font-weight: 800; color: #072711; line-height: 1.1; }
+  .meal-day-text { flex: 1; min-width: 0; font-size: 0.88rem; line-height: 1.4; padding-top: 2px; }
+  .meal-day-edit-btn {
+    background: rgba(0,0,0,0.05); border: none; border-radius: 10px; width: 30px; height: 30px;
+    display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0;
+  }
+  .meal-edited-badge { font-size: 0.65rem; opacity: 0.45; margin-top: 4px; }
+  </style>
+</div>
+<script>
+let mealPlan = null;
+
+async function init_mealplan() {
+  await refreshMealPlan();
+}
+
+async function refreshMealPlan() {
+  let res;
+  try { res = await API.mealplanCurrent(); } catch { res = null; }
+  mealPlan = res && res.plan;
+  renderMealPlan(res);
+}
+
+function mealFormatDate(iso) {
+  const d = new Date(iso + 'T00:00');
+  return {
+    weekday: d.toLocaleDateString('de-DE', { weekday: 'short' }),
+    num: d.getDate(),
+  };
+}
+
+function renderMealPlan(res) {
+  const today = new Date().toISOString().slice(0, 10);
+  const sub = document.getElementById('meal-header-sub');
+
+  if (!mealPlan || !mealPlan.days || !mealPlan.days.length) {
+    document.getElementById('meal-empty').style.display = 'block';
+    document.getElementById('meal-content').style.display = 'none';
+    if (sub) sub.textContent = 'Kein Plan vorhanden';
+    return;
+  }
+
+  document.getElementById('meal-empty').style.display = 'none';
+  document.getElementById('meal-content').style.display = 'block';
+
+  const todayMeal = (res && res.today && res.today.meal) || null;
+  if (sub) sub.textContent = todayMeal ? 'Heute: ' + todayMeal : 'Kein Essen für heute im Plan';
+
+  const days = [...mealPlan.days].sort((a, b) => a.date.localeCompare(b.date));
+  document.getElementById('meal-days-list').innerHTML = days.map(d => {
+    const { weekday, num } = mealFormatDate(d.date);
+    return `<div class="meal-day-row ${d.date === today ? 'today' : ''}">
+      <div class="meal-day-date">
+        <div class="meal-day-weekday">${weekday}</div>
+        <div class="meal-day-num">${num}.</div>
+      </div>
+      <div class="meal-day-text">
+        ${escapeHtml(d.meal)}
+        ${d.edited ? '<div class="meal-edited-badge">✓ Manuell angepasst</div>' : ''}
+      </div>
+      <button class="meal-day-edit-btn" onclick="editMealDay(${d.id})"><i data-lucide="pencil" style="width:14px;height:14px;"></i></button>
+    </div>`;
+  }).join('');
+
+  document.getElementById('meal-image').src = mealPlan.image_url;
+  if (window.lucide) lucide.createIcons();
+}
+
+function toggleMealImage() {
+  const img = document.getElementById('meal-image');
+  const chevron = document.getElementById('meal-image-chevron');
+  const showing = img.style.display !== 'none';
+  img.style.display = showing ? 'none' : 'block';
+  chevron.style.transform = showing ? 'rotate(0deg)' : 'rotate(180deg)';
+}
+
+function editMealDay(dayId) {
+  const day = mealPlan.days.find(d => d.id === dayId);
+  if (!day) return;
+  const { weekday, num } = mealFormatDate(day.date);
+  openSheet(`
+    <div class="sheet-title">${weekday}, ${num}. — Essen bearbeiten</div>
+    <textarea class="m3-input" id="meal-edit-text" rows="4" style="resize:none;height:auto;">${escapeHtml(day.meal)}</textarea>
+    <button class="m3-btn-full" onclick="saveMealDay(${dayId})">Speichern</button>
+  `);
+}
+
+async function saveMealDay(dayId) {
+  const meal = document.getElementById('meal-edit-text').value.trim();
+  if (!meal) { showToast('Darf nicht leer sein'); return; }
+  try {
+    await API.updateMealDay(dayId, { meal });
+    const day = mealPlan.days.find(d => d.id === dayId);
+    if (day) { day.meal = meal; day.edited = true; }
+    closeSheet();
+    renderMealPlan({ plan: mealPlan, today: mealPlan.days.find(d => d.date === new Date().toISOString().slice(0,10)) });
+    showToast('Gespeichert');
+  } catch {
+    showToast('Fehler');
+  }
+}
+
+async function mealFileSelected(inputEl) {
+  const file = inputEl.files[0];
+  inputEl.value = '';
+  if (!file) return;
+  showToast('Bild wird analysiert…', 6000);
+  try {
+    const form = new FormData();
+    form.append('file', file);
+    mealPlan = await API.uploadMealPlan(form);
+    renderMealPlan({ plan: mealPlan, today: mealPlan.days.find(d => d.date === new Date().toISOString().slice(0,10)) });
+    showToast('Essensplan aktualisiert');
+  } catch (err) {
+    showToast(err.detail || 'Erkennung fehlgeschlagen');
+  }
+}
+</script>
