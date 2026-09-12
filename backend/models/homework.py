@@ -13,6 +13,8 @@ class Homework(Base):
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     checked_by = Column(JSON, default=list)  # list of user_ids who checked it off
+    file_url = Column(String, nullable=True)
+    file_type = Column(String, nullable=True)  # image|file
 
     subject = relationship("Subject", back_populates="homework_items")
     class_group = relationship("ClassGroup", back_populates="homework_items")

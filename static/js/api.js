@@ -48,6 +48,7 @@ const API = {
   deleteEvent:   (id)     => API.delete(`/calendar/${id}`),
   homework:      ()       => API.get('/homework/'),
   createHomework:(d)      => API.post('/homework/', d),
+  uploadHwFile:  (form)   => API.upload('/homework/upload', form),
   checkHomework: (id)     => API.post(`/homework/${id}/check`),
   deleteHomework:(id)     => API.delete(`/homework/${id}`),
   grades:        ()       => API.get('/grades/'),

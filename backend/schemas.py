@@ -79,12 +79,16 @@ class HomeworkOut(BaseModel):
     due_date: str
     created_by: int
     checked_by: List[int]
+    file_url: Optional[str] = None
+    file_type: Optional[str] = None
     class Config: from_attributes = True
 
 class HomeworkCreate(BaseModel):
     subject_id: int
     description: str
     due_date: str
+    file_url: Optional[str] = None
+    file_type: Optional[str] = None
 
 # Grade
 class GradeOut(BaseModel):

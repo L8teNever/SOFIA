@@ -21,9 +21,81 @@
   <button class="fab" onclick="openHwSheet()">
     <i data-lucide="plus" style="width:24px;height:24px;"></i>
   </button>
+
+  <!-- Detail overlay: opened on top of this page when a homework card is
+       tapped. .page-overlay (in addition to .page) marks it for the
+       generic back-navigation handler in app.js. -->
+  <template id="tpl-hw-detail">
+    <div class="page page-overlay" id="page-hw-detail" style="background:#fff5f8;">
+      <div class="page-header">
+        <button class="icon-btn" onclick="event.stopPropagation();closeHwDetail();"><i data-lucide="arrow-left" style="width:22px;height:22px;"></i></button>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.5;color:#31111d;" id="hwd-subject">–</div>
+          <span class="page-title" style="color:#31111d;font-size:1.3rem;" id="hwd-title">–</span>
+        </div>
+        <button class="icon-btn" onclick="deleteHwFromDetail()" style="color:#b3261e;"><i data-lucide="trash-2" style="width:20px;height:20px;"></i></button>
+      </div>
+      <div class="page-scroll-1col"><div class="page-inner">
+        <div class="m3-card" id="hwd-due-card" style="display:flex;align-items:center;gap:12px;">
+          <div class="icon-box" style="width:44px;height:44px;background:rgba(103,80,164,0.1);flex-shrink:0;">
+            <i data-lucide="calendar" style="width:20px;height:20px;color:#6750a4;"></i>
+          </div>
+          <div>
+            <div style="font-size:0.72rem;opacity:0.5;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;">Fällig</div>
+            <div style="font-weight:700;" id="hwd-due">–</div>
+          </div>
+        </div>
+
+        <div class="m3-card" id="hwd-desc-card">
+          <div style="font-size:0.72rem;opacity:0.5;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px;">Beschreibung</div>
+          <div style="white-space:pre-wrap;line-height:1.5;" id="hwd-desc">–</div>
+        </div>
+
+        <div id="hwd-attachment-wrap" style="display:none;">
+          <div class="section-label">Anhang</div>
+          <div class="m3-card" id="hwd-attachment" style="padding:8px;"></div>
+        </div>
+
+        <button class="m3-btn-full" id="hwd-toggle-btn" onclick="toggleHwFromDetail()" style="margin-top:8px;">Als erledigt markieren</button>
+      </div></div>
+    </div>
+  </template>
+
+  <style>
+  .hw-due-segments { display: flex; gap: 6px; margin-bottom: 10px; }
+  .hw-due-seg {
+    flex: 1; padding: 10px 6px; border-radius: 14px; border: none; cursor: pointer;
+    background: rgba(0,0,0,0.05); color: #31111d; font-family: inherit; font-weight: 600;
+    font-size: 0.78rem; transition: background 0.15s, color 0.15s;
+  }
+  .hw-due-seg.active { background: #31111d; color: #fff; }
+  .hw-due-seg:disabled { opacity: 0.35; cursor: not-allowed; }
+  .hw-due-computed {
+    background: #fff; border: 1.5px solid rgba(0,0,0,0.06); border-radius: 14px;
+    padding: 12px 14px; font-weight: 600; font-size: 0.9rem; color: #31111d;
+  }
+  .hw-day-chip-strip { display: flex; gap: 8px; overflow-x: auto; padding: 2px; }
+  .hw-day-chip {
+    flex-shrink: 0; width: 52px; padding: 10px 0; border-radius: 14px; border: 1.5px solid rgba(0,0,0,0.08);
+    background: #fff; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 2px;
+    font-family: inherit; color: #31111d;
+  }
+  .hw-day-chip-wd { font-size: 0.68rem; opacity: 0.55; text-transform: uppercase; font-weight: 700; }
+  .hw-day-chip-num { font-size: 1.05rem; font-weight: 700; }
+  .hw-day-chip.has-lesson { border-color: #6750a4; background: rgba(103,80,164,0.08); }
+  .hw-day-chip.has-lesson .hw-day-chip-wd { color: #6750a4; }
+  .hw-day-chip.selected { background: #31111d; border-color: #31111d; }
+  .hw-day-chip.selected .hw-day-chip-wd, .hw-day-chip.selected .hw-day-chip-num { color: #fff; }
+
+  .hw-card-attachment-badge {
+    display: flex; align-items: center; justify-content: center;
+    width: 22px; height: 22px; border-radius: 8px; background: rgba(0,0,0,0.08); flex-shrink: 0;
+  }
+  </style>
 </div>
 <script>
 let hwItems = [], hwSubjects = [], hwCurrentFilter = 'all', hwCurrentUser = null, hwTimetable = null;
+let hwDueMode = 'next', hwCustomDate = null, hwPendingFile = null;
 
 async function init_homework() {
   [hwItems, hwSubjects, hwCurrentUser] = await Promise.all([
@@ -49,6 +121,54 @@ function hwCurrentSubjectId() {
   const name = (active.subject_short || active.subject || '').toLowerCase();
   const match = hwSubjects.find(s => (s.short_name || '').toLowerCase() === name || (s.name || '').toLowerCase() === name);
   return match ? match.id : null;
+}
+
+// Sorted (ascending), deduplicated YYYYMMDD dates of upcoming (not yet over,
+// not cancelled) lessons of `subjectId` from the fetched Untis timetable.
+function hwSubjectLessonDates(subjectId) {
+  if (!hwTimetable || !hwTimetable.configured || hwTimetable.error) return [];
+  const sub = hwSubjects.find(s => s.id === subjectId);
+  if (!sub) return [];
+  const subName = (sub.name || '').toLowerCase();
+  const subShort = (sub.short_name || '').toLowerCase();
+  if (!subName && !subShort) return [];
+  const lessons = [...(hwTimetable.this_week?.lessons || []), ...(hwTimetable.next_week?.lessons || [])];
+  const now = new Date();
+  const todayNum = now.getFullYear() + String(now.getMonth() + 1).padStart(2, '0') + String(now.getDate()).padStart(2, '0');
+  const nowHHMM = now.getHours() * 100 + now.getMinutes();
+
+  const matches = lessons.filter(l => {
+    if (l.cancelled) return false;
+    const lname = (l.subject || '').toLowerCase();
+    const lshort = (l.subject_short || '').toLowerCase();
+    const isMatch = (subShort && lshort === subShort) || (subName && lname === subName);
+    if (!isMatch) return false;
+    if (l.date < todayNum) return false;
+    if (l.date === todayNum && l.endTime < nowHHMM) return false;
+    return true;
+  }).sort((a, b) => a.date.localeCompare(b.date) || a.startTime - b.startTime);
+
+  const seen = new Set(), dates = [];
+  for (const l of matches) {
+    if (seen.has(l.date)) continue;
+    seen.add(l.date);
+    dates.push(l.date);
+  }
+  return dates;
+}
+
+function yyyymmddToIso(d) {
+  return `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`;
+}
+
+function hwDefaultTomorrow() {
+  return new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+}
+
+function hwFormatDueLabel(iso) {
+  if (!iso) return '–';
+  const d = new Date(iso + 'T00:00');
+  return d.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' });
 }
 
 function renderHwStats() {
@@ -78,19 +198,23 @@ function hwCard(h, sub, uid, today) {
   const isToday = h.due_date === today;
   const isTomorrow = h.due_date === new Date(Date.now()+86400000).toISOString().slice(0,10);
   const dateLabel = isToday ? 'Heute' : isTomorrow ? 'Morgen' : d.toLocaleDateString('de-DE',{weekday:'short',day:'numeric',month:'short'});
-  return '<div style="background:' + bg + ';border-radius:24px;padding:18px;margin-bottom:10px;' + (checked?'opacity:0.5;':'' ) + '">'
+  const attachmentBadge = h.file_url
+    ? '<div class="hw-card-attachment-badge"><i data-lucide="' + (h.file_type === 'image' ? 'image' : 'paperclip') + '" style="width:12px;height:12px;"></i></div>'
+    : '';
+  return '<div onclick="openHwDetail(' + h.id + ')" style="background:' + bg + ';border-radius:24px;padding:18px;margin-bottom:10px;cursor:pointer;' + (checked?'opacity:0.5;':'' ) + '">'
     + '<div style="display:flex;gap:12px;align-items:flex-start;">'
-    + '<div onclick="toggleHw(' + h.id + ')" style="width:28px;height:28px;border-radius:50%;flex-shrink:0;margin-top:1px;cursor:pointer;display:flex;align-items:center;justify-content:center;'
+    + '<div onclick="event.stopPropagation();toggleHw(' + h.id + ')" style="width:28px;height:28px;border-radius:50%;flex-shrink:0;margin-top:1px;cursor:pointer;display:flex;align-items:center;justify-content:center;'
     + (checked ? 'background:rgba(0,0,0,0.3);' : 'border:2.5px solid rgba(0,0,0,0.25);background:transparent;') + '">'
     + (checked ? '<i data-lucide="check" style="width:14px;height:14px;color:white;"></i>' : '') + '</div>'
     + '<div style="flex:1;min-width:0;">'
-    + '<div style="font-weight:700;font-size:0.95rem;' + (checked?'text-decoration:line-through;':'') + '">' + h.description + '</div>'
+    + '<div style="font-weight:700;font-size:0.95rem;' + (checked?'text-decoration:line-through;':'') + '">' + escapeHtml(h.description) + '</div>'
     + '<div style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap;">'
-    + '<span style="font-size:0.72rem;font-weight:700;background:rgba(0,0,0,0.1);padding:4px 10px;border-radius:10px;">' + (sub.name||'?') + '</span>'
+    + '<span style="font-size:0.72rem;font-weight:700;background:rgba(0,0,0,0.1);padding:4px 10px;border-radius:10px;">' + escapeHtml(sub.name||'?') + '</span>'
     + '<span style="font-size:0.72rem;font-weight:' + (overdue?'700':'500') + ';opacity:0.7;' + (overdue?'color:#b3261e;':'') + '">'
     + (overdue ? '⚠ Überfällig · ' : '') + dateLabel + '</span>'
+    + attachmentBadge
     + '</div></div>'
-    + '<button onclick="deleteHw(' + h.id + ')" style="background:rgba(0,0,0,0.08);border:none;border-radius:10px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;">'
+    + '<button onclick="event.stopPropagation();deleteHw(' + h.id + ')" style="background:rgba(0,0,0,0.08);border:none;border-radius:10px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;">'
     + '<i data-lucide="x" style="width:14px;height:14px;"></i></button>'
     + '</div></div>';
 }
@@ -147,22 +271,218 @@ async function deleteHw(id) {
   catch { showToast('Fehler'); }
 }
 
+// ---- Detail overlay ----
+
+let hwDetailId = null;
+
+function openHwDetail(id) {
+  const hw = hwItems.find(h => h.id === id);
+  if (!hw) return;
+  hwDetailId = id;
+  const existing = document.getElementById('page-hw-detail');
+  if (existing) existing.remove();
+  const tpl = document.getElementById('tpl-hw-detail').content.cloneNode(true);
+  document.body.appendChild(tpl);
+  const page = document.getElementById('page-hw-detail');
+  page.style.setProperty('--ox', '50%');
+  page.style.setProperty('--oy', '50%');
+  requestAnimationFrame(() => requestAnimationFrame(() => page.classList.add('active')));
+  renderHwDetail(hw);
+  history.pushState({ hwDetail: id }, '', window.location.pathname);
+  if (window.lucide) lucide.createIcons();
+}
+
+function renderHwDetail(hw) {
+  const sub = hwSubjects.find(s => s.id === hw.subject_id) || {};
+  const uid = hwCurrentUser && hwCurrentUser.id;
+  const checked = hw.checked_by.includes(uid);
+  document.getElementById('hwd-subject').textContent = sub.name || '?';
+  document.getElementById('hwd-title').textContent = hw.description;
+  document.getElementById('hwd-desc').textContent = hw.description;
+  document.getElementById('hwd-due').textContent = hwFormatDueLabel(hw.due_date);
+  const toggleBtn = document.getElementById('hwd-toggle-btn');
+  toggleBtn.textContent = checked ? 'Als offen markieren' : 'Als erledigt markieren';
+
+  const wrap = document.getElementById('hwd-attachment-wrap');
+  const box = document.getElementById('hwd-attachment');
+  if (hw.file_url) {
+    wrap.style.display = 'block';
+    box.innerHTML = hw.file_type === 'image'
+      ? `<img src="${hw.file_url}" style="width:100%;border-radius:20px;display:block;">`
+      : `<a href="${hw.file_url}" target="_blank" style="display:flex;align-items:center;gap:12px;padding:8px;color:inherit;text-decoration:none;">
+          <div class="icon-box" style="width:44px;height:44px;background:rgba(103,80,164,0.1);flex-shrink:0;"><i data-lucide="file" style="width:20px;height:20px;color:#6750a4;"></i></div>
+          <span style="font-weight:600;font-size:0.85rem;">Datei öffnen</span>
+        </a>`;
+  } else {
+    wrap.style.display = 'none';
+  }
+  if (window.lucide) lucide.createIcons();
+}
+
+// Just triggers browser back — the popstate handler in app.js (which looks
+// for .page-overlay.active) does the actual close. Doing both here AND
+// there would double-process: by the time popstate fires, this overlay
+// would already have lost its "active" class, so that handler would fall
+// through and incorrectly close the homework list page underneath it.
+function closeHwDetail() {
+  hwDetailId = null;
+  history.back();
+}
+
+async function toggleHwFromDetail() {
+  if (hwDetailId == null) return;
+  await toggleHw(hwDetailId);
+  const hw = hwItems.find(h => h.id === hwDetailId);
+  if (hw) renderHwDetail(hw);
+}
+
+async function deleteHwFromDetail() {
+  if (hwDetailId == null) return;
+  await deleteHw(hwDetailId);
+  closeHwDetail();
+}
+
+// ---- "New homework" sheet: subject/description + smart due-date + attachment ----
+
 function openHwSheet() {
-  const defaultSubId = hwCurrentSubjectId();
+  const defaultSubId = hwCurrentSubjectId() || (hwSubjects[0] && hwSubjects[0].id);
+  hwDueMode = 'next';
+  hwCustomDate = null;
+  hwPendingFile = null;
   openSheet('<div class="sheet-title">Neue Hausaufgabe</div>'
-    + '<select class="m3-select" id="hw-subject">' + hwSubjects.map(s=>'<option value="'+s.id+'"'+(s.id===defaultSubId?' selected':'')+'>'+s.name+'</option>').join('') + '</select>'
+    + '<select class="m3-select" id="hw-subject" onchange="renderHwDueSection()">' + hwSubjects.map(s=>'<option value="'+s.id+'"'+(s.id===defaultSubId?' selected':'')+'>'+escapeHtml(s.name)+'</option>').join('') + '</select>'
     + '<textarea class="m3-input" id="hw-desc" placeholder="Beschreibung" rows="3" style="resize:none;height:auto;"></textarea>'
-    + '<input class="m3-input" id="hw-due" type="date" value="' + new Date(Date.now()+86400000).toISOString().slice(0,10) + '">'
-    + '<button class="m3-btn-full" onclick="saveHw()">Speichern</button>');
+    + '<div class="section-label" style="margin:16px 4px 6px 4px;">Fällig am</div>'
+    + '<div id="hw-due-section"></div>'
+    + '<div class="section-label" style="margin:16px 4px 6px 4px;">Anhang</div>'
+    + '<label class="m3-btn-tonal" style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;">'
+    +   '<i data-lucide="camera" style="width:18px;height:18px;"></i> Foto/Datei hinzufügen'
+    +   '<input type="file" id="hw-file-input" accept="image/*,application/pdf" style="display:none;" onchange="hwFileSelected(this)">'
+    + '</label>'
+    + '<div id="hw-file-preview"></div>'
+    + '<button class="m3-btn-full" onclick="saveHw()" style="margin-top:16px;">Speichern</button>');
+  renderHwDueSection();
+  if (window.lucide) lucide.createIcons();
+}
+
+function renderHwDueSection() {
+  const container = document.getElementById('hw-due-section');
+  const subjectSelect = document.getElementById('hw-subject');
+  if (!container || !subjectSelect) return;
+  const subjectId = parseInt(subjectSelect.value);
+  const untisReady = !!(hwTimetable && hwTimetable.configured && !hwTimetable.error);
+
+  if (!untisReady) {
+    container.innerHTML = `<input class="m3-input" id="hw-due" type="date" value="${hwCustomDate || hwDefaultTomorrow()}" onchange="hwCustomDate=this.value">`;
+    return;
+  }
+
+  const dates = hwSubjectLessonDates(subjectId);
+  if (dates.length === 0 && hwDueMode !== 'custom') hwDueMode = 'custom';
+  const nextIso = dates[0] ? yyyymmddToIso(dates[0]) : null;
+  const next2Iso = dates[1] ? yyyymmddToIso(dates[1]) : null;
+
+  let html = `<div class="hw-due-segments">
+    <button type="button" class="hw-due-seg ${hwDueMode==='next'?'active':''}" ${!nextIso?'disabled':''} onclick="setHwDueMode('next')">Nächste Stunde</button>
+    <button type="button" class="hw-due-seg ${hwDueMode==='next2'?'active':''}" ${!next2Iso?'disabled':''} onclick="setHwDueMode('next2')">Übernächste</button>
+    <button type="button" class="hw-due-seg ${hwDueMode==='custom'?'active':''}" onclick="setHwDueMode('custom')">Datum wählen</button>
+  </div>`;
+
+  if (hwDueMode === 'next' || hwDueMode === 'next2') {
+    const iso = hwDueMode === 'next' ? nextIso : next2Iso;
+    html += `<div class="hw-due-computed">${hwFormatDueLabel(iso)}</div>`;
+  } else {
+    const chipDays = [];
+    for (let i = 0; i < 14; i++) {
+      const iso = new Date(Date.now() + i*86400000).toISOString().slice(0,10);
+      chipDays.push({ iso, num: iso.replace(/-/g,''), hasLesson: dates.includes(iso.replace(/-/g,'')) });
+    }
+    if (!hwCustomDate) hwCustomDate = (chipDays[1] || chipDays[0]).iso;
+    const chipsHtml = chipDays.map(d => {
+      const dt = new Date(d.iso + 'T00:00');
+      const wd = dt.toLocaleDateString('de-DE', { weekday: 'short' });
+      const isSel = d.iso === hwCustomDate;
+      return `<button type="button" class="hw-day-chip ${d.hasLesson?'has-lesson':''} ${isSel?'selected':''}" onclick="pickHwCustomDate('${d.iso}')">
+        <span class="hw-day-chip-wd">${wd}</span><span class="hw-day-chip-num">${dt.getDate()}</span>
+      </button>`;
+    }).join('');
+    html += `<div class="hw-day-chip-strip no-scrollbar">${chipsHtml}</div>
+      <div style="margin-top:10px;">
+        <input class="m3-input" id="hw-due-custom-input" type="date" value="${hwCustomDate}" onchange="pickHwCustomDate(this.value)">
+      </div>`;
+  }
+
+  container.innerHTML = html;
+}
+
+function setHwDueMode(mode) {
+  hwDueMode = mode;
+  renderHwDueSection();
+}
+
+function pickHwCustomDate(iso) {
+  hwCustomDate = iso;
+  renderHwDueSection();
+}
+
+function getHwDueDateValue() {
+  const plainInput = document.getElementById('hw-due');
+  if (plainInput) return plainInput.value;
+  if (hwDueMode === 'next' || hwDueMode === 'next2') {
+    const subjectId = parseInt(document.getElementById('hw-subject').value);
+    const dates = hwSubjectLessonDates(subjectId);
+    const iso = hwDueMode === 'next' ? dates[0] : dates[1];
+    return iso ? yyyymmddToIso(iso) : (hwCustomDate || hwDefaultTomorrow());
+  }
+  return hwCustomDate || hwDefaultTomorrow();
+}
+
+async function hwFileSelected(inputEl) {
+  const file = inputEl.files[0];
+  inputEl.value = '';
+  if (!file) return;
+  const preview = document.getElementById('hw-file-preview');
+  if (preview) preview.innerHTML = '<div style="font-size:0.8rem;opacity:0.6;margin-top:8px;">Wird hochgeladen…</div>';
+  try {
+    const form = new FormData();
+    form.append('file', file);
+    hwPendingFile = await API.uploadHwFile(form);
+    renderHwFilePreview();
+  } catch {
+    if (preview) preview.innerHTML = '';
+    showToast('Upload fehlgeschlagen');
+  }
+}
+
+function renderHwFilePreview() {
+  const preview = document.getElementById('hw-file-preview');
+  if (!preview) return;
+  if (!hwPendingFile) { preview.innerHTML = ''; return; }
+  const isImg = hwPendingFile.type === 'image';
+  preview.innerHTML = `<div style="display:flex;align-items:center;gap:10px;margin-top:10px;background:#f5f3f9;border-radius:14px;padding:8px 10px;">
+    ${isImg
+      ? `<img src="${hwPendingFile.url}" style="width:44px;height:44px;border-radius:10px;object-fit:cover;flex-shrink:0;">`
+      : `<div class="icon-box" style="width:44px;height:44px;background:rgba(103,80,164,0.1);flex-shrink:0;"><i data-lucide="file" style="width:20px;height:20px;"></i></div>`}
+    <span style="flex:1;font-size:0.82rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(hwPendingFile.name || 'Datei')}</span>
+    <button onclick="removeHwFile()" style="background:rgba(0,0,0,0.06);border:none;border-radius:10px;width:30px;height:30px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><i data-lucide="x" style="width:14px;height:14px;"></i></button>
+  </div>`;
+  if (window.lucide) lucide.createIcons();
+}
+
+function removeHwFile() {
+  hwPendingFile = null;
+  renderHwFilePreview();
 }
 
 async function saveHw() {
   const subject_id = parseInt(document.getElementById('hw-subject').value);
   const description = document.getElementById('hw-desc').value.trim();
-  const due_date = document.getElementById('hw-due').value;
+  const due_date = getHwDueDateValue();
   if (!description||!due_date) { showToast('Felder ausfullen'); return; }
   try {
-    const hw = await API.createHomework({subject_id,description,due_date});
+    const payload = { subject_id, description, due_date };
+    if (hwPendingFile) { payload.file_url = hwPendingFile.url; payload.file_type = hwPendingFile.type; }
+    const hw = await API.createHomework(payload);
     hwItems.push(hw); closeSheet(); renderHwStats(); renderHw(); showToast('Gespeichert');
   } catch { showToast('Fehler'); }
 }

@@ -46,3 +46,10 @@ async def _migrate_columns(conn):
     existing_users = {row[1] for row in result_users.fetchall()}
     if "avatar_url" not in existing_users:
         await conn.execute(text("ALTER TABLE users ADD COLUMN avatar_url TEXT"))
+
+    result_hw = await conn.execute(text("PRAGMA table_info(homework)"))
+    existing_hw = {row[1] for row in result_hw.fetchall()}
+    if "file_url" not in existing_hw:
+        await conn.execute(text("ALTER TABLE homework ADD COLUMN file_url TEXT"))
+    if "file_type" not in existing_hw:
+        await conn.execute(text("ALTER TABLE homework ADD COLUMN file_type TEXT"))

@@ -38,6 +38,11 @@ function applyAvatarEl(el, user, fallbackText) {
   }
 }
 
+function escapeHtml(str) {
+  if (!str) return '';
+  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+}
+
 function showToast(msg, duration = 3000) {
   const t = document.getElementById('toast');
   t.textContent = msg;
@@ -144,6 +149,17 @@ window.addEventListener('popstate', (e) => {
   }
   if (sheetActive) {
     closeSheet(true);
+    return;
+  }
+
+  // Detail overlays (e.g. a homework item opened on top of the list page)
+  // stack on top of a regular .page rather than replacing it — close the
+  // overlay first so back-navigation doesn't yank the page underneath it.
+  const overlay = document.querySelector('.page-overlay.active');
+  if (overlay) {
+    overlay.classList.remove('active');
+    overlay.classList.add('closing');
+    setTimeout(() => overlay.remove(), 600);
     return;
   }
 
