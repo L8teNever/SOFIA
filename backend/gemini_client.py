@@ -75,10 +75,27 @@ async def extract_meal_days(image_bytes: bytes, mime_type: str) -> list[dict]:
         }],
         "generationConfig": {"temperature": 0.1, "responseMimeType": "application/json"},
     }
-    url = GEMINI_URL.format(model=settings.gemini_model)
+    model = settings.gemini_model
+    # gemini-2.0-flash is retired by Google; auto-upgrade to gemini-3.6-flash
+    if model in ("gemini-2.0-flash", "gemini-2.0-flash-exp"):
+        model = "gemini-3.6-flash"
 
     async with httpx.AsyncClient(timeout=60) as client:
-        resp = await client.post(url, params={"key": settings.gemini_api_key}, json=body)
+        resp = await client.post(
+            GEMINI_URL.format(model=model),
+            params={"key": settings.gemini_api_key},
+            json=body,
+        )
+
+        # Fallback to gemini-3.6-flash if custom/deprecated model returned 404
+        if resp.status_code == 404 and model != "gemini-3.6-flash":
+            logger.info("Modell %s meldete 404; Fallback auf gemini-3.6-flash...", model)
+            model = "gemini-3.6-flash"
+            resp = await client.post(
+                GEMINI_URL.format(model=model),
+                params={"key": settings.gemini_api_key},
+                json=body,
+            )
 
     if resp.status_code != 200:
         err_msg = ""
