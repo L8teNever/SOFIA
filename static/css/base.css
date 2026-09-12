@@ -23,11 +23,19 @@
    show/hide and rubber-band scroll reveal whatever's behind body for a
    frame, so a mismatched vh/dvh height shows up as a white bar. Matching
    the app background here makes that gap invisible instead of white. */
-html { height: 100%; background: var(--m3-bg); }
+html {
+  height: 100%;
+  background: var(--m3-bg);
+  touch-action: manipulation;
+  -webkit-text-size-adjust: 100%;
+}
 
 /* Remove browser blue tap highlight and focus rings on interactive elements */
 * { -webkit-tap-highlight-color: transparent; }
-button, a, [onclick], [tabindex], input, select, textarea { outline: none; }
+button, a, [onclick], [tabindex], input, select, textarea, .widget, .m3-card, .fab, .icon-btn {
+  outline: none;
+  touch-action: manipulation;
+}
 button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
   outline: 2px solid var(--m3-prim);
   outline-offset: 2px;
@@ -269,8 +277,8 @@ body.has-update-banner { padding-top: 52px; transition: padding-top 0.3s ease; }
   opacity: 0; pointer-events: none;
   border-radius: 0; margin: 0 auto; overflow: hidden;
   transform-origin: var(--ox, 50%) var(--oy, 50%);
-  transform: scale(0.05);
-  transition: transform 0.55s var(--m3-easing), opacity 0.35s var(--m3-easing), border-radius 0.5s var(--m3-easing);
+  transform: scale(0.08);
+  transition: transform 0.28s cubic-bezier(0.1, 0.9, 0.2, 1), opacity 0.2s ease;
 }
 /* Tablet and desktop: full-screen pages, no floating popup card — a
    subpage should use the whole window, not shrink into an inset card with
@@ -286,7 +294,7 @@ body.has-update-banner { padding-top: 52px; transition: padding-top 0.3s ease; }
   .page.closing { border-radius: 0; }
 }
 .page.active  { transform: scale(1); opacity: 1; pointer-events: all; }
-.page.closing { transform: scale(0.05); opacity: 0; }
+.page.closing { transform: scale(0.08); opacity: 0; transition: transform 0.22s ease-in, opacity 0.18s ease-in; }
 
 .page-scroll {
   flex: 1; overflow-y: auto;

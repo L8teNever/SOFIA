@@ -1,13 +1,34 @@
+// Prevent mobile gesture & double-tap zoom
+document.addEventListener('gesturestart', e => e.preventDefault(), { passive: false });
+document.addEventListener('gesturechange', e => e.preventDefault(), { passive: false });
+document.addEventListener('gestureend', e => e.preventDefault(), { passive: false });
+
+let lastTouchTime = 0;
+document.addEventListener('touchend', function(e) {
+  const now = Date.now();
+  if (now - lastTouchTime <= 300) {
+    if (!['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) {
+      e.preventDefault();
+    }
+  }
+  lastTouchTime = now;
+}, { passive: false });
+
+document.addEventListener('wheel', function(e) {
+  if (e.ctrlKey) e.preventDefault();
+}, { passive: false });
+
+document.addEventListener('dblclick', function(e) {
+  if (!['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) {
+    e.preventDefault();
+  }
+});
+
 let currentUser = null;
 let currentPage = null;
 let pageHistory = [];
 let isSelfPopping = false;
 
-// Keep --app-height in sync with the real visible viewport (visualViewport,
-// where available) instead of relying on vh/dvh alone. Mobile Safari doesn't
-// shrink vh when the keyboard opens, and dvh support/behavior is still
-// inconsistent across iOS versions — this covers both plus browser
-// chrome show/hide, so body always matches what's actually on screen.
 function updateAppHeight() {
   const h = (window.visualViewport ? window.visualViewport.height : window.innerHeight);
   document.documentElement.style.setProperty('--app-height', h + 'px');
@@ -17,6 +38,20 @@ window.addEventListener('resize', updateAppHeight);
 window.addEventListener('orientationchange', updateAppHeight);
 if (window.visualViewport) {
   window.visualViewport.addEventListener('resize', updateAppHeight);
+}
+
+const KNOWN_PAGES = ['calendar','homework','grades','timetable','mealplan','drive','quickshare','settings','admin','notifications'];
+const pageCache = new Map();
+
+function prefetchPages() {
+  KNOWN_PAGES.forEach(name => {
+    if (!pageCache.has(name)) {
+      fetch('/pages/' + name + '.html')
+        .then(res => res.ok ? res.text() : null)
+        .then(html => { if (html) pageCache.set(name, html); })
+        .catch(() => {});
+    }
+  });
 }
 
 // Returns an inline-style fragment that paints a user's avatar_url as the
@@ -83,14 +118,17 @@ async function openPage(name, triggerEl, preserveUrl = false) {
     ox = (r.left + r.width / 2) + 'px';
     oy = (r.top + r.height / 2) + 'px';
   }
-  let html;
-  try {
-    const res = await fetch('/pages/' + name + '.html', { cache: 'no-store' });
-    if (!res.ok) throw new Error('not found');
-    html = await res.text();
-  } catch {
-    showToast('Seite nicht gefunden');
-    return;
+  let html = pageCache.get(name);
+  if (!html) {
+    try {
+      const res = await fetch('/pages/' + name + '.html');
+      if (!res.ok) throw new Error('not found');
+      html = await res.text();
+      pageCache.set(name, html);
+    } catch {
+      showToast('Seite nicht gefunden');
+      return;
+    }
   }
   const existing = document.getElementById('page-container').querySelector('.page');
   if (existing) existing.remove();
@@ -103,7 +141,9 @@ async function openPage(name, triggerEl, preserveUrl = false) {
   page.style.setProperty('--oy', oy);
   document.body.appendChild(page);
   container.innerHTML = '';
-  requestAnimationFrame(() => requestAnimationFrame(() => page.classList.add('active')));
+  // Force layout reflow so animation starts immediately
+  page.getBoundingClientRect();
+  requestAnimationFrame(() => page.classList.add('active'));
   
   if (!preserveUrl) {
     history.pushState({ page: name }, '', '/' + name);
@@ -126,7 +166,7 @@ function closePage() {
   const wasNotifications = currentPage === 'notifications';
   page.classList.remove('active');
   page.classList.add('closing');
-  setTimeout(() => page.remove(), 600);
+  setTimeout(() => page.remove(), 260);
   pageHistory.pop();
   currentPage = pageHistory[pageHistory.length - 1] || null;
   const prev = pageHistory[pageHistory.length - 1];
@@ -445,7 +485,30 @@ function showNotActivated(email) {
     '</div>';
 }
 
+let introTimer = null;
+let introFinished = false;
+
+function skipIntro() {
+  if (introFinished) return;
+  introFinished = true;
+  if (introTimer) clearTimeout(introTimer);
+  const overlay = document.getElementById('intro-overlay');
+  if (overlay) {
+    overlay.style.transition = 'opacity 0.22s ease';
+    overlay.style.opacity = '0';
+    overlay.style.pointerEvents = 'none';
+    setTimeout(function() { if (overlay && overlay.parentNode) overlay.remove(); }, 250);
+  }
+  showApp();
+}
+
 function runIntro(deepLinkPromise) {
+  const overlay = document.getElementById('intro-overlay');
+  if (overlay) {
+    overlay.addEventListener('click', skipIntro);
+    overlay.addEventListener('touchstart', skipIntro, { passive: true });
+  }
+
   const name = currentUser && (currentUser.display_name || currentUser.email.split('@')[0]);
   const lines = name ? ['Willkommen zurück,', name] : ['Willkommen zurück'];
   const container = document.getElementById('intro-text');
@@ -473,30 +536,17 @@ function runIntro(deepLinkPromise) {
       c.style.transform = 'scale(1) translateY(0)';
     });
   });
-  setTimeout(async function() {
-    // If we're deep-linking straight to a subpage, wait for it to actually
-    // be open before the intro fades — it was kicked off back in boot(), in
-    // parallel with everything else, and sits at z-index 100 (well under
-    // the intro overlay's 2000) so it's invisible regardless of timing. In
-    // practice a same-origin page fetch finishes long before this animation
-    // does, so this normally resolves instantly; it's just a safety net for
-    // a slow connection so the dashboard never gets a chance to show through
-    // once the overlay actually starts fading.
+  introTimer = setTimeout(async function() {
+    if (introFinished) return;
     if (deepLinkPromise) { try { await deepLinkPromise; } catch (e) {} }
-    const overlay = document.getElementById('intro-overlay');
-    overlay.style.opacity = '0';
-    overlay.style.pointerEvents = 'none';
-    setTimeout(function() { if (overlay.parentNode) overlay.remove(); }, 900);
-    showApp();
+    skipIntro();
   }, charIdx * 45 + 700);
 }
-
-const KNOWN_PAGES = ['calendar','homework','grades','timetable','mealplan','drive','quickshare','settings','admin','notifications'];
 
 function showApp() {
   document.getElementById('app').classList.add('ready');
   document.querySelectorAll('.widget').forEach(function(w, i) {
-    setTimeout(function() { w.classList.add('pop'); }, i * 70);
+    setTimeout(function() { w.classList.add('pop'); }, i * 35);
   });
   if (window.lucide) lucide.createIcons();
   loadDashboard();
@@ -531,6 +581,7 @@ function showApp() {
 async function boot() {
   try {
     currentUser = await API.me();
+    prefetchPages();
   } catch (err) {
     let email = '';
     try { const c = await fetch('/api/v1/auth/check'); const j = await c.json(); email = j.email || ''; } catch {}
