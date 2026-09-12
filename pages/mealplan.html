@@ -5,6 +5,9 @@
       <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.5;color:#072711;" id="meal-header-sub">Essensplan</div>
       <span class="page-title" style="color:#072711;">Essensplan</span>
     </div>
+    <button class="icon-btn" id="meal-delete-btn" onclick="deleteMealPlanConfirm()" style="display:none;color:#b3261e;">
+      <i data-lucide="trash-2" style="width:20px;height:20px;"></i>
+    </button>
   </div>
 
   <div class="page-scroll-1col no-scrollbar"><div class="page-inner">
@@ -57,8 +60,11 @@
 </div>
 <script>
 let mealPlan = null;
+let mealCanDelete = false;
 
 async function init_mealplan() {
+  const me = await API.me().catch(() => null);
+  mealCanDelete = !!(me && (me.role === 'admin' || me.role === 'super_admin'));
   await refreshMealPlan();
 }
 
@@ -81,15 +87,19 @@ function renderMealPlan(res) {
   const today = new Date().toISOString().slice(0, 10);
   const sub = document.getElementById('meal-header-sub');
 
+  const deleteBtn = document.getElementById('meal-delete-btn');
+
   if (!mealPlan || !mealPlan.days || !mealPlan.days.length) {
     document.getElementById('meal-empty').style.display = 'block';
     document.getElementById('meal-content').style.display = 'none';
     if (sub) sub.textContent = 'Kein Plan vorhanden';
+    if (deleteBtn) deleteBtn.style.display = 'none';
     return;
   }
 
   document.getElementById('meal-empty').style.display = 'none';
   document.getElementById('meal-content').style.display = 'block';
+  if (deleteBtn) deleteBtn.style.display = mealCanDelete ? 'flex' : 'none';
 
   const todayMeal = (res && res.today && res.today.meal) || null;
   if (sub) sub.textContent = todayMeal ? 'Heute: ' + todayMeal : 'Kein Essen für heute im Plan';
@@ -112,6 +122,18 @@ function renderMealPlan(res) {
 
   document.getElementById('meal-image').src = mealPlan.image_url;
   if (window.lucide) lucide.createIcons();
+}
+
+async function deleteMealPlanConfirm() {
+  if (!mealPlan || !confirm('Diesen Essensplan wirklich löschen?')) return;
+  try {
+    await API.deleteMealPlan(mealPlan.id);
+    mealPlan = null;
+    renderMealPlan(null);
+    showToast('Essensplan gelöscht');
+  } catch {
+    showToast('Fehler');
+  }
 }
 
 function toggleMealImage() {

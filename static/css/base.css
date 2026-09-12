@@ -224,6 +224,16 @@ body.has-update-banner { padding-top: 52px; transition: padding-top 0.3s ease; }
   align-items: center;
 }
 .w-stack > .widget .icon-box { width: 40px !important; height: 40px !important; }
+/* .w-square's own justify-content:space-between (meant for its normal
+   column layout: icon on top, text at the bottom) survives the flip to
+   row above since this override never touched that property — pushing the
+   text all the way to the far edge of the row instead of next to the icon.
+   Only .w-square needs this; .w-half/.w-compact already lay out with a
+   gap and no space-between. */
+.w-stack > .widget.w-square {
+  justify-content: flex-start;
+  gap: 12px;
+}
 
 .icon-box {
   display: flex; align-items: center; justify-content: center;

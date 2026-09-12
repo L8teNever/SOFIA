@@ -58,6 +58,7 @@ const API = {
   mealplanCurrent:  ()       => API.get('/mealplan/current'),
   uploadMealPlan:   (form)   => API.upload('/mealplan/upload', form),
   updateMealDay:    (id, d)  => API.patch(`/mealplan/day/${id}`, d),
+  deleteMealPlan:   (id)     => API.delete(`/mealplan/${id}`),
   files:         ()       => API.get('/files/'),
   uploadFile:    (form)   => API.upload('/files/', form),
   deleteFile:    (id)     => API.delete(`/files/${id}`),

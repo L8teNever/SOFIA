@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from backend.database import get_db
-from backend.auth import get_current_user
+from backend.auth import get_current_user, require_admin
 from backend.models.meal_plan import MealPlan, MealPlanDay
 from backend.models.user import User
 from backend.schemas import MealPlanOut, MealPlanDayOut, MealPlanDayUpdate
@@ -81,6 +81,21 @@ async def current_meal_plan(db: AsyncSession = Depends(get_db), current_user: Us
         "today": MealPlanDayOut.model_validate(today_day) if today_day else None,
         "plan": MealPlanOut.model_validate(plan) if plan else None,
     }
+
+
+@router.delete("/{plan_id}")
+async def delete_meal_plan(
+    plan_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_admin),
+):
+    plan = await _get_plan(db, plan_id)
+    if not plan:
+        raise HTTPException(404)
+    path = os.path.join(settings.upload_dir, "mealplan", os.path.basename(plan.image_url))
+    if os.path.exists(path):
+        os.remove(path)
+    await db.delete(plan)
+    await db.commit()
+    return {"ok": True}
 
 
 @router.patch("/day/{day_id}", response_model=MealPlanDayOut)
