@@ -497,12 +497,7 @@ async function boot() {
     return;
   }
   const didOnboard = await checkAndRunOnboarding();
-  if (currentUser.role === 'admin' || currentUser.role === 'super_admin') {
-    document.getElementById('admin-widget').style.display = 'flex';
-  }
   updateGreeting();
-  const sn = document.getElementById('w-settings-name');
-  if (sn) sn.textContent = (currentUser.display_name || currentUser.email.split('@')[0]) + ' · ' + (currentUser.class_name || '');
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js').then(function(reg) {
       // If a new SW is already waiting right after registration (rare but possible)

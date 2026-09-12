@@ -20,10 +20,14 @@ async def push_to_users(db: AsyncSession, users: List[User], title: str, body: s
     sent = 0
     if settings.vapid_private_key:
         from pywebpush import webpush, WebPushException
-        expired_ids = []
-        for u in users:
+
+        # Each webpush call is a blocking HTTP request run on a thread; firing
+        # them one at a time made the total time scale with the class size
+        # (25 users x ~300ms was ~7.5s). Run them concurrently instead — total
+        # time is then roughly the slowest single push, not the sum.
+        async def _send_one(u: User):
             if not u.push_subscription:
-                continue
+                return None
             try:
                 sub = json.loads(u.push_subscription)
                 await asyncio.to_thread(
@@ -33,14 +37,19 @@ async def push_to_users(db: AsyncSession, users: List[User], title: str, body: s
                     vapid_private_key=settings.vapid_private_key,
                     vapid_claims={"sub": settings.vapid_claim_email},
                 )
-                sent += 1
+                return "sent"
             except WebPushException as e:
                 if e.response is not None and e.response.status_code in (404, 410):
-                    expired_ids.append(u.id)
-                else:
-                    logger.warning("Push failed for user %s: %s", u.id, e)
+                    return ("expired", u.id)
+                logger.warning("Push failed for user %s: %s", u.id, e)
+                return None
             except Exception as e:
                 logger.warning("Push error for user %s: %s", u.id, e)
+                return None
+
+        results = await asyncio.gather(*(_send_one(u) for u in users))
+        sent = sum(1 for r in results if r == "sent")
+        expired_ids = [r[1] for r in results if isinstance(r, tuple)]
         if expired_ids:
             expired_result = await db.execute(select(User).where(User.id.in_(expired_ids)))
             for u in expired_result.scalars().all():

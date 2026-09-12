@@ -45,6 +45,21 @@
       <div style="font-size:0.8rem;opacity:0.5;" id="settings-class-info"></div>
     </div>
 
+    <!-- Admin (shown conditionally) -->
+    <div class="section-label" id="settings-admin-label" style="display:none;">Verwaltung</div>
+    <div class="m3-card" id="settings-admin-card" style="display:none;cursor:pointer;" onclick="openPage('admin')">
+      <div style="display:flex;align-items:center;gap:14px;">
+        <div class="icon-box" style="width:40px;height:40px;background:rgba(103,80,164,0.1);flex-shrink:0;">
+          <i data-lucide="shield" style="width:20px;height:20px;color:#6750a4;"></i>
+        </div>
+        <div style="flex:1;">
+          <div style="font-weight:700;">Admin-Panel</div>
+          <div style="font-size:0.8rem;opacity:0.5;">Nutzer, Klassen & Fächer verwalten</div>
+        </div>
+        <i data-lucide="chevron-right" style="width:18px;height:18px;opacity:0.5;"></i>
+      </div>
+    </div>
+
     <!-- App info -->
     <div class="section-label">App</div>
     <div class="m3-card">
@@ -80,6 +95,11 @@ async function init_settings() {
   document.getElementById('settings-name-input').value = settingsUser.display_name || '';
   const roleLabel = { student:'Schüler', admin:'Admin', super_admin:'Super-Admin' };
   document.getElementById('settings-role').textContent = roleLabel[settingsUser.role] || settingsUser.role;
+
+  if (settingsUser.role === 'admin' || settingsUser.role === 'super_admin') {
+    document.getElementById('settings-admin-label').style.display = 'block';
+    document.getElementById('settings-admin-card').style.display = 'block';
+  }
 
   // Check push status
   if ('serviceWorker' in navigator && 'PushManager' in window) {

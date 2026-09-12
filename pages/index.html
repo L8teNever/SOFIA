@@ -9,7 +9,7 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
-  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://unpkg.com/lucide@latest" defer></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&display=swap">
   <link rel="stylesheet" href="/static/css/base.css?v=__BUILD__">
@@ -114,28 +114,6 @@
       <div style="overflow:hidden;flex:1;min-width:0;">
         <div style="font-size:0.88rem;font-weight:700;" class="widget-title">Share</div>
         <div style="font-size:0.72rem;opacity:0.6;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><span id="w-files-count">0</span> geteilt</div>
-      </div>
-    </div>
-
-    <!-- Settings -->
-    <div class="widget w-compact" style="background:#25232a;color:white;" onclick="openPage('settings',this)" data-page="settings">
-      <div class="icon-box" style="width:40px;height:40px;background:rgba(255,255,255,0.1);">
-        <i data-lucide="settings" style="width:20px;height:20px;"></i>
-      </div>
-      <div style="overflow:hidden;flex:1;min-width:0;">
-        <div style="font-size:0.88rem;font-weight:700;" class="widget-title">Einstellungen</div>
-        <div style="font-size:0.72rem;opacity:0.5;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" id="w-settings-name">–</div>
-      </div>
-    </div>
-
-    <!-- Admin (shown conditionally) -->
-    <div class="widget w-compact" style="background:#25232a;color:white;display:none;" id="admin-widget" onclick="openPage('admin',this)" data-page="admin">
-      <div class="icon-box" style="width:40px;height:40px;background:rgba(255,255,255,0.1);">
-        <i data-lucide="shield" style="width:20px;height:20px;"></i>
-      </div>
-      <div style="overflow:hidden;flex:1;min-width:0;">
-        <div style="font-size:0.88rem;font-weight:700;" class="widget-title">Admin</div>
-        <div style="font-size:0.72rem;opacity:0.5;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Panel</div>
       </div>
     </div>
 

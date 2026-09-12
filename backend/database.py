@@ -1,4 +1,5 @@
 import os
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
 from backend.config import settings
@@ -13,6 +14,18 @@ if _db_path and not _db_path.startswith(":"):
 
 engine = create_async_engine(settings.database_url, echo=False)
 AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
+
+if settings.database_url.startswith("sqlite"):
+    # WAL lets readers keep going while a write is in progress instead of
+    # locking the whole file — matters once more than one person is using
+    # the app at the same time. synchronous=NORMAL is the standard pairing
+    # with WAL (still crash-safe, just skips an fsync WAL already covers).
+    @event.listens_for(engine.sync_engine, "connect")
+    def _set_sqlite_pragmas(dbapi_connection, connection_record):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+        cursor.close()
 
 class Base(DeclarativeBase):
     pass
