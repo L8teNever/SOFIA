@@ -75,14 +75,40 @@
       </div>
     </div>
 
-    <!-- App info -->
-    <div class="section-label">App</div>
-    <div class="m3-card">
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;">
-        <span style="opacity:0.7;">Version</span><span style="font-weight:600;">1.0.0</span>
+    <!-- App & Version info -->
+    <div class="section-label">App & Version</div>
+    <div class="m3-card" id="settings-version-card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;padding:2px 0 6px;">
+        <div>
+          <div style="font-weight:700;font-size:0.95rem;display:flex;align-items:center;gap:6px;">
+            Sofia Web
+            <span id="settings-commit-badge" class="chip" style="font-size:0.7rem;padding:2px 7px;border-radius:6px;background:rgba(103,80,164,0.08);color:#6750a4;font-family:monospace;font-weight:700;border:none;">#main</span>
+          </div>
+          <div style="font-size:0.78rem;opacity:0.6;margin-top:3px;" id="settings-build-date">Build wird geladen...</div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-weight:800;font-size:0.95rem;color:#1c1b1f;" id="settings-version-label">v1.2.0</div>
+          <div id="settings-version-status-badge" style="display:inline-flex;align-items:center;gap:4px;font-size:0.75rem;font-weight:700;color:#2e7d32;margin-top:3px;">
+            <i data-lucide="check-circle" style="width:13px;height:13px;"></i>
+            <span id="settings-version-status-text">Auf neuestem Stand</span>
+          </div>
+        </div>
       </div>
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-top:1px solid rgba(0,0,0,0.05);">
-        <span style="opacity:0.7;">Powered by</span><span style="font-weight:600;">Sofia</span>
+
+      <div style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(0,0,0,0.05);">
+        <div id="settings-update-desc" style="font-size:0.8rem;opacity:0.7;margin-bottom:10px;line-height:1.4;">
+          Automatische Prüfung bei App-Start aktiv.
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button id="btn-check-updates" class="m3-btn" style="flex:1;min-width:140px;display:flex;align-items:center;justify-content:center;gap:6px;font-size:0.84rem;padding:8px 14px;background:#f3edf7;color:#6750a4;border:none;border-radius:12px;font-weight:700;cursor:pointer;" onclick="checkForUpdatesManual()">
+            <i data-lucide="refresh-cw" id="icon-update-spin" style="width:15px;height:15px;"></i>
+            <span id="text-check-updates">Nach Updates suchen</span>
+          </button>
+          <button id="btn-apply-update" class="m3-btn" style="display:none;flex:1;min-width:140px;align-items:center;justify-content:center;gap:6px;font-size:0.84rem;padding:8px 14px;background:#6750a4;color:#fff;border:none;border-radius:12px;font-weight:700;cursor:pointer;box-shadow:0 3px 10px rgba(103,80,164,0.3);" onclick="applyAppUpdate()">
+            <i data-lucide="download" style="width:15px;height:15px;"></i>
+            <span>Jetzt aktualisieren</span>
+          </button>
+        </div>
       </div>
     </div>
 
@@ -136,6 +162,7 @@ async function init_settings() {
   }
 
   updatePwaInstallState();
+  loadVersionInfo();
 }
 
 async function saveName() {
@@ -377,4 +404,144 @@ async function triggerPwaInstall() {
     <button class="m3-btn-full" onclick="closeSheet()">Verstanden</button>
   `);
 }
+
+let pendingUpdateSW = null;
+
+async function loadVersionInfo() {
+  const verLabel = document.getElementById('settings-version-label');
+  const commitBadge = document.getElementById('settings-commit-badge');
+  const buildDateEl = document.getElementById('settings-build-date');
+  const statusBadge = document.getElementById('settings-version-status-badge');
+  const applyBtn = document.getElementById('btn-apply-update');
+  const descEl = document.getElementById('settings-update-desc');
+
+  const clientVer = window.__APP_VERSION__ || '1.2.0';
+  if (verLabel) verLabel.textContent = 'v' + clientVer;
+
+  try {
+    const info = await API.appVersion();
+    if (info) {
+      if (verLabel) verLabel.textContent = 'v' + (info.version || clientVer);
+      if (commitBadge) commitBadge.textContent = '#' + (info.commit || 'main');
+      if (buildDateEl) buildDateEl.textContent = 'Stand: ' + (info.build_date || 'Unbekannt');
+
+      // 1. Check if an updated SW is already waiting in browser
+      if ('serviceWorker' in navigator) {
+        const reg = await navigator.serviceWorker.getRegistration();
+        if (reg && reg.waiting) {
+          pendingUpdateSW = reg.waiting;
+          markUpdateAvailable(info, 'Ein neues Update ist bereits geladen und bereit zur Installation.');
+          return;
+        }
+      }
+
+      // 2. Check if client build timestamp differs from server
+      const clientBuildTs = window.__BUILD_TS__;
+      if (clientBuildTs && clientBuildTs !== '__BUILD__' && info.build_ts && clientBuildTs !== info.build_ts) {
+        markUpdateAvailable(info, 'Eine neuere Version ist auf dem Server verfügbar.');
+        return;
+      }
+
+      // No update pending
+      if (statusBadge) {
+        statusBadge.style.color = '#2e7d32';
+        statusBadge.innerHTML = '<i data-lucide="check-circle" style="width:13px;height:13px;"></i> <span id="settings-version-status-text">Auf neuestem Stand</span>';
+      }
+      if (descEl) descEl.textContent = 'Deine Version ist aktuell. Keine neuen Updates verfügbar.';
+      if (applyBtn) applyBtn.style.display = 'none';
+      if (window.lucide) lucide.createIcons();
+    }
+  } catch (e) {
+    if (buildDateEl) buildDateEl.textContent = 'Version: v' + clientVer;
+  }
+}
+
+function markUpdateAvailable(info, msg) {
+  const statusBadge = document.getElementById('settings-version-status-badge');
+  const descEl = document.getElementById('settings-update-desc');
+  const applyBtn = document.getElementById('btn-apply-update');
+
+  if (statusBadge) {
+    statusBadge.style.color = '#b3261e';
+    statusBadge.innerHTML = '<i data-lucide="arrow-up-circle" style="width:13px;height:13px;"></i> <span id="settings-version-status-text">Update verfügbar</span>';
+  }
+  if (descEl) {
+    descEl.textContent = msg || 'Ein neues Update ist bereit zur Installation.';
+  }
+  if (applyBtn) {
+    applyBtn.style.display = 'inline-flex';
+  }
+  if (window.lucide) lucide.createIcons();
+}
+
+async function checkForUpdatesManual() {
+  const icon = document.getElementById('icon-update-spin');
+  const text = document.getElementById('text-check-updates');
+  const descEl = document.getElementById('settings-update-desc');
+
+  if (icon) icon.classList.add('spin');
+  if (text) text.textContent = 'Prüfe...';
+  if (descEl) descEl.textContent = 'Suche nach Server-Updates...';
+
+  try {
+    let updateFound = false;
+
+    // 1. Service Worker update check
+    if ('serviceWorker' in navigator) {
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (reg) {
+        await reg.update().catch(()=>{});
+        if (reg.waiting) {
+          pendingUpdateSW = reg.waiting;
+          updateFound = true;
+        }
+      }
+    }
+
+    // 2. Fetch version API
+    const info = await API.appVersion();
+    const clientBuildTs = window.__BUILD_TS__;
+    if (clientBuildTs && clientBuildTs !== '__BUILD__' && info && info.build_ts && clientBuildTs !== info.build_ts) {
+      updateFound = true;
+    }
+
+    if (updateFound) {
+      markUpdateAvailable(info, 'Neues Update verfügbar! Tippe auf „Jetzt aktualisieren“.');
+      showToast('🚀 Neues Update verfügbar!');
+    } else {
+      const statusBadge = document.getElementById('settings-version-status-badge');
+      const applyBtn = document.getElementById('btn-apply-update');
+      if (statusBadge) {
+        statusBadge.style.color = '#2e7d32';
+        statusBadge.innerHTML = '<i data-lucide="check-circle" style="width:13px;height:13px;"></i> <span id="settings-version-status-text">Auf neuestem Stand</span>';
+      }
+      if (descEl) descEl.textContent = 'Alles auf dem neuesten Stand (v' + (info?.version || '1.2.0') + ').';
+      if (applyBtn) applyBtn.style.display = 'none';
+      if (window.lucide) lucide.createIcons();
+      showToast('Sofia ist auf dem neuesten Stand ✓');
+    }
+  } catch (err) {
+    if (descEl) descEl.textContent = 'Update-Prüfung konnte nicht abgeschlossen werden.';
+    showToast('Prüfung fehlgeschlagen');
+  } finally {
+    if (icon) icon.classList.remove('spin');
+    if (text) text.textContent = 'Nach Updates suchen';
+  }
+}
+
+async function applyAppUpdate() {
+  showToast('Aktualisiere Sofia...');
+  if (pendingUpdateSW) {
+    pendingUpdateSW.postMessage({ type: 'SKIP_WAITING' });
+  } else if ('serviceWorker' in navigator) {
+    const reg = await navigator.serviceWorker.getRegistration();
+    if (reg && reg.waiting) {
+      reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+    }
+  }
+  setTimeout(() => {
+    window.location.reload(true);
+  }, 400);
+}
 </script>
+

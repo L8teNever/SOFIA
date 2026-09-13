@@ -9,6 +9,7 @@ from backend.auth import get_current_user
 from backend.models.user import User
 from backend.routes import auth_routes, users, classes, subjects, calendar, homework, grades, files, vapid, admin, timetable, mealplan
 from backend.routes.timetable import poll_cancelled_lessons_loop
+from backend.version import get_version_info
 import os, time, mimetypes, asyncio, logging
 
 logging.basicConfig(
@@ -53,6 +54,11 @@ async def impressum_config():
         "phone": settings.impressum_phone,
         "email": settings.impressum_email,
     }
+
+# App version & build metadata endpoint
+@app.get("/api/v1/version", include_in_schema=False)
+async def app_version():
+    return get_version_info(BUILD_TS)
 
 # Page fragments — only accessible when authenticated
 @app.get("/pages/{page_name}.html", include_in_schema=False)

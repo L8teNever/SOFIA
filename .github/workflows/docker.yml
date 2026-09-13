@@ -21,6 +21,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Write version metadata
+        run: |
+          echo "{\"version\": \"1.2.0\", \"commit\": \"${{ github.sha }}\"}" > backend/version.json
+
       - name: Fix Docker daemon DNS
         run: |
           echo '{"dns": ["8.8.8.8", "1.1.1.1"]}' | sudo tee /etc/docker/daemon.json
