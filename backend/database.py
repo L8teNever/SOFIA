@@ -53,3 +53,8 @@ async def _migrate_columns(conn):
         await conn.execute(text("ALTER TABLE homework ADD COLUMN file_url TEXT"))
     if "file_type" not in existing_hw:
         await conn.execute(text("ALTER TABLE homework ADD COLUMN file_type TEXT"))
+
+    result_cal = await conn.execute(text("PRAGMA table_info(calendar_events)"))
+    existing_cal = {row[1] for row in result_cal.fetchall()}
+    if "end_date" not in existing_cal:
+        await conn.execute(text("ALTER TABLE calendar_events ADD COLUMN end_date TEXT"))

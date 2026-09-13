@@ -38,15 +38,30 @@
   </button>
 </div>
 
+<style>
+.ev-mode-btn {
+  flex: 1; padding: 8px 12px; border: none; border-radius: 10px; background: transparent; font-size: 0.82rem; font-weight: 600; cursor: pointer; color: #49454f; transition: all 0.15s;
+}
+.ev-mode-btn.active {
+  background: #fff; color: var(--m3-prim); box-shadow: 0 1px 4px rgba(0,0,0,0.12);
+}
+.cal-day.is-holiday {
+  background: rgba(125, 82, 96, 0.12) !important;
+  color: #7d5260 !important;
+  font-weight: 700;
+  border-radius: 50%;
+}
+</style>
+
 <script>
 let calYear = new Date().getFullYear();
 let calMonth = new Date().getMonth();
 let calEvents = [];
 let calSubjects = [];
 
-const CAL_TYPE_COLORS = { exam:'#ffd8e4', trip:'#c4eed0', other:'#eaddff', personal:'#d3e3fd' };
-const CAL_TYPE_BORDER = { exam:'#b3261e', trip:'#146c2e', other:'#6750a4', personal:'#1a73e8' };
-const CAL_TYPE_LABEL  = { exam:'Klassenarbeit', trip:'Ausflug', other:'Sonstiges', personal:'Persönlich' };
+const CAL_TYPE_COLORS = { exam:'#ffd8e4', trip:'#c4eed0', other:'#eaddff', personal:'#d3e3fd', holiday:'#e8def8' };
+const CAL_TYPE_BORDER = { exam:'#b3261e', trip:'#146c2e', other:'#6750a4', personal:'#1a73e8', holiday:'#7d5260' };
+const CAL_TYPE_LABEL  = { exam:'Klassenarbeit', trip:'Ausflug', other:'Sonstiges', personal:'Persönlich', holiday:'Ferien' };
 
 async function init_calendar() {
   await Promise.all([
@@ -61,6 +76,33 @@ async function loadCalEvents() {
   calEvents = await API.events(month).catch(() => []);
 }
 
+function eventCoversDate(e, dStr) {
+  const start = e.date.slice(0, 10);
+  const end = e.end_date ? e.end_date.slice(0, 10) : start;
+  return dStr >= start && dStr <= end;
+}
+
+function formatCalDateLabel(e, today) {
+  const d = new Date(e.date + 'T00:00');
+  const isToday = e.date === today;
+  const isTomorrow = e.date === new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+  const singleLabel = isToday ? 'Heute' : isTomorrow ? 'Morgen' : d.toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'short' });
+
+  if (!e.end_date || e.end_date === e.date) {
+    return singleLabel + (e.time ? ' · ' + e.time : '');
+  }
+
+  const dEnd = new Date(e.end_date + 'T00:00');
+  const isRunning = today >= e.date && today <= e.end_date;
+  const startFmt = d.toLocaleDateString('de-DE', { day: 'numeric', month: 'short' });
+  const endFmt = dEnd.toLocaleDateString('de-DE', { day: 'numeric', month: 'short' });
+
+  if (isRunning) {
+    return `Läuft aktuell (bis ${endFmt})`;
+  }
+  return `${startFmt} – ${endFmt}`;
+}
+
 function renderCal() {
   const months = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
   const titleEl = document.getElementById('cal-month-title');
@@ -73,8 +115,8 @@ function renderCal() {
   const startDay = (first.getDay() + 6) % 7;
   const daysInMonth = new Date(calYear, calMonth+1, 0).getDate();
   const today = new Date().toISOString().slice(0,10);
-  const eventDates = new Set(calEvents.map(e => e.date.slice(0,10)));
   const prevDays = new Date(calYear, calMonth, 0).getDate();
+
   for (let i = startDay - 1; i >= 0; i--) {
     const d = document.createElement('div');
     d.className = 'cal-day muted';
@@ -83,8 +125,16 @@ function renderCal() {
   }
   for (let d = 1; d <= daysInMonth; d++) {
     const dateStr = calYear + '-' + String(calMonth+1).padStart(2,'0') + '-' + String(d).padStart(2,'0');
+    const covering = calEvents.filter(e => eventCoversDate(e, dateStr));
+    const hasEvent = covering.length > 0;
+    const hasHoliday = covering.some(e => e.event_type === 'holiday');
+
     const el = document.createElement('div');
-    el.className = 'cal-day' + (dateStr === today ? ' today' : '') + (eventDates.has(dateStr) ? ' has-event' : '');
+    let cls = 'cal-day';
+    if (dateStr === today) cls += ' today';
+    if (hasEvent) cls += ' has-event';
+    if (hasHoliday) cls += ' is-holiday';
+    el.className = cls;
     el.textContent = d;
     el.onclick = () => showDayEvents(dateStr);
     grid.appendChild(el);
@@ -95,7 +145,11 @@ function renderCal() {
 function renderEventList() {
   const list = document.getElementById('cal-events-list');
   const today = new Date().toISOString().slice(0,10);
-  const upcoming = calEvents.filter(e => e.date >= today).sort((a,b) => a.date.localeCompare(b.date));
+  const upcoming = calEvents.filter(e => {
+    const end = e.end_date ? e.end_date.slice(0, 10) : e.date.slice(0, 10);
+    return end >= today;
+  }).sort((a,b) => a.date.localeCompare(b.date));
+
   if (!upcoming.length) {
     list.innerHTML = '';
     document.getElementById('cal-no-events').style.display = 'block';
@@ -103,13 +157,9 @@ function renderEventList() {
   }
   document.getElementById('cal-no-events').style.display = 'none';
   list.innerHTML = upcoming.map(e => {
-    const bg = CAL_TYPE_COLORS[e.event_type] || '#eaddff';
     const border = CAL_TYPE_BORDER[e.event_type] || '#6750a4';
     const label = CAL_TYPE_LABEL[e.event_type] || 'Termin';
-    const d = new Date(e.date+'T00:00');
-    const isToday = e.date === today;
-    const isTomorrow = e.date === new Date(Date.now()+86400000).toISOString().slice(0,10);
-    const dayLabel = isToday ? 'Heute' : isTomorrow ? 'Morgen' : d.toLocaleDateString('de-DE',{weekday:'long',day:'numeric',month:'long'});
+    const dayLabel = formatCalDateLabel(e, today);
     const isExam = e.event_type === 'exam';
     const sub = e.subject_id ? calSubjects.find(s => s.id === e.subject_id) : null;
     const subName = sub ? (sub.name || sub.short_name) : '';
@@ -124,7 +174,7 @@ function renderEventList() {
         + subBadge
         + '</div>'
         + '<div style="font-size:1.15rem;font-weight:700;margin-top:4px;">' + e.title + '</div>'
-        + '<div style="font-size:0.82rem;opacity:0.75;margin-top:4px;">' + dayLabel + (e.time ? ' · ' + e.time : '') + '</div>'
+        + '<div style="font-size:0.82rem;opacity:0.75;margin-top:4px;">' + dayLabel + '</div>'
         + '</div>'
         + '<button onclick="delEvent(' + e.id + ')" style="background:rgba(255,255,255,0.12);border:none;border-radius:10px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;margin-top:-4px;">'
         + '<i data-lucide="x" style="width:14px;height:14px;color:white;"></i></button>'
@@ -138,7 +188,7 @@ function renderEventList() {
       + (subName ? `<span style="font-size:0.72rem;font-weight:600;background:rgba(0,0,0,0.06);padding:1px 6px;border-radius:6px;margin-left:6px;margin-bottom:2px;">${subName}</span>` : '')
       + '</div>'
       + '<div style="font-weight:700;font-size:0.95rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + e.title + '</div>'
-      + '<div style="font-size:0.78rem;opacity:0.55;margin-top:2px;">' + dayLabel + (e.time ? ' · ' + e.time : '') + '</div>'
+      + '<div style="font-size:0.78rem;opacity:0.55;margin-top:2px;">' + dayLabel + '</div>'
       + '</div>'
       + '<button onclick="delEvent(' + e.id + ')" style="background:rgba(0,0,0,0.06);border:none;border-radius:10px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;">'
       + '<i data-lucide="x" style="width:14px;height:14px;"></i></button>'
@@ -156,7 +206,7 @@ async function calNav(dir) {
 }
 
 function showDayEvents(date) {
-  const dayEvts = calEvents.filter(e => e.date.slice(0,10) === date);
+  const dayEvts = calEvents.filter(e => eventCoversDate(e, date));
   if (!dayEvts.length) { openNewEventSheet(date); return; }
 
   const d = new Date(date + 'T00:00');
@@ -164,10 +214,11 @@ function showDayEvents(date) {
   const evtsHtml = dayEvts.map(e => {
     const sub = e.subject_id ? calSubjects.find(s => s.id === e.subject_id) : null;
     const subText = sub ? ` (${sub.name || sub.short_name})` : '';
+    const dateRange = (e.end_date && e.end_date !== e.date) ? ` · ${e.date.slice(8,10)}.${e.date.slice(5,7)} – ${e.end_date.slice(8,10)}.${e.end_date.slice(5,7)}` : '';
     return `<div style="background:#f3edf7;border-radius:16px;padding:12px 14px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;">
       <div>
         <div style="font-weight:700;font-size:0.95rem;color:#1c1b1f;">${e.title}${subText}</div>
-        <div style="font-size:0.78rem;color:#49454f;margin-top:2px;">${CAL_TYPE_LABEL[e.event_type] || 'Termin'}${e.time ? ' · ' + e.time : ''}</div>
+        <div style="font-size:0.78rem;color:#49454f;margin-top:2px;">${CAL_TYPE_LABEL[e.event_type] || 'Termin'}${e.time ? ' · ' + e.time : ''}${dateRange}</div>
       </div>
       <button onclick="delEvent(${e.id});closeSheet();" style="background:none;border:none;cursor:pointer;opacity:0.6;padding:6px;"><i data-lucide="trash-2" style="width:18px;height:18px;color:#ba1a1a;"></i></button>
     </div>`;
@@ -176,6 +227,35 @@ function showDayEvents(date) {
   openSheet('<div class="sheet-title">' + dTitle + '</div>'
     + '<div style="margin-bottom:16px;">' + evtsHtml + '</div>'
     + '<button class="m3-btn-full" onclick="closeSheet();openNewEventSheet(\'' + date + '\')">+ Weiteren Termin hinzufügen</button>');
+}
+
+function setEventRangeMode(isRange) {
+  const btnSingle = document.getElementById('ev-mode-single');
+  const btnRange = document.getElementById('ev-mode-range');
+  const wrap = document.getElementById('ev-end-date-wrap');
+  if (btnSingle) btnSingle.classList.toggle('active', !isRange);
+  if (btnRange) btnRange.classList.toggle('active', isRange);
+  if (wrap) {
+    wrap.style.display = isRange ? 'block' : 'none';
+    if (isRange) {
+      const startVal = document.getElementById('ev-date')?.value;
+      const endInput = document.getElementById('ev-end-date');
+      if (startVal && endInput && (!endInput.value || endInput.value < startVal)) {
+        endInput.value = startVal;
+      }
+      if (typeof enhanceDateTimeInputs === 'function') enhanceDateTimeInputs(wrap);
+    }
+  }
+}
+
+function toggleEventTime() {
+  const btn = document.getElementById('ev-time-toggle');
+  const wrap = document.getElementById('ev-time-wrap');
+  if (wrap) {
+    wrap.style.display = 'block';
+    if (btn) btn.style.display = 'none';
+    if (typeof enhanceDateTimeInputs === 'function') enhanceDateTimeInputs(wrap);
+  }
 }
 
 async function openNewEventSheet(defaultDate) {
@@ -187,22 +267,45 @@ async function openNewEventSheet(defaultDate) {
 
   openSheet('<div class="sheet-title">Neuer Termin</div>'
     + '<input class="m3-input" id="ev-title" placeholder="Titel">'
-    + '<input class="m3-input" id="ev-date" type="date" value="' + today + '">'
-    + '<input class="m3-input" id="ev-time" type="time" placeholder="Uhrzeit (optional)">'
-    + '<select class="m3-select" id="ev-type">'
-    +   '<option value="other">Sonstiges</option>'
-    +   '<option value="exam">Klassenarbeit</option>'
-    +   '<option value="trip">Ausflug</option>'
-    +   '<option value="personal">Persönlich</option>'
-    + '</select>'
-    + '<div id="ev-subject-row" style="display:none;margin-bottom:12px;">'
+    + '<div style="display:flex;background:#f3edf7;border-radius:12px;padding:3px;margin-bottom:12px;">'
+    +   '<button type="button" id="ev-mode-single" class="ev-mode-btn active" onclick="setEventRangeMode(false)">Einzelner Tag</button>'
+    +   '<button type="button" id="ev-mode-range" class="ev-mode-btn" onclick="setEventRangeMode(true)">Zeitraum (mehrere Tage)</button>'
+    + '</div>'
+    + '<div id="ev-start-date-wrap">'
+    +   '<label style="font-size:0.78rem;font-weight:600;color:var(--m3-prim);display:block;margin-bottom:4px;margin-left:4px;">Datum / Startdatum:</label>'
+    +   '<input class="m3-input" id="ev-date" type="date" value="' + today + '">'
+    + '</div>'
+    + '<div id="ev-end-date-wrap" style="display:none;margin-top:6px;">'
+    +   '<label style="font-size:0.78rem;font-weight:600;color:var(--m3-prim);display:block;margin-bottom:4px;margin-left:4px;">Enddatum (Bis):</label>'
+    +   '<input class="m3-input" id="ev-end-date" type="date" value="' + today + '">'
+    + '</div>'
+    + '<div style="margin-top:10px;">'
+    +   '<label style="font-size:0.78rem;font-weight:600;color:var(--m3-prim);display:block;margin-bottom:4px;margin-left:4px;">Kategorie:</label>'
+    +   '<select class="m3-select" id="ev-type">'
+    +     '<option value="other">Sonstiges</option>'
+    +     '<option value="exam">Klassenarbeit</option>'
+    +     '<option value="trip">Ausflug / Klassenfahrt</option>'
+    +     '<option value="holiday">Ferien</option>'
+    +     '<option value="personal">Persönlich</option>'
+    +   '</select>'
+    + '</div>'
+    + '<div id="ev-subject-row" style="display:none;margin-top:10px;margin-bottom:12px;">'
     +   '<label style="font-size:0.78rem;font-weight:600;color:var(--m3-prim);display:block;margin-bottom:4px;margin-left:4px;">Fach für die Klassenarbeit:</label>'
     +   '<select class="m3-select" id="ev-subject">'
     +     '<option value="">Fach auswählen (optional)</option>'
     +     + subOpts
     +   '</select>'
     + '</div>'
-    + '<button class="m3-btn-full" onclick="saveEvent()" style="margin-top:12px;">Speichern</button>');
+    + '<div style="margin: 8px 0 14px 0;">'
+    +   '<button type="button" id="ev-time-toggle" onclick="toggleEventTime()" style="background:none;border:none;color:var(--m3-prim);font-size:0.85rem;font-weight:600;cursor:pointer;padding:6px 0;display:flex;align-items:center;gap:6px;">'
+    +     '<i data-lucide="clock" style="width:16px;height:16px;"></i> + Uhrzeit hinzufügen (optional)'
+    +   '</button>'
+    +   '<div id="ev-time-wrap" style="display:none;margin-top:6px;">'
+    +     '<label style="font-size:0.78rem;font-weight:600;color:var(--m3-prim);display:block;margin-bottom:4px;margin-left:4px;">Uhrzeit:</label>'
+    +     '<input class="m3-input" id="ev-time" type="time" placeholder="Uhrzeit (optional)">'
+    +   '</div>'
+    + '</div>'
+    + '<button class="m3-btn-full" onclick="saveEvent()" style="margin-top:10px;">Speichern</button>');
 
   const typeEl = document.getElementById('ev-type');
   const subRow = document.getElementById('ev-subject-row');
@@ -222,14 +325,23 @@ async function saveEvent() {
   const title = document.getElementById('ev-title').value.trim();
   const date = document.getElementById('ev-date').value;
   if (!title || !date) { showToast('Titel und Datum erforderlich'); return; }
+
+  const isRange = document.getElementById('ev-mode-range')?.classList.contains('active');
+  const endVal = document.getElementById('ev-end-date')?.value;
+  const end_date = isRange && endVal && endVal >= date ? endVal : (isRange && endVal ? date : null);
+
   const event_type = document.getElementById('ev-type').value;
   const subEl = document.getElementById('ev-subject');
   const subject_id = (event_type === 'exam' && subEl && subEl.value) ? parseInt(subEl.value, 10) : null;
+  const timeEl = document.getElementById('ev-time');
+  const time = (timeEl && timeEl.value) ? timeEl.value : null;
+
   try {
     await API.createEvent({
       title,
       date,
-      time: document.getElementById('ev-time').value || null,
+      end_date,
+      time,
       event_type,
       subject_id
     });

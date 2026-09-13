@@ -9,13 +9,15 @@ class EventType(str, enum.Enum):
     trip = "trip"
     other = "other"
     personal = "personal"
+    holiday = "holiday"
 
 class CalendarEvent(Base):
     __tablename__ = "calendar_events"
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String, nullable=False)
-    date = Column(String, nullable=False)  # ISO date YYYY-MM-DD
-    time = Column(String, nullable=True)   # HH:MM optional
+    date = Column(String, nullable=False)      # ISO date YYYY-MM-DD
+    end_date = Column(String, nullable=True)  # ISO date YYYY-MM-DD (optional, for multi-day periods)
+    time = Column(String, nullable=True)       # HH:MM optional
     event_type = Column(Enum(EventType), default=EventType.other)
     class_id = Column(Integer, ForeignKey("class_groups.id"), nullable=False)
     subject_id = Column(Integer, ForeignKey("subjects.id"), nullable=True)

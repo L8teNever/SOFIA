@@ -20,6 +20,7 @@
         <button class="admin-tab-btn" onclick="adminTab('subjects',this)" data-tab="subjects">Fächer</button>
         <button class="admin-tab-btn" onclick="adminTab('untis',this)" data-tab="untis">Untis</button>
         <button class="admin-tab-btn" onclick="adminTab('push',this)" data-tab="push">Push</button>
+        <button class="admin-tab-btn" onclick="adminTab('holidays',this)" data-tab="holidays" id="tab-btn-holidays" style="display:none;">Schulferien</button>
       </div>
     </div>
 
@@ -60,6 +61,48 @@
         <button class="m3-btn-full" onclick="sendAdminPush()">Senden</button>
       </div>
 
+      <div id="tab-holidays" style="display:none;">
+        <div class="m3-card-tonal" style="background:#e8def8;color:#21005d;margin-bottom:12px;">
+          <div style="font-weight:700;font-size:1.05rem;margin-bottom:6px;display:flex;align-items:center;gap:8px;">
+            <i data-lucide="sun" style="width:20px;height:20px;color:#6750a4;"></i>
+            Schulferien importieren & verwalten
+          </div>
+          <div style="font-size:0.82rem;opacity:0.8;line-height:1.5;">
+            Wähle ein Bundesland und das gewünschte Jahr aus. Sofia trägt alle offiziellen Ferientermine automatisch in den Kalender aller Klassen ein.
+          </div>
+        </div>
+
+        <div class="m3-card" style="margin-bottom:14px;">
+          <div style="margin-bottom:12px;">
+            <label style="font-size:0.78rem;font-weight:600;color:var(--m3-prim);display:block;margin-bottom:4px;margin-left:4px;">Bundesland:</label>
+            <select class="m3-select" id="holiday-state" onchange="loadHolidayPreview()"></select>
+          </div>
+
+          <div style="margin-bottom:16px;">
+            <label style="font-size:0.78rem;font-weight:600;color:var(--m3-prim);display:block;margin-bottom:4px;margin-left:4px;">Jahr / Schuljahr:</label>
+            <select class="m3-select" id="holiday-year" onchange="loadHolidayPreview()">
+              <option value="2025">2025</option>
+              <option value="2026" selected>2026</option>
+              <option value="2027">2027</option>
+            </select>
+          </div>
+
+          <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:16px;">
+            <button class="m3-btn-full" onclick="importHolidaysAction()" id="btn-import-holidays" style="flex:1;min-width:180px;display:flex;align-items:center;justify-content:center;gap:8px;">
+              <i data-lucide="download" style="width:18px;height:18px;"></i>
+              Ferien in Kalender eintragen
+            </button>
+            <button class="m3-btn-tonal" onclick="deleteAllHolidaysAction()" id="btn-delete-holidays" style="background:#ffdad6;color:#410002;border:none;border-radius:20px;padding:12px 18px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;font-family:inherit;">
+              <i data-lucide="trash-2" style="width:18px;height:18px;"></i>
+              Alle Ferien löschen
+            </button>
+          </div>
+        </div>
+
+        <div class="section-label" style="margin-top:16px;margin-bottom:8px;color:#21005d;">Vorschau der Ferientermine</div>
+        <div id="holiday-preview-list"></div>
+      </div>
+
     </div>
   </div>
 </div>
@@ -72,6 +115,9 @@ async function init_admin() {
   if (!adminMe) return;
   const isSuperAdmin = adminMe.role === 'super_admin';
   document.getElementById('admin-role-badge').textContent = isSuperAdmin ? 'Super-Admin' : 'Admin';
+
+  const holidaysTabBtn = document.getElementById('tab-btn-holidays');
+  if (holidaysTabBtn) holidaysTabBtn.style.display = isSuperAdmin ? 'inline-block' : 'none';
 
   const tasks = [
     API.classUsers().catch(()=>[]),
@@ -100,12 +146,14 @@ async function init_admin() {
 }
 
 function adminTab(tab, btn) {
-  ['users','classes','subjects','untis','push'].forEach(t => {
-    document.getElementById('tab-'+t).style.display = t===tab?'block':'none';
+  ['users','classes','subjects','untis','push','holidays'].forEach(t => {
+    const el = document.getElementById('tab-'+t);
+    if (el) el.style.display = t===tab?'block':'none';
   });
   document.querySelectorAll('#page-admin .admin-tab-btn').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
   if (tab === 'untis') renderUntisTab();
+  if (tab === 'holidays') initHolidaysTab();
 }
 
 async function renderUntisTab() {
@@ -452,5 +500,85 @@ async function sendAdminPush() {
   const r = await API.sendPush({ title, body, target }).catch(()=>null);
   if (r) showToast(`Gesendet an ${r.sent} Gerät(e)`);
   else showToast('Fehler');
+}
+
+// ---- Schulferien Verwaltung ----
+let holidayStatesList = [];
+
+async function initHolidaysTab() {
+  if (!holidayStatesList.length) {
+    holidayStatesList = await API.holidayStates().catch(() => []);
+    const sel = document.getElementById('holiday-state');
+    if (sel && holidayStatesList.length) {
+      sel.innerHTML = holidayStatesList.map(s => `<option value="${s.code}" ${s.code==='NW'?'selected':''}>${s.name} (${s.code})</option>`).join('');
+      if (typeof enhanceDropdowns === 'function') enhanceDropdowns(sel.parentNode);
+    }
+  }
+  await loadHolidayPreview();
+}
+
+async function loadHolidayPreview() {
+  const state = document.getElementById('holiday-state')?.value || 'NW';
+  const year = document.getElementById('holiday-year')?.value || '2026';
+  const list = document.getElementById('holiday-preview-list');
+  if (!list) return;
+
+  list.innerHTML = '<div style="text-align:center;padding:24px;opacity:0.6;font-size:0.85rem;">Ferientermine werden geladen…</div>';
+  const holidays = await API.holidayPreview(state, year).catch(() => []);
+  if (!holidays || !holidays.length) {
+    list.innerHTML = '<div class="m3-card" style="opacity:0.6;text-align:center;">Keine Ferientermine für diesen Zeitraum gefunden</div>';
+    return;
+  }
+
+  list.innerHTML = holidays.map(h => {
+    const startParts = h.start.split('-');
+    const endParts = h.end.split('-');
+    const rangeText = `${startParts[2]}.${startParts[1]}. – ${endParts[2]}.${endParts[1]}.${endParts[0]}`;
+    const badge = h.imported
+      ? '<span style="font-size:0.72rem;font-weight:700;color:#146c2e;background:#c4eed0;padding:2px 8px;border-radius:8px;">Im Kalender</span>'
+      : '<span style="font-size:0.72rem;font-weight:600;color:#79747e;background:#f3edf7;padding:2px 8px;border-radius:8px;">Nicht eingetragen</span>';
+
+    return `
+      <div class="m3-card" style="margin-bottom:8px;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;">
+        <div>
+          <div style="font-weight:700;font-size:0.95rem;color:#1c1b1f;">${h.name}</div>
+          <div style="font-size:0.8rem;color:#49454f;margin-top:2px;">${rangeText}</div>
+        </div>
+        ${badge}
+      </div>
+    `;
+  }).join('');
+  if (window.lucide) lucide.createIcons();
+}
+
+async function importHolidaysAction() {
+  const state = document.getElementById('holiday-state')?.value || 'NW';
+  const year = parseInt(document.getElementById('holiday-year')?.value || '2026', 10);
+  const btn = document.getElementById('btn-import-holidays');
+  if (btn) { btn.disabled = true; btn.style.opacity = '0.6'; }
+  try {
+    const res = await API.importHolidays({ state, year });
+    showToast(`${res.imported_count || 0} Ferientermine eingetragen`);
+    await loadHolidayPreview();
+  } catch (err) {
+    showToast(err.detail || 'Fehler beim Import');
+  } finally {
+    if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
+  }
+}
+
+async function deleteAllHolidaysAction() {
+  if (!confirm('Möchtest du wirklich alle Ferien-Termine aus dem Kalender löschen?')) return;
+  const btn = document.getElementById('btn-delete-holidays');
+  if (btn) { btn.disabled = true; btn.style.opacity = '0.6'; }
+  try {
+    const res = await API.deleteHolidays();
+    showToast(`${res.deleted_count || 0} Ferien-Termine gelöscht`);
+    await loadHolidayPreview();
+  } catch (err) {
+    showToast(err.detail || 'Fehler beim Löschen');
+  } finally {
+    if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
+  }
 }
 </script>

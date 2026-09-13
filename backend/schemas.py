@@ -56,6 +56,7 @@ class CalendarEventOut(BaseModel):
     id: int
     title: str
     date: str
+    end_date: Optional[str] = None
     time: Optional[str]
     event_type: str
     class_id: int
@@ -66,9 +67,15 @@ class CalendarEventOut(BaseModel):
 class CalendarEventCreate(BaseModel):
     title: str
     date: str
+    end_date: Optional[str] = None
     time: Optional[str] = None
     event_type: str = "other"
     subject_id: Optional[int] = None
+
+class HolidayImportRequest(BaseModel):
+    state: str
+    year: int
+    class_id: Optional[int] = None
 
 # Homework
 class HomeworkOut(BaseModel):
