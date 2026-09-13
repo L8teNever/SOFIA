@@ -364,12 +364,18 @@ function renderHw() {
   const subMap = Object.fromEntries(hwSubjects.map(s => [s.id, s]));
   let items = [...hwItems].sort((a,b) => a.due_date.localeCompare(b.due_date));
   const list = document.getElementById('hw-list');
+  const emptyEl = document.getElementById('hw-empty');
+  // toggleHw()'s background API call/re-render can land after the user
+  // has already navigated off this page (closePage keeps the closing
+  // .page in the DOM for its 260ms transition, but this page's own
+  // elements may already be gone by then) — nothing to render into then.
+  if (!list || !emptyEl) return;
 
   if (hwCurrentFilter === 'open') items = items.filter(h => !(h.checked_by || []).includes(uid));
   if (hwCurrentFilter === 'done') items = items.filter(h => (h.checked_by || []).includes(uid));
 
-  if (!items.length) { list.innerHTML = ''; document.getElementById('hw-empty').style.display = 'block'; return; }
-  document.getElementById('hw-empty').style.display = 'none';
+  if (!items.length) { list.innerHTML = ''; emptyEl.style.display = 'block'; return; }
+  emptyEl.style.display = 'none';
 
   if (hwCurrentFilter !== 'done') {
     const todayItems    = items.filter(h => !(h.checked_by || []).includes(uid) && h.due_date === today);
@@ -396,11 +402,7 @@ function toggleHw(id, checkEl) {
   const uid = hwCurrentUser && hwCurrentUser.id;
   const nowChecked = !(hwItems[idx].checked_by || []).includes(uid);
 
-  // Pop the checkbox to its new look right away instead of waiting on the
-  // API round-trip, then give that a beat to actually register before the
-  // list re-render sorts the card into a different section (or removes it
-  // under "Offen") — otherwise checking a task off just makes it vanish
-  // with no felt confirmation that anything happened. Skipped when called
+  // Pop the checkbox to its new look right away. Skipped when called
   // without a checkbox element (the detail view's header button pops
   // itself instead — see toggleHwFromDetail).
   if (checkEl) {
@@ -413,19 +415,30 @@ function toggleHw(id, checkEl) {
     if (window.lucide) lucide.createIcons();
   }
 
+  // Update local state and re-sort the list right away — entirely on a
+  // local timer, not waiting on the network round-trip first. The actual
+  // API.checkHomework() call underneath fires in the background: it's
+  // how the change gets persisted, not something the UI waits on to
+  // reflect it. Only reverted (with an error toast) if that call comes
+  // back failed, which a real user will essentially never see.
+  const applyLocal = () => {
+    const arr = [...(hwItems[idx].checked_by||[])];
+    const i = arr.indexOf(uid); if (i>=0) arr.splice(i,1); else arr.push(uid);
+    hwItems[idx].checked_by = arr;
+  };
+  applyLocal();
+
   return new Promise(resolve => {
-    setTimeout(async () => {
-      try {
-        await API.checkHomework(id);
-        const arr = [...(hwItems[idx].checked_by||[])];
-        const i = arr.indexOf(uid); if (i>=0) arr.splice(i,1); else arr.push(uid);
-        hwItems[idx].checked_by = arr;
-      } catch {
-        showToast('Fehler');
-      }
+    setTimeout(() => {
       renderHwStats(); renderHw();
       resolve();
     }, checkEl ? 260 : 0);
+
+    API.checkHomework(id).catch(() => {
+      applyLocal(); // toggle back
+      renderHwStats(); renderHw();
+      showToast('Fehler beim Speichern — rückgängig gemacht');
+    });
   });
 }
 
