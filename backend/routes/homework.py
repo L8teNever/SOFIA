@@ -268,6 +268,45 @@ async def create_solution(request: Request, hw_id: int, data: HomeworkSolutionCr
     return sol_res.scalar_one()
 
 
+@router.put("/{hw_id}/solutions/{sol_id}", response_model=HomeworkSolutionOut)
+async def update_solution(request: Request, hw_id: int, sol_id: int, data: HomeworkSolutionCreate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    result = await db.execute(
+        select(HomeworkSolution).where(HomeworkSolution.id == sol_id, HomeworkSolution.homework_id == hw_id)
+    )
+    sol = result.scalar_one_or_none()
+    if not sol:
+        raise HTTPException(404, "Lösung nicht gefunden")
+    if sol.user_id != current_user.id and current_user.role not in ("admin", "super_admin"):
+        raise HTTPException(403, "Keine Berechtigung")
+
+    atts = [a.model_dump() if hasattr(a, "model_dump") else dict(a) for a in (data.attachments or [])]
+    text_val = (data.text or "").strip()
+    if not text_val and not atts:
+        raise HTTPException(400, "Bitte gib einen Text ein oder lade mindestens eine Datei hoch")
+
+    sol.text = text_val if text_val else None
+    sol.attachments = atts
+    await db.commit()
+    await db.refresh(sol)
+
+    await log_audit(
+        db,
+        action="homework_solution.update",
+        user=current_user,
+        entity_type="homework_solution",
+        entity_id=sol_id,
+        details={"homework_id": hw_id, "attachments_count": len(atts)},
+        request=request,
+    )
+
+    sol_res = await db.execute(
+        select(HomeworkSolution)
+        .options(selectinload(HomeworkSolution.user))
+        .where(HomeworkSolution.id == sol.id)
+    )
+    return sol_res.scalar_one()
+
+
 @router.delete("/{hw_id}/solutions/{sol_id}")
 async def delete_solution(request: Request, hw_id: int, sol_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     result = await db.execute(

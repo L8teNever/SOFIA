@@ -341,16 +341,38 @@ body.has-active-page .app-container {
     max-width: 720px; width: 100%; margin: 0 auto;
     column-span: all; column-count: inherit;
   }
-  /* Same centering, but capped to the header's 960px instead — for
-     multi-column card grids (e.g. homework's list) where 720px squeezes
-     3 columns down to unreadably narrow cards. */
-  .page-scroll > .page-inner-wide {
-    max-width: 960px; width: 100%; margin: 0 auto;
-    column-span: all; column-count: inherit;
-  }
 }
 @media (min-width: 1100px) {
   .page-scroll { column-count: 3; column-gap: 28px; padding: 0 60px 160px 60px; }
+}
+
+/* Capped/centered to the header's own 960px — for content wider than
+   .page-inner's reading-width cap needs (e.g. homework's card grid
+   below). Standalone (not scoped to a multi-column .page-scroll) since
+   its own layout, not a parent's column-span, is what centers it. */
+.page-inner-wide { max-width: 960px; width: 100%; margin: 0 auto; }
+
+/* A card list broken into labeled sections (Überfällig/Diese Woche/...)
+   — CSS Grid instead of .page-scroll's column-count, which fills each
+   column top-to-bottom before starting the next (so item 2 could land
+   under item 1 in the same column instead of beside it), and forced a
+   fresh balance pass after every section-spanning label, occasionally
+   leaving a stray empty fragment where a column had nothing left to
+   balance. Grid's own auto-placement is row-major by construction: item
+   1 top-left, item 2 top-right, item 3 starts the next row — the "Z"
+   order you'd expect from a card grid, with no balancing to go wrong. */
+.hw-card-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
+/* Keep .section-label's usual breathing room above (separating this
+   section from the previous one) but drop its own bottom margin — the
+   grid's gap already puts the right amount of space below it before the
+   section's first card, so the two stacking would double it up. */
+.hw-card-grid > .section-label { margin: 20px 0 0 0; }
+@media (min-width: 760px) {
+  .hw-card-grid { grid-template-columns: repeat(2, 1fr); gap: 14px; }
+  .hw-card-grid > .section-label { grid-column: 1 / -1; }
+}
+@media (min-width: 1100px) {
+  .hw-card-grid { grid-template-columns: repeat(3, 1fr); gap: 18px; }
 }
 
 /* Single-column scroll — for pages where columns break layout */
