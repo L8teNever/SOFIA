@@ -293,9 +293,8 @@ function hwFormatDueLabel(iso) {
 }
 
 function renderHwStats() {
-  const today = new Date().toISOString().slice(0,10);
   const uid = hwCurrentUser && hwCurrentUser.id;
-  const open = hwItems.filter(h => !(h.checked_by || []).includes(uid) && h.due_date >= today).length;
+  const open = hwItems.filter(h => !(h.checked_by || []).includes(uid)).length;
   const done = hwItems.filter(h => (h.checked_by || []).includes(uid)).length;
   const sub = document.getElementById('hw-header-sub');
   if (sub) sub.textContent = open + ' offen · ' + done + ' erledigt';
@@ -366,7 +365,7 @@ function renderHw() {
   let items = [...hwItems].sort((a,b) => a.due_date.localeCompare(b.due_date));
   const list = document.getElementById('hw-list');
 
-  if (hwCurrentFilter === 'open') items = items.filter(h => !(h.checked_by || []).includes(uid) && h.due_date >= today);
+  if (hwCurrentFilter === 'open') items = items.filter(h => !(h.checked_by || []).includes(uid));
   if (hwCurrentFilter === 'done') items = items.filter(h => (h.checked_by || []).includes(uid));
 
   if (!items.length) { list.innerHTML = ''; document.getElementById('hw-empty').style.display = 'block'; return; }
