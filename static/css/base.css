@@ -478,6 +478,30 @@ body.has-active-page .app-container {
 @media (min-width: 760px)  { .page-subbar { padding-left: 40px; padding-right: 40px; } }
 @media (min-width: 1100px) { .page-subbar { padding-left: 60px; padding-right: 60px; } }
 
+/* A quick, deliberate "that registered" pop — the one moment this app
+   asks a user to confirm state changing (checking a task off, un-
+   checking it) gets a beat of feedback instead of the list just
+   silently reshuffling around it. Kept to this single interaction
+   rather than added everywhere, so it stays noticeable. */
+@keyframes hw-check-pop {
+  0% { transform: scale(1); }
+  45% { transform: scale(1.28); }
+  100% { transform: scale(1); }
+}
+.hw-check-pop { animation: hw-check-pop 0.32s cubic-bezier(0.34, 1.56, 0.64, 1); }
+
+/* A soft fade+rise for cards entering a freshly (re-)rendered list —
+   homework's cards and calendar's event cards, the two places a whole
+   list gets rebuilt from scratch often enough (switching a filter,
+   navigating a month) that a plain instant snap-into-place felt static.
+   Not applied to every card in the app — this exact list-rebuild
+   situation is what makes it worth the beat of motion. */
+@keyframes list-card-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.list-card-enter { animation: list-card-enter 0.24s ease both; }
+
 .section-label {
   font-size: 0.72rem; font-weight: 700;
   text-transform: uppercase; letter-spacing: 0.12em;

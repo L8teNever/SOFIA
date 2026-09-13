@@ -336,9 +336,9 @@ function hwCard(h, sub, uid, today) {
     : '';
 
   return `
-    <div onclick="openHwDetail(${h.id})" style="background:${bg};border-radius:24px;padding:18px;cursor:pointer;transition:transform 0.12s ease;${checked ? 'opacity:0.55;' : ''}">
+    <div class="list-card-enter" onclick="openHwDetail(${h.id})" style="background:${bg};border-radius:24px;padding:18px;cursor:pointer;transition:transform 0.12s ease;${checked ? 'opacity:0.55;' : ''}">
       <div style="display:flex;gap:12px;align-items:flex-start;">
-        <div onclick="event.stopPropagation();toggleHw(${h.id})" style="width:28px;height:28px;border-radius:50%;flex-shrink:0;margin-top:1px;cursor:pointer;display:flex;align-items:center;justify-content:center;${checked ? 'background:rgba(0,0,0,0.3);' : 'border:2.5px solid rgba(0,0,0,0.25);background:transparent;'}">
+        <div class="hw-check" onclick="event.stopPropagation();toggleHw(${h.id},this)" style="width:28px;height:28px;border-radius:50%;flex-shrink:0;margin-top:1px;cursor:pointer;display:flex;align-items:center;justify-content:center;${checked ? 'background:rgba(0,0,0,0.3);' : 'border:2.5px solid rgba(0,0,0,0.25);background:transparent;'}">
           ${checked ? '<i data-lucide="check" style="width:14px;height:14px;color:white;"></i>' : ''}
         </div>
         <div style="flex:1;min-width:0;">
@@ -390,18 +390,43 @@ function renderHw() {
   if (window.lucide) lucide.createIcons();
 }
 
-async function toggleHw(id) {
-  try {
-    await API.checkHomework(id);
-    const idx = hwItems.findIndex(h => h.id === id);
-    if (idx >= 0) {
-      const uid = hwCurrentUser && hwCurrentUser.id;
-      const arr = [...(hwItems[idx].checked_by||[])];
-      const i = arr.indexOf(uid); if (i>=0) arr.splice(i,1); else arr.push(uid);
-      hwItems[idx].checked_by = arr;
-    }
-    renderHwStats(); renderHw();
-  } catch { showToast('Fehler'); }
+function toggleHw(id, checkEl) {
+  const idx = hwItems.findIndex(h => h.id === id);
+  if (idx < 0) return Promise.resolve();
+  const uid = hwCurrentUser && hwCurrentUser.id;
+  const nowChecked = !(hwItems[idx].checked_by || []).includes(uid);
+
+  // Pop the checkbox to its new look right away instead of waiting on the
+  // API round-trip, then give that a beat to actually register before the
+  // list re-render sorts the card into a different section (or removes it
+  // under "Offen") — otherwise checking a task off just makes it vanish
+  // with no felt confirmation that anything happened. Skipped when called
+  // without a checkbox element (the detail view's header button pops
+  // itself instead — see toggleHwFromDetail).
+  if (checkEl) {
+    checkEl.style.background = nowChecked ? 'rgba(0,0,0,0.3)' : 'transparent';
+    checkEl.style.border = nowChecked ? 'none' : '2.5px solid rgba(0,0,0,0.25)';
+    checkEl.innerHTML = nowChecked ? '<i data-lucide="check" style="width:14px;height:14px;color:white;"></i>' : '';
+    checkEl.classList.remove('hw-check-pop');
+    void checkEl.offsetWidth; // restart the animation if toggled again quickly
+    checkEl.classList.add('hw-check-pop');
+    if (window.lucide) lucide.createIcons();
+  }
+
+  return new Promise(resolve => {
+    setTimeout(async () => {
+      try {
+        await API.checkHomework(id);
+        const arr = [...(hwItems[idx].checked_by||[])];
+        const i = arr.indexOf(uid); if (i>=0) arr.splice(i,1); else arr.push(uid);
+        hwItems[idx].checked_by = arr;
+      } catch {
+        showToast('Fehler');
+      }
+      renderHwStats(); renderHw();
+      resolve();
+    }, checkEl ? 260 : 0);
+  });
 }
 
 function openHwCardMenu(btn, hwId) {
@@ -571,6 +596,12 @@ function closeHwDetail() {
 
 async function toggleHwFromDetail() {
   if (hwDetailId == null) return;
+  const btn = document.getElementById('hwd-toggle-btn');
+  if (btn) {
+    btn.classList.remove('hw-check-pop');
+    void btn.offsetWidth;
+    btn.classList.add('hw-check-pop');
+  }
   await toggleHw(hwDetailId);
   const hw = hwItems.find(h => h.id === hwDetailId);
   if (hw) renderHwDetail(hw);
