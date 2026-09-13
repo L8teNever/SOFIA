@@ -61,4 +61,5 @@ async def seed():
         await db.commit()
         print("Seed complete!")
 
-asyncio.run(seed())
+if __name__ == "__main__":
+    asyncio.run(seed())

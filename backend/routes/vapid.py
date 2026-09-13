@@ -7,6 +7,12 @@ from backend.models.user import User
 from backend.models.notification import Notification
 from backend.models.push_subscription import PushSubscription
 from backend.schemas import PushSubscriptionIn, PushUnsubscribeIn, PushNotificationIn, NotificationOut
+from backend.config import settings
+from typing import List, Optional
+import json, asyncio, logging
+
+logger = logging.getLogger(__name__)
+router = APIRouter(prefix="/api/v1/push", tags=["push"])
 
 async def push_to_users(db: AsyncSession, users: List[User], title: str, body: str) -> int:
     """Sends a web push to every subscribed device of `users`, persists a
