@@ -357,7 +357,14 @@ function hwCard(h, sub, uid, today) {
   `;
 }
 
-function renderHw() {
+// skipEnterAnim: every card carries .list-card-enter, which replays its
+// fade-in the instant innerHTML is set — fine for a genuinely fresh list
+// (opening the page, switching a filter), but toggling a checkbox
+// rebuilds the *whole* list too, so every other, unrelated card would
+// flash transparent-then-back for a moment right along with the one
+// that actually moved. Pass true to cut that animation short immediately
+// after render so only the checkbox's own pop reads as feedback.
+function renderHw(skipEnterAnim) {
   const today = new Date().toISOString().slice(0,10);
   const thisWeekEnd = new Date(Date.now() + 6*86400000).toISOString().slice(0,10);
   const uid = hwCurrentUser && hwCurrentUser.id;
@@ -392,6 +399,9 @@ function renderHw() {
     list.innerHTML = html;
   } else {
     list.innerHTML = items.map(h => hwCard(h, subMap[h.subject_id]||{}, uid, today)).join('');
+  }
+  if (skipEnterAnim) {
+    list.querySelectorAll('.list-card-enter').forEach(el => { el.style.animation = 'none'; });
   }
   if (window.lucide) lucide.createIcons();
 }
@@ -430,13 +440,13 @@ function toggleHw(id, checkEl) {
 
   return new Promise(resolve => {
     setTimeout(() => {
-      renderHwStats(); renderHw();
+      renderHwStats(); renderHw(true);
       resolve();
     }, checkEl ? 260 : 0);
 
     API.checkHomework(id).catch(() => {
       applyLocal(); // toggle back
-      renderHwStats(); renderHw();
+      renderHwStats(); renderHw(true);
       showToast('Fehler beim Speichern — rückgängig gemacht');
     });
   });
@@ -464,7 +474,7 @@ async function executeDeleteHw(id) {
   try {
     await API.deleteHomework(id);
     hwItems = hwItems.filter(h => h.id !== id);
-    renderHwStats(); renderHw();
+    renderHwStats(); renderHw(true);
     if (hwDetailId === id) closeHwDetail();
     showToast('Aufgabe gelöscht');
   } catch { showToast('Fehler beim Löschen'); }
