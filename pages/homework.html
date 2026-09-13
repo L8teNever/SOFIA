@@ -8,15 +8,10 @@
   <div class="page-scroll no-scrollbar">
     <div class="page-inner-wide">
       <div id="hw-list"></div>
-      <div id="hw-empty" style="display:none;text-align:center;padding:60px 20px;opacity:0.4;">
-        <i data-lucide="check-circle" style="width:48px;height:48px;margin-bottom:12px;display:block;margin-left:auto;margin-right:auto;"></i>
-        <div style="font-weight:600;">Keine Hausaufgaben!</div>
-      </div>
+      <div id="hw-empty-slot"></div>
     </div>
   </div>
-  <button class="fab" onclick="openHwSheet()" title="Neue Aufgabe erstellen">
-    <i data-lucide="plus" style="width:24px;height:24px;"></i>
-  </button>
+  <div id="hw-fab-slot"></div>
 
   <!-- Detail overlay: opened on top of this page when a homework card is tapped -->
   <template id="tpl-hw-detail">
@@ -214,6 +209,12 @@ document.getElementById('ph-homework').outerHTML = pageHeader({
   subtitle: 'Lade…',
   subtitleId: 'hw-header-sub',
   subtitleStyle: 'color:#31111d;',
+});
+document.getElementById('hw-empty-slot').outerHTML = emptyState({
+  icon: 'check-circle', title: 'Keine Hausaufgaben!', wrapperId: 'hw-empty'
+});
+document.getElementById('hw-fab-slot').outerHTML = fab({
+  onclick: 'openHwSheet()', title: 'Neue Aufgabe erstellen'
 });
 let hwItems = [], hwSubjects = [], hwCurrentFilter = 'all', hwCurrentUser = null, hwTimetable = null;
 let hwDueMode = 'next', hwCustomDate = null;

@@ -63,10 +63,7 @@ async function loadNotifications() {
   if (readAllBtn) readAllBtn.style.display = hasUnread ? 'block' : 'none';
 
   if (!items.length) {
-    list.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;text-align:center;opacity:0.35;">
-      <i data-lucide="bell-off" style="width:48px;height:48px;margin-bottom:12px;"></i>
-      <div style="font-weight:600;">Keine Benachrichtigungen</div>
-    </div>`;
+    list.innerHTML = emptyState({ icon: 'bell-off', title: 'Keine Benachrichtigungen', hidden: false });
     lucide.createIcons();
     return;
   }

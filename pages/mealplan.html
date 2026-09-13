@@ -14,11 +14,7 @@
 
   <div class="page-scroll-1col no-scrollbar"><div class="page-inner">
     <!-- Empty state -->
-    <div id="meal-empty" style="display:none;text-align:center;padding:60px 20px;opacity:0.4;">
-      <i data-lucide="utensils" style="width:48px;height:48px;margin-bottom:14px;display:block;margin-left:auto;margin-right:auto;"></i>
-      <div style="font-weight:700;font-size:1.05rem;" id="meal-empty-title">Noch kein Essensplan eingetragen</div>
-      <div style="font-size:0.85rem;margin-top:4px;" id="meal-empty-sub">Tippe auf das Plus-Symbol, um den neuen Wochenplan hinzuzufügen.</div>
-    </div>
+    <div id="meal-empty-slot"></div>
 
     <!-- Active AI Background Loading State -->
     <div id="meal-loading" style="display:none;padding:24px 0;">
@@ -126,6 +122,15 @@ document.getElementById('ph-mealplan').outerHTML = pageHeader({
   trailing: `<button class="icon-btn" id="meal-delete-btn" onclick="deleteMealPlanConfirm()" style="display:none;color:#b3261e;">
       <i data-lucide="trash-2" style="width:20px;height:20px;"></i>
     </button>`
+});
+document.getElementById('meal-empty-slot').outerHTML = emptyState({
+  icon: 'utensils',
+  title: 'Noch kein Essensplan eingetragen',
+  titleId: 'meal-empty-title',
+  titleStyle: 'font-weight:700;font-size:1.05rem;',
+  subtitle: 'Tippe auf das Plus-Symbol, um den neuen Wochenplan hinzuzufügen.',
+  subtitleId: 'meal-empty-sub',
+  wrapperId: 'meal-empty',
 });
 let mealPlan = null;
 let mealCanDelete = false;

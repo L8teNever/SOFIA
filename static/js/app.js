@@ -130,6 +130,48 @@ function pageHeader({
   return `<div class="page-header${className ? ' ' + className : ''}"${style ? ` style="${style}"` : ''}>${back}${titleBlock}${trailing}</div>`;
 }
 
+// The small "nothing here yet" placeholder — icon, bold one-liner, optional
+// dimmer subtitle — repeated near-identically on homework, grades, mealplan
+// and notifications with each page free-handing its own icon size/opacity/
+// padding. One definition here means all four now visually match exactly,
+// and a future page gets the same look by construction instead of by
+// someone eyeballing the existing ones. Most callers toggle this element's
+// display rather than re-render it, so pass wrapperId to get an addressable
+// node (hidden by default — pass hidden:false to start visible).
+function emptyState({
+  icon = 'inbox',
+  title = '',
+  titleId = '',
+  titleStyle = 'font-weight:600;',
+  subtitle = '',
+  subtitleId = '',
+  subtitleStyle = 'font-size:0.85rem;margin-top:4px;',
+  wrapperId = '',
+  hidden = true,
+} = {}) {
+  const titleHtml = (title || titleId)
+    ? `<div${titleId ? ` id="${titleId}"` : ''} style="${titleStyle}">${title}</div>`
+    : '';
+  const subtitleHtml = (subtitle || subtitleId)
+    ? `<div${subtitleId ? ` id="${subtitleId}"` : ''} style="${subtitleStyle}">${subtitle}</div>`
+    : '';
+  return `<div${wrapperId ? ` id="${wrapperId}"` : ''} style="${hidden ? 'display:none;' : ''}text-align:center;padding:60px 20px;opacity:0.4;">
+    <i data-lucide="${icon}" style="width:48px;height:48px;margin-bottom:12px;display:block;margin-left:auto;margin-right:auto;"></i>
+    ${titleHtml}
+    ${subtitleHtml}
+  </div>`;
+}
+
+// The circular "+" button pinned bottom-right on pages with one obvious
+// primary create-action (new event, new homework item, new grade...) —
+// same size/position/shadow everywhere via the .fab class, this just saves
+// re-typing the icon wrapper and guarantees the icon is always 24px.
+function fab({ icon = 'plus', onclick = '', title = '', id = '' } = {}) {
+  return `<button class="fab"${id ? ` id="${id}"` : ''} onclick="${onclick}" title="${title}">
+    <i data-lucide="${icon}" style="width:24px;height:24px;"></i>
+  </button>`;
+}
+
 function showToast(msg, duration = 3000) {
   const t = document.getElementById('toast');
   t.textContent = msg;

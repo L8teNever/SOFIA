@@ -45,9 +45,7 @@
   </div>
 
   <!-- Floating Action Button -->
-  <button class="fab" onclick="openNewEventSheet()" title="Neuen Termin erstellen">
-    <i data-lucide="plus" style="width:24px;height:24px;"></i>
-  </button>
+  <div id="cal-fab-slot"></div>
 
 <style>
 /* .page-header now supplies background/border/z-index/padding/capping —
@@ -327,6 +325,9 @@ document.getElementById('ph-calendar').outerHTML = pageHeader({
         <span id="cal-filter-dot" style="display:none;position:absolute;top:6px;right:6px;width:8px;height:8px;border-radius:50%;background:#6750a4;border:2px solid #f9f6fc;"></span>
       </button>
     </div>`
+});
+document.getElementById('cal-fab-slot').outerHTML = fab({
+  onclick: 'openNewEventSheet()', title: 'Neuen Termin erstellen'
 });
 var calYear = new Date().getFullYear();
 var calMonth = new Date().getMonth();
