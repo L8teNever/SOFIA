@@ -29,7 +29,7 @@
       </div>
     </div>
 
-    <!-- Right: Events list (filtered by selected day or upcoming) -->
+    <!-- Right: Events list (filtered by selected day or full month) -->
     <div class="page-2col-right" style="padding-bottom:100px;">
       <div id="cal-events-list"></div>
       <div id="cal-no-events" style="display:none;text-align:center;padding:40px 20px;opacity:0.4;font-size:0.9rem;">Keine Termine in diesem Monat</div>
@@ -98,7 +98,7 @@
 }
 .cal-day.has-event::after,
 .cal-day.has-event-dots::after {
-  display: none !important; /* Supress legacy single dot */
+  display: none !important; /* Suppress legacy single dot */
 }
 .cal-day-num {
   line-height: 1;
@@ -130,29 +130,34 @@
   outline: 2.5px solid #6750a4;
 }
 .cal-day.is-holiday:not(.selected):not(.today) {
-  background: rgba(125, 82, 96, 0.15) !important;
+  background: rgba(125, 82, 96, 0.16) !important;
   color: #7d5260 !important;
   font-weight: 700;
 }
 
-/* Category dots container */
+/* Category dots container (positioned absolutely at bottom of day cell) */
 .cal-dots-wrap {
+  position: absolute;
+  bottom: 4px;
+  left: 0;
+  right: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 2px;
-  margin-top: 3px;
-  height: 6px;
+  gap: 2.5px;
+  height: 7px;
+  pointer-events: none;
 }
 .cal-dot {
-  width: 5px;
-  height: 5px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   flex-shrink: 0;
   display: inline-block;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.3);
 }
 .cal-day.today .cal-dot {
-  filter: brightness(1.6);
+  box-shadow: 0 1px 2px rgba(255,255,255,0.4);
 }
 .cal-dot-exam     { background: #ba1a1a; }
 .cal-dot-trip     { background: #146c2e; }
@@ -164,11 +169,56 @@
   font-size: 0.58rem;
   line-height: 1;
   font-weight: 800;
-  opacity: 0.85;
+  opacity: 0.9;
   margin-left: 1px;
 }
 .cal-day.today .cal-dot-more {
   color: #fff;
+}
+
+/* Date badge on event cards in full-month list */
+.ev-date-badge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 48px;
+  background: #f3edf7;
+  border-radius: 12px;
+  flex-shrink: 0;
+  margin-right: 12px;
+  line-height: 1;
+  color: #21005d;
+}
+.ev-date-badge.is-today {
+  background: #6750a4;
+  color: #ffffff;
+}
+.ev-date-badge-dark {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 48px;
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  flex-shrink: 0;
+  margin-right: 12px;
+  line-height: 1;
+  color: #ffffff;
+}
+.ev-date-num {
+  font-size: 1.15rem;
+  font-weight: 800;
+}
+.ev-date-wd {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  opacity: 0.7;
+  margin-top: 3px;
 }
 
 /* Action buttons on event cards */
@@ -308,7 +358,6 @@ function onCalDayClick(dateStr) {
   }
   renderCal();
   
-  // Smooth scroll down to events list if on mobile screens
   if (window.innerWidth < 900) {
     const listEl = document.getElementById('cal-events-list');
     if (listEl) {
@@ -443,6 +492,7 @@ function renderEventList() {
   const list = document.getElementById('cal-events-list');
   const noEventsEl = document.getElementById('cal-no-events');
   const today = new Date().toISOString().slice(0, 10);
+  const months = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
 
   let eventsToShow = [];
   let headerHtml = '';
@@ -460,7 +510,7 @@ function renderEventList() {
           <div class="section-label" style="color:#21005d;margin:0;">${fullDateStr}</div>
         </div>
         <button onclick="clearDateSelection()" class="cal-clear-filter-btn">
-          <i data-lucide="calendar" style="width:14px;height:14px;"></i> Alle Termine
+          <i data-lucide="calendar" style="width:14px;height:14px;"></i> Alle Termine anzeigen
         </button>
       </div>
     `;
@@ -483,15 +533,21 @@ function renderEventList() {
       return;
     }
   } else {
+    // Whole month view: show all events touching this month
+    const monthStart = `${calYear}-${String(calMonth+1).padStart(2,'0')}-01`;
+    const lastDayOfMonth = new Date(calYear, calMonth+1, 0).getDate();
+    const monthEnd = `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(lastDayOfMonth).padStart(2,'0')}`;
+
     eventsToShow = calEvents.filter(e => {
-      const end = e.end_date ? e.end_date.slice(0, 10) : e.date.slice(0, 10);
-      return end >= today;
+      const s = e.date.slice(0, 10);
+      const end = e.end_date ? e.end_date.slice(0, 10) : s;
+      return s <= monthEnd && end >= monthStart;
     }).sort((a, b) => a.date.localeCompare(b.date));
 
     headerHtml = `
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-        <div class="section-label" style="color:#21005d;margin:0;">Kommende Termine</div>
-        <span style="font-size:0.75rem;opacity:0.6;font-weight:600;">${eventsToShow.length} Termine</span>
+        <div class="section-label" style="color:#21005d;margin:0;">Termine im ${months[calMonth]} ${calYear}</div>
+        <span style="font-size:0.75rem;opacity:0.65;font-weight:700;background:rgba(33,0,93,0.08);padding:3px 9px;border-radius:10px;">${eventsToShow.length} ${eventsToShow.length === 1 ? 'Termin' : 'Termine'}</span>
       </div>
     `;
 
@@ -516,19 +572,31 @@ function renderEventList() {
     const subBadge = subName ? `<span style="font-size:0.72rem;font-weight:600;background:rgba(255,255,255,0.22);padding:2px 8px;border-radius:8px;margin-left:8px;letter-spacing:normal;text-transform:none;">${escapeHtml(subName)}</span>` : '';
     const personalBadge = isPersonal ? `<span style="font-size:0.7rem;font-weight:600;background:#d3e3fd;color:#0b57d0;padding:2px 8px;border-radius:8px;margin-left:6px;display:inline-flex;align-items:center;gap:3px;"><i data-lucide="lock" style="width:10px;height:10px;"></i> Nur für dich</span>` : '';
 
+    const dObj = new Date(e.date + 'T00:00');
+    const dayNum = dObj.getDate();
+    const weekday = dObj.toLocaleDateString('de-DE', { weekday: 'short' });
+    const isEvToday = e.date === today;
+
     if (isExam) {
       return `
         <div class="m3-card-tonal" style="background:#21005d;color:#fff;margin-bottom:10px;border-radius:20px;padding:14px 16px;">
-          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;">
-            <div style="flex:1;min-width:0;">
-              <div style="display:flex;align-items:center;flex-wrap:wrap;gap:4px;">
-                <span style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.75;color:#ffdad6;">${label}</span>
-                ${subBadge}
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+            <div style="display:flex;align-items:center;flex:1;min-width:0;">
+              <div class="ev-date-badge-dark">
+                <span class="ev-date-num">${dayNum}</span>
+                <span class="ev-date-wd">${weekday}</span>
               </div>
-              <div style="font-size:1.1rem;font-weight:700;margin-top:4px;word-break:break-word;">${escapeHtml(e.title)}</div>
-              <div style="font-size:0.82rem;opacity:0.75;margin-top:4px;display:flex;align-items:center;gap:5px;">
-                <i data-lucide="calendar" style="width:14px;height:14px;"></i>
-                <span>${dayLabel}</span>
+              <div style="flex:1;min-width:0;">
+                <div style="display:flex;align-items:center;flex-wrap:wrap;gap:4px;">
+                  <span class="cal-dot cal-dot-exam" style="box-shadow:none;"></span>
+                  <span style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.85;color:#ffdad6;">${label}</span>
+                  ${subBadge}
+                </div>
+                <div style="font-size:1.05rem;font-weight:700;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(e.title)}</div>
+                <div style="font-size:0.78rem;opacity:0.75;margin-top:2px;display:flex;align-items:center;gap:5px;">
+                  <i data-lucide="calendar" style="width:13px;height:13px;"></i>
+                  <span>${dayLabel}</span>
+                </div>
               </div>
             </div>
             <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
@@ -545,21 +613,27 @@ function renderEventList() {
     }
 
     return `
-      <div style="background:white;border-radius:20px;padding:14px 16px;margin-bottom:10px;display:flex;gap:0;align-items:center;box-shadow:0 1px 4px rgba(0,0,0,0.06);">
-        <div style="width:4px;height:48px;background:${border};border-radius:2px;flex-shrink:0;margin-right:14px;"></div>
-        <div style="flex:1;min-width:0;">
-          <div style="display:flex;align-items:center;flex-wrap:wrap;gap:4px;margin-bottom:2px;">
-            <span style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:${border};">${label}</span>
-            ${subName ? `<span style="font-size:0.72rem;font-weight:600;background:rgba(0,0,0,0.06);padding:1px 6px;border-radius:6px;margin-left:4px;">${escapeHtml(subName)}</span>` : ''}
-            ${personalBadge}
+      <div style="background:white;border-radius:20px;padding:14px 16px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:8px;box-shadow:0 1px 4px rgba(0,0,0,0.06);">
+        <div style="display:flex;align-items:center;flex:1;min-width:0;">
+          <div class="ev-date-badge ${isEvToday ? 'is-today' : ''}">
+            <span class="ev-date-num">${dayNum}</span>
+            <span class="ev-date-wd">${weekday}</span>
           </div>
-          <div style="font-weight:700;font-size:0.95rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#1c1b1f;">${escapeHtml(e.title)}</div>
-          <div style="font-size:0.78rem;opacity:0.6;margin-top:2px;display:flex;align-items:center;gap:4px;">
-            <i data-lucide="calendar" style="width:13px;height:13px;"></i>
-            <span>${dayLabel}</span>
+          <div style="flex:1;min-width:0;">
+            <div style="display:flex;align-items:center;flex-wrap:wrap;gap:4px;margin-bottom:2px;">
+              <span class="cal-dot cal-dot-${e.event_type}"></span>
+              <span style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:${border};">${label}</span>
+              ${subName ? `<span style="font-size:0.72rem;font-weight:600;background:rgba(0,0,0,0.06);padding:1px 6px;border-radius:6px;margin-left:4px;">${escapeHtml(subName)}</span>` : ''}
+              ${personalBadge}
+            </div>
+            <div style="font-weight:700;font-size:0.95rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#1c1b1f;">${escapeHtml(e.title)}</div>
+            <div style="font-size:0.78rem;opacity:0.6;margin-top:2px;display:flex;align-items:center;gap:4px;">
+              <i data-lucide="calendar" style="width:13px;height:13px;"></i>
+              <span>${dayLabel}</span>
+            </div>
           </div>
         </div>
-        <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;margin-left:8px;">
+        <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
           <button onclick="openEditEventSheet(${e.id})" title="Bearbeiten" class="ev-action-btn edit">
             <i data-lucide="pencil" style="width:15px;height:15px;"></i>
           </button>
@@ -579,7 +653,7 @@ async function calNav(dir) {
   calMonth += dir;
   if (calMonth < 0) { calMonth = 11; calYear--; }
   if (calMonth > 11) { calMonth = 0; calYear++; }
-  selectedCalDate = null; // Reset day filter on month change
+  selectedCalDate = null;
   await loadCalEvents();
   renderCal();
 }

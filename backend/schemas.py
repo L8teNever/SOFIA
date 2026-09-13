@@ -77,7 +77,12 @@ class HolidayImportRequest(BaseModel):
     year: int
     class_id: Optional[int] = None
 
-# Homework
+# Homework & Attachments
+class AttachmentItem(BaseModel):
+    url: str
+    type: str = "file"  # "image" or "file"
+    name: Optional[str] = None
+
 class HomeworkOut(BaseModel):
     id: int
     subject_id: int
@@ -85,9 +90,11 @@ class HomeworkOut(BaseModel):
     description: str
     due_date: str
     created_by: int
-    checked_by: List[int]
+    created_at: Optional[datetime] = None
+    checked_by: List[int] = []
     file_url: Optional[str] = None
     file_type: Optional[str] = None
+    attachments: List[AttachmentItem] = []
     class Config: from_attributes = True
 
 class HomeworkCreate(BaseModel):
@@ -96,6 +103,36 @@ class HomeworkCreate(BaseModel):
     due_date: str
     file_url: Optional[str] = None
     file_type: Optional[str] = None
+    attachments: Optional[List[AttachmentItem]] = []
+
+class HomeworkUpdate(BaseModel):
+    subject_id: Optional[int] = None
+    description: Optional[str] = None
+    due_date: Optional[str] = None
+    file_url: Optional[str] = None
+    file_type: Optional[str] = None
+    attachments: Optional[List[AttachmentItem]] = None
+
+class SolutionUserOut(BaseModel):
+    id: int
+    display_name: Optional[str] = None
+    email: str
+    avatar_url: Optional[str] = None
+    class Config: from_attributes = True
+
+class HomeworkSolutionCreate(BaseModel):
+    text: Optional[str] = None
+    attachments: List[AttachmentItem] = []
+
+class HomeworkSolutionOut(BaseModel):
+    id: int
+    homework_id: int
+    user_id: int
+    text: Optional[str] = None
+    attachments: List[AttachmentItem] = []
+    created_at: datetime
+    user: Optional[SolutionUserOut] = None
+    class Config: from_attributes = True
 
 # Grade
 class GradeOut(BaseModel):

@@ -15,7 +15,9 @@ class Homework(Base):
     checked_by = Column(JSON, default=list)  # list of user_ids who checked it off
     file_url = Column(String, nullable=True)
     file_type = Column(String, nullable=True)  # image|file
+    attachments = Column(JSON, default=list)   # list of {"url": str, "type": str, "name": str}
 
     subject = relationship("Subject", back_populates="homework_items")
     class_group = relationship("ClassGroup", back_populates="homework_items")
     creator = relationship("User")
+    solutions = relationship("HomeworkSolution", back_populates="homework", cascade="all, delete-orphan", order_by="desc(HomeworkSolution.created_at)")

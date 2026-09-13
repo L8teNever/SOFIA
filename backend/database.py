@@ -36,7 +36,7 @@ async def get_db():
 
 async def init_db():
     from backend.models import (
-        user, class_group, subject, calendar_event, homework,
+        user, class_group, subject, calendar_event, homework, homework_solution,
         grade, shared_file, notification, meal_plan,
         push_subscription, notification_setting, sent_notification_log
     )
@@ -58,6 +58,8 @@ async def _migrate_columns(conn):
         await conn.execute(text("ALTER TABLE homework ADD COLUMN file_url TEXT"))
     if "file_type" not in existing_hw:
         await conn.execute(text("ALTER TABLE homework ADD COLUMN file_type TEXT"))
+    if "attachments" not in existing_hw:
+        await conn.execute(text("ALTER TABLE homework ADD COLUMN attachments JSON DEFAULT '[]'"))
 
     result_cal = await conn.execute(text("PRAGMA table_info(calendar_events)"))
     existing_cal = {row[1] for row in result_cal.fetchall()}

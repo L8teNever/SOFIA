@@ -18,48 +18,98 @@
       <div style="font-weight:600;">Keine Hausaufgaben!</div>
     </div>
   </div>
-  <button class="fab" onclick="openHwSheet()">
+  <button class="fab" onclick="openHwSheet()" title="Neue Aufgabe erstellen">
     <i data-lucide="plus" style="width:24px;height:24px;"></i>
   </button>
 
-  <!-- Detail overlay: opened on top of this page when a homework card is
-       tapped. .page-overlay (in addition to .page) marks it for the
-       generic back-navigation handler in app.js. -->
+  <!-- Detail overlay: opened on top of this page when a homework card is tapped -->
   <template id="tpl-hw-detail">
     <div class="page page-overlay" id="page-hw-detail" style="background:#fff5f8;">
       <div class="page-header">
-        <button class="icon-btn" onclick="event.stopPropagation();closeHwDetail();"><i data-lucide="arrow-left" style="width:22px;height:22px;"></i></button>
+        <button class="icon-btn" onclick="event.stopPropagation();closeHwDetail();" title="Zurück"><i data-lucide="arrow-left" style="width:22px;height:22px;"></i></button>
         <div style="flex:1;min-width:0;">
-          <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.5;color:#31111d;" id="hwd-subject">–</div>
-          <span class="page-title" style="color:#31111d;font-size:1.3rem;" id="hwd-title">–</span>
+          <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.6;color:#31111d;" id="hwd-subject">–</div>
+          <span class="page-title" style="color:#31111d;font-size:1.25rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" id="hwd-title">–</span>
         </div>
-        <button class="icon-btn" onclick="deleteHwFromDetail()" style="color:#b3261e;"><i data-lucide="trash-2" style="width:20px;height:20px;"></i></button>
+        <button class="icon-btn" onclick="deleteHwFromDetail()" style="color:#ba1a1a;" title="Aufgabe löschen"><i data-lucide="trash-2" style="width:20px;height:20px;"></i></button>
       </div>
-      <div class="page-scroll-1col"><div class="page-inner">
-        <div class="m3-card" id="hwd-due-card" style="display:flex;align-items:center;gap:12px;">
-          <div class="icon-box" style="width:44px;height:44px;background:rgba(103,80,164,0.1);flex-shrink:0;">
-            <i data-lucide="calendar" style="width:20px;height:20px;color:#6750a4;"></i>
+
+      <div class="page-scroll-1col no-scrollbar"><div class="page-inner" style="padding-bottom:90px;">
+        <!-- Due Date Card -->
+        <div class="m3-card" id="hwd-due-card" style="display:flex;align-items:center;justify-content:space-between;gap:12px;border-radius:20px;">
+          <div style="display:flex;align-items:center;gap:12px;">
+            <div class="icon-box" style="width:44px;height:44px;background:rgba(103,80,164,0.1);border-radius:14px;flex-shrink:0;">
+              <i data-lucide="calendar" style="width:20px;height:20px;color:#6750a4;"></i>
+            </div>
+            <div>
+              <div style="font-size:0.72rem;opacity:0.55;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;">Fällig</div>
+              <div style="font-weight:700;font-size:0.95rem;color:#1c1b1f;" id="hwd-due">–</div>
+            </div>
           </div>
-          <div>
-            <div style="font-size:0.72rem;opacity:0.5;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;">Fällig</div>
-            <div style="font-weight:700;" id="hwd-due">–</div>
+          <div id="hwd-status-badge"></div>
+        </div>
+
+        <!-- Description Card -->
+        <div class="m3-card" id="hwd-desc-card" style="border-radius:20px;margin-top:10px;">
+          <div style="font-size:0.72rem;opacity:0.55;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px;">Aufgabe / Beschreibung</div>
+          <div style="white-space:pre-wrap;line-height:1.55;font-size:1.05rem;color:#1c1b1f;font-weight:600;" id="hwd-desc">–</div>
+        </div>
+
+        <!-- Toggle Done Button -->
+        <button class="m3-btn-full" id="hwd-toggle-btn" onclick="toggleHwFromDetail()" style="margin-top:12px;border-radius:16px;">Als erledigt markieren</button>
+
+        <!-- Task Attachments Gallery -->
+        <div id="hwd-attachment-wrap" style="display:none;margin-top:18px;">
+          <div class="section-label" style="display:flex;align-items:center;gap:6px;color:#31111d;">
+            <i data-lucide="paperclip" style="width:16px;height:16px;"></i>
+            <span id="hwd-attachment-label">Anhänge zur Aufgabe</span>
+          </div>
+          <div id="hwd-attachment-images" class="hw-gallery-grid" style="display:none;margin-bottom:10px;"></div>
+          <div id="hwd-attachment-files" style="display:none;"></div>
+        </div>
+
+        <!-- Class Solutions Section -->
+        <div style="margin-top:24px;padding-top:16px;border-top:1.5px solid rgba(49,17,29,0.08);">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;gap:8px;">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <div class="section-label" style="margin:0;color:#31111d;">Lösungssammlungen</div>
+              <span id="hwd-solutions-badge" style="font-size:0.72rem;font-weight:700;background:rgba(49,17,29,0.08);color:#31111d;padding:2px 8px;border-radius:8px;">0</span>
+            </div>
+            <button onclick="openUploadSolutionSheet()" class="m3-btn-tonal" style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;font-size:0.8rem;border-radius:12px;">
+              <i data-lucide="plus" style="width:14px;height:14px;"></i> Lösung teilen
+            </button>
+          </div>
+          <div style="font-size:0.8rem;opacity:0.6;margin-bottom:14px;">Hier können Mitschüler Lösungen, Rechenwege oder Fotos teilen.</div>
+
+          <div id="hwd-solutions-list">
+            <div style="text-align:center;padding:20px;opacity:0.5;font-size:0.85rem;">Lade Lösungen…</div>
           </div>
         </div>
 
-        <div class="m3-card" id="hwd-desc-card">
-          <div style="font-size:0.72rem;opacity:0.5;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px;">Beschreibung</div>
-          <div style="white-space:pre-wrap;line-height:1.5;" id="hwd-desc">–</div>
-        </div>
-
-        <div id="hwd-attachment-wrap" style="display:none;">
-          <div class="section-label">Anhang</div>
-          <div class="m3-card" id="hwd-attachment" style="padding:8px;"></div>
-        </div>
-
-        <button class="m3-btn-full" id="hwd-toggle-btn" onclick="toggleHwFromDetail()" style="margin-top:8px;">Als erledigt markieren</button>
       </div></div>
     </div>
   </template>
+
+  <!-- Universal Image Lightbox -->
+  <div id="hw-lightbox" style="display:none;position:fixed;inset:0;z-index:2000;background:rgba(0,0,0,0.92);backdrop-filter:blur(12px);flex-direction:column;opacity:0;transition:opacity 0.22s ease;" onclick="onHwLightboxBgClick(event)">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;color:#fff;z-index:2;">
+      <div style="display:flex;align-items:center;gap:10px;min-width:0;flex:1;">
+        <i data-lucide="image" style="width:20px;height:20px;color:#ffd8e4;flex-shrink:0;"></i>
+        <span style="font-weight:700;font-size:0.95rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" id="hw-lightbox-title">Bild-Vorschau</span>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <a id="hw-lightbox-open-link" href="#" target="_blank" style="width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,0.12);color:#fff;display:flex;align-items:center;justify-content:center;text-decoration:none;" title="In neuem Tab öffnen">
+          <i data-lucide="external-link" style="width:18px;height:18px;"></i>
+        </a>
+        <button onclick="closeHwLightbox()" style="width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,0.12);color:#fff;border:none;display:flex;align-items:center;justify-content:center;cursor:pointer;" title="Schließen">
+          <i data-lucide="x" style="width:22px;height:22px;"></i>
+        </button>
+      </div>
+    </div>
+    <div style="flex:1;display:flex;align-items:center;justify-content:center;padding:12px;overflow:auto;touch-action:pinch-zoom;" onclick="closeHwLightbox()">
+      <img id="hw-lightbox-img" src="" style="max-width:96vw;max-height:86vh;object-fit:contain;border-radius:14px;box-shadow:0 12px 40px rgba(0,0,0,0.6);" onclick="event.stopPropagation()">
+    </div>
+  </div>
 
   <style>
   .hw-due-segments { display: flex; gap: 6px; margin-bottom: 10px; }
@@ -88,14 +138,91 @@
   .hw-day-chip.selected .hw-day-chip-wd, .hw-day-chip.selected .hw-day-chip-num { color: #fff; }
 
   .hw-card-attachment-badge {
-    display: flex; align-items: center; justify-content: center;
-    width: 22px; height: 22px; border-radius: 8px; background: rgba(0,0,0,0.08); flex-shrink: 0;
+    display: inline-flex; align-items: center; gap: 3px;
+    padding: 3px 8px; border-radius: 8px; background: rgba(0,0,0,0.08); font-size: 0.72rem; font-weight: 700;
+  }
+
+  /* Gallery thumbnail grid */
+  .hw-gallery-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 10px;
+  }
+  .hw-gallery-item {
+    position: relative;
+    border-radius: 16px;
+    overflow: hidden;
+    background: #000;
+    cursor: pointer;
+    aspect-ratio: 4/3;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+  .hw-gallery-item:hover {
+    transform: scale(1.02);
+    box-shadow: 0 4px 14px rgba(0,0,0,0.15);
+  }
+  .hw-gallery-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .hw-gallery-overlay {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to top, rgba(0,0,0,0.45), transparent);
+    display: flex;
+    align-items: flex-end;
+    padding: 8px;
+    color: #fff;
+    opacity: 0.9;
+  }
+
+  /* File attachment cards */
+  .hw-file-card {
+    background: #ffffff;
+    border-radius: 16px;
+    padding: 10px 14px;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+  }
+  .hw-file-card:hover {
+    background: #faf8fc;
+  }
+
+  /* Solution card */
+  .hw-solution-card {
+    background: #ffffff;
+    border-radius: 20px;
+    padding: 14px 16px;
+    margin-bottom: 12px;
+    box-shadow: 0 1px 5px rgba(0,0,0,0.05);
+  }
+  .hw-user-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 18px;
+    background: #eaddff;
+    color: #21005d;
+    font-weight: 700;
+    font-size: 0.85rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
   }
   </style>
 </div>
+
 <script>
 let hwItems = [], hwSubjects = [], hwCurrentFilter = 'all', hwCurrentUser = null, hwTimetable = null;
-let hwDueMode = 'next', hwCustomDate = null, hwPendingFile = null;
+let hwDueMode = 'next', hwCustomDate = null;
+let hwPendingFiles = []; // Array of { url, type, name }
+let hwDetailId = null;
 
 async function init_homework() {
   [hwItems, hwSubjects, hwCurrentUser] = await Promise.all([
@@ -107,9 +234,6 @@ async function init_homework() {
   API.timetable().then(tt => { hwTimetable = tt; }).catch(() => {});
 }
 
-// Finds the subject of whatever lesson is happening right now (per the
-// WebUntis timetable), so the "new homework" sheet can default to it
-// instead of always landing on the first subject in the list.
 function hwCurrentSubjectId() {
   if (!hwTimetable || !hwTimetable.configured || hwTimetable.error) return null;
   const lessons = hwTimetable.this_week?.lessons || [];
@@ -123,8 +247,6 @@ function hwCurrentSubjectId() {
   return match ? match.id : null;
 }
 
-// Sorted (ascending), deduplicated YYYYMMDD dates of upcoming (not yet over,
-// not cancelled) lessons of `subjectId` from the fetched Untis timetable.
 function hwSubjectLessonDates(subjectId) {
   if (!hwTimetable || !hwTimetable.configured || hwTimetable.error) return [];
   const sub = hwSubjects.find(s => s.id === subjectId);
@@ -168,14 +290,14 @@ function hwDefaultTomorrow() {
 function hwFormatDueLabel(iso) {
   if (!iso) return '–';
   const d = new Date(iso + 'T00:00');
-  return d.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' });
+  return d.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 }
 
 function renderHwStats() {
   const today = new Date().toISOString().slice(0,10);
   const uid = hwCurrentUser && hwCurrentUser.id;
-  const open = hwItems.filter(h => !h.checked_by.includes(uid) && h.due_date >= today).length;
-  const done = hwItems.filter(h => h.checked_by.includes(uid)).length;
+  const open = hwItems.filter(h => !(h.checked_by || []).includes(uid) && h.due_date >= today).length;
+  const done = hwItems.filter(h => (h.checked_by || []).includes(uid)).length;
   const sub = document.getElementById('hw-header-sub');
   if (sub) sub.textContent = open + ' offen · ' + done + ' erledigt';
 }
@@ -190,33 +312,49 @@ function sectionLabel(text) {
   return '<div class="section-label" style="color:#31111d;">' + text + '</div>';
 }
 
+function getHwAttachments(h) {
+  if (Array.isArray(h.attachments) && h.attachments.length > 0) return h.attachments;
+  if (h.file_url) return [{ url: h.file_url, type: h.file_type || 'file', name: 'Anhang' }];
+  return [];
+}
+
 function hwCard(h, sub, uid, today) {
-  const checked = h.checked_by.includes(uid);
+  const checked = (h.checked_by || []).includes(uid);
   const overdue = h.due_date < today && !checked;
   const bg = sub.color || '#ffd8e4';
   const d = new Date(h.due_date+'T00:00');
   const isToday = h.due_date === today;
   const isTomorrow = h.due_date === new Date(Date.now()+86400000).toISOString().slice(0,10);
   const dateLabel = isToday ? 'Heute' : isTomorrow ? 'Morgen' : d.toLocaleDateString('de-DE',{weekday:'short',day:'numeric',month:'short'});
-  const attachmentBadge = h.file_url
-    ? '<div class="hw-card-attachment-badge"><i data-lucide="' + (h.file_type === 'image' ? 'image' : 'paperclip') + '" style="width:12px;height:12px;"></i></div>'
+
+  const atts = getHwAttachments(h);
+  const hasImages = atts.some(a => a.type === 'image');
+  const attachmentBadge = atts.length > 0
+    ? `<span class="hw-card-attachment-badge"><i data-lucide="${hasImages ? 'image' : 'paperclip'}" style="width:12px;height:12px;"></i> ${atts.length > 1 ? atts.length : ''}</span>`
     : '';
-  return '<div onclick="openHwDetail(' + h.id + ')" style="background:' + bg + ';border-radius:24px;padding:18px;margin-bottom:10px;cursor:pointer;' + (checked?'opacity:0.5;':'' ) + '">'
-    + '<div style="display:flex;gap:12px;align-items:flex-start;">'
-    + '<div onclick="event.stopPropagation();toggleHw(' + h.id + ')" style="width:28px;height:28px;border-radius:50%;flex-shrink:0;margin-top:1px;cursor:pointer;display:flex;align-items:center;justify-content:center;'
-    + (checked ? 'background:rgba(0,0,0,0.3);' : 'border:2.5px solid rgba(0,0,0,0.25);background:transparent;') + '">'
-    + (checked ? '<i data-lucide="check" style="width:14px;height:14px;color:white;"></i>' : '') + '</div>'
-    + '<div style="flex:1;min-width:0;">'
-    + '<div style="font-weight:700;font-size:0.95rem;' + (checked?'text-decoration:line-through;':'') + '">' + escapeHtml(h.description) + '</div>'
-    + '<div style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap;">'
-    + '<span style="font-size:0.72rem;font-weight:700;background:rgba(0,0,0,0.1);padding:4px 10px;border-radius:10px;">' + escapeHtml(sub.name||'?') + '</span>'
-    + '<span style="font-size:0.72rem;font-weight:' + (overdue?'700':'500') + ';opacity:0.7;' + (overdue?'color:#b3261e;':'') + '">'
-    + (overdue ? '⚠ Überfällig · ' : '') + dateLabel + '</span>'
-    + attachmentBadge
-    + '</div></div>'
-    + '<button onclick="event.stopPropagation();deleteHw(' + h.id + ')" style="background:rgba(0,0,0,0.08);border:none;border-radius:10px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;">'
-    + '<i data-lucide="x" style="width:14px;height:14px;"></i></button>'
-    + '</div></div>';
+
+  return `
+    <div onclick="openHwDetail(${h.id})" style="background:${bg};border-radius:24px;padding:18px;margin-bottom:10px;cursor:pointer;transition:transform 0.12s ease;${checked ? 'opacity:0.55;' : ''}">
+      <div style="display:flex;gap:12px;align-items:flex-start;">
+        <div onclick="event.stopPropagation();toggleHw(${h.id})" style="width:28px;height:28px;border-radius:50%;flex-shrink:0;margin-top:1px;cursor:pointer;display:flex;align-items:center;justify-content:center;${checked ? 'background:rgba(0,0,0,0.3);' : 'border:2.5px solid rgba(0,0,0,0.25);background:transparent;'}">
+          ${checked ? '<i data-lucide="check" style="width:14px;height:14px;color:white;"></i>' : ''}
+        </div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:700;font-size:0.95rem;${checked ? 'text-decoration:line-through;' : ''}">${escapeHtml(h.description)}</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap;">
+            <span style="font-size:0.72rem;font-weight:700;background:rgba(0,0,0,0.1);padding:4px 10px;border-radius:10px;">${escapeHtml(sub.name || '?')}</span>
+            <span style="font-size:0.72rem;font-weight:${overdue ? '700' : '500'};opacity:0.7;${overdue ? 'color:#b3261e;' : ''}">
+              ${overdue ? '⚠ Überfällig · ' : ''}${dateLabel}
+            </span>
+            ${attachmentBadge}
+          </div>
+        </div>
+        <button onclick="event.stopPropagation();confirmDelHw(${h.id})" style="background:rgba(0,0,0,0.08);border:none;border-radius:10px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;" title="Aufgabe löschen">
+          <i data-lucide="x" style="width:14px;height:14px;"></i>
+        </button>
+      </div>
+    </div>
+  `;
 }
 
 function renderHw() {
@@ -227,18 +365,18 @@ function renderHw() {
   let items = [...hwItems].sort((a,b) => a.due_date.localeCompare(b.due_date));
   const list = document.getElementById('hw-list');
 
-  if (hwCurrentFilter === 'open') items = items.filter(h => !h.checked_by.includes(uid) && h.due_date >= today);
-  if (hwCurrentFilter === 'done') items = items.filter(h => h.checked_by.includes(uid));
+  if (hwCurrentFilter === 'open') items = items.filter(h => !(h.checked_by || []).includes(uid) && h.due_date >= today);
+  if (hwCurrentFilter === 'done') items = items.filter(h => (h.checked_by || []).includes(uid));
 
   if (!items.length) { list.innerHTML = ''; document.getElementById('hw-empty').style.display = 'block'; return; }
   document.getElementById('hw-empty').style.display = 'none';
 
   if (hwCurrentFilter !== 'done') {
-    const todayItems    = items.filter(h => !h.checked_by.includes(uid) && h.due_date === today);
-    const weekItems     = items.filter(h => !h.checked_by.includes(uid) && h.due_date > today && h.due_date <= thisWeekEnd);
-    const laterItems    = items.filter(h => !h.checked_by.includes(uid) && h.due_date > thisWeekEnd);
-    const overdueItems  = items.filter(h => !h.checked_by.includes(uid) && h.due_date < today);
-    const doneItems     = hwCurrentFilter === 'all' ? items.filter(h => h.checked_by.includes(uid)) : [];
+    const todayItems    = items.filter(h => !(h.checked_by || []).includes(uid) && h.due_date === today);
+    const weekItems     = items.filter(h => !(h.checked_by || []).includes(uid) && h.due_date > today && h.due_date <= thisWeekEnd);
+    const laterItems    = items.filter(h => !(h.checked_by || []).includes(uid) && h.due_date > thisWeekEnd);
+    const overdueItems  = items.filter(h => !(h.checked_by || []).includes(uid) && h.due_date < today);
+    const doneItems     = hwCurrentFilter === 'all' ? items.filter(h => (h.checked_by || []).includes(uid)) : [];
     let html = '';
     if (overdueItems.length) { html += sectionLabel('Überfällig'); html += overdueItems.map(h => hwCard(h, subMap[h.subject_id]||{}, uid, today)).join(''); }
     if (todayItems.length)   { html += sectionLabel('Heute fällig'); html += todayItems.map(h => hwCard(h, subMap[h.subject_id]||{}, uid, today)).join(''); }
@@ -266,14 +404,36 @@ async function toggleHw(id) {
   } catch { showToast('Fehler'); }
 }
 
-async function deleteHw(id) {
-  try { await API.deleteHomework(id); hwItems = hwItems.filter(h=>h.id!==id); renderHwStats(); renderHw(); showToast('Geloescht'); }
-  catch { showToast('Fehler'); }
+function confirmDelHw(id) {
+  const hw = hwItems.find(h => h.id === id);
+  const title = hw ? `„${escapeHtml(hw.description.slice(0, 40))}${hw.description.length > 40 ? '…' : ''}“` : 'diese Aufgabe';
+  openModal(`
+    <div style="text-align:center;padding:8px 4px;">
+      <div style="width:52px;height:52px;border-radius:26px;background:#ffdad6;color:#ba1a1a;display:inline-flex;align-items:center;justify-content:center;margin-bottom:14px;">
+        <i data-lucide="alert-triangle" style="width:28px;height:28px;"></i>
+      </div>
+      <div style="font-size:1.2rem;font-weight:700;color:#1c1b1f;margin-bottom:8px;">Aufgabe löschen?</div>
+      <div style="font-size:0.92rem;color:#49454f;line-height:1.45;margin-bottom:22px;">Willst du ${title} wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.</div>
+      <div style="display:flex;gap:10px;">
+        <button type="button" class="m3-btn-outline" style="flex:1;" onclick="closeModal()">Abbrechen</button>
+        <button type="button" class="m3-btn-primary" style="flex:1;background:#ba1a1a;color:#fff;border:none;" onclick="executeDeleteHw(${id})">Löschen</button>
+      </div>
+    </div>
+  `);
 }
 
-// ---- Detail overlay ----
+async function executeDeleteHw(id) {
+  closeModal();
+  try {
+    await API.deleteHomework(id);
+    hwItems = hwItems.filter(h => h.id !== id);
+    renderHwStats(); renderHw();
+    if (hwDetailId === id) closeHwDetail();
+    showToast('Aufgabe gelöscht');
+  } catch { showToast('Fehler beim Löschen'); }
+}
 
-let hwDetailId = null;
+// ---- Detail Overlay (Unterseite) ----
 
 function openHwDetail(id) {
   const hw = hwItems.find(h => h.id === id);
@@ -288,6 +448,7 @@ function openHwDetail(id) {
   page.style.setProperty('--oy', '50%');
   requestAnimationFrame(() => requestAnimationFrame(() => page.classList.add('active')));
   renderHwDetail(hw);
+  loadHwSolutions(hw.id);
   history.pushState({ hwDetail: id }, '', window.location.pathname);
   if (window.lucide) lucide.createIcons();
 }
@@ -295,35 +456,104 @@ function openHwDetail(id) {
 function renderHwDetail(hw) {
   const sub = hwSubjects.find(s => s.id === hw.subject_id) || {};
   const uid = hwCurrentUser && hwCurrentUser.id;
-  const checked = hw.checked_by.includes(uid);
-  document.getElementById('hwd-subject').textContent = sub.name || '?';
-  document.getElementById('hwd-title').textContent = hw.description;
-  document.getElementById('hwd-desc').textContent = hw.description;
-  document.getElementById('hwd-due').textContent = hwFormatDueLabel(hw.due_date);
-  const toggleBtn = document.getElementById('hwd-toggle-btn');
-  toggleBtn.textContent = checked ? 'Als offen markieren' : 'Als erledigt markieren';
+  const checked = (hw.checked_by || []).includes(uid);
+  const today = new Date().toISOString().slice(0, 10);
+  const overdue = hw.due_date < today && !checked;
+  const isToday = hw.due_date === today;
 
+  const subEl = document.getElementById('hwd-subject');
+  if (subEl) subEl.textContent = sub.name || '?';
+
+  const titleEl = document.getElementById('hwd-title');
+  if (titleEl) titleEl.textContent = hw.description;
+
+  const descEl = document.getElementById('hwd-desc');
+  if (descEl) descEl.textContent = hw.description;
+
+  const dueEl = document.getElementById('hwd-due');
+  if (dueEl) dueEl.textContent = hwFormatDueLabel(hw.due_date);
+
+  const statusBadge = document.getElementById('hwd-status-badge');
+  if (statusBadge) {
+    if (checked) {
+      statusBadge.innerHTML = `<span style="font-size:0.75rem;font-weight:700;background:#c4eed0;color:#074d1a;padding:4px 10px;border-radius:10px;display:inline-flex;align-items:center;gap:4px;"><i data-lucide="check" style="width:12px;height:12px;"></i> Erledigt</span>`;
+    } else if (overdue) {
+      statusBadge.innerHTML = `<span style="font-size:0.75rem;font-weight:700;background:#ffdad6;color:#ba1a1a;padding:4px 10px;border-radius:10px;display:inline-flex;align-items:center;gap:4px;"><i data-lucide="alert-triangle" style="width:12px;height:12px;"></i> Überfällig</span>`;
+    } else if (isToday) {
+      statusBadge.innerHTML = `<span style="font-size:0.75rem;font-weight:700;background:#ffe082;color:#5d4037;padding:4px 10px;border-radius:10px;">Heute fällig</span>`;
+    } else {
+      statusBadge.innerHTML = `<span style="font-size:0.75rem;font-weight:700;background:rgba(0,0,0,0.06);color:#49454f;padding:4px 10px;border-radius:10px;">Offen</span>`;
+    }
+  }
+
+  const toggleBtn = document.getElementById('hwd-toggle-btn');
+  if (toggleBtn) {
+    if (checked) {
+      toggleBtn.textContent = '✓ Als erledigt markiert (Klicke zum Wiedereröffnen)';
+      toggleBtn.style.background = '#e8f5e9';
+      toggleBtn.style.color = '#1b5e20';
+    } else {
+      toggleBtn.textContent = 'Als erledigt markieren';
+      toggleBtn.style.background = '';
+      toggleBtn.style.color = '';
+    }
+  }
+
+  // Render Attachments
   const wrap = document.getElementById('hwd-attachment-wrap');
-  const box = document.getElementById('hwd-attachment');
-  if (hw.file_url) {
+  const imgBox = document.getElementById('hwd-attachment-images');
+  const fileBox = document.getElementById('hwd-attachment-files');
+  const attLabel = document.getElementById('hwd-attachment-label');
+
+  const atts = getHwAttachments(hw);
+  if (atts.length > 0) {
     wrap.style.display = 'block';
-    box.innerHTML = hw.file_type === 'image'
-      ? `<img src="${hw.file_url}" style="width:100%;border-radius:20px;display:block;">`
-      : `<a href="${hw.file_url}" target="_blank" style="display:flex;align-items:center;gap:12px;padding:8px;color:inherit;text-decoration:none;">
-          <div class="icon-box" style="width:44px;height:44px;background:rgba(103,80,164,0.1);flex-shrink:0;"><i data-lucide="file" style="width:20px;height:20px;color:#6750a4;"></i></div>
-          <span style="font-weight:600;font-size:0.85rem;">Datei öffnen</span>
-        </a>`;
+    if (attLabel) attLabel.textContent = `Anhänge zur Aufgabe (${atts.length})`;
+
+    const images = atts.filter(a => a.type === 'image');
+    const files = atts.filter(a => a.type !== 'image');
+
+    if (images.length > 0) {
+      imgBox.style.display = 'grid';
+      imgBox.innerHTML = images.map(img => `
+        <div class="hw-gallery-item" onclick="openHwLightbox('${img.url}', '${escapeHtml(img.name || 'Aufgaben-Bild')}')">
+          <img class="hw-gallery-img" src="${img.url}" loading="lazy">
+          <div class="hw-gallery-overlay">
+            <span style="font-size:0.7rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(img.name || 'Bild')}</span>
+          </div>
+        </div>
+      `).join('');
+    } else {
+      imgBox.style.display = 'none';
+    }
+
+    if (files.length > 0) {
+      fileBox.style.display = 'block';
+      fileBox.innerHTML = files.map(f => `
+        <div class="hw-file-card">
+          <div style="display:flex;align-items:center;gap:12px;min-width:0;flex:1;">
+            <div class="icon-box" style="width:38px;height:38px;background:rgba(103,80,164,0.1);border-radius:10px;flex-shrink:0;">
+              <i data-lucide="file-text" style="width:18px;height:18px;color:#6750a4;"></i>
+            </div>
+            <div style="font-weight:600;font-size:0.85rem;color:#1c1b1f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+              ${escapeHtml(f.name || 'Dokument')}
+            </div>
+          </div>
+          <a href="${f.url}" target="_blank" class="m3-btn-tonal" style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;font-size:0.78rem;text-decoration:none;border-radius:10px;flex-shrink:0;">
+            <i data-lucide="external-link" style="width:13px;height:13px;"></i> Öffnen
+          </a>
+        </div>
+      `).join('');
+    } else {
+      fileBox.style.display = 'none';
+    }
   } else {
     wrap.style.display = 'none';
   }
+
   if (window.lucide) lucide.createIcons();
 }
 
-// Just triggers browser back — the popstate handler in app.js (which looks
-// for .page-overlay.active) does the actual close. Doing both here AND
-// there would double-process: by the time popstate fires, this overlay
-// would already have lost its "active" class, so that handler would fall
-// through and incorrectly close the homework list page underneath it.
 function closeHwDetail() {
   hwDetailId = null;
   history.back();
@@ -336,31 +566,276 @@ async function toggleHwFromDetail() {
   if (hw) renderHwDetail(hw);
 }
 
-async function deleteHwFromDetail() {
+function deleteHwFromDetail() {
   if (hwDetailId == null) return;
-  await deleteHw(hwDetailId);
-  closeHwDetail();
+  confirmDelHw(hwDetailId);
 }
 
-// ---- "New homework" sheet: subject/description + smart due-date + attachment ----
+// ---- Solutions (Lösungssammlungen der Klasse) ----
+
+async function loadHwSolutions(hwId) {
+  const container = document.getElementById('hwd-solutions-list');
+  const badge = document.getElementById('hwd-solutions-badge');
+  if (!container) return;
+
+  try {
+    const solutions = await API.homeworkSolutions(hwId);
+    if (badge) badge.textContent = solutions.length;
+
+    if (!solutions.length) {
+      container.innerHTML = `
+        <div class="m3-card" style="background:#fff;text-align:center;padding:24px 16px;border-radius:18px;box-shadow:0 1px 4px rgba(0,0,0,0.04);">
+          <div style="width:40px;height:40px;border-radius:20px;background:#f5f3f9;display:inline-flex;align-items:center;justify-content:center;margin-bottom:8px;color:#6750a4;">
+            <i data-lucide="help-circle" style="width:20px;height:20px;"></i>
+          </div>
+          <div style="font-weight:700;font-size:0.9rem;color:#1c1b1f;">Noch keine Lösungen eingetragen</div>
+          <div style="font-size:0.78rem;color:#49454f;margin:4px auto 14px;max-width:260px;">Hast du die Aufgabe bereits gelöst? Teile deine Lösung mit der Klasse!</div>
+          <button onclick="openUploadSolutionSheet()" class="m3-btn-primary" style="font-size:0.8rem;padding:7px 16px;border-radius:12px;display:inline-flex;align-items:center;gap:6px;">
+            <i data-lucide="plus" style="width:14px;height:14px;"></i> Eigene Lösung teilen
+          </button>
+        </div>
+      `;
+      if (window.lucide) lucide.createIcons();
+      return;
+    }
+
+    container.innerHTML = solutions.map(sol => {
+      const u = sol.user || {};
+      const name = escapeHtml(u.display_name || u.email || 'Mitschüler');
+      const initials = (name[0] || 'M').toUpperCase();
+      const dt = new Date(sol.created_at);
+      const timeFmt = dt.toLocaleDateString('de-DE', { day: 'numeric', month: 'short' }) + ', ' + dt.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) + ' Uhr';
+      const isAuthor = hwCurrentUser && (sol.user_id === hwCurrentUser.id || hwCurrentUser.role === 'admin' || hwCurrentUser.role === 'super_admin');
+
+      const atts = Array.isArray(sol.attachments) ? sol.attachments : [];
+      const images = atts.filter(a => a.type === 'image');
+      const files = atts.filter(a => a.type !== 'image');
+
+      const imagesHtml = images.length > 0 ? `
+        <div class="hw-gallery-grid" style="margin-top:10px;">
+          ${images.map(img => `
+            <div class="hw-gallery-item" onclick="openHwLightbox('${img.url}', '${escapeHtml(img.name || 'Lösung')}')">
+              <img class="hw-gallery-img" src="${img.url}" loading="lazy">
+              <div class="hw-gallery-overlay">
+                <span style="font-size:0.7rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(img.name || 'Lösungs-Bild')}</span>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      ` : '';
+
+      const filesHtml = files.length > 0 ? `
+        <div style="margin-top:8px;">
+          ${files.map(f => `
+            <div class="hw-file-card" style="background:#f9f7fc;">
+              <div style="display:flex;align-items:center;gap:10px;min-width:0;flex:1;">
+                <div class="icon-box" style="width:34px;height:34px;background:rgba(103,80,164,0.1);border-radius:10px;flex-shrink:0;">
+                  <i data-lucide="file-text" style="width:16px;height:16px;color:#6750a4;"></i>
+                </div>
+                <div style="font-weight:600;font-size:0.82rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(f.name || 'Lösungsdatei')}</div>
+              </div>
+              <a href="${f.url}" target="_blank" class="m3-btn-tonal" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;font-size:0.75rem;text-decoration:none;border-radius:8px;">
+                <i data-lucide="external-link" style="width:12px;height:12px;"></i> Öffnen
+              </a>
+            </div>
+          `).join('')}
+        </div>
+      ` : '';
+
+      return `
+        <div class="hw-solution-card">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+            <div style="display:flex;align-items:center;gap:10px;">
+              <div class="hw-user-avatar">${initials}</div>
+              <div>
+                <div style="font-weight:700;font-size:0.9rem;color:#1c1b1f;">${name}</div>
+                <div style="font-size:0.72rem;opacity:0.55;">${timeFmt}</div>
+              </div>
+            </div>
+            ${isAuthor ? `
+              <button onclick="confirmDelSolution(${sol.id})" style="background:none;border:none;color:#ba1a1a;cursor:pointer;padding:6px;opacity:0.7;" title="Lösung löschen">
+                <i data-lucide="trash-2" style="width:16px;height:16px;"></i>
+              </button>
+            ` : ''}
+          </div>
+          ${sol.text ? `<div style="font-size:0.9rem;line-height:1.45;color:#31111d;white-space:pre-wrap;background:#faf8fc;padding:10px 12px;border-radius:12px;">${escapeHtml(sol.text)}</div>` : ''}
+          ${imagesHtml}
+          ${filesHtml}
+        </div>
+      `;
+    }).join('');
+
+    if (window.lucide) lucide.createIcons();
+  } catch {
+    container.innerHTML = '<div style="text-align:center;padding:16px;opacity:0.5;font-size:0.85rem;">Lösungen konnten nicht geladen werden.</div>';
+  }
+}
+
+let solPendingFiles = [];
+
+function openUploadSolutionSheet() {
+  solPendingFiles = [];
+  openSheet(`
+    <div class="sheet-title">Eigene Lösung teilen</div>
+    <div style="font-size:0.82rem;color:#49454f;margin-bottom:12px;">Lade Fotos deiner Lösung oder Dokumente hoch, um sie mit der Klasse zu teilen.</div>
+    <textarea class="m3-input" id="sol-text" placeholder="Notizen / Lösungsweg beschreiben (optional)" rows="3" style="resize:none;height:auto;margin-bottom:12px;"></textarea>
+    
+    <div class="section-label" style="margin:12px 4px 6px 4px;">Anhänge (Bilder / Dateien)</div>
+    <label class="m3-btn-tonal" style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;border-radius:14px;padding:12px;">
+      <i data-lucide="camera" style="width:18px;height:18px;"></i> Fotos / Dokumente auswählen
+      <input type="file" id="sol-file-input" multiple accept="image/*,application/pdf,.doc,.docx,.txt" style="display:none;" onchange="solFilesSelected(this)">
+    </label>
+    <div id="sol-files-preview" style="margin-top:10px;"></div>
+
+    <button class="m3-btn-full" onclick="submitSolution()" style="margin-top:16px;border-radius:16px;">Lösung teilen</button>
+  `);
+  if (window.lucide) lucide.createIcons();
+}
+
+async function solFilesSelected(inputEl) {
+  const files = Array.from(inputEl.files || []);
+  inputEl.value = '';
+  if (!files.length) return;
+
+  const preview = document.getElementById('sol-files-preview');
+  if (preview) preview.innerHTML = '<div style="font-size:0.8rem;opacity:0.6;padding:6px 0;">Dateien werden hochgeladen…</div>';
+
+  try {
+    for (const file of files) {
+      const form = new FormData();
+      form.append('file', file);
+      const res = await API.uploadHwFile(form);
+      solPendingFiles.push(res);
+    }
+    renderSolFilesPreview();
+  } catch {
+    showToast('Upload fehlgeschlagen');
+    renderSolFilesPreview();
+  }
+}
+
+function renderSolFilesPreview() {
+  const preview = document.getElementById('sol-files-preview');
+  if (!preview) return;
+  if (!solPendingFiles.length) { preview.innerHTML = ''; return; }
+
+  preview.innerHTML = solPendingFiles.map((f, idx) => {
+    const isImg = f.type === 'image';
+    return `
+      <div style="display:flex;align-items:center;gap:10px;background:#f5f3f9;border-radius:12px;padding:8px 10px;margin-bottom:6px;">
+        ${isImg
+          ? `<img src="${f.url}" style="width:38px;height:38px;border-radius:8px;object-fit:cover;flex-shrink:0;">`
+          : `<div class="icon-box" style="width:38px;height:38px;background:rgba(103,80,164,0.1);border-radius:8px;flex-shrink:0;"><i data-lucide="file" style="width:18px;height:18px;color:#6750a4;"></i></div>`}
+        <span style="flex:1;font-size:0.82rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(f.name || 'Datei')}</span>
+        <button type="button" onclick="removeSolFile(${idx})" style="background:rgba(0,0,0,0.06);border:none;border-radius:8px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+          <i data-lucide="x" style="width:14px;height:14px;"></i>
+        </button>
+      </div>
+    `;
+  }).join('');
+  if (window.lucide) lucide.createIcons();
+}
+
+function removeSolFile(idx) {
+  solPendingFiles.splice(idx, 1);
+  renderSolFilesPreview();
+}
+
+async function submitSolution() {
+  if (!hwDetailId) return;
+  const text = (document.getElementById('sol-text')?.value || '').trim();
+  if (!text && !solPendingFiles.length) {
+    showToast('Bitte gib einen Text ein oder hänge Dateien an');
+    return;
+  }
+
+  try {
+    await API.createSolution(hwDetailId, {
+      text,
+      attachments: solPendingFiles
+    });
+    closeSheet();
+    loadHwSolutions(hwDetailId);
+    showToast('Lösung geteilt!');
+  } catch (err) {
+    showToast(err.detail || 'Fehler beim Hochladen');
+  }
+}
+
+function confirmDelSolution(solId) {
+  openModal(`
+    <div style="text-align:center;padding:8px 4px;">
+      <div style="width:52px;height:52px;border-radius:26px;background:#ffdad6;color:#ba1a1a;display:inline-flex;align-items:center;justify-content:center;margin-bottom:14px;">
+        <i data-lucide="alert-triangle" style="width:28px;height:28px;"></i>
+      </div>
+      <div style="font-size:1.15rem;font-weight:700;color:#1c1b1f;margin-bottom:8px;">Lösung löschen?</div>
+      <div style="font-size:0.9rem;color:#49454f;line-height:1.45;margin-bottom:20px;">Willst du deine hochgeladene Lösung wirklich löschen?</div>
+      <div style="display:flex;gap:10px;">
+        <button type="button" class="m3-btn-outline" style="flex:1;" onclick="closeModal()">Abbrechen</button>
+        <button type="button" class="m3-btn-primary" style="flex:1;background:#ba1a1a;color:#fff;border:none;" onclick="executeDeleteSolution(${solId})">Löschen</button>
+      </div>
+    </div>
+  `);
+}
+
+async function executeDeleteSolution(solId) {
+  closeModal();
+  if (!hwDetailId) return;
+  try {
+    await API.deleteSolution(hwDetailId, solId);
+    loadHwSolutions(hwDetailId);
+    showToast('Lösung gelöscht');
+  } catch (err) {
+    showToast(err.detail || 'Fehler beim Löschen');
+  }
+}
+
+// ---- Image Lightbox Helpers ----
+
+function openHwLightbox(url, title) {
+  const lb = document.getElementById('hw-lightbox');
+  if (!lb) return;
+  const img = document.getElementById('hw-lightbox-img');
+  const titleEl = document.getElementById('hw-lightbox-title');
+  const link = document.getElementById('hw-lightbox-open-link');
+  if (img) img.src = url;
+  if (titleEl) titleEl.textContent = title || 'Bild-Vorschau';
+  if (link) link.href = url;
+  lb.style.display = 'flex';
+  requestAnimationFrame(() => lb.style.opacity = '1');
+  if (window.lucide) lucide.createIcons();
+}
+
+function closeHwLightbox(isPopState = false) {
+  const lb = document.getElementById('hw-lightbox');
+  if (!lb) return;
+  lb.style.opacity = '0';
+  setTimeout(() => { lb.style.display = 'none'; }, 220);
+}
+
+function onHwLightboxBgClick(e) {
+  if (e.target.id === 'hw-lightbox') closeHwLightbox();
+}
+
+// ---- "New homework" sheet with multi-file support ----
 
 function openHwSheet() {
   const defaultSubId = hwCurrentSubjectId() || (hwSubjects[0] && hwSubjects[0].id);
   hwDueMode = 'next';
   hwCustomDate = null;
-  hwPendingFile = null;
+  hwPendingFiles = [];
   openSheet('<div class="sheet-title">Neue Hausaufgabe</div>'
     + '<select class="m3-select" id="hw-subject" onchange="renderHwDueSection()">' + hwSubjects.map(s=>'<option value="'+s.id+'"'+(s.id===defaultSubId?' selected':'')+'>'+escapeHtml(s.name)+'</option>').join('') + '</select>'
     + '<textarea class="m3-input" id="hw-desc" placeholder="Beschreibung" rows="3" style="resize:none;height:auto;"></textarea>'
     + '<div class="section-label" style="margin:16px 4px 6px 4px;">Fällig am</div>'
     + '<div id="hw-due-section"></div>'
-    + '<div class="section-label" style="margin:16px 4px 6px 4px;">Anhang</div>'
-    + '<label class="m3-btn-tonal" style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;">'
-    +   '<i data-lucide="camera" style="width:18px;height:18px;"></i> Foto/Datei hinzufügen'
-    +   '<input type="file" id="hw-file-input" accept="image/*,application/pdf" style="display:none;" onchange="hwFileSelected(this)">'
+    + '<div class="section-label" style="margin:16px 4px 6px 4px;">Anhänge (mehrere möglich)</div>'
+    + '<label class="m3-btn-tonal" style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;border-radius:14px;padding:12px;">'
+    +   '<i data-lucide="camera" style="width:18px;height:18px;"></i> Fotos / Dateien hinzufügen'
+    +   '<input type="file" id="hw-file-input" multiple accept="image/*,application/pdf,.doc,.docx,.txt" style="display:none;" onchange="hwFilesSelected(this)">'
     + '</label>'
-    + '<div id="hw-file-preview"></div>'
-    + '<button class="m3-btn-full" onclick="saveHw()" style="margin-top:16px;">Speichern</button>');
+    + '<div id="hw-file-preview" style="margin-top:10px;"></div>'
+    + '<button class="m3-btn-full" onclick="saveHw()" style="margin-top:16px;border-radius:16px;">Speichern</button>');
   renderHwDueSection();
   if (window.lucide) lucide.createIcons();
 }
@@ -439,40 +914,52 @@ function getHwDueDateValue() {
   return hwCustomDate || hwDefaultTomorrow();
 }
 
-async function hwFileSelected(inputEl) {
-  const file = inputEl.files[0];
+async function hwFilesSelected(inputEl) {
+  const files = Array.from(inputEl.files || []);
   inputEl.value = '';
-  if (!file) return;
+  if (!files.length) return;
+
   const preview = document.getElementById('hw-file-preview');
-  if (preview) preview.innerHTML = '<div style="font-size:0.8rem;opacity:0.6;margin-top:8px;">Wird hochgeladen…</div>';
+  if (preview) preview.innerHTML = '<div style="font-size:0.8rem;opacity:0.6;margin-top:8px;">Dateien werden hochgeladen…</div>';
+
   try {
-    const form = new FormData();
-    form.append('file', file);
-    hwPendingFile = await API.uploadHwFile(form);
+    for (const file of files) {
+      const form = new FormData();
+      form.append('file', file);
+      const res = await API.uploadHwFile(form);
+      hwPendingFiles.push(res);
+    }
     renderHwFilePreview();
   } catch {
-    if (preview) preview.innerHTML = '';
     showToast('Upload fehlgeschlagen');
+    renderHwFilePreview();
   }
 }
 
 function renderHwFilePreview() {
   const preview = document.getElementById('hw-file-preview');
   if (!preview) return;
-  if (!hwPendingFile) { preview.innerHTML = ''; return; }
-  const isImg = hwPendingFile.type === 'image';
-  preview.innerHTML = `<div style="display:flex;align-items:center;gap:10px;margin-top:10px;background:#f5f3f9;border-radius:14px;padding:8px 10px;">
-    ${isImg
-      ? `<img src="${hwPendingFile.url}" style="width:44px;height:44px;border-radius:10px;object-fit:cover;flex-shrink:0;">`
-      : `<div class="icon-box" style="width:44px;height:44px;background:rgba(103,80,164,0.1);flex-shrink:0;"><i data-lucide="file" style="width:20px;height:20px;"></i></div>`}
-    <span style="flex:1;font-size:0.82rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(hwPendingFile.name || 'Datei')}</span>
-    <button onclick="removeHwFile()" style="background:rgba(0,0,0,0.06);border:none;border-radius:10px;width:30px;height:30px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><i data-lucide="x" style="width:14px;height:14px;"></i></button>
-  </div>`;
+  if (!hwPendingFiles.length) { preview.innerHTML = ''; return; }
+
+  preview.innerHTML = hwPendingFiles.map((f, idx) => {
+    const isImg = f.type === 'image';
+    return `
+      <div style="display:flex;align-items:center;gap:10px;margin-top:6px;background:#f5f3f9;border-radius:12px;padding:8px 10px;">
+        ${isImg
+          ? `<img src="${f.url}" style="width:38px;height:38px;border-radius:8px;object-fit:cover;flex-shrink:0;">`
+          : `<div class="icon-box" style="width:38px;height:38px;background:rgba(103,80,164,0.1);border-radius:8px;flex-shrink:0;"><i data-lucide="file" style="width:18px;height:18px;color:#6750a4;"></i></div>`}
+        <span style="flex:1;font-size:0.82rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(f.name || 'Datei')}</span>
+        <button type="button" onclick="removeHwFile(${idx})" style="background:rgba(0,0,0,0.06);border:none;border-radius:8px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+          <i data-lucide="x" style="width:14px;height:14px;"></i>
+        </button>
+      </div>
+    `;
+  }).join('');
   if (window.lucide) lucide.createIcons();
 }
 
-function removeHwFile() {
-  hwPendingFile = null;
+function removeHwFile(idx) {
+  hwPendingFiles.splice(idx, 1);
   renderHwFilePreview();
 }
 
@@ -480,12 +967,25 @@ async function saveHw() {
   const subject_id = parseInt(document.getElementById('hw-subject').value);
   const description = document.getElementById('hw-desc').value.trim();
   const due_date = getHwDueDateValue();
-  if (!description||!due_date) { showToast('Felder ausfullen'); return; }
+  if (!description || !due_date) { showToast('Felder ausfüllen'); return; }
+
   try {
-    const payload = { subject_id, description, due_date };
-    if (hwPendingFile) { payload.file_url = hwPendingFile.url; payload.file_type = hwPendingFile.type; }
+    const payload = {
+      subject_id,
+      description,
+      due_date,
+      attachments: hwPendingFiles,
+      file_url: hwPendingFiles[0]?.url || null,
+      file_type: hwPendingFiles[0]?.type || null
+    };
     const hw = await API.createHomework(payload);
-    hwItems.push(hw); closeSheet(); renderHwStats(); renderHw(); showToast('Gespeichert');
-  } catch { showToast('Fehler'); }
+    hwItems.push(hw);
+    closeSheet();
+    renderHwStats();
+    renderHw();
+    showToast('Aufgabe gespeichert');
+  } catch (err) {
+    showToast(err.detail || 'Fehler beim Speichern');
+  }
 }
 </script>

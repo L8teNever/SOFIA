@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, or_, and_
+from sqlalchemy import select, or_, and_, func
 from backend.database import get_db
 from backend.auth import get_current_user, require_admin, require_super_admin
 from backend.models.calendar_event import CalendarEvent
@@ -29,10 +29,7 @@ async def list_events(month: Optional[str] = None, db: AsyncSession = Depends(ge
         last_day = f"{month}-31"
         query = query.where(
             CalendarEvent.date <= last_day,
-            or_(
-                CalendarEvent.end_date >= first_day,
-                and_(CalendarEvent.end_date.is_(None), CalendarEvent.date >= first_day)
-            )
+            func.coalesce(func.nullif(CalendarEvent.end_date, ""), CalendarEvent.date) >= first_day
         )
     result = await db.execute(query.order_by(CalendarEvent.date))
     return result.scalars().all()
