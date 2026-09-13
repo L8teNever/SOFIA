@@ -398,6 +398,19 @@ body.has-active-page .app-container {
   z-index: 10;
   position: relative;
 }
+/* Opt-in: caps and centers the header like .page-inner below it does for
+   content, so a header with buttons on both ends doesn't spread them out
+   toward the edges of a much wider desktop window than the actual
+   (narrower, centered) content ever reaches. Only add this on a page
+   whose own content is ALSO capped (via .page-inner or similar) — capping
+   just the header while the content underneath still runs full width
+   only trades one mismatch for the opposite one. */
+.page-header.capped {
+  max-width: 960px;
+  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
+}
 @media (min-width: 600px) { .page-header { padding: 28px 28px 18px 28px; } }
 /* Extra breathing room below the header's divider line on tablet/desktop —
    content right under it (filter chips, tabs, ...) sat almost flush

@@ -1,5 +1,5 @@
 <div class="page" id="page-notifications" style="background:#f5f3f9;">
-  <div class="page-header">
+  <div class="page-header capped">
     <button class="back-btn"><i data-lucide="arrow-left" style="width:22px;height:22px;"></i></button>
     <span class="page-title">Benachrichtigungen</span>
     <div style="flex:1;"></div>
@@ -9,14 +9,13 @@
     </button>
   </div>
 
+  <div class="page-scroll-1col no-scrollbar"><div class="page-inner">
+    <!-- Push-Status-Banner -->
+    <div id="push-status" style="padding-bottom:8px;"></div>
 
-  <!-- Push-Status-Banner -->
-  <div id="push-status" style="padding:0 16px 8px 16px;"></div>
-
-  <!-- Notification list -->
-  <div style="flex:1;overflow-y:auto;padding:0 16px 80px 16px;">
+    <!-- Notification list -->
     <div id="notif-list"></div>
-  </div>
+  </div></div>
 </div>
 
 <script>

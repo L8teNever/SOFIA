@@ -4,7 +4,15 @@
     <button class="back-btn" title="Zurück" style="width:38px;height:38px;flex-shrink:0;"><i data-lucide="arrow-left" style="width:20px;height:20px;"></i></button>
     <div style="flex:1;min-width:0;">
       <div style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.6;color:#6750a4;" id="cal-year-label"></div>
-      <span class="page-title cal-month-title" style="color:#1c1b1f;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;" id="cal-month-title">Kalender</span>
+      <div style="display:flex;align-items:center;gap:2px;min-width:0;">
+        <span class="page-title cal-month-title" style="color:#1c1b1f;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" id="cal-month-title">Kalender</span>
+        <!-- Only shown in week view (a day selected) — taps back out to
+             the full month instead of relying on tapping the tiny
+             selected day again, which isn't obvious on its own. -->
+        <button type="button" id="cal-expand-btn" onclick="clearDateSelection()" style="display:none;background:none;border:none;color:#6750a4;cursor:pointer;padding:2px;flex-shrink:0;" title="Zur Monatsansicht">
+          <i data-lucide="chevron-down" style="width:19px;height:19px;"></i>
+        </button>
+      </div>
     </div>
     <!-- Quick Nav -->
     <div style="display:flex;align-items:center;gap:3px;flex-shrink:0;">
@@ -72,16 +80,24 @@
    Needed once nav + Heute + the filter icon all live in this one row —
    at narrow widths there just isn't room for the shared 1.75rem title
    next to four buttons. */
+/* max-width/margin/padding mirror .cal-main-container exactly (same
+   1140px cap, same 16px -> 28px padding step) so the header's back button
+   and trailing buttons land directly above that content's left/right
+   edges instead of the full (much wider, on desktop) window edges — a
+   plain full-width header here left the buttons stranded far to the
+   right of the actual (centered, capped) calendar card below them. */
 .cal-page-header {
   background: inherit;
   border-bottom: 1px solid rgba(0, 0, 0, 0.08);
   z-index: 10;
   position: relative;
   flex-shrink: 0;
+  max-width: 1140px;
+  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
 }
-@media (min-width: 600px)  { .cal-page-header { padding: 28px 28px 18px 28px; } }
-@media (min-width: 760px)  { .cal-page-header { padding: 32px 40px 20px 40px; margin-bottom: 12px; } }
-@media (min-width: 1100px) { .cal-page-header { padding: 36px 60px 22px 60px; margin-bottom: 16px; } }
+@media (min-width: 768px) { .cal-page-header { padding: 24px 28px 18px 28px; } }
 .cal-month-title { font-size: 1.3rem; }
 @media (min-width: 400px) { .cal-month-title { font-size: 1.45rem; } }
 @media (min-width: 600px) { .cal-month-title { font-size: 1.6rem; } }
@@ -354,6 +370,7 @@ function setCalCategoryFilter(cat) {
   activeCategoryFilter = cat;
   const dot = document.getElementById('cal-filter-dot');
   if (dot) dot.style.display = cat === 'all' ? 'none' : 'block';
+  renderCalGridOnly();
   renderEventList();
 }
 
@@ -424,6 +441,15 @@ function selectDay(dateStr) {
   renderEventList();
 }
 
+// Same effect as tapping the selected day again — the chevron next to the
+// month title in week view calls this directly, since relying on people
+// noticing they can re-tap the (now tiny) selected day isn't obvious.
+function clearDateSelection() {
+  selectedCalDate = null;
+  renderCalGridOnly();
+  renderEventList();
+}
+
 async function calToday() {
   const today = new Date();
   calYear = today.getFullYear();
@@ -434,6 +460,23 @@ async function calToday() {
 }
 
 async function calNav(dir) {
+  // In week view (a day selected) the arrows step by week instead of by
+  // month, staying collapsed to whichever week that lands on — matching
+  // month view's own arrows only when zoomed all the way out.
+  if (selectedCalDate) {
+    const d = new Date(selectedCalDate + 'T00:00');
+    d.setDate(d.getDate() + dir * 7);
+    const newYear = d.getFullYear();
+    const newMonth = d.getMonth();
+    const monthChanged = newYear !== calYear || newMonth !== calMonth;
+    calYear = newYear;
+    calMonth = newMonth;
+    selectedCalDate = newYear + '-' + String(newMonth + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    if (monthChanged) await loadCalEvents();
+    renderCal();
+    return;
+  }
+
   calMonth += dir;
   if (calMonth < 0) { calMonth = 11; calYear--; }
   if (calMonth > 11) { calMonth = 0; calYear++; }
@@ -473,9 +516,14 @@ function renderCalGridOnly() {
   // Days of current month
   for (let d = 1; d <= daysInMonth; d++) {
     const dateStr = calYear + '-' + String(calMonth + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
-    const covering = calEvents.filter(e => eventCoversDate(e, dateStr));
+    // Same category filter as the events list below — a dot for an event
+    // that's currently filtered out would be showing something the list
+    // doesn't, so it disappears here too instead of just staying visible.
+    const covering = calEvents.filter(e =>
+      eventCoversDate(e, dateStr) &&
+      (activeCategoryFilter === 'all' || (e.event_type || 'other') === activeCategoryFilter)
+    );
     const hasEvent = covering.length > 0;
-    const hasHoliday = covering.some(e => e.event_type === 'holiday');
     const isToday = dateStr === todayStr;
     const isSelected = selectedCalDate === dateStr;
 
@@ -483,7 +531,6 @@ function renderCalGridOnly() {
     let cls = 'cal-day';
     if (isToday) cls += ' today';
     if (isSelected) cls += ' selected';
-    if (hasHoliday) cls += ' is-holiday';
 
     el.className = cls;
 
@@ -521,6 +568,10 @@ function updateWeekCollapse(startDay, daysInMonth) {
   const grid = document.getElementById('cal-grid');
   if (!viewport || !grid || !grid.children.length) return;
 
+  const expandBtn = document.getElementById('cal-expand-btn');
+  const prevBtn = document.querySelector('[onclick="calNav(-1)"]');
+  const nextBtn = document.querySelector('[onclick="calNav(1)"]');
+
   const rowGap = 2; // must match .cal-days-grid's row gap
   // offsetHeight (layout size) rather than getBoundingClientRect (visual
   // size) — this can run while the page is still mid scale-in transition
@@ -534,9 +585,15 @@ function updateWeekCollapse(startDay, daysInMonth) {
     const rowIndex = Math.floor((startDay + dayNum - 1) / 7);
     viewport.style.maxHeight = cellHeight + 'px';
     grid.style.transform = `translateY(-${rowIndex * rowStep}px)`;
+    if (expandBtn) expandBtn.style.display = 'inline-flex';
+    if (prevBtn) prevBtn.title = 'Vorherige Woche';
+    if (nextBtn) nextBtn.title = 'Nächste Woche';
   } else {
     viewport.style.maxHeight = (totalRows * rowStep - rowGap) + 'px';
     grid.style.transform = 'translateY(0)';
+    if (expandBtn) expandBtn.style.display = 'none';
+    if (prevBtn) prevBtn.title = 'Vorheriger Monat';
+    if (nextBtn) nextBtn.title = 'Nächster Monat';
   }
 }
 
