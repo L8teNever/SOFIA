@@ -57,7 +57,7 @@ if (window.visualViewport) {
   window.visualViewport.addEventListener('resize', updateAppHeight);
 }
 
-const KNOWN_PAGES = ['calendar','homework','grades','timetable','mealplan','drive','quickshare','settings','admin','notifications'];
+const KNOWN_PAGES = ['calendar','homework','grades','timetable','mealplan','drive','quickshare','settings','admin','notifications','notification-settings'];
 const pageCache = new Map();
 
 function prefetchPages() {

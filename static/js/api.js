@@ -20,6 +20,7 @@ const API = {
 
   get:    (path)        => API._req('GET',    path),
   post:   (path, body)  => API._req('POST',   path, body),
+  put:    (path, body)  => API._req('PUT',    path, body),
   patch:  (path, body)  => API._req('PATCH',  path, body),
   delete: (path)        => API._req('DELETE', path),
   upload: (path, form)  => API._req('POST',   path, form, true),
