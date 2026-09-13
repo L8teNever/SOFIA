@@ -296,8 +296,23 @@ body.has-update-banner { padding-top: 52px; transition: padding-top 0.3s ease; }
 .page.active  { transform: scale(1); opacity: 1; pointer-events: all; }
 .page.closing { transform: scale(0.08); opacity: 0; transition: transform 0.22s ease-in, opacity 0.18s ease-in; }
 
+/* Isolate dashboard completely when a subpage is active:
+   prevents phantom text selection, accidental background scrolling, and repainting flickers */
+body.has-active-page {
+  overflow: hidden !important;
+}
+body.has-active-page .app-container {
+  visibility: hidden !important;
+  pointer-events: none !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  overflow: hidden !important;
+}
+
 .page-scroll {
   flex: 1; overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   padding: 0 20px 120px 20px;
 }
 @media (min-width: 600px) {
@@ -329,6 +344,8 @@ body.has-update-banner { padding-top: 52px; transition: padding-top 0.3s ease; }
 /* Single-column scroll — for pages where columns break layout */
 .page-scroll-1col {
   flex: 1; overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   padding: 0 20px 120px 20px;
 }
 @media (min-width: 600px) {

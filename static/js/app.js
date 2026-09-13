@@ -162,6 +162,14 @@ async function openPage(name, triggerEl, preserveUrl = false) {
   page.getBoundingClientRect();
   requestAnimationFrame(() => page.classList.add('active'));
   
+  // Completely isolate background dashboard from touch/scroll/selection bleedthrough
+  document.body.classList.add('has-active-page');
+  const appContainer = document.getElementById('app');
+  if (appContainer) {
+    appContainer.setAttribute('inert', '');
+    appContainer.setAttribute('aria-hidden', 'true');
+  }
+
   if (!preserveUrl) {
     history.pushState({ page: name }, '', '/' + name);
   } else {
@@ -186,6 +194,17 @@ function closePage() {
   setTimeout(() => page.remove(), 260);
   pageHistory.pop();
   currentPage = pageHistory[pageHistory.length - 1] || null;
+
+  // Restore dashboard if returning to the root/start page
+  if (pageHistory.length === 0) {
+    document.body.classList.remove('has-active-page');
+    const appContainer = document.getElementById('app');
+    if (appContainer) {
+      appContainer.removeAttribute('inert');
+      appContainer.removeAttribute('aria-hidden');
+    }
+  }
+
   const prev = pageHistory[pageHistory.length - 1];
   history.pushState({ page: prev }, '', prev ? '/' + prev : '/');
   if (wasNotifications) refreshNotifBadge();
@@ -209,6 +228,12 @@ window.addEventListener('popstate', (e) => {
     return;
   }
 
+  const lbActive = document.getElementById('meal-lightbox');
+  if (lbActive && lbActive.style.display !== 'none' && typeof closeMealLightbox === 'function') {
+    closeMealLightbox(true);
+    return;
+  }
+
   // Detail overlays (e.g. a homework item opened on top of the list page)
   // stack on top of a regular .page rather than replacing it — close the
   // overlay first so back-navigation doesn't yank the page underneath it.
@@ -226,6 +251,12 @@ window.addEventListener('popstate', (e) => {
     page.classList.add('closing'); 
     setTimeout(() => page.remove(), 600); 
     currentPage = null; 
+    document.body.classList.remove('has-active-page');
+    const appContainer = document.getElementById('app');
+    if (appContainer) {
+      appContainer.removeAttribute('inert');
+      appContainer.removeAttribute('aria-hidden');
+    }
   }
 });
 
