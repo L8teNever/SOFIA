@@ -24,6 +24,23 @@ document.addEventListener('dblclick', function(e) {
   }
 });
 
+// PWA Install Prompt Listener
+window.deferredInstallPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  window.deferredInstallPrompt = e;
+  if (typeof updatePwaInstallState === 'function') {
+    updatePwaInstallState();
+  }
+});
+window.addEventListener('appinstalled', () => {
+  window.deferredInstallPrompt = null;
+  if (typeof updatePwaInstallState === 'function') {
+    updatePwaInstallState();
+  }
+  showToast('Sofia wurde erfolgreich als App installiert!');
+});
+
 let currentUser = null;
 let currentPage = null;
 let pageHistory = [];

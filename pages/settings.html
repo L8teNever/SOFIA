@@ -60,6 +60,21 @@
       </div>
     </div>
 
+    <!-- PWA Install / Home Screen -->
+    <div class="section-label">Als App nutzen</div>
+    <div class="m3-card" id="settings-pwa-card" style="cursor:pointer;" onclick="triggerPwaInstall()">
+      <div style="display:flex;align-items:center;gap:14px;">
+        <div class="icon-box" id="settings-pwa-iconbox" style="width:42px;height:42px;background:rgba(103,80,164,0.12);flex-shrink:0;">
+          <i data-lucide="smartphone" style="width:22px;height:22px;color:#6750a4;" id="settings-pwa-icon"></i>
+        </div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:700;font-size:0.96rem;" id="settings-pwa-title">Sofia als App installieren</div>
+          <div style="font-size:0.78rem;opacity:0.6;line-height:1.3;margin-top:2px;" id="settings-pwa-sub">Zum Startbildschirm hinzufügen (Vollbild ohne Browserleisten)</div>
+        </div>
+        <span class="chip" id="settings-pwa-badge" style="background:#eaddff;color:#21005d;font-weight:700;font-size:0.72rem;padding:4px 10px;border-radius:10px;border:none;">Installieren</span>
+      </div>
+    </div>
+
     <!-- App info -->
     <div class="section-label">App</div>
     <div class="m3-card">
@@ -119,6 +134,8 @@ async function init_settings() {
       document.getElementById('settings-class-info').textContent = 'ID: ' + cls.id;
     }
   }
+
+  updatePwaInstallState();
 }
 
 async function saveName() {
@@ -198,6 +215,137 @@ async function togglePush(sw) {
       if (Notification.permission === 'denied') showToast('Berechtigung verweigert');
       else showToast('Fehler: ' + (e.message || 'Aktivierung fehlgeschlagen'));
     }
+  }
+}
+
+function updatePwaInstallState() {
+  const badge = document.getElementById('settings-pwa-badge');
+  const title = document.getElementById('settings-pwa-title');
+  const sub = document.getElementById('settings-pwa-sub');
+  const iconbox = document.getElementById('settings-pwa-iconbox');
+  const icon = document.getElementById('settings-pwa-icon');
+  if (!badge) return;
+
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || 
+                       window.navigator.standalone === true;
+
+  if (isStandalone) {
+    badge.textContent = 'Aktiv';
+    badge.style.background = '#c4eed0';
+    badge.style.color = '#072711';
+    if (title) title.textContent = 'Als App installiert';
+    if (sub) sub.textContent = 'Sofia läuft im Vollbildmodus auf deinem Startbildschirm';
+    if (iconbox) iconbox.style.background = 'rgba(7,39,17,0.1)';
+    if (icon) {
+      icon.setAttribute('data-lucide', 'check-circle');
+      icon.style.color = '#1b5e20';
+    }
+  } else {
+    const isIosDevice = /iphone|ipad|ipod/.test(navigator.userAgent.toLowerCase()) || 
+                        (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    badge.textContent = isIosDevice ? 'Anleitung' : (window.deferredInstallPrompt ? 'Installieren' : 'Hinzufügen');
+    badge.style.background = '#eaddff';
+    badge.style.color = '#21005d';
+    if (title) title.textContent = 'Sofia als App installieren';
+    if (sub) sub.textContent = 'Zum Startbildschirm hinzufügen (Vollbild ohne Browserleisten)';
+    if (iconbox) iconbox.style.background = 'rgba(103,80,164,0.12)';
+    if (icon) {
+      icon.setAttribute('data-lucide', 'smartphone');
+      icon.style.color = '#6750a4';
+    }
+  }
+  if (window.lucide) lucide.createIcons();
+}
+
+function triggerPwaInstall() {
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || 
+                       window.navigator.standalone === true;
+  if (isStandalone) {
+    showToast('Sofia ist bereits als App auf deinem Startbildschirm installiert! ✓');
+    return;
+  }
+
+  const isIosDevice = /iphone|ipad|ipod/.test(navigator.userAgent.toLowerCase()) || 
+                      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+  if (window.deferredInstallPrompt) {
+    window.deferredInstallPrompt.prompt();
+    window.deferredInstallPrompt.userChoice.then(choice => {
+      if (choice && choice.outcome === 'accepted') {
+        showToast('App-Installation gestartet…');
+      }
+      window.deferredInstallPrompt = null;
+      updatePwaInstallState();
+    });
+  } else if (isIosDevice) {
+    openSheet(`
+      <div style="text-align:center;padding:6px 0 14px;">
+        <div style="width:58px;height:58px;border-radius:16px;background:#6750a4;color:#fff;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;box-shadow:0 8px 20px rgba(103,80,164,0.3);overflow:hidden;">
+          <img src="/static/icons/icon-192.png" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display='none';this.nextElementSibling.style.display='block';">
+          <i data-lucide="smartphone" style="display:none;width:30px;height:30px;"></i>
+        </div>
+        <div class="sheet-title" style="margin-bottom:4px;font-size:1.15rem;">Sofia zum Home-Bildschirm</div>
+        <div style="font-size:0.84rem;opacity:0.65;line-height:1.45;max-width:320px;margin:0 auto;">
+          Als echte App im Vollbildmodus nutzen – komplett ohne störende Safari-Balken oben und unten!
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:10px;margin:10px 0 20px;">
+        <div style="display:flex;align-items:flex-start;gap:12px;background:#fff;padding:12px 14px;border-radius:16px;border:1px solid rgba(0,0,0,0.06);">
+          <div style="width:30px;height:30px;border-radius:10px;background:rgba(103,80,164,0.1);color:#6750a4;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:0.9rem;flex-shrink:0;">1</div>
+          <div style="flex:1;font-size:0.88rem;line-height:1.4;">
+            Tippe in Safari unten (beim iPad oben) auf das <b>Teilen-Symbol</b> <span style="display:inline-flex;padding:2px 6px;border-radius:6px;background:rgba(0,0,0,0.06);font-size:0.95rem;font-weight:700;">⎋</span> (Kästchen mit Pfeil nach oben).
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:flex-start;gap:12px;background:#fff;padding:12px 14px;border-radius:16px;border:1px solid rgba(0,0,0,0.06);">
+          <div style="width:30px;height:30px;border-radius:10px;background:rgba(103,80,164,0.1);color:#6750a4;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:0.9rem;flex-shrink:0;">2</div>
+          <div style="flex:1;font-size:0.88rem;line-height:1.4;">
+            Scrolle etwas nach unten und wähle <b>„Zum Home-Bildschirm“</b> (Plus-Symbol ➕).
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:flex-start;gap:12px;background:#fff;padding:12px 14px;border-radius:16px;border:1px solid rgba(0,0,0,0.06);">
+          <div style="width:30px;height:30px;border-radius:10px;background:rgba(103,80,164,0.1);color:#6750a4;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:0.9rem;flex-shrink:0;">3</div>
+          <div style="flex:1;font-size:0.88rem;line-height:1.4;">
+            Tippe oben rechts auf <b>„Hinzufügen“</b>.
+          </div>
+        </div>
+      </div>
+
+      <button class="m3-btn-full" onclick="closeSheet()">Verstanden</button>
+    `);
+  } else {
+    openSheet(`
+      <div style="text-align:center;padding:6px 0 14px;">
+        <div style="width:58px;height:58px;border-radius:16px;background:#6750a4;color:#fff;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;box-shadow:0 8px 20px rgba(103,80,164,0.3);overflow:hidden;">
+          <img src="/static/icons/icon-192.png" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display='none';this.nextElementSibling.style.display='block';">
+          <i data-lucide="smartphone" style="display:none;width:30px;height:30px;"></i>
+        </div>
+        <div class="sheet-title" style="margin-bottom:4px;font-size:1.15rem;">App auf Startbildschirm hinzufügen</div>
+        <div style="font-size:0.84rem;opacity:0.65;line-height:1.45;max-width:320px;margin:0 auto;">
+          Nutze Sofia im Vollbildmodus wie eine echte App ohne Adressleiste.
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:10px;margin:10px 0 20px;">
+        <div style="display:flex;align-items:flex-start;gap:12px;background:#fff;padding:12px 14px;border-radius:16px;border:1px solid rgba(0,0,0,0.06);">
+          <div style="width:30px;height:30px;border-radius:10px;background:rgba(103,80,164,0.1);color:#6750a4;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:0.9rem;flex-shrink:0;">1</div>
+          <div style="flex:1;font-size:0.88rem;line-height:1.4;">
+            Tippe oben rechts im Browser auf die <b>3 Punkte (Menü ⋮)</b> bzw. auf das Installieren-Symbol in der Adressleiste.
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:flex-start;gap:12px;background:#fff;padding:12px 14px;border-radius:16px;border:1px solid rgba(0,0,0,0.06);">
+          <div style="width:30px;height:30px;border-radius:10px;background:rgba(103,80,164,0.1);color:#6750a4;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:0.9rem;flex-shrink:0;">2</div>
+          <div style="flex:1;font-size:0.88rem;line-height:1.4;">
+            Wähle <b>„App installieren“</b> oder <b>„Zum Startbildschirm hinzufügen“</b>.
+          </div>
+        </div>
+      </div>
+
+      <button class="m3-btn-full" onclick="closeSheet()">Verstanden</button>
+    `);
   }
 }
 </script>

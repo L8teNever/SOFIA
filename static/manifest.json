@@ -1,8 +1,10 @@
-﻿{
+{
   "name": "Sofia – Schulbegleiter",
   "short_name": "Sofia",
   "description": "Dein digitaler Schulbegleiter",
   "start_url": "/",
+  "id": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#1c1b1f",
   "theme_color": "#6750a4",
