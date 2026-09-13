@@ -410,8 +410,9 @@ body.has-active-page .app-container {
    between this and its content on wide screens — the fix there is to cap
    that page's content to match, not to special-case its header. */
 .page-header {
+  --ph-pad-x: 20px;
   display: flex; align-items: center; gap: 16px;
-  padding: max(24px, env(safe-area-inset-top, 24px)) 20px 16px 20px; flex-shrink: 0;
+  padding: max(24px, env(safe-area-inset-top, 24px)) var(--ph-pad-x) 16px var(--ph-pad-x); flex-shrink: 0;
   background: inherit;
   border-bottom: 1px solid rgba(0, 0, 0, 0.08);
   z-index: 10;
@@ -421,12 +422,20 @@ body.has-active-page .app-container {
   width: 100%;
   box-sizing: border-box;
 }
-@media (min-width: 600px) { .page-header { padding: 28px 28px 18px 28px; } }
+@media (min-width: 600px) { .page-header { --ph-pad-x: 28px; padding-top: 28px; padding-bottom: 18px; } }
 /* Extra breathing room below the header's divider line on tablet/desktop —
    content right under it (filter chips, tabs, ...) sat almost flush
    against the line at these widths. */
-@media (min-width: 760px) { .page-header { padding: 32px 40px 20px 40px; margin-bottom: 12px; } }
-@media (min-width: 1100px) { .page-header { padding: 36px 60px 22px 60px; margin-bottom: 16px; } }
+@media (min-width: 760px) { .page-header { --ph-pad-x: 40px; padding-top: 32px; padding-bottom: 20px; margin-bottom: 12px; } }
+@media (min-width: 1100px) { .page-header { --ph-pad-x: 60px; padding-top: 36px; padding-bottom: 22px; margin-bottom: 16px; } }
+/* The back button (always .page-header's first child, guaranteed by
+   pageHeader()) and whatever sits at the far right (a trailing icon, a
+   badge, a whole nav-row) are pulled back out by the same amount as the
+   header's own horizontal padding — otherwise they read as floating
+   inset from the divider line underneath, which spans the header's full
+   (unpadded) width, instead of lining up with where that line ends. */
+.page-header > *:first-child { margin-left: calc(-1 * var(--ph-pad-x)); }
+.page-header > *:last-child { margin-right: calc(-1 * var(--ph-pad-x)); }
 .page-title { font-size: 1.75rem; font-weight: 700; letter-spacing: -0.01em; }
 
 /* A toolbar row (filter chips, mode toggles) sitting directly under
