@@ -251,7 +251,7 @@
   flex-shrink: 0;
 }
 .cal-dot-exam { background: #ba1a1a; }
-.cal-dot-holiday { background: #7d5260; }
+.cal-dot-holiday { background: #8a5a00; }
 .cal-dot-trip { background: #006d3a; }
 .cal-dot-personal { background: #006399; }
 .cal-dot-other { background: #6750a4; }
@@ -262,12 +262,14 @@
   font-weight: 800;
   color: #6750a4;
 }
-/* Selected day is a solid purple circle — dots need to invert to stay
-   visible against it. */
-.cal-day.selected .cal-dot,
+/* Selected day is a solid purple circle — dots keep their category color
+   (that's the whole point of the color-coding) but get a thin white ring
+   so they still stand out against the matching-ish purple background. */
+.cal-day.selected .cal-dot {
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.95);
+}
 .cal-day.selected .cal-dot-more {
-  background: rgba(255,255,255,0.9) !important;
-  color: rgba(255,255,255,0.9) !important;
+  color: rgba(255,255,255,0.95);
 }
 
 /* Date Badge in Event Cards */
@@ -685,8 +687,8 @@ function renderEventList() {
         typeBg = 'rgba(186, 26, 26, 0.1)';
       } else if (e.event_type === 'holiday') {
         typeLabel = 'Schulferien';
-        typeColor = '#7d5260';
-        typeBg = 'rgba(125, 82, 96, 0.1)';
+        typeColor = '#8a5a00';
+        typeBg = 'rgba(138, 90, 0, 0.1)';
       } else if (e.event_type === 'trip') {
         typeLabel = 'Ausflug';
         typeColor = '#006d3a';
