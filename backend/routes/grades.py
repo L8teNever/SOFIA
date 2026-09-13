@@ -37,6 +37,30 @@ async def create_grade(request: Request, data: GradeCreate, db: AsyncSession = D
 
     return grade
 
+@router.put("/{grade_id}", response_model=GradeOut)
+async def update_grade(request: Request, grade_id: int, data: GradeCreate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    result = await db.execute(select(Grade).where(Grade.id == grade_id, Grade.user_id == current_user.id))
+    grade = result.scalar_one_or_none()
+    if not grade:
+        raise HTTPException(404)
+
+    for field, value in data.model_dump().items():
+        setattr(grade, field, value)
+    await db.commit()
+    await db.refresh(grade)
+
+    await log_audit(
+        db,
+        action="grade.update",
+        user=current_user,
+        entity_type="grade",
+        entity_id=grade.id,
+        details={"subject_id": grade.subject_id, "value": grade.value, "label": grade.label, "weight_type": grade.weight_type},
+        request=request,
+    )
+
+    return grade
+
 @router.delete("/{grade_id}")
 async def delete_grade(request: Request, grade_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     result = await db.execute(select(Grade).where(Grade.id == grade_id, Grade.user_id == current_user.id))

@@ -173,8 +173,7 @@ function renderGrades() {
             + '</div>'
             + (g.date ? '<div style="font-size:0.75rem;color:#79747e;margin-top:1px;">' + new Date(g.date + 'T00:00').toLocaleDateString('de-DE') + '</div>' : '')
             + '</div>'
-            + '<button onclick="confirmDeleteGrade(' + g.id + ', \'' + escapeHtml(g.label || 'Note') + '\')" class="ev-action-btn delete" title="Note löschen">'
-            + '<i data-lucide="trash-2" style="width:15px;height:15px;"></i></button>'
+            + moreMenuBtn('openGradeMenu(this, ' + g.id + ')')
             + '</div>';
         }).join('')
       + '</div>';
@@ -203,32 +202,46 @@ async function doDeleteGrade(id) {
   }
 }
 
-function openGradeSheet() {
-  const subOpts = gradeSubjects.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+let gradeEditId = null;
+
+// Same sheet for entering and editing a grade — passing an existing
+// grade pre-fills every field and switches saveGrade() to update.
+function openGradeSheet(editGrade) {
+  gradeEditId = editGrade ? editGrade.id : null;
+  const subOpts = gradeSubjects.map(s => `<option value="${s.id}"${editGrade && s.id === editGrade.subject_id ? ' selected' : ''}>${escapeHtml(s.name)}</option>`).join('');
+  const weightType = editGrade ? (editGrade.weight_type || 'exam') : 'exam';
 
   openSheet(`
-    <div class="sheet-title" style="font-size:1.25rem;font-weight:800;color:#1c1b1f;margin-bottom:16px;">Note eintragen</div>
-    
+    <div class="sheet-title" style="font-size:1.25rem;font-weight:800;color:#1c1b1f;margin-bottom:16px;">${editGrade ? 'Note bearbeiten' : 'Note eintragen'}</div>
+
     <label style="font-size:0.78rem;font-weight:700;color:#6750a4;display:block;margin-bottom:4px;margin-left:4px;">Fach:</label>
     <select class="m3-select" id="g-subject">${subOpts}</select>
 
     <label style="font-size:0.78rem;font-weight:700;color:#6750a4;display:block;margin-bottom:4px;margin-left:4px;">Notenart:</label>
     <select class="m3-select" id="g-weight-type">
-      <option value="exam">Klassenarbeit (Schriftlich)</option>
-      <option value="oral">Mündlich / Sonstige Mitarbeit</option>
+      <option value="exam"${weightType === 'exam' ? ' selected' : ''}>Klassenarbeit (Schriftlich)</option>
+      <option value="oral"${weightType === 'oral' ? ' selected' : ''}>Mündlich / Sonstige Mitarbeit</option>
     </select>
 
     <label style="font-size:0.78rem;font-weight:700;color:#6750a4;display:block;margin-bottom:4px;margin-left:4px;">Note:</label>
-    <input class="m3-input" id="g-value" type="number" step="0.25" min="1" max="6" placeholder="Note (1.0 bis 6.0)">
+    <input class="m3-input" id="g-value" type="number" step="0.25" min="1" max="6" placeholder="Note (1.0 bis 6.0)" value="${editGrade ? editGrade.value : ''}">
 
     <label style="font-size:0.78rem;font-weight:700;color:#6750a4;display:block;margin-bottom:4px;margin-left:4px;">Bezeichnung:</label>
-    <input class="m3-input" id="g-label" placeholder="z. B. 2. Klassenarbeit, Referat, Vokabeltest...">
+    <input class="m3-input" id="g-label" placeholder="z. B. 2. Klassenarbeit, Referat, Vokabeltest..." value="${editGrade ? escapeHtml(editGrade.label || '') : ''}">
 
     <label style="font-size:0.78rem;font-weight:700;color:#6750a4;display:block;margin-bottom:4px;margin-left:4px;">Datum:</label>
-    <input class="m3-input" id="g-date" type="date" value="${new Date().toISOString().slice(0, 10)}">
+    <input class="m3-input" id="g-date" type="date" value="${editGrade ? (editGrade.date || '') : new Date().toISOString().slice(0, 10)}">
 
     ${sheetActions({ saveAction: 'saveGrade()' })}
   `);
+}
+
+function openGradeMenu(btn, gradeId) {
+  const g = gradeItems.find(x => x.id === gradeId);
+  toggleMoreMenu(btn, [
+    { icon: 'pencil', label: 'Bearbeiten', onclick: () => openGradeSheet(g) },
+    { icon: 'trash-2', label: 'Löschen', onclick: () => confirmDeleteGrade(gradeId, g ? (g.label || 'Note') : 'Note'), danger: true },
+  ]);
 }
 
 async function saveGrade() {
@@ -244,11 +257,19 @@ async function saveGrade() {
   }
 
   try {
-    const g = await API.createGrade({ subject_id, value, label, date, weight_type, weight: 1.0 });
-    gradeItems.unshift(g);
+    if (gradeEditId) {
+      const updated = await API.updateGrade(gradeEditId, { subject_id, value, label, date, weight_type, weight: 1.0 });
+      const idx = gradeItems.findIndex(g => g.id === gradeEditId);
+      if (idx >= 0) gradeItems[idx] = updated;
+      gradeEditId = null;
+      showToast('Note aktualisiert');
+    } else {
+      const g = await API.createGrade({ subject_id, value, label, date, weight_type, weight: 1.0 });
+      gradeItems.unshift(g);
+      showToast('Note gespeichert');
+    }
     closeSheet();
     renderGrades();
-    showToast('Note gespeichert');
   } catch {
     showToast('Fehler beim Speichern');
   }

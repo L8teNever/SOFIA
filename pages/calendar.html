@@ -134,6 +134,16 @@
   grid-template-columns: repeat(7, 1fr);
   gap: 2px 0;
 }
+/* A quick fade+rise on the whole grid whenever it's rebuilt for a
+   different month (arrows, "Heute") — restarted from JS in
+   renderCalGridOnly() each time, same felt "that changed" beat as the
+   list-card-enter cards elsewhere, just on the grid as one unit rather
+   than per day-cell (31 individually animating cells would look busy). */
+@keyframes cal-grid-enter {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.cal-days-grid.cal-grid-enter { animation: cal-grid-enter 0.22s ease; }
 
 /* Day cell: a plain number by default. "Today" and "selected" borrow
    Android's own Calendar/Clock convention — a ring for today, a solid
@@ -315,13 +325,26 @@ var calEvents = [];
 var calSubjects = [];
 var selectedCalDate = null;
 var activeCategoryFilter = 'all';
+var calCurrentUser = null;
 
 async function init_calendar() {
-  await Promise.all([
+  const [, , me] = await Promise.all([
     loadCalEvents(),
-    loadCalSubjects()
+    loadCalSubjects(),
+    API.me().catch(() => null),
   ]);
+  calCurrentUser = me;
   renderCal();
+}
+
+// Matches the backend's own rule for PUT/DELETE on an event exactly — the
+// creator, or an admin, can edit/delete; everyone else can't, so imported
+// class-wide entries (school holidays, another user's event) shouldn't
+// even offer the option and then fail on save.
+function calCanModifyEvent(ev) {
+  if (!calCurrentUser) return false;
+  if (calCurrentUser.role === 'admin' || calCurrentUser.role === 'super_admin') return true;
+  return ev.created_by === calCurrentUser.id;
 }
 
 async function loadCalSubjects() {
@@ -445,13 +468,21 @@ function renderCal() {
   document.getElementById('cal-month-title').textContent = months[calMonth];
   document.getElementById('cal-year-label').textContent = String(calYear);
 
-  renderCalGridOnly();
+  renderCalGridOnly(true);
   renderEventList();
 }
 
-function renderCalGridOnly() {
+// animate: only for an actual month change (arrows, "Heute") — day-select
+// and category-filter re-renders call this without it, since fading the
+// whole grid on every single day tap would feel busier than helpful.
+function renderCalGridOnly(animate) {
   const grid = document.getElementById('cal-grid');
   if (!grid) return;
+  if (animate) {
+    grid.classList.remove('cal-grid-enter');
+    void grid.offsetWidth;
+    grid.classList.add('cal-grid-enter');
+  }
   grid.innerHTML = '';
 
   const first = new Date(calYear, calMonth, 1);
@@ -646,7 +677,7 @@ function renderEventList() {
             </div>
           </div>
           <div style="display:flex;align-items:center;flex-shrink:0;">
-            ${moreMenuBtn(`openCalEventMenu(this, ${e.id})`)}
+            ${calCanModifyEvent(e) ? moreMenuBtn(`openCalEventMenu(this, ${e.id})`) : ''}
           </div>
         </div>
       `;

@@ -66,6 +66,7 @@ const API = {
   deleteSolution:    (hwId, solId) => API.delete(`/homework/${hwId}/solutions/${solId}`),
   grades:        ()       => API.get('/grades/'),
   createGrade:   (d)      => API.post('/grades/', d),
+  updateGrade:   (id, d)  => API.put(`/grades/${id}`, d),
   deleteGrade:   (id)     => API.delete(`/grades/${id}`),
   timetable:     ()       => API.get('/timetable/'),
   mealplanCurrent:  ()       => API.get('/mealplan/current'),
