@@ -683,3 +683,163 @@
 }
 .m3-btn-primary:hover { background: #5a4491; box-shadow: 0 4px 12px rgba(103, 80, 164, 0.35); }
 .m3-btn-primary:active { transform: scale(0.96); }
+
+/* M3 Outline Button */
+.m3-btn-outline {
+  background: transparent;
+  border: 1.5px solid rgba(103, 80, 164, 0.35);
+  color: var(--m3-prim);
+  font-size: 0.9rem;
+  font-weight: 600;
+  padding: 10px 20px;
+  border-radius: 16px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, transform 0.1s;
+  font-family: inherit;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.m3-btn-outline:hover {
+  background: rgba(103, 80, 164, 0.08);
+  border-color: var(--m3-prim);
+}
+.m3-btn-outline:active {
+  transform: scale(0.96);
+  background: rgba(103, 80, 164, 0.14);
+}
+
+/* Segmented Control (Pill switch) */
+.ev-segmented-wrap, .m3-segmented-wrap {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  background: #ede7f6;
+  padding: 5px;
+  border-radius: 16px;
+  margin-bottom: 14px;
+  border: 1px solid rgba(103, 80, 164, 0.15);
+  box-sizing: border-box;
+}
+
+.ev-seg-btn, .m3-seg-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 11px 14px;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  color: #49454f;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s cubic-bezier(0.2, 0, 0, 1);
+  user-select: none;
+  font-family: inherit;
+}
+.ev-seg-btn:hover:not(.active), .m3-seg-btn:hover:not(.active) {
+  background: rgba(255, 255, 255, 0.6);
+  color: #1c1b1f;
+}
+.ev-seg-btn.active, .m3-seg-btn.active {
+  background: #6750a4 !important;
+  color: #ffffff !important;
+  font-weight: 700;
+  box-shadow: 0 3px 10px rgba(103, 80, 164, 0.35);
+}
+.ev-seg-btn.active i, .ev-seg-btn.active svg,
+.m3-seg-btn.active i, .m3-seg-btn.active svg {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
+}
+
+/* Event Card Action Buttons (Pencil & Trash) */
+.ev-action-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  font-family: inherit;
+}
+.ev-action-btn.edit {
+  background: #f3edf7;
+  color: #49454f;
+}
+.ev-action-btn.edit:hover {
+  background: #eaddff;
+  color: #21005d;
+}
+.ev-action-btn.delete {
+  background: #fff0ee;
+  color: #ba1a1a;
+}
+.ev-action-btn.delete:hover {
+  background: #ffdad6;
+  color: #410002;
+}
+.ev-action-btn.dark-edit {
+  background: rgba(255, 255, 255, 0.15);
+  color: #ffffff;
+}
+.ev-action-btn.dark-edit:hover {
+  background: rgba(255, 255, 255, 0.28);
+}
+.ev-action-btn.dark-delete {
+  background: rgba(255, 218, 214, 0.2);
+  color: #ffb4ab;
+}
+.ev-action-btn.dark-delete:hover {
+  background: rgba(255, 218, 214, 0.35);
+}
+
+/* Calendar Filter Chips */
+.cal-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 4px 0 14px 0;
+  margin-bottom: 8px;
+  scrollbar-width: none;
+}
+.cal-filter-bar::-webkit-scrollbar {
+  display: none;
+}
+.cal-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #49454f;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+.cal-filter-chip:hover {
+  background: #f3edf7;
+  color: #1c1b1f;
+}
+.cal-filter-chip.active {
+  background: #6750a4;
+  color: #ffffff;
+  border-color: #6750a4;
+  box-shadow: 0 2px 8px rgba(103, 80, 164, 0.3);
+}
+.cal-filter-chip.active .cal-dot {
+  box-shadow: 0 0 0 2px #ffffff;
+}
+

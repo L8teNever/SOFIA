@@ -1,182 +1,275 @@
-<div class="page" id="page-calendar" style="background:#faf6ff;">
-  <div class="page-header">
-    <button class="back-btn"><i data-lucide="arrow-left" style="width:22px;height:22px;"></i></button>
-    <div style="flex:1;">
-      <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.5;color:#21005d;" id="cal-year-label"></div>
-      <span class="page-title" style="color:#21005d;" id="cal-month-title">Kalender</span>
+<div class="page" id="page-calendar" style="background:#f9f6fc;">
+  <!-- Header -->
+  <div class="page-header" style="display:flex;align-items:center;gap:10px;padding:max(20px,env(safe-area-inset-top,20px)) 20px 14px 20px;">
+    <button class="back-btn" title="Zurück"><i data-lucide="arrow-left" style="width:22px;height:22px;"></i></button>
+    <div style="flex:1;min-width:0;">
+      <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.6;color:#6750a4;" id="cal-year-label"></div>
+      <span class="page-title" style="color:#1c1b1f;font-size:1.45rem;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" id="cal-month-title">Kalender</span>
     </div>
-    <button onclick="calNav(-1)" class="icon-btn" title="Vorheriger Monat"><i data-lucide="chevron-left" style="width:20px;height:20px;"></i></button>
-    <button onclick="calNav(1)" class="icon-btn" title="Nächster Monat"><i data-lucide="chevron-right" style="width:20px;height:20px;"></i></button>
+    <!-- Quick Nav -->
+    <div style="display:flex;align-items:center;gap:6px;">
+      <button onclick="calNav(-1)" class="icon-btn" title="Vorheriger Monat" style="width:40px;height:40px;border-radius:14px;"><i data-lucide="chevron-left" style="width:20px;height:20px;"></i></button>
+      <button onclick="calToday()" class="m3-btn-outline" style="padding:6px 14px;border-radius:12px;font-size:0.8rem;font-weight:700;height:40px;" title="Zum heutigen Tag springen">Heute</button>
+      <button onclick="calNav(1)" class="icon-btn" title="Nächster Monat" style="width:40px;height:40px;border-radius:14px;"><i data-lucide="chevron-right" style="width:20px;height:20px;"></i></button>
+    </div>
   </div>
 
-  <div class="page-2col no-scrollbar">
-    <!-- Left: Calendar grid & month summary -->
-    <div class="page-2col-left">
-      <div class="m3-card-tonal" style="background:#eaddff;color:#21005d;border-radius:24px;padding:18px 16px;">
-        <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:8px;">
-          <div style="text-align:center;font-size:0.72rem;font-weight:700;opacity:0.55;padding:4px 0;">Mo</div>
-          <div style="text-align:center;font-size:0.72rem;font-weight:700;opacity:0.55;padding:4px 0;">Di</div>
-          <div style="text-align:center;font-size:0.72rem;font-weight:700;opacity:0.55;padding:4px 0;">Mi</div>
-          <div style="text-align:center;font-size:0.72rem;font-weight:700;opacity:0.55;padding:4px 0;">Do</div>
-          <div style="text-align:center;font-size:0.72rem;font-weight:700;opacity:0.55;padding:4px 0;">Fr</div>
-          <div style="text-align:center;font-size:0.72rem;font-weight:700;opacity:0.55;padding:4px 0;">Sa</div>
-          <div style="text-align:center;font-size:0.72rem;font-weight:700;opacity:0.55;padding:4px 0;">So</div>
+  <!-- Main 2-Column Responsive Layout -->
+  <div class="cal-main-container">
+    <!-- Left Column: Modern White Calendar Card -->
+    <div class="cal-left-pane">
+      <div class="cal-card">
+        <!-- Weekdays Header -->
+        <div class="cal-weekdays-grid">
+          <div>Mo</div><div>Di</div><div>Mi</div><div>Do</div><div>Fr</div><div>Sa</div><div>So</div>
         </div>
-        <div id="cal-grid" style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;"></div>
+        <!-- Days Grid -->
+        <div id="cal-grid" class="cal-days-grid"></div>
         
-        <!-- Summary & Legend in purple box -->
-        <div id="cal-summary-box" style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(33,0,93,0.12);"></div>
+        <!-- Legend / Overview -->
+        <div id="cal-overview-box" class="cal-overview-box"></div>
       </div>
     </div>
 
-    <!-- Right: Events list (filtered by selected day or full month) -->
-    <div class="page-2col-right" style="padding-bottom:100px;">
+    <!-- Right Column: Filter Bar & Events List -->
+    <div class="cal-right-pane">
+      <!-- Interactive Category Filter Chips -->
+      <div class="cal-filter-bar" id="cal-filter-bar">
+        <button type="button" class="cal-filter-chip active" onclick="setCalCategoryFilter('all', this)">
+          <span>Alle</span>
+          <span class="cal-chip-count" id="count-all">0</span>
+        </button>
+        <button type="button" class="cal-filter-chip" onclick="setCalCategoryFilter('exam', this)">
+          <span class="cal-dot cal-dot-exam"></span>
+          <span>Arbeiten</span>
+          <span class="cal-chip-count" id="count-exam">0</span>
+        </button>
+        <button type="button" class="cal-filter-chip" onclick="setCalCategoryFilter('holiday', this)">
+          <span class="cal-dot cal-dot-holiday"></span>
+          <span>Ferien</span>
+          <span class="cal-chip-count" id="count-holiday">0</span>
+        </button>
+        <button type="button" class="cal-filter-chip" onclick="setCalCategoryFilter('trip', this)">
+          <span class="cal-dot cal-dot-trip"></span>
+          <span>Ausflüge</span>
+          <span class="cal-chip-count" id="count-trip">0</span>
+        </button>
+        <button type="button" class="cal-filter-chip" onclick="setCalCategoryFilter('personal', this)">
+          <span class="cal-dot cal-dot-personal"></span>
+          <span>Persönlich</span>
+          <span class="cal-chip-count" id="count-personal">0</span>
+        </button>
+        <button type="button" class="cal-filter-chip" onclick="setCalCategoryFilter('other', this)">
+          <span class="cal-dot cal-dot-other"></span>
+          <span>Sonstige</span>
+          <span class="cal-chip-count" id="count-other">0</span>
+        </button>
+      </div>
+
+      <!-- Events List Header / Active Filter Info -->
+      <div id="cal-events-header"></div>
+
+      <!-- Events Cards Container -->
       <div id="cal-events-list"></div>
-      <div id="cal-no-events" style="display:none;text-align:center;padding:40px 20px;opacity:0.4;font-size:0.9rem;">Keine Termine in diesem Monat</div>
+
+      <!-- Empty State -->
+      <div id="cal-no-events" style="display:none;" class="cal-empty-card">
+        <div style="width:54px;height:54px;border-radius:18px;background:#ede7f6;color:#6750a4;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;">
+          <i data-lucide="calendar" style="width:28px;height:28px;"></i>
+        </div>
+        <div style="font-weight:700;font-size:1.05rem;color:#1c1b1f;margin-bottom:4px;" id="cal-empty-title">Keine Termine</div>
+        <div style="font-size:0.85rem;color:#49454f;margin-bottom:16px;" id="cal-empty-sub">Für diesen Zeitraum sind keine Termine eingetragen.</div>
+        <button class="m3-btn-primary" onclick="openNewEventSheet(selectedCalDate)" style="display:inline-flex;align-items:center;gap:6px;">
+          <i data-lucide="plus" style="width:18px;height:18px;"></i>
+          <span>Neuen Termin eintragen</span>
+        </button>
+      </div>
     </div>
   </div>
 
+  <!-- Floating Action Button -->
   <button class="fab" onclick="openNewEventSheet()" title="Neuen Termin erstellen">
     <i data-lucide="plus" style="width:24px;height:24px;"></i>
   </button>
 </div>
 
 <style>
-/* Segmented Mode Button (Single vs Range) */
-.ev-segmented-wrap {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
-  background: #efe7f4;
-  padding: 4px;
-  border-radius: 14px;
-  margin-bottom: 14px;
-  border: 1px solid rgba(103, 80, 164, 0.12);
-}
-.ev-seg-btn {
+/* Responsive layout container */
+.cal-main-container {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 10px 12px;
-  border: none;
-  border-radius: 10px;
-  background: transparent;
-  color: #49454f;
-  font-size: 0.82rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.18s ease;
-  user-select: none;
+  flex-direction: column;
+  gap: 18px;
+  padding: 0 16px 100px 16px;
+  max-width: 1140px;
+  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
 }
-.ev-seg-btn:hover:not(.active) {
-  background: rgba(255, 255, 255, 0.5);
-  color: #1c1b1f;
+@media (min-width: 768px) {
+  .cal-main-container {
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 28px;
+    padding: 0 28px 100px 28px;
+  }
+  .cal-left-pane {
+    width: 360px;
+    flex-shrink: 0;
+    position: sticky;
+    top: 16px;
+  }
+  .cal-right-pane {
+    flex: 1;
+    min-width: 0;
+  }
 }
-.ev-seg-btn.active {
-  background: #ffffff;
-  color: #6750a4;
-  font-weight: 700;
-  box-shadow: 0 2px 6px rgba(103, 80, 164, 0.18), 0 1px 2px rgba(0,0,0,0.06);
+@media (min-width: 1024px) {
+  .cal-left-pane {
+    width: 400px;
+  }
 }
 
-/* Day styles in Calendar Grid */
+/* Modern Calendar Card */
+.cal-card {
+  background: #ffffff;
+  border-radius: 26px;
+  padding: 18px 16px;
+  box-shadow: 0 2px 12px rgba(103, 80, 164, 0.08), 0 1px 3px rgba(0,0,0,0.04);
+  border: 1px solid rgba(103, 80, 164, 0.08);
+}
+
+.cal-weekdays-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  margin-bottom: 8px;
+}
+.cal-weekdays-grid div {
+  text-align: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #49454f;
+  opacity: 0.65;
+  padding: 4px 0;
+}
+
+.cal-days-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+
 .cal-day {
   position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: flex-start;
-  padding-top: 5px;
+  padding-top: 6px;
   aspect-ratio: 1/1;
-  border-radius: 14px;
-  font-size: 0.85rem;
+  border-radius: 16px;
+  font-size: 0.88rem;
   font-weight: 600;
   cursor: pointer;
-  transition: transform 0.12s ease, background 0.15s ease, box-shadow 0.15s ease;
+  transition: all 0.15s ease;
   user-select: none;
-}
-.cal-day.has-event::after,
-.cal-day.has-event-dots::after {
-  display: none !important; /* Suppress legacy single dot */
-}
-.cal-day-num {
-  line-height: 1;
-  font-size: 0.84rem;
-  z-index: 1;
+  background: transparent;
+  color: #1c1b1f;
 }
 .cal-day:hover:not(.muted) {
-  background: rgba(103, 80, 164, 0.14);
+  background: #f3edf7;
+  transform: translateY(-1px);
+}
+.cal-day.muted {
+  opacity: 0.28;
+  cursor: default;
 }
 .cal-day.today {
   background: #6750a4 !important;
   color: #ffffff !important;
   font-weight: 700;
-  box-shadow: 0 2px 6px rgba(103, 80, 164, 0.3);
+  box-shadow: 0 3px 8px rgba(103, 80, 164, 0.35);
 }
 .cal-day.selected {
-  outline: 2.5px solid #21005d;
-  outline-offset: -1px;
-  background: #d0bcff !important;
-  color: #21005d !important;
-  font-weight: 800;
-  transform: scale(1.05);
-  z-index: 2;
-  box-shadow: 0 3px 10px rgba(33, 0, 93, 0.22);
-}
-.cal-day.today.selected {
-  background: #21005d !important;
-  color: #ffffff !important;
   outline: 2.5px solid #6750a4;
-}
-.cal-day.is-holiday:not(.selected):not(.today) {
-  background: rgba(125, 82, 96, 0.16) !important;
-  color: #7d5260 !important;
+  outline-offset: -1px;
+  background: #eaddff !important;
+  color: #21005d !important;
   font-weight: 700;
 }
+.cal-day.today.selected {
+  background: #6750a4 !important;
+  color: #ffffff !important;
+  outline: 2.5px solid #21005d;
+}
+.cal-day.is-holiday:not(.today):not(.selected) {
+  background: rgba(125, 82, 96, 0.08);
+}
 
-/* Category dots container (positioned absolutely at bottom of day cell) */
+.cal-day-num {
+  line-height: 1;
+  font-size: 0.85rem;
+  z-index: 1;
+}
+
+/* Dots container */
 .cal-dots-wrap {
   position: absolute;
-  bottom: 4px;
+  bottom: 5px;
   left: 0;
   right: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 2.5px;
-  height: 7px;
+  gap: 3px;
   pointer-events: none;
+  height: 6px;
 }
 .cal-dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
   flex-shrink: 0;
-  display: inline-block;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.25);
 }
-.cal-day.today .cal-dot {
-  box-shadow: 0 1px 2px rgba(255,255,255,0.4);
-}
-.cal-dot-exam     { background: #ba1a1a; }
-.cal-dot-trip     { background: #146c2e; }
-.cal-dot-holiday  { background: #7d5260; }
-.cal-dot-personal { background: #1a73e8; }
-.cal-dot-other    { background: #6750a4; }
+.cal-dot-exam { background: #ba1a1a; }
+.cal-dot-holiday { background: #7d5260; }
+.cal-dot-trip { background: #006d3a; }
+.cal-dot-personal { background: #006399; }
+.cal-dot-other { background: #6750a4; }
 
 .cal-dot-more {
-  font-size: 0.58rem;
+  font-size: 0.6rem;
   line-height: 1;
   font-weight: 800;
-  opacity: 0.9;
+  color: #6750a4;
   margin-left: 1px;
 }
 .cal-day.today .cal-dot-more {
-  color: #fff;
+  color: #ffffff;
 }
 
-/* Date badge on event cards in full-month list */
+/* Overview box below grid */
+.cal-overview-box {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.cal-chip-count {
+  font-size: 0.72rem;
+  font-weight: 700;
+  background: rgba(0, 0, 0, 0.07);
+  padding: 1px 6px;
+  border-radius: 10px;
+  margin-left: 2px;
+}
+.cal-filter-chip.active .cal-chip-count {
+  background: rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+}
+
+/* Date Badge in Event Cards */
 .ev-date-badge {
   display: flex;
   flex-direction: column;
@@ -184,208 +277,146 @@
   justify-content: center;
   width: 44px;
   height: 48px;
+  border-radius: 14px;
   background: #f3edf7;
-  border-radius: 12px;
-  flex-shrink: 0;
-  margin-right: 12px;
-  line-height: 1;
   color: #21005d;
+  margin-right: 14px;
+  flex-shrink: 0;
+  border: 1px solid rgba(103, 80, 164, 0.1);
+  transition: all 0.15s ease;
 }
 .ev-date-badge.is-today {
   background: #6750a4;
   color: #ffffff;
-}
-.ev-date-badge-dark {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 48px;
-  background: rgba(255, 255, 255, 0.14);
-  border-radius: 12px;
-  flex-shrink: 0;
-  margin-right: 12px;
-  line-height: 1;
-  color: #ffffff;
+  border-color: #6750a4;
+  box-shadow: 0 2px 6px rgba(103, 80, 164, 0.3);
 }
 .ev-date-num {
   font-size: 1.15rem;
   font-weight: 800;
+  line-height: 1;
 }
 .ev-date-wd {
-  font-size: 0.65rem;
+  font-size: 0.68rem;
   font-weight: 700;
   text-transform: uppercase;
-  opacity: 0.7;
-  margin-top: 3px;
+  opacity: 0.75;
+  margin-top: 2px;
+  line-height: 1;
 }
 
-/* Action buttons on event cards */
-.ev-action-btn {
-  border: none;
-  border-radius: 10px;
-  width: 32px;
-  height: 32px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-.ev-action-btn:hover {
-  transform: scale(1.08);
-}
-.ev-action-btn.edit {
-  background: rgba(0, 0, 0, 0.05);
-  color: #49454f;
-}
-.ev-action-btn.edit:hover {
-  background: rgba(103, 80, 164, 0.12);
-  color: #6750a4;
-}
-.ev-action-btn.delete {
-  background: rgba(186, 26, 26, 0.08);
-  color: #ba1a1a;
-}
-.ev-action-btn.delete:hover {
-  background: rgba(186, 26, 26, 0.16);
-  color: #ba1a1a;
-}
-.ev-action-btn.dark-edit {
-  background: rgba(255, 255, 255, 0.15);
-  color: #ffffff;
-}
-.ev-action-btn.dark-edit:hover {
-  background: rgba(255, 255, 255, 0.28);
-}
-.ev-action-btn.dark-delete {
-  background: rgba(255, 255, 255, 0.15);
-  color: #ffb4ab;
-}
-.ev-action-btn.dark-delete:hover {
-  background: rgba(255, 180, 171, 0.28);
-  color: #ffffff;
-}
-
-/* Legend items */
-.cal-legend-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 4px 8px;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.65);
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: #21005d;
-}
-.cal-clear-filter-btn {
-  border: none;
-  background: #eaddff;
-  color: #21005d;
-  font-size: 0.75rem;
-  font-weight: 700;
-  padding: 5px 11px;
-  border-radius: 10px;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  transition: all 0.15s ease;
-}
-.cal-clear-filter-btn:hover {
-  background: #d0bcff;
+.cal-empty-card {
+  background: #ffffff;
+  border-radius: 24px;
+  padding: 36px 20px;
+  text-align: center;
+  border: 1px dashed rgba(103, 80, 164, 0.2);
+  margin-top: 10px;
 }
 </style>
 
 <script>
-let calYear = new Date().getFullYear();
-let calMonth = new Date().getMonth();
-let calEvents = [];
-let calSubjects = [];
-let selectedCalDate = null;
-
-const CAL_TYPE_COLORS = { exam:'#ffd8e4', trip:'#c4eed0', other:'#eaddff', personal:'#d3e3fd', holiday:'#e8def8' };
-const CAL_TYPE_BORDER = { exam:'#ba1a1a', trip:'#146c2e', other:'#6750a4', personal:'#1a73e8', holiday:'#7d5260' };
-const CAL_TYPE_LABEL  = { exam:'Klassenarbeit', trip:'Ausflug', other:'Sonstiges', personal:'Persönlich', holiday:'Ferien' };
+var calYear = new Date().getFullYear();
+var calMonth = new Date().getMonth();
+var calEvents = [];
+var calSubjects = [];
+var selectedCalDate = null;
+var activeCategoryFilter = 'all';
 
 async function init_calendar() {
   await Promise.all([
     loadCalEvents(),
-    API.subjects().then(subs => { calSubjects = subs || []; }).catch(() => { calSubjects = []; })
+    loadCalSubjects()
   ]);
   renderCal();
 }
 
+async function loadCalSubjects() {
+  try {
+    calSubjects = await API.subjects();
+  } catch {
+    calSubjects = [];
+  }
+}
+
 async function loadCalEvents() {
-  const month = calYear + '-' + String(calMonth+1).padStart(2,'0');
-  calEvents = await API.events(month).catch(() => []);
-}
-
-function eventCoversDate(e, dStr) {
-  const start = e.date.slice(0, 10);
-  const end = e.end_date ? e.end_date.slice(0, 10) : start;
-  return dStr >= start && dStr <= end;
-}
-
-function formatCalDateLabel(e, today) {
-  const d = new Date(e.date + 'T00:00');
-  const isToday = e.date === today;
-  const isTomorrow = e.date === new Date(Date.now() + 86400000).toISOString().slice(0, 10);
-  const singleLabel = isToday ? 'Heute' : isTomorrow ? 'Morgen' : d.toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'short' });
-
-  if (!e.end_date || e.end_date === e.date) {
-    return singleLabel + (e.time ? ' · ' + e.time + ' Uhr' : '');
+  const m = String(calMonth + 1).padStart(2, '0');
+  try {
+    calEvents = await API.calendarMonth(calYear + '-' + m);
+  } catch {
+    calEvents = [];
   }
-
-  const dEnd = new Date(e.end_date + 'T00:00');
-  const isRunning = today >= e.date && today <= e.end_date;
-  const startFmt = d.toLocaleDateString('de-DE', { day: 'numeric', month: 'short' });
-  const endFmt = dEnd.toLocaleDateString('de-DE', { day: 'numeric', month: 'short' });
-
-  if (isRunning) {
-    return `Läuft aktuell (bis ${endFmt})`;
-  }
-  return `${startFmt} – ${endFmt}`;
 }
 
-function onCalDayClick(dateStr) {
+function eventCoversDate(ev, dateStr) {
+  const start = ev.date ? ev.date.slice(0, 10) : '';
+  const end = ev.end_date ? ev.end_date.slice(0, 10) : start;
+  return dateStr >= start && dateStr <= end;
+}
+
+function setCalCategoryFilter(cat, btn) {
+  activeCategoryFilter = cat;
+  document.querySelectorAll('#cal-filter-bar .cal-filter-chip').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  renderEventList();
+}
+
+function selectDay(dateStr) {
   if (selectedCalDate === dateStr) {
-    selectedCalDate = null;
+    selectedCalDate = null; // Toggle off if clicked again
   } else {
     selectedCalDate = dateStr;
   }
-  renderCal();
-  
-  if (window.innerWidth < 900) {
-    const listEl = document.getElementById('cal-events-list');
-    if (listEl) {
-      listEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }
-  }
+  renderCalGridOnly();
+  renderEventList();
 }
 
 function clearDateSelection() {
   selectedCalDate = null;
+  renderCalGridOnly();
+  renderEventList();
+}
+
+async function calToday() {
+  const today = new Date();
+  calYear = today.getFullYear();
+  calMonth = today.getMonth();
+  selectedCalDate = today.toISOString().slice(0, 10);
+  await loadCalEvents();
+  renderCal();
+}
+
+async function calNav(dir) {
+  calMonth += dir;
+  if (calMonth < 0) { calMonth = 11; calYear--; }
+  if (calMonth > 11) { calMonth = 0; calYear++; }
+  selectedCalDate = null;
+  await loadCalEvents();
   renderCal();
 }
 
 function renderCal() {
   const months = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
-  const titleEl = document.getElementById('cal-month-title');
-  const yearEl  = document.getElementById('cal-year-label');
-  if (titleEl) titleEl.textContent = months[calMonth];
-  if (yearEl)  yearEl.textContent  = calYear;
+  document.getElementById('cal-month-title').textContent = months[calMonth];
+  document.getElementById('cal-year-label').textContent = String(calYear);
 
+  renderCalGridOnly();
+  updateCategoryCounts();
+  renderEventList();
+}
+
+function renderCalGridOnly() {
   const grid = document.getElementById('cal-grid');
+  if (!grid) return;
   grid.innerHTML = '';
-  const first = new Date(calYear, calMonth, 1);
-  const startDay = (first.getDay() + 6) % 7;
-  const daysInMonth = new Date(calYear, calMonth+1, 0).getDate();
-  const today = new Date().toISOString().slice(0,10);
-  const prevDays = new Date(calYear, calMonth, 0).getDate();
 
+  const first = new Date(calYear, calMonth, 1);
+  const startDay = (first.getDay() + 6) % 7; // 0=Mo ... 6=So
+  const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+  const prevDays = new Date(calYear, calMonth, 0).getDate();
+  const todayStr = new Date().toISOString().slice(0, 10);
+
+  // Leading days from previous month
   for (let i = startDay - 1; i >= 0; i--) {
     const d = document.createElement('div');
     d.className = 'cal-day muted';
@@ -393,12 +424,13 @@ function renderCal() {
     grid.appendChild(d);
   }
 
+  // Days of current month
   for (let d = 1; d <= daysInMonth; d++) {
-    const dateStr = calYear + '-' + String(calMonth+1).padStart(2,'0') + '-' + String(d).padStart(2,'0');
+    const dateStr = calYear + '-' + String(calMonth + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
     const covering = calEvents.filter(e => eventCoversDate(e, dateStr));
     const hasEvent = covering.length > 0;
     const hasHoliday = covering.some(e => e.event_type === 'holiday');
-    const isToday = dateStr === today;
+    const isToday = dateStr === todayStr;
     const isSelected = selectedCalDate === dateStr;
 
     const el = document.createElement('div');
@@ -406,7 +438,6 @@ function renderCal() {
     if (isToday) cls += ' today';
     if (isSelected) cls += ' selected';
     if (hasHoliday) cls += ' is-holiday';
-    if (hasEvent) cls += ' has-event-dots';
 
     el.className = cls;
 
@@ -427,235 +458,227 @@ function renderCal() {
     }
 
     el.innerHTML = `<span class="cal-day-num">${d}</span>${dotsHtml}`;
-    el.onclick = () => onCalDayClick(dateStr);
+    el.onclick = () => selectDay(dateStr);
     grid.appendChild(el);
   }
 
-  renderMonthLegend();
-  renderEventList();
+  renderOverviewBox();
 }
 
-function renderMonthLegend() {
-  const box = document.getElementById('cal-summary-box');
+function renderOverviewBox() {
+  const box = document.getElementById('cal-overview-box');
   if (!box) return;
 
-  const monthStart = `${calYear}-${String(calMonth+1).padStart(2,'0')}-01`;
-  const lastDayOfMonth = new Date(calYear, calMonth+1, 0).getDate();
-  const monthEnd = `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(lastDayOfMonth).padStart(2,'0')}`;
-
-  const monthEvts = calEvents.filter(e => {
-    const s = e.date.slice(0, 10);
-    const end = e.end_date ? e.end_date.slice(0, 10) : s;
-    return s <= monthEnd && end >= monthStart;
-  });
-
-  const exams = monthEvts.filter(e => e.event_type === 'exam').length;
-  const holidays = monthEvts.filter(e => e.event_type === 'holiday').length;
-  const trips = monthEvts.filter(e => e.event_type === 'trip').length;
-  const personals = monthEvts.filter(e => e.event_type === 'personal').length;
-  const others = monthEvts.filter(e => e.event_type === 'other').length;
-
-  let selHtml = '';
   if (selectedCalDate) {
     const d = new Date(selectedCalDate + 'T00:00');
     const fStr = d.toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'short' });
     const countOnDay = calEvents.filter(e => eventCoversDate(e, selectedCalDate)).length;
-    selHtml = `
-      <div style="display:flex;align-items:center;justify-content:space-between;background:rgba(255,255,255,0.75);padding:7px 10px;border-radius:12px;margin-bottom:10px;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
-        <div style="font-size:0.78rem;font-weight:700;display:flex;align-items:center;gap:6px;color:#21005d;">
-          <i data-lucide="check-circle-2" style="width:15px;height:15px;color:#6750a4;"></i>
+    box.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;background:#f3edf7;padding:8px 12px;border-radius:14px;">
+        <div style="font-size:0.82rem;font-weight:700;color:#21005d;display:flex;align-items:center;gap:6px;">
+          <i data-lucide="check-circle" style="width:16px;height:16px;color:#6750a4;"></i>
           <span>${fStr}: <b>${countOnDay} ${countOnDay === 1 ? 'Termin' : 'Termine'}</b></span>
         </div>
-        <button onclick="clearDateSelection()" style="border:none;background:#6750a4;color:#fff;font-size:0.7rem;font-weight:700;padding:3px 8px;border-radius:8px;cursor:pointer;">Alle anzeigen</button>
+        <button onclick="clearDateSelection()" style="border:none;background:#6750a4;color:#fff;font-size:0.72rem;font-weight:700;padding:4px 10px;border-radius:10px;cursor:pointer;">Alle anzeigen</button>
+      </div>
+    `;
+  } else {
+    box.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;font-size:0.78rem;color:#49454f;">
+        <span>Tippe auf einen Tag für Details</span>
+        <button onclick="openNewEventSheet()" style="background:transparent;border:none;color:#6750a4;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:4px;">
+          <i data-lucide="plus-circle" style="width:14px;height:14px;"></i> Neuer Termin
+        </button>
       </div>
     `;
   }
-
-  const badges = [];
-  if (exams > 0) badges.push(`<span class="cal-legend-chip"><span class="cal-dot cal-dot-exam"></span> ${exams} ${exams === 1 ? 'Klassenarbeit' : 'Klassenarbeiten'}</span>`);
-  if (holidays > 0) badges.push(`<span class="cal-legend-chip"><span class="cal-dot cal-dot-holiday"></span> ${holidays} Ferien</span>`);
-  if (trips > 0) badges.push(`<span class="cal-legend-chip"><span class="cal-dot cal-dot-trip"></span> ${trips} ${trips === 1 ? 'Ausflug' : 'Ausflüge'}</span>`);
-  if (personals > 0) badges.push(`<span class="cal-legend-chip"><span class="cal-dot cal-dot-personal"></span> ${personals} Persönlich</span>`);
-  if (others > 0) badges.push(`<span class="cal-legend-chip"><span class="cal-dot cal-dot-other"></span> ${others} Sonstiges</span>`);
-
-  const badgesHtml = badges.length ? `
-    <div style="display:flex;flex-wrap:wrap;gap:6px;">
-      ${badges.join('')}
-    </div>
-  ` : `<div style="font-size:0.75rem;opacity:0.6;font-style:italic;">Keine Termine für diesen Monat eingetragen</div>`;
-
-  box.innerHTML = selHtml + badgesHtml;
   if (window.lucide) lucide.createIcons();
+}
+
+function updateCategoryCounts() {
+  const monthStart = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-01`;
+  const lastDay = new Date(calYear, calMonth + 1, 0).getDate();
+  const monthEnd = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+
+  const monthEvts = calEvents.filter(e => {
+    const s = (e.date || '').slice(0, 10);
+    const end = (e.end_date || s).slice(0, 10);
+    return s <= monthEnd && end >= monthStart;
+  });
+
+  const setCount = (id, n) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = String(n);
+  };
+
+  setCount('count-all', monthEvts.length);
+  setCount('count-exam', monthEvts.filter(e => e.event_type === 'exam').length);
+  setCount('count-holiday', monthEvts.filter(e => e.event_type === 'holiday').length);
+  setCount('count-trip', monthEvts.filter(e => e.event_type === 'trip').length);
+  setCount('count-personal', monthEvts.filter(e => e.event_type === 'personal').length);
+  setCount('count-other', monthEvts.filter(e => e.event_type === 'other' || !e.event_type).length);
 }
 
 function renderEventList() {
   const list = document.getElementById('cal-events-list');
-  const noEventsEl = document.getElementById('cal-no-events');
-  const today = new Date().toISOString().slice(0, 10);
-  const months = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+  const headerEl = document.getElementById('cal-events-header');
+  const emptyEl = document.getElementById('cal-no-events');
+  if (!list) return;
 
-  let eventsToShow = [];
-  let headerHtml = '';
+  const monthStart = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-01`;
+  const lastDay = new Date(calYear, calMonth + 1, 0).getDate();
+  const monthEnd = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
 
+  let pool = calEvents.filter(e => {
+    const s = (e.date || '').slice(0, 10);
+    const end = (e.end_date || s).slice(0, 10);
+    return s <= monthEnd && end >= monthStart;
+  });
+
+  // Filter by selected day if active
   if (selectedCalDate) {
-    eventsToShow = calEvents.filter(e => eventCoversDate(e, selectedCalDate))
-                            .sort((a, b) => a.date.localeCompare(b.date));
+    pool = pool.filter(e => eventCoversDate(e, selectedCalDate));
+  }
+
+  // Filter by category if not 'all'
+  if (activeCategoryFilter !== 'all') {
+    pool = pool.filter(e => (e.event_type || 'other') === activeCategoryFilter);
+  }
+
+  // Sort chronologically
+  pool.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+
+  // Header above list
+  if (selectedCalDate) {
     const d = new Date(selectedCalDate + 'T00:00');
-    const fullDateStr = d.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-    
-    headerHtml = `
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:8px;flex-wrap:wrap;">
+    const fullStr = d.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    headerEl.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
         <div>
           <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#6750a4;">Termine am</div>
-          <div class="section-label" style="color:#21005d;margin:0;">${fullDateStr}</div>
+          <div style="font-size:1.15rem;font-weight:800;color:#1c1b1f;">${fullStr}</div>
         </div>
-        <button onclick="clearDateSelection()" class="cal-clear-filter-btn">
-          <i data-lucide="calendar" style="width:14px;height:14px;"></i> Alle Termine anzeigen
+        <button onclick="clearDateSelection()" class="m3-btn-outline" style="padding:6px 14px;font-size:0.8rem;border-radius:12px;">
+          <i data-lucide="calendar" style="width:14px;height:14px;"></i> Alle anzeigen
         </button>
       </div>
     `;
-
-    if (!eventsToShow.length) {
-      if (noEventsEl) noEventsEl.style.display = 'none';
-      list.innerHTML = headerHtml + `
-        <div class="m3-card" style="background:#fff;text-align:center;padding:32px 16px;border-radius:22px;box-shadow:0 1px 4px rgba(0,0,0,0.05);margin-bottom:12px;">
-          <div style="width:48px;height:48px;border-radius:24px;background:#f3edf7;display:inline-flex;align-items:center;justify-content:center;margin-bottom:10px;color:#6750a4;">
-            <i data-lucide="calendar" style="width:24px;height:24px;"></i>
-          </div>
-          <div style="font-weight:700;font-size:1rem;color:#1c1b1f;">Keine Termine an diesem Tag</div>
-          <div style="font-size:0.82rem;color:#49454f;margin:6px auto 16px;max-width:280px;">Für diesen Tag ist noch nichts eingetragen.</div>
-          <button class="m3-btn-primary" style="display:inline-flex;align-items:center;gap:8px;padding:9px 18px;font-size:0.85rem;border-radius:14px;" onclick="openNewEventSheet('${selectedCalDate}')">
-            <i data-lucide="plus" style="width:16px;height:16px;"></i> Termin hinzufügen
-          </button>
-        </div>
-      `;
-      if (window.lucide) lucide.createIcons();
-      return;
-    }
   } else {
-    // Whole month view: show all events touching this month
-    const monthStart = `${calYear}-${String(calMonth+1).padStart(2,'0')}-01`;
-    const lastDayOfMonth = new Date(calYear, calMonth+1, 0).getDate();
-    const monthEnd = `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(lastDayOfMonth).padStart(2,'0')}`;
-
-    eventsToShow = calEvents.filter(e => {
-      const s = e.date.slice(0, 10);
-      const end = e.end_date ? e.end_date.slice(0, 10) : s;
-      return s <= monthEnd && end >= monthStart;
-    }).sort((a, b) => a.date.localeCompare(b.date));
-
-    headerHtml = `
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-        <div class="section-label" style="color:#21005d;margin:0;">Termine im ${months[calMonth]} ${calYear}</div>
-        <span style="font-size:0.75rem;opacity:0.65;font-weight:700;background:rgba(33,0,93,0.08);padding:3px 9px;border-radius:10px;">${eventsToShow.length} ${eventsToShow.length === 1 ? 'Termin' : 'Termine'}</span>
+    headerEl.innerHTML = `
+      <div style="margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;">
+        <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#6750a4;">
+          ${activeCategoryFilter === 'all' ? 'Alle Termine dieses Monats' : 'Gefilterte Termine'}
+        </div>
+        <span style="font-size:0.75rem;color:#49454f;font-weight:600;">${pool.length} ${pool.length === 1 ? 'Eintrag' : 'Einträge'}</span>
       </div>
     `;
-
-    if (!eventsToShow.length) {
-      list.innerHTML = headerHtml;
-      if (noEventsEl) noEventsEl.style.display = 'block';
-      if (window.lucide) lucide.createIcons();
-      return;
-    }
   }
 
-  if (noEventsEl) noEventsEl.style.display = 'none';
+  if (pool.length === 0) {
+    list.innerHTML = '';
+    emptyEl.style.display = 'block';
+    const emptyTitle = document.getElementById('cal-empty-title');
+    const emptySub = document.getElementById('cal-empty-sub');
+    if (selectedCalDate) {
+      const d = new Date(selectedCalDate + 'T00:00');
+      const f = d.toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'short' });
+      emptyTitle.textContent = `Keine Termine am ${f}`;
+      emptySub.textContent = `Für diesen Tag ist bisher noch nichts eingetragen.`;
+    } else {
+      emptyTitle.textContent = 'Keine Termine gefunden';
+      emptySub.textContent = activeCategoryFilter === 'all'
+        ? 'In diesem Monat stehen keine Termine an.'
+        : 'Keine Termine in dieser Kategorie vorhanden.';
+    }
+  } else {
+    emptyEl.style.display = 'none';
+    const subMap = Object.fromEntries((calSubjects || []).map(s => [s.id, s]));
+    const todayStr = new Date().toISOString().slice(0, 10);
 
-  const cardsHtml = eventsToShow.map(e => {
-    const border = CAL_TYPE_BORDER[e.event_type] || '#6750a4';
-    const label = CAL_TYPE_LABEL[e.event_type] || 'Termin';
-    const dayLabel = formatCalDateLabel(e, today);
-    const isExam = e.event_type === 'exam';
-    const isPersonal = e.event_type === 'personal';
-    const sub = e.subject_id ? calSubjects.find(s => s.id === e.subject_id) : null;
-    const subName = sub ? (sub.name || sub.short_name) : '';
-    const subBadge = subName ? `<span style="font-size:0.72rem;font-weight:600;background:rgba(255,255,255,0.22);padding:2px 8px;border-radius:8px;margin-left:8px;letter-spacing:normal;text-transform:none;">${escapeHtml(subName)}</span>` : '';
-    const personalBadge = isPersonal ? `<span style="font-size:0.7rem;font-weight:600;background:#d3e3fd;color:#0b57d0;padding:2px 8px;border-radius:8px;margin-left:6px;display:inline-flex;align-items:center;gap:3px;"><i data-lucide="lock" style="width:10px;height:10px;"></i> Nur für dich</span>` : '';
+    list.innerHTML = pool.map(e => {
+      const isEvToday = eventCoversDate(e, todayStr);
+      const isMulti = Boolean(e.end_date && e.end_date !== e.date);
 
-    const dObj = new Date(e.date + 'T00:00');
-    const dayNum = dObj.getDate();
-    const weekday = dObj.toLocaleDateString('de-DE', { weekday: 'short' });
-    const isEvToday = e.date === today;
+      const sDate = new Date(e.date + 'T00:00');
+      const dayNum = sDate.getDate();
+      const weekday = sDate.toLocaleDateString('de-DE', { weekday: 'short' });
 
-    if (isExam) {
+      let dayLabel = sDate.toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'short' });
+      if (isMulti) {
+        const eDate = new Date(e.end_date + 'T00:00');
+        dayLabel = `${sDate.toLocaleDateString('de-DE', { day: 'numeric', month: 'short' })} – ${eDate.toLocaleDateString('de-DE', { day: 'numeric', month: 'short' })}`;
+      }
+
+      let typeLabel = 'Sonstiges';
+      let dotCls = 'cal-dot-other';
+      let typeColor = '#6750a4';
+
+      if (e.event_type === 'exam') {
+        typeLabel = 'Klassenarbeit';
+        dotCls = 'cal-dot-exam';
+        typeColor = '#ba1a1a';
+      } else if (e.event_type === 'holiday') {
+        typeLabel = 'Schulferien';
+        dotCls = 'cal-dot-holiday';
+        typeColor = '#7d5260';
+      } else if (e.event_type === 'trip') {
+        typeLabel = 'Ausflug';
+        dotCls = 'cal-dot-trip';
+        typeColor = '#006d3a';
+      } else if (e.event_type === 'personal') {
+        typeLabel = 'Persönlich';
+        dotCls = 'cal-dot-personal';
+        typeColor = '#006399';
+      }
+
+      const subObj = e.subject_id ? subMap[e.subject_id] : null;
+      const subName = subObj ? (subObj.name || subObj.short_name) : null;
+      const subColor = subObj ? (subObj.color || '#6750a4') : null;
+
+      const personalBadge = e.event_type === 'personal'
+        ? `<span style="font-size:0.68rem;font-weight:700;background:#d3e3fd;color:#041e49;padding:2px 7px;border-radius:6px;display:inline-flex;align-items:center;gap:3px;"><i data-lucide="lock" style="width:10px;height:10px;"></i> Nur für dich</span>`
+        : '';
+
+      const subjectBadge = subName
+        ? `<span style="font-size:0.7rem;font-weight:700;background:${subColor || '#ede7f6'};color:#1c1b1f;padding:2px 8px;border-radius:6px;">${escapeHtml(subName)}</span>`
+        : '';
+
       return `
-        <div class="m3-card-tonal" style="background:#21005d;color:#fff;margin-bottom:10px;border-radius:20px;padding:14px 16px;">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
-            <div style="display:flex;align-items:center;flex:1;min-width:0;">
-              <div class="ev-date-badge-dark">
-                <span class="ev-date-num">${dayNum}</span>
-                <span class="ev-date-wd">${weekday}</span>
+        <div class="m3-card" style="margin-bottom:10px;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;border-radius:20px;box-shadow:0 1px 4px rgba(0,0,0,0.05);transition:transform 0.1s ease;">
+          <div style="display:flex;align-items:center;flex:1;min-width:0;">
+            <div class="ev-date-badge ${isEvToday ? 'is-today' : ''}">
+              <span class="ev-date-num">${dayNum}</span>
+              <span class="ev-date-wd">${weekday}</span>
+            </div>
+            <div style="flex:1;min-width:0;">
+              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:3px;">
+                <span class="cal-dot ${dotCls}"></span>
+                <span style="font-size:0.68rem;font-weight:800;text-transform:uppercase;letter-spacing:0.08em;color:${typeColor};">${typeLabel}</span>
+                ${subjectBadge}
+                ${personalBadge}
               </div>
-              <div style="flex:1;min-width:0;">
-                <div style="display:flex;align-items:center;flex-wrap:wrap;gap:4px;">
-                  <span class="cal-dot cal-dot-exam" style="box-shadow:none;"></span>
-                  <span style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.85;color:#ffdad6;">${label}</span>
-                  ${subBadge}
-                </div>
-                <div style="font-size:1.05rem;font-weight:700;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(e.title)}</div>
-                <div style="font-size:0.78rem;opacity:0.75;margin-top:2px;display:flex;align-items:center;gap:5px;">
-                  <i data-lucide="calendar" style="width:13px;height:13px;"></i>
-                  <span>${dayLabel}</span>
-                </div>
+              <div style="font-weight:700;font-size:0.98rem;color:#1c1b1f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(e.title)}</div>
+              <div style="font-size:0.78rem;color:#49454f;margin-top:2px;display:flex;align-items:center;gap:5px;">
+                <i data-lucide="calendar" style="width:13px;height:13px;opacity:0.6;"></i>
+                <span>${dayLabel}</span>
+                ${e.time ? `<span style="opacity:0.4;">·</span><i data-lucide="clock" style="width:13px;height:13px;opacity:0.6;"></i><span>${e.time} Uhr</span>` : ''}
               </div>
             </div>
-            <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
-              <button onclick="openEditEventSheet(${e.id})" title="Bearbeiten" class="ev-action-btn dark-edit">
-                <i data-lucide="pencil" style="width:15px;height:15px;"></i>
-              </button>
-              <button onclick="confirmDelEvent(${e.id})" title="Löschen" class="ev-action-btn dark-delete">
-                <i data-lucide="trash-2" style="width:15px;height:15px;"></i>
-              </button>
-            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+            <button onclick="openEditEventSheet(${e.id})" title="Bearbeiten" class="ev-action-btn edit">
+              <i data-lucide="pencil" style="width:16px;height:16px;"></i>
+            </button>
+            <button onclick="confirmDelEvent(${e.id})" title="Löschen" class="ev-action-btn delete">
+              <i data-lucide="trash-2" style="width:16px;height:16px;"></i>
+            </button>
           </div>
         </div>
       `;
-    }
+    }).join('');
+  }
 
-    return `
-      <div style="background:white;border-radius:20px;padding:14px 16px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:8px;box-shadow:0 1px 4px rgba(0,0,0,0.06);">
-        <div style="display:flex;align-items:center;flex:1;min-width:0;">
-          <div class="ev-date-badge ${isEvToday ? 'is-today' : ''}">
-            <span class="ev-date-num">${dayNum}</span>
-            <span class="ev-date-wd">${weekday}</span>
-          </div>
-          <div style="flex:1;min-width:0;">
-            <div style="display:flex;align-items:center;flex-wrap:wrap;gap:4px;margin-bottom:2px;">
-              <span class="cal-dot cal-dot-${e.event_type}"></span>
-              <span style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:${border};">${label}</span>
-              ${subName ? `<span style="font-size:0.72rem;font-weight:600;background:rgba(0,0,0,0.06);padding:1px 6px;border-radius:6px;margin-left:4px;">${escapeHtml(subName)}</span>` : ''}
-              ${personalBadge}
-            </div>
-            <div style="font-weight:700;font-size:0.95rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#1c1b1f;">${escapeHtml(e.title)}</div>
-            <div style="font-size:0.78rem;opacity:0.6;margin-top:2px;display:flex;align-items:center;gap:4px;">
-              <i data-lucide="calendar" style="width:13px;height:13px;"></i>
-              <span>${dayLabel}</span>
-            </div>
-          </div>
-        </div>
-        <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
-          <button onclick="openEditEventSheet(${e.id})" title="Bearbeiten" class="ev-action-btn edit">
-            <i data-lucide="pencil" style="width:15px;height:15px;"></i>
-          </button>
-          <button onclick="confirmDelEvent(${e.id})" title="Löschen" class="ev-action-btn delete">
-            <i data-lucide="trash-2" style="width:15px;height:15px;"></i>
-          </button>
-        </div>
-      </div>
-    `;
-  }).join('');
-
-  list.innerHTML = headerHtml + cardsHtml;
   if (window.lucide) lucide.createIcons();
-}
-
-async function calNav(dir) {
-  calMonth += dir;
-  if (calMonth < 0) { calMonth = 11; calYear--; }
-  if (calMonth > 11) { calMonth = 0; calYear++; }
-  selectedCalDate = null;
-  await loadCalEvents();
-  renderCal();
 }
 
 function setEventRangeMode(isRange) {
@@ -663,9 +686,11 @@ function setEventRangeMode(isRange) {
   const btnRange = document.getElementById('ev-mode-range');
   const wrap = document.getElementById('ev-end-date-wrap');
   const startLbl = document.getElementById('ev-start-label');
+
   if (btnSingle) btnSingle.classList.toggle('active', !isRange);
   if (btnRange) btnRange.classList.toggle('active', isRange);
   if (startLbl) startLbl.textContent = isRange ? 'Startdatum (Ab):' : 'Datum:';
+
   if (wrap) {
     wrap.style.display = isRange ? 'block' : 'none';
     if (isRange) {
@@ -690,17 +715,18 @@ function toggleEventTime() {
 }
 
 async function openNewEventSheet(defaultDate) {
-  try {
-    calSubjects = await API.subjects();
-  } catch {
-    if (!calSubjects) calSubjects = [];
-  }
-  const today = defaultDate || selectedCalDate || new Date().toISOString().slice(0,10);
-  const subOpts = (calSubjects || []).map(s => '<option value="' + s.id + '">' + escapeHtml(s.name || s.short_name || '') + '</option>').join('');
+  await loadCalSubjects();
+  const today = defaultDate || selectedCalDate || new Date().toISOString().slice(0, 10);
+  const subOpts = (calSubjects || []).map(s => `<option value="${s.id}">${escapeHtml(s.name || s.short_name || '')}</option>`).join('');
 
   openSheet(`
-    <div class="sheet-title">Neuer Termin</div>
-    <input class="m3-input" id="ev-title" placeholder="Titel">
+    <div class="sheet-title" style="font-size:1.25rem;font-weight:800;color:#1c1b1f;margin-bottom:16px;">Neuer Termin</div>
+    
+    <label style="font-size:0.78rem;font-weight:700;color:#6750a4;display:block;margin-bottom:4px;margin-left:4px;">Titel des Termins:</label>
+    <input class="m3-input" id="ev-title" placeholder="z. B. Mathearbeit, Schulausflug, Zahnarzt...">
+
+    <!-- Segmented Toggle: Single vs Multi-Day -->
+    <label style="font-size:0.78rem;font-weight:700;color:#6750a4;display:block;margin-bottom:6px;margin-left:4px;">Dauer:</label>
     <div class="ev-segmented-wrap">
       <button type="button" id="ev-mode-single" class="ev-seg-btn active" onclick="setEventRangeMode(false)">
         <i data-lucide="calendar" style="width:16px;height:16px;"></i>
@@ -711,41 +737,54 @@ async function openNewEventSheet(defaultDate) {
         <span>Zeitraum (mehrere Tage)</span>
       </button>
     </div>
+
+    <!-- Dates -->
     <div id="ev-start-date-wrap">
-      <label id="ev-start-label" style="font-size:0.78rem;font-weight:600;color:var(--m3-prim);display:block;margin-bottom:4px;margin-left:4px;">Datum:</label>
+      <label id="ev-start-label" style="font-size:0.78rem;font-weight:700;color:#6750a4;display:block;margin-bottom:4px;margin-left:4px;">Datum:</label>
       <input class="m3-input" id="ev-date" type="date" value="${today}">
     </div>
+
     <div id="ev-end-date-wrap" style="display:none;margin-top:8px;">
-      <label style="font-size:0.78rem;font-weight:600;color:var(--m3-prim);display:block;margin-bottom:4px;margin-left:4px;">Enddatum (Bis):</label>
+      <label style="font-size:0.78rem;font-weight:700;color:#6750a4;display:block;margin-bottom:4px;margin-left:4px;">Enddatum (Bis einschließlich):</label>
       <input class="m3-input" id="ev-end-date" type="date" value="${today}">
     </div>
+
+    <!-- Category -->
     <div style="margin-top:12px;">
-      <label style="font-size:0.78rem;font-weight:600;color:var(--m3-prim);display:block;margin-bottom:4px;margin-left:4px;">Kategorie:</label>
+      <label style="font-size:0.78rem;font-weight:700;color:#6750a4;display:block;margin-bottom:4px;margin-left:4px;">Kategorie:</label>
       <select class="m3-select" id="ev-type">
         <option value="other">Sonstiges</option>
         <option value="exam">Klassenarbeit</option>
         <option value="trip">Ausflug / Klassenfahrt</option>
         <option value="holiday">Ferien</option>
-        <option value="personal">Persönlich (nur für dich)</option>
+        <option value="personal">Persönlich (nur für dich sichtbar)</option>
       </select>
     </div>
+
+    <!-- Subject for exam -->
     <div id="ev-subject-row" style="display:none;margin-top:10px;margin-bottom:12px;">
-      <label style="font-size:0.78rem;font-weight:600;color:var(--m3-prim);display:block;margin-bottom:4px;margin-left:4px;">Fach für die Klassenarbeit:</label>
+      <label style="font-size:0.78rem;font-weight:700;color:#6750a4;display:block;margin-bottom:4px;margin-left:4px;">Fach für die Klassenarbeit:</label>
       <select class="m3-select" id="ev-subject">
         <option value="">Fach auswählen (optional)</option>
         ${subOpts}
       </select>
     </div>
-    <div style="margin: 10px 0 16px 0;">
-      <button type="button" id="ev-time-toggle" onclick="toggleEventTime()" style="background:none;border:none;color:var(--m3-prim);font-size:0.85rem;font-weight:600;cursor:pointer;padding:6px 0;display:flex;align-items:center;gap:6px;">
+
+    <!-- Optional Time -->
+    <div style="margin: 12px 0 18px 0;">
+      <button type="button" id="ev-time-toggle" onclick="toggleEventTime()" style="background:none;border:none;color:#6750a4;font-size:0.85rem;font-weight:700;cursor:pointer;padding:6px 0;display:flex;align-items:center;gap:6px;">
         <i data-lucide="clock" style="width:16px;height:16px;"></i> + Uhrzeit hinzufügen (optional)
       </button>
       <div id="ev-time-wrap" style="display:none;margin-top:6px;">
-        <label style="font-size:0.78rem;font-weight:600;color:var(--m3-prim);display:block;margin-bottom:4px;margin-left:4px;">Uhrzeit:</label>
+        <label style="font-size:0.78rem;font-weight:700;color:#6750a4;display:block;margin-bottom:4px;margin-left:4px;">Uhrzeit:</label>
         <input class="m3-input" id="ev-time" type="time" placeholder="Uhrzeit (optional)">
       </div>
     </div>
-    <button class="m3-btn-full" onclick="saveEvent()" style="margin-top:10px;">Speichern</button>
+
+    <div style="display:flex;gap:10px;margin-top:16px;">
+      <button type="button" class="m3-btn-outline" style="flex:1;" onclick="closeSheet()">Abbrechen</button>
+      <button type="button" class="m3-btn-primary" style="flex:2;" onclick="saveEvent()">Speichern</button>
+    </div>
   `);
 
   const typeEl = document.getElementById('ev-type');
@@ -754,13 +793,6 @@ async function openNewEventSheet(defaultDate) {
     typeEl.addEventListener('change', () => {
       const isExam = typeEl.value === 'exam';
       subRow.style.display = isExam ? 'block' : 'none';
-      if (!isExam) {
-        const subSel = document.getElementById('ev-subject');
-        if (subSel) {
-          subSel.value = '';
-          subSel.dispatchEvent(new Event('change', { bubbles: true }));
-        }
-      }
     });
   }
 }
@@ -781,20 +813,13 @@ async function saveEvent() {
   const time = (timeEl && timeEl.value) ? timeEl.value : null;
 
   try {
-    await API.createEvent({
-      title,
-      date,
-      end_date,
-      time,
-      event_type,
-      subject_id
-    });
+    await API.createEvent({ title, date, end_date, time, event_type, subject_id });
     closeSheet();
     await loadCalEvents();
     renderCal();
     showToast('Termin gespeichert');
-  } catch (err) {
-    showToast(err.detail || 'Fehler beim Speichern');
+  } catch {
+    showToast('Fehler beim Speichern');
   }
 }
 
@@ -802,12 +827,7 @@ async function openEditEventSheet(eventId) {
   const ev = calEvents.find(x => x.id === eventId);
   if (!ev) { showToast('Termin nicht gefunden'); return; }
 
-  try {
-    calSubjects = await API.subjects();
-  } catch {
-    if (!calSubjects) calSubjects = [];
-  }
-
+  await loadCalSubjects();
   const isRange = Boolean(ev.end_date && ev.end_date !== ev.date);
   const subOpts = (calSubjects || []).map(s => {
     const sel = s.id === ev.subject_id ? 'selected' : '';
@@ -819,14 +839,19 @@ async function openEditEventSheet(eventId) {
     { value: 'exam', label: 'Klassenarbeit' },
     { value: 'trip', label: 'Ausflug / Klassenfahrt' },
     { value: 'holiday', label: 'Ferien' },
-    { value: 'personal', label: 'Persönlich (nur für dich)' }
+    { value: 'personal', label: 'Persönlich (nur für dich sichtbar)' }
   ].map(t => `<option value="${t.value}" ${t.value === ev.event_type ? 'selected' : ''}>${t.label}</option>`).join('');
 
   const hasTime = Boolean(ev.time);
 
   openSheet(`
-    <div class="sheet-title">Termin bearbeiten</div>
+    <div class="sheet-title" style="font-size:1.25rem;font-weight:800;color:#1c1b1f;margin-bottom:16px;">Termin bearbeiten</div>
+    
+    <label style="font-size:0.78rem;font-weight:700;color:#6750a4;display:block;margin-bottom:4px;margin-left:4px;">Titel des Termins:</label>
     <input class="m3-input" id="ev-title" placeholder="Titel" value="${escapeHtml(ev.title)}">
+
+    <!-- Segmented Toggle -->
+    <label style="font-size:0.78rem;font-weight:700;color:#6750a4;display:block;margin-bottom:6px;margin-left:4px;">Dauer:</label>
     <div class="ev-segmented-wrap">
       <button type="button" id="ev-mode-single" class="ev-seg-btn ${!isRange ? 'active' : ''}" onclick="setEventRangeMode(false)">
         <i data-lucide="calendar" style="width:16px;height:16px;"></i>
@@ -837,37 +862,45 @@ async function openEditEventSheet(eventId) {
         <span>Zeitraum (mehrere Tage)</span>
       </button>
     </div>
+
+    <!-- Dates -->
     <div id="ev-start-date-wrap">
-      <label id="ev-start-label" style="font-size:0.78rem;font-weight:600;color:var(--m3-prim);display:block;margin-bottom:4px;margin-left:4px;">${isRange ? 'Startdatum (Ab):' : 'Datum:'}</label>
+      <label id="ev-start-label" style="font-size:0.78rem;font-weight:700;color:#6750a4;display:block;margin-bottom:4px;margin-left:4px;">${isRange ? 'Startdatum (Ab):' : 'Datum:'}</label>
       <input class="m3-input" id="ev-date" type="date" value="${ev.date}">
     </div>
+
     <div id="ev-end-date-wrap" style="display:${isRange ? 'block' : 'none'};margin-top:8px;">
-      <label style="font-size:0.78rem;font-weight:600;color:var(--m3-prim);display:block;margin-bottom:4px;margin-left:4px;">Enddatum (Bis):</label>
+      <label style="font-size:0.78rem;font-weight:700;color:#6750a4;display:block;margin-bottom:4px;margin-left:4px;">Enddatum (Bis einschließlich):</label>
       <input class="m3-input" id="ev-end-date" type="date" value="${ev.end_date || ev.date}">
     </div>
+
+    <!-- Category -->
     <div style="margin-top:12px;">
-      <label style="font-size:0.78rem;font-weight:600;color:var(--m3-prim);display:block;margin-bottom:4px;margin-left:4px;">Kategorie:</label>
+      <label style="font-size:0.78rem;font-weight:700;color:#6750a4;display:block;margin-bottom:4px;margin-left:4px;">Kategorie:</label>
       <select class="m3-select" id="ev-type">
         ${typeOpts}
       </select>
     </div>
+
     <div id="ev-subject-row" style="display:${ev.event_type === 'exam' ? 'block' : 'none'};margin-top:10px;margin-bottom:12px;">
-      <label style="font-size:0.78rem;font-weight:600;color:var(--m3-prim);display:block;margin-bottom:4px;margin-left:4px;">Fach für die Klassenarbeit:</label>
+      <label style="font-size:0.78rem;font-weight:700;color:#6750a4;display:block;margin-bottom:4px;margin-left:4px;">Fach für die Klassenarbeit:</label>
       <select class="m3-select" id="ev-subject">
         <option value="">Fach auswählen (optional)</option>
         ${subOpts}
       </select>
     </div>
-    <div style="margin: 10px 0 16px 0;">
-      <button type="button" id="ev-time-toggle" onclick="toggleEventTime()" style="background:none;border:none;color:var(--m3-prim);font-size:0.85rem;font-weight:600;cursor:pointer;padding:6px 0;display:${hasTime ? 'none' : 'flex'};align-items:center;gap:6px;">
+
+    <div style="margin: 12px 0 18px 0;">
+      <button type="button" id="ev-time-toggle" onclick="toggleEventTime()" style="background:none;border:none;color:#6750a4;font-size:0.85rem;font-weight:700;cursor:pointer;padding:6px 0;display:${hasTime ? 'none' : 'flex'};align-items:center;gap:6px;">
         <i data-lucide="clock" style="width:16px;height:16px;"></i> + Uhrzeit hinzufügen (optional)
       </button>
       <div id="ev-time-wrap" style="display:${hasTime ? 'block' : 'none'};margin-top:6px;">
-        <label style="font-size:0.78rem;font-weight:600;color:var(--m3-prim);display:block;margin-bottom:4px;margin-left:4px;">Uhrzeit:</label>
+        <label style="font-size:0.78rem;font-weight:700;color:#6750a4;display:block;margin-bottom:4px;margin-left:4px;">Uhrzeit:</label>
         <input class="m3-input" id="ev-time" type="time" placeholder="Uhrzeit (optional)" value="${ev.time || ''}">
       </div>
     </div>
-    <div style="display:flex;gap:10px;margin-top:14px;">
+
+    <div style="display:flex;gap:10px;margin-top:16px;">
       <button type="button" class="m3-btn-outline" style="flex:1;" onclick="closeSheet()">Abbrechen</button>
       <button type="button" class="m3-btn-primary" style="flex:2;" onclick="saveEditedEvent(${ev.id})">Speichern</button>
     </div>
@@ -879,13 +912,6 @@ async function openEditEventSheet(eventId) {
     typeEl.addEventListener('change', () => {
       const isExam = typeEl.value === 'exam';
       subRow.style.display = isExam ? 'block' : 'none';
-      if (!isExam) {
-        const subSel = document.getElementById('ev-subject');
-        if (subSel) {
-          subSel.value = '';
-          subSel.dispatchEvent(new Event('change', { bubbles: true }));
-        }
-      }
     });
   }
 }
@@ -906,51 +932,47 @@ async function saveEditedEvent(eventId) {
   const time = (timeEl && timeEl.value) ? timeEl.value : null;
 
   try {
-    await API.updateEvent(eventId, {
-      title,
-      date,
-      end_date,
-      time,
-      event_type,
-      subject_id
-    });
+    await API.updateEvent(eventId, { title, date, end_date, time, event_type, subject_id });
     closeSheet();
     await loadCalEvents();
     renderCal();
     showToast('Termin aktualisiert');
-  } catch (err) {
-    showToast(err.detail || 'Fehler beim Aktualisieren');
+  } catch {
+    showToast('Fehler beim Aktualisieren');
   }
 }
 
-// Universal Delete Confirmation Modal
-function confirmDelEvent(id) {
-  const ev = calEvents.find(x => x.id === id);
-  const title = ev ? `„${escapeHtml(ev.title)}“ ` : '';
+function confirmDelEvent(eventId) {
+  const ev = calEvents.find(x => x.id === eventId);
+  const title = ev ? escapeHtml(ev.title) : 'diesen Termin';
+
   openModal(`
-    <div style="text-align:center;padding:8px 4px;">
-      <div style="width:52px;height:52px;border-radius:26px;background:#ffdad6;color:#ba1a1a;display:inline-flex;align-items:center;justify-content:center;margin-bottom:14px;">
-        <i data-lucide="alert-triangle" style="width:28px;height:28px;"></i>
+    <div style="text-align:center;padding:12px 6px 6px;">
+      <div style="width:54px;height:54px;border-radius:18px;background:#ffdad6;color:#ba1a1a;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;">
+        <i data-lucide="trash-2" style="width:26px;height:26px;"></i>
       </div>
-      <div style="font-size:1.2rem;font-weight:700;color:#1c1b1f;margin-bottom:8px;">Termin löschen?</div>
-      <div style="font-size:0.92rem;color:#49454f;line-height:1.45;margin-bottom:22px;">Willst du das wirklich löschen?${title ? `<br><span style="font-weight:600;color:#1c1b1f;display:inline-block;margin-top:6px;">${title}</span>` : ''}</div>
+      <div style="font-size:1.2rem;font-weight:800;margin-bottom:8px;color:#1c1b1f;">Termin löschen?</div>
+      <div style="font-size:0.92rem;color:#49454f;line-height:1.45;margin-bottom:22px;">
+        Willst du das wirklich löschen?<br>
+        <span style="font-weight:700;color:#1c1b1f;display:inline-block;margin-top:6px;">„${title}“</span>
+      </div>
       <div style="display:flex;gap:10px;">
-        <button type="button" class="m3-btn-outline" style="flex:1;" onclick="closeModal()">Abbrechen</button>
-        <button type="button" class="m3-btn-primary" style="flex:1;background:#ba1a1a;color:#fff;border:none;" onclick="executeDeleteEvent(${id})">Löschen</button>
+        <button class="m3-btn-outline" style="flex:1;" onclick="closeModal()">Abbrechen</button>
+        <button class="m3-btn-primary" style="flex:1;background:#ba1a1a;box-shadow:0 2px 8px rgba(186,26,26,0.3);" onclick="doDelEvent(${eventId})">Löschen</button>
       </div>
     </div>
   `);
 }
 
-async function executeDeleteEvent(id) {
+async function doDelEvent(eventId) {
   closeModal();
   try {
-    await API.deleteEvent(id);
+    await API.deleteEvent(eventId);
     await loadCalEvents();
     renderCal();
     showToast('Termin gelöscht');
-  } catch (err) {
-    showToast(err.detail || 'Fehler beim Löschen');
+  } catch {
+    showToast('Fehler beim Löschen');
   }
 }
 </script>

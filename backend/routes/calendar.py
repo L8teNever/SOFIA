@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_, and_, func
 from backend.database import get_db
@@ -8,6 +8,7 @@ from backend.models.class_group import ClassGroup
 from backend.models.user import User
 from backend.schemas import CalendarEventOut, CalendarEventCreate, HolidayImportRequest
 from backend.services.holidays import GERMAN_STATES, fetch_holidays
+from backend.services.audit_service import log_audit
 from typing import List, Optional
 import logging
 
@@ -36,7 +37,7 @@ async def list_events(month: Optional[str] = None, db: AsyncSession = Depends(ge
 
 
 @router.post("/", response_model=CalendarEventOut)
-async def create_event(data: CalendarEventCreate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+async def create_event(request: Request, data: CalendarEventCreate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     event = CalendarEvent(
         title=data.title,
         date=data.date,
@@ -50,6 +51,16 @@ async def create_event(data: CalendarEventCreate, db: AsyncSession = Depends(get
     db.add(event)
     await db.commit()
     await db.refresh(event)
+
+    await log_audit(
+        db,
+        action="calendar.event_create",
+        user=current_user,
+        entity_type="calendar_event",
+        entity_id=event.id,
+        details={"title": event.title, "date": event.date, "type": event.event_type},
+        request=request,
+    )
 
     try:
         from backend.services.notification_scheduler import notify_new_event
@@ -157,7 +168,7 @@ async def delete_all_holidays(
 # --- Einzelne Termine bearbeiten & löschen ---
 
 @router.put("/{event_id}", response_model=CalendarEventOut)
-async def update_event(event_id: int, data: CalendarEventCreate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+async def update_event(request: Request, event_id: int, data: CalendarEventCreate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     result = await db.execute(select(CalendarEvent).where(CalendarEvent.id == event_id))
     event = result.scalar_one_or_none()
     if not event:
@@ -178,10 +189,21 @@ async def update_event(event_id: int, data: CalendarEventCreate, db: AsyncSessio
 
     await db.commit()
     await db.refresh(event)
+
+    await log_audit(
+        db,
+        action="calendar.event_update",
+        user=current_user,
+        entity_type="calendar_event",
+        entity_id=event.id,
+        details={"title": event.title, "date": event.date, "type": event.event_type},
+        request=request,
+    )
+
     return event
 
 @router.delete("/{event_id}")
-async def delete_event(event_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+async def delete_event(request: Request, event_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     result = await db.execute(select(CalendarEvent).where(CalendarEvent.id == event_id))
     event = result.scalar_one_or_none()
     if not event:
@@ -192,7 +214,20 @@ async def delete_event(event_id: int, db: AsyncSession = Depends(get_db), curren
         raise HTTPException(403, "Persönliche Termine können nur vom Ersteller gelöscht werden")
     if event.created_by != current_user.id and current_user.role not in ("admin", "super_admin"):
         raise HTTPException(403)
+    title = event.title
+    dt = event.date
     await db.delete(event)
     await db.commit()
+
+    await log_audit(
+        db,
+        action="calendar.event_delete",
+        user=current_user,
+        entity_type="calendar_event",
+        entity_id=event_id,
+        details={"title": title, "date": dt},
+        request=request,
+    )
+
     return {"ok": True}
 

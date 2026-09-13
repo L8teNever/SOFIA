@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from backend.database import get_db
@@ -6,6 +6,8 @@ from backend.auth import get_current_user, require_super_admin
 from backend.models.user import User, UserRole
 from backend.schemas import UserOut, UserUpdate, UserAdminUpdate, UserCreate
 from backend.config import settings
+from backend.services.virus_scanner import scan_file
+from backend.services.audit_service import log_audit
 from typing import List
 from PIL import Image, ImageOps
 import aiofiles, uuid, os, io
@@ -89,12 +91,16 @@ async def register_self(db: AsyncSession = Depends(get_db), current_user: User =
     return {"status": "already_registered", "user": UserOut.model_validate(current_user)}
 
 @router.post("/me/avatar", response_model=UserOut)
-async def upload_avatar(file: UploadFile = File(...), db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+async def upload_avatar(request: Request, file: UploadFile = File(...), db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     if not (file.content_type or "").startswith("image/"):
         raise HTTPException(400, "Nur Bilddateien erlaubt")
     raw = await file.read()
     if len(raw) > settings.max_file_size:
-        raise HTTPException(413, "Datei zu groß")
+        raise HTTPException(413, "Datei zu groß (max. 1 GB)")
+
+    # 1. Virenscanner
+    await scan_file(raw, file.filename or "avatar.webp", file.content_type)
+
     try:
         processed = _compress_avatar(raw)
     except Exception:
@@ -111,12 +117,33 @@ async def upload_avatar(file: UploadFile = File(...), db: AsyncSession = Depends
     current_user.avatar_url = f"/uploads/{AVATAR_DIR_NAME}/{filename}"
     await db.commit()
     await db.refresh(current_user)
+
+    await log_audit(
+        db,
+        action="user.avatar_upload",
+        user=current_user,
+        entity_type="user",
+        entity_id=current_user.id,
+        details={"filename": filename, "size": len(processed)},
+        request=request,
+    )
+
     return current_user
 
 @router.delete("/me/avatar", response_model=UserOut)
-async def delete_avatar(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+async def delete_avatar(request: Request, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     _delete_avatar_file(current_user.avatar_url)
     current_user.avatar_url = None
     await db.commit()
     await db.refresh(current_user)
+
+    await log_audit(
+        db,
+        action="user.avatar_delete",
+        user=current_user,
+        entity_type="user",
+        entity_id=current_user.id,
+        request=request,
+    )
+
     return current_user

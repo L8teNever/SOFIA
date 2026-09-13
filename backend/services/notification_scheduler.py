@@ -534,12 +534,27 @@ async def reminders_60s_poll_loop():
             logger.warning("Error in reminders_60s_poll_loop: %s", e)
         await asyncio.sleep(60)
 
+async def weekly_mealplan_cleanup_loop():
+    """Runs once every 6 hours to clean up old meal plan images from past weeks."""
+    while True:
+        try:
+            from backend.routes.mealplan import cleanup_past_mealplans
+            async with AsyncSessionLocal() as db:
+                cleaned = await cleanup_past_mealplans(db)
+                if cleaned.get("cleaned_files", 0) > 0:
+                    logger.info("Auto-Cleanup: %d alte Mensa-Bilder gelöscht (%d Bytes freigegeben)", cleaned["cleaned_files"], cleaned["freed_bytes"])
+        except Exception as e:
+            logger.warning("Error in weekly_mealplan_cleanup_loop: %s", e)
+        await asyncio.sleep(21600)  # Every 6 hours
+
 async def start_notification_scheduler():
-    """Starts both background tasks concurrently."""
+    """Starts background tasks concurrently."""
     t1 = asyncio.create_task(timetable_5min_poll_loop())
     t2 = asyncio.create_task(reminders_60s_poll_loop())
+    t3 = asyncio.create_task(weekly_mealplan_cleanup_loop())
     try:
-        await asyncio.gather(t1, t2)
+        await asyncio.gather(t1, t2, t3)
     except asyncio.CancelledError:
         t1.cancel()
         t2.cancel()
+        t3.cancel()

@@ -142,6 +142,8 @@ class GradeOut(BaseModel):
     label: Optional[str]
     note: Optional[str]
     date: Optional[str]
+    weight_type: Optional[str] = "exam"
+    weight: Optional[float] = 1.0
     class Config: from_attributes = True
 
 class GradeCreate(BaseModel):
@@ -150,6 +152,8 @@ class GradeCreate(BaseModel):
     label: Optional[str] = None
     note: Optional[str] = None
     date: Optional[str] = None
+    weight_type: Optional[str] = "exam"
+    weight: Optional[float] = 1.0
 
 # Shared Files
 class SharedFileOut(BaseModel):
@@ -254,4 +258,51 @@ class NotificationSettingUpdate(BaseModel):
     timetable_break_end_lead_minutes: Optional[int] = None
     timetable_end_of_day_summary: Optional[bool] = None
     timetable_end_of_day_delay_minutes: Optional[int] = None
+
+# Subject Weighting
+class SubjectWeightingCreate(BaseModel):
+    subject_id: int
+    exam_weight: float = 50.0
+    oral_weight: float = 50.0
+    planned_exams: int = 2
+
+class SubjectWeightingOut(BaseModel):
+    id: int
+    class_id: int
+    subject_id: int
+    exam_weight: float
+    oral_weight: float
+    planned_exams: int
+    updated_by: Optional[int] = None
+    updated_at: Optional[datetime] = None
+    class Config: from_attributes = True
+
+# Audit Log
+class AuditLogOut(BaseModel):
+    id: int
+    user_id: Optional[int] = None
+    username: Optional[str] = None
+    user_role: Optional[str] = None
+    action: str
+    entity_type: Optional[str] = None
+    entity_id: Optional[str] = None
+    details: Optional[str] = None
+    ip_address: Optional[str] = None
+    user_agent: Optional[str] = None
+    created_at: datetime
+    class Config: from_attributes = True
+
+# Storage Statistics
+class StorageCategoryStats(BaseModel):
+    bytes: int
+    files: int
+
+class StorageStatsOut(BaseModel):
+    total_bytes: int
+    total_files: int
+    db_bytes: int
+    categories: dict[str, StorageCategoryStats]
+    disk_total_bytes: int
+    disk_free_bytes: int
+
 

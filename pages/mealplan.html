@@ -408,8 +408,28 @@ function renderMealPlan(res) {
   if (window.lucide) lucide.createIcons();
 }
 
-async function deleteMealPlanConfirm() {
-  if (!mealPlan || !confirm('Diesen Essensplan wirklich löschen?')) return;
+function deleteMealPlanConfirm() {
+  if (!mealPlan) return;
+  openModal(`
+    <div style="text-align:center;padding:12px 6px 6px;">
+      <div style="width:54px;height:54px;border-radius:18px;background:#ffdad6;color:#ba1a1a;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;">
+        <i data-lucide="trash-2" style="width:26px;height:26px;"></i>
+      </div>
+      <div style="font-size:1.2rem;font-weight:800;margin-bottom:8px;color:#1c1b1f;">Speiseplan löschen?</div>
+      <div style="font-size:0.92rem;color:#49454f;line-height:1.45;margin-bottom:22px;">
+        Willst du diesen Speiseplan wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.
+      </div>
+      <div style="display:flex;gap:10px;">
+        <button class="m3-btn-outline" style="flex:1;" onclick="closeModal()">Abbrechen</button>
+        <button class="m3-btn-primary" style="flex:1;background:#ba1a1a;box-shadow:0 2px 8px rgba(186,26,26,0.3);" onclick="doDeleteMealPlan()">Löschen</button>
+      </div>
+    </div>
+  `);
+}
+
+async function doDeleteMealPlan() {
+  closeModal();
+  if (!mealPlan) return;
   try {
     await API.deleteMealPlan(mealPlan.id);
     mealPlan = null;

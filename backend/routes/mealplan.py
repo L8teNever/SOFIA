@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
@@ -9,6 +9,9 @@ from backend.models.user import User
 from backend.schemas import MealPlanOut, MealPlanDayOut, MealPlanDayUpdate
 from backend.config import settings
 from backend.gemini_client import extract_meal_days, GeminiError
+from backend.services.virus_scanner import scan_file
+from backend.services.compression import compress_lossless
+from backend.services.audit_service import log_audit
 from datetime import date, datetime, timedelta
 import os, uuid, aiofiles, asyncio, logging
 from typing import Optional
@@ -87,7 +90,9 @@ async def _get_plan(db: AsyncSession, plan_id: int) -> Optional[MealPlan]:
 
 @router.post("/upload")
 async def upload_meal_plan(
+    request: Request,
     file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     global upload_status
@@ -95,7 +100,15 @@ async def upload_meal_plan(
         raise HTTPException(400, "Nur Bilddateien erlaubt")
     raw = await file.read()
     if len(raw) > settings.max_file_size:
-        raise HTTPException(413, "Datei zu groß")
+        raise HTTPException(413, "Datei zu groß (max. 1 GB)")
+
+    # 1. Virenscanner
+    await scan_file(raw, file.filename or "mealplan.jpg", file.content_type)
+
+    # 2. Verlustfreie Komprimierung
+    raw, ext, mime = compress_lossless(raw, file.filename or "", file.content_type)
+    if not ext:
+        ext = os.path.splitext(file.filename or "")[1] or ".jpg"
 
     # If already processing within the last 90 seconds, reject concurrent uploads
     if upload_status["status"] == "processing" and upload_status.get("started_at"):
@@ -108,7 +121,6 @@ async def upload_meal_plan(
 
     plan_dir = os.path.join(settings.upload_dir, "mealplan")
     os.makedirs(plan_dir, exist_ok=True)
-    ext = os.path.splitext(file.filename or "")[1] or ".jpg"
     filename = f"{uuid.uuid4().hex}{ext}"
     async with aiofiles.open(os.path.join(plan_dir, filename), "wb") as out:
         await out.write(raw)
@@ -119,13 +131,58 @@ async def upload_meal_plan(
     upload_status["error"] = None
     upload_status["plan_id"] = None
 
-    asyncio.create_task(_process_meal_plan_background(raw, file.content_type, filename, current_user.id))
+    await log_audit(
+        db,
+        action="mealplan.upload",
+        user=current_user,
+        entity_type="meal_plan",
+        details={"filename": file.filename, "size": len(raw)},
+        request=request,
+    )
+
+    asyncio.create_task(_process_meal_plan_background(raw, mime or file.content_type, filename, current_user.id))
 
     return {
         "ok": True,
         "status": "processing",
         "message": "Foto hochgeladen! Die KI verarbeitet den Plan im Hintergrund.",
     }
+
+
+async def cleanup_past_mealplans(db: AsyncSession) -> dict:
+    """
+    Cleans up old meal plan image files from past weeks (older than the current week's Monday).
+    Preserves text meal records in the database, but deletes the heavy images from disk.
+    Homework files and attachments are strictly preserved and never touched.
+    """
+    today = date.today()
+    this_monday_str = (today - timedelta(days=today.weekday())).isoformat()
+
+    plans_res = await db.execute(select(MealPlan).options(selectinload(MealPlan.days)))
+    all_plans = plans_res.scalars().all()
+
+    cleaned_count = 0
+    freed_bytes = 0
+
+    for p in all_plans:
+        # Determine if all days of this plan are strictly before this week's Monday
+        dates = [d.date for d in p.days if d.date]
+        if dates and max(dates) < this_monday_str and p.image_url:
+            img_rel = p.image_url.lstrip("/")
+            full_path = os.path.join(".", img_rel)
+            if os.path.exists(full_path):
+                try:
+                    freed_bytes += os.path.getsize(full_path)
+                    os.remove(full_path)
+                    cleaned_count += 1
+                except OSError:
+                    pass
+            p.image_url = ""  # Mark image removed but keep text meal days intact
+
+    if cleaned_count > 0:
+        await db.commit()
+
+    return {"cleaned_files": cleaned_count, "freed_bytes": freed_bytes}
 
 
 @router.get("/status")

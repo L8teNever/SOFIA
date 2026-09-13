@@ -38,7 +38,8 @@ async def init_db():
     from backend.models import (
         user, class_group, subject, calendar_event, homework, homework_solution,
         grade, shared_file, notification, meal_plan,
-        push_subscription, notification_setting, sent_notification_log
+        push_subscription, notification_setting, sent_notification_log,
+        subject_weighting, audit_log
     )
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -65,6 +66,13 @@ async def _migrate_columns(conn):
     existing_cal = {row[1] for row in result_cal.fetchall()}
     if "end_date" not in existing_cal:
         await conn.execute(text("ALTER TABLE calendar_events ADD COLUMN end_date TEXT"))
+
+    result_gr = await conn.execute(text("PRAGMA table_info(grades)"))
+    existing_gr = {row[1] for row in result_gr.fetchall()}
+    if "weight_type" not in existing_gr:
+        await conn.execute(text("ALTER TABLE grades ADD COLUMN weight_type TEXT DEFAULT 'exam'"))
+    if "weight" not in existing_gr:
+        await conn.execute(text("ALTER TABLE grades ADD COLUMN weight FLOAT DEFAULT 1.0"))
 
     # Migrate legacy users.push_subscription into push_subscriptions table
     try:

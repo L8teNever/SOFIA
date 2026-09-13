@@ -12,6 +12,8 @@ class Grade(Base):
     label = Column(String, nullable=True)  # e.g. "Mathearbeit 1"
     note = Column(Text, nullable=True)
     date = Column(String, nullable=True)   # ISO date
+    weight_type = Column(String, default="exam")  # 'exam' (Klassenarbeit/Schriftlich) or 'oral' (Mündlich/Sonstige)
+    weight = Column(Float, default=1.0)           # Weight factor within type
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     user = relationship("User", back_populates="grades")

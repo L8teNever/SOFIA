@@ -64,7 +64,7 @@ class Settings:
     secret_key:        str           = os.getenv("SECRET_KEY", "dev-secret-key")
     encryption_key:    str           = os.getenv("ENCRYPTION_KEY", "")
     upload_dir:        str           = os.getenv("UPLOAD_DIR", "./uploads")
-    max_file_size:     int           = int(os.getenv("MAX_FILE_SIZE", "52428800"))
+    max_file_size:     int           = int(os.getenv("MAX_FILE_SIZE", "1073741824"))  # 1 GB
     dev_email:         Optional[str] = os.getenv("DEV_EMAIL")
     gemini_api_key:    str           = os.getenv("GEMINI_API_KEY", "")
     gemini_model:      str           = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")

@@ -21,6 +21,8 @@
         <button class="admin-tab-btn" onclick="adminTab('untis',this)" data-tab="untis">Untis</button>
         <button class="admin-tab-btn" onclick="adminTab('push',this)" data-tab="push">Push</button>
         <button class="admin-tab-btn" onclick="adminTab('holidays',this)" data-tab="holidays" id="tab-btn-holidays" style="display:none;">Schulferien</button>
+        <button class="admin-tab-btn" onclick="adminTab('storage',this)" data-tab="storage" id="tab-btn-storage" style="display:none;">Speicher</button>
+        <button class="admin-tab-btn" onclick="adminTab('audit',this)" data-tab="audit" id="tab-btn-audit" style="display:none;">Audit-Logs</button>
       </div>
     </div>
 
@@ -103,6 +105,65 @@
         <div id="holiday-preview-list"></div>
       </div>
 
+      <!-- Storage Tab -->
+      <div id="tab-storage" style="display:none;">
+        <div class="m3-card-tonal" style="background:#eaddff;color:#21005d;margin-bottom:14px;">
+          <div style="font-weight:800;font-size:1.1rem;margin-bottom:4px;display:flex;align-items:center;gap:8px;">
+            <i data-lucide="database" style="width:20px;height:20px;color:#6750a4;"></i>
+            Speicherplatz & Datenverwaltung
+          </div>
+          <div style="font-size:0.84rem;opacity:0.85;line-height:1.45;">
+            Übersicht über den Datenbestand auf dem Server. Alte Speiseplan-Bilder vergangener Wochen können bereinigt werden. <b style="color:#21005d;">Hausaufgaben und deren Anhänge bleiben dauerhaft erhalten.</b>
+          </div>
+        </div>
+
+        <div id="admin-storage-summary" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;"></div>
+        <div id="admin-storage-categories" style="margin-bottom:16px;"></div>
+
+        <div class="m3-card" style="border-radius:22px;padding:20px;">
+          <div style="font-weight:800;font-size:1.02rem;color:#1c1b1f;margin-bottom:6px;">Bereinigung von Mensaplan-Bildern</div>
+          <div style="font-size:0.84rem;color:#49454f;line-height:1.45;margin-bottom:14px;">
+            Sobald eine neue Schulwoche beginnt, werden Fotos alter Speisepläne nicht mehr benötigt. Mit einem Klick kannst du die Bilddateien alter Wochen restlos löschen, um Speicherplatz freizugeben. Die Textgerichte im Speiseplan bleiben erhalten.
+          </div>
+          <button class="m3-btn-primary" onclick="cleanupMealplansAction()" id="btn-cleanup-mealplans" style="background:#6750a4;display:inline-flex;align-items:center;gap:8px;">
+            <i data-lucide="sparkles" style="width:18px;height:18px;"></i>
+            Alte Mensa-Bilder jetzt bereinigen
+          </button>
+        </div>
+      </div>
+
+      <!-- Audit-Logs Tab -->
+      <div id="tab-audit" style="display:none;">
+        <div class="m3-card-tonal" style="background:#25232a;color:#ffffff;margin-bottom:14px;">
+          <div style="font-weight:800;font-size:1.1rem;margin-bottom:4px;display:flex;align-items:center;gap:8px;">
+            <i data-lucide="shield-check" style="width:20px;height:20px;color:#d0bcff;"></i>
+            Permanentes Super-Admin Audit-Log
+          </div>
+          <div style="font-size:0.84rem;opacity:0.85;line-height:1.45;">
+            Lückenlose Protokollierung aller Benutzeraktionen auf Sofia (Logins, Uploads, Änderungen, Löschungen). Diese Logs werden <b>niemals automatisch gelöscht</b>.
+          </div>
+        </div>
+
+        <div class="m3-card" style="margin-bottom:14px;padding:14px 16px;">
+          <div style="display:flex;gap:10px;flex-wrap:wrap;">
+            <input class="m3-input" id="audit-search" placeholder="Suche nach Benutzer, IP, Aktion oder Details..." oninput="debounceAuditSearch()" style="flex:2;min-width:200px;margin-bottom:0;">
+            <select class="m3-select" id="audit-action-filter" onchange="loadAuditLogs()" style="flex:1;min-width:140px;margin-bottom:0;">
+              <option value="">Alle Aktionen</option>
+              <option value="homework.">Hausaufgaben</option>
+              <option value="homework_solution.">Lösungen</option>
+              <option value="file.">Dateien</option>
+              <option value="calendar.">Kalender</option>
+              <option value="grade">Noten</option>
+              <option value="user.">Benutzer</option>
+              <option value="admin.">Admin</option>
+              <option value="security.">Sicherheit / Malware</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="audit-logs-list"></div>
+      </div>
+
     </div>
   </div>
 </div>
@@ -138,6 +199,11 @@ async function init_admin() {
         <div style="font-size:1.8rem;font-weight:700;">${stats.classes}</div>
         <div style="font-size:0.8rem;opacity:0.7;">Klassen</div>
       </div>`;
+
+    const storageBtn = document.getElementById('tab-btn-storage');
+    if (storageBtn) storageBtn.style.display = 'inline-block';
+    const auditBtn = document.getElementById('tab-btn-audit');
+    if (auditBtn) auditBtn.style.display = 'inline-block';
   }
 
   renderAdminUsers();
@@ -146,7 +212,7 @@ async function init_admin() {
 }
 
 function adminTab(tab, btn) {
-  ['users','classes','subjects','untis','push','holidays'].forEach(t => {
+  ['users','classes','subjects','untis','push','holidays','storage','audit'].forEach(t => {
     const el = document.getElementById('tab-'+t);
     if (el) el.style.display = t===tab?'block':'none';
   });
@@ -154,6 +220,8 @@ function adminTab(tab, btn) {
   btn.classList.add('active');
   if (tab === 'untis') renderUntisTab();
   if (tab === 'holidays') initHolidaysTab();
+  if (tab === 'storage') renderStorageTab();
+  if (tab === 'audit') loadAuditLogs();
 }
 
 async function renderUntisTab() {
@@ -581,4 +649,235 @@ async function deleteAllHolidaysAction() {
     if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
   }
 }
+
+// ---- Speicher & Datenverwaltung ----
+
+function formatBytes(bytes, decimals = 1) {
+  if (!bytes || bytes <= 0) return '0 B';
+  const k = 1024;
+  const dm = decimals < 0 ? 0 : decimals;
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+}
+
+async function renderStorageTab() {
+  const summaryEl = document.getElementById('admin-storage-summary');
+  const catEl = document.getElementById('admin-storage-categories');
+  if (!summaryEl || !catEl) return;
+
+  summaryEl.innerHTML = '<div style="grid-column:span 2;text-align:center;padding:20px;opacity:0.6;">Speicherdaten werden ermittelt…</div>';
+
+  try {
+    const stats = await API.storageStats();
+
+    summaryEl.innerHTML = `
+      <div class="m3-card-tonal" style="background:#eaddff;color:#21005d;border-radius:20px;padding:16px;text-align:center;">
+        <div style="font-size:1.7rem;font-weight:800;">${formatBytes(stats.total_bytes)}</div>
+        <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;opacity:0.75;margin-top:2px;">Uploads Gesamt</div>
+        <div style="font-size:0.72rem;opacity:0.65;margin-top:4px;">${stats.total_files} Dateien gespeichert</div>
+      </div>
+      <div class="m3-card-tonal" style="background:#c4eed0;color:#072711;border-radius:20px;padding:16px;text-align:center;">
+        <div style="font-size:1.7rem;font-weight:800;">${formatBytes(stats.disk_free_bytes)}</div>
+        <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;opacity:0.75;margin-top:2px;">Freier Festplattenspeicher</div>
+        <div style="font-size:0.72rem;opacity:0.65;margin-top:4px;">von ${formatBytes(stats.disk_total_bytes)} verfügbar</div>
+      </div>
+    `;
+
+    const hw = stats.categories.homework || { bytes: 0, files: 0 };
+    const mp = stats.categories.mealplan || { bytes: 0, files: 0 };
+    const av = stats.categories.avatars || { bytes: 0, files: 0 };
+    const fl = stats.categories.files || { bytes: 0, files: 0 };
+
+    catEl.innerHTML = `
+      <div class="m3-card" style="margin-bottom:8px;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;border-radius:18px;">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div style="width:38px;height:38px;border-radius:12px;background:#ffd8e4;color:#31111d;display:flex;align-items:center;justify-content:center;">
+            <i data-lucide="book-open" style="width:18px;height:18px;"></i>
+          </div>
+          <div>
+            <div style="font-weight:700;font-size:0.95rem;color:#1c1b1f;display:flex;align-items:center;gap:6px;">
+              <span>Hausaufgaben-Anhänge</span>
+              <span style="font-size:0.68rem;font-weight:700;background:#c4eed0;color:#072711;padding:1px 6px;border-radius:6px;">Dauerhaft gesichert</span>
+            </div>
+            <div style="font-size:0.75rem;color:#49454f;margin-top:2px;">${hw.files} Dateien gespeichert</div>
+          </div>
+        </div>
+        <div style="font-weight:800;font-size:1.05rem;color:#1c1b1f;">${formatBytes(hw.bytes)}</div>
+      </div>
+
+      <div class="m3-card" style="margin-bottom:8px;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;border-radius:18px;">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div style="width:38px;height:38px;border-radius:12px;background:#c4eed0;color:#072711;display:flex;align-items:center;justify-content:center;">
+            <i data-lucide="utensils" style="width:18px;height:18px;"></i>
+          </div>
+          <div>
+            <div style="font-weight:700;font-size:0.95rem;color:#1c1b1f;">Speiseplan-Bilder</div>
+            <div style="font-size:0.75rem;color:#49454f;margin-top:2px;">${mp.files} Fotos hochgeladen</div>
+          </div>
+        </div>
+        <div style="font-weight:800;font-size:1.05rem;color:#1c1b1f;">${formatBytes(mp.bytes)}</div>
+      </div>
+
+      <div class="m3-card" style="margin-bottom:8px;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;border-radius:18px;">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div style="width:38px;height:38px;border-radius:12px;background:#e8def8;color:#21005d;display:flex;align-items:center;justify-content:center;">
+            <i data-lucide="user" style="width:18px;height:18px;"></i>
+          </div>
+          <div>
+            <div style="font-weight:700;font-size:0.95rem;color:#1c1b1f;">Profilbilder (Avatare)</div>
+            <div style="font-size:0.75rem;color:#49454f;margin-top:2px;">${av.files} Bilder komprimiert</div>
+          </div>
+        </div>
+        <div style="font-weight:800;font-size:1.05rem;color:#1c1b1f;">${formatBytes(av.bytes)}</div>
+      </div>
+
+      <div class="m3-card" style="margin-bottom:8px;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;border-radius:18px;">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div style="width:38px;height:38px;border-radius:12px;background:#ffdec1;color:#442b00;display:flex;align-items:center;justify-content:center;">
+            <i data-lucide="folder" style="width:18px;height:18px;"></i>
+          </div>
+          <div>
+            <div style="font-weight:700;font-size:0.95rem;color:#1c1b1f;">Geteilte Dateien (Drive / Quickshare)</div>
+            <div style="font-size:0.75rem;color:#49454f;margin-top:2px;">${fl.files} geteilte Dateien</div>
+          </div>
+        </div>
+        <div style="font-weight:800;font-size:1.05rem;color:#1c1b1f;">${formatBytes(fl.bytes)}</div>
+      </div>
+
+      <div class="m3-card" style="margin-bottom:8px;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;border-radius:18px;">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div style="width:38px;height:38px;border-radius:12px;background:#eaddff;color:#21005d;display:flex;align-items:center;justify-content:center;">
+            <i data-lucide="database" style="width:18px;height:18px;"></i>
+          </div>
+          <div>
+            <div style="font-weight:700;font-size:0.95rem;color:#1c1b1f;">Datenbankgröße (SQLite / Index)</div>
+            <div style="font-size:0.75rem;color:#49454f;margin-top:2px;">Systemdatenbank</div>
+          </div>
+        </div>
+        <div style="font-weight:800;font-size:1.05rem;color:#1c1b1f;">${formatBytes(stats.db_bytes)}</div>
+      </div>
+    `;
+    if (window.lucide) lucide.createIcons();
+  } catch (err) {
+    summaryEl.innerHTML = '<div style="grid-column:span 2;color:#ba1a1a;text-align:center;padding:16px;">Fehler beim Laden der Speicherstatistik</div>';
+  }
+}
+
+async function cleanupMealplansAction() {
+  const btn = document.getElementById('btn-cleanup-mealplans');
+  if (btn) { btn.disabled = true; btn.style.opacity = '0.6'; }
+  try {
+    const res = await API.cleanupMealplans();
+    showToast(`${res.cleaned_files || 0} alte Mensabild(er) bereinigt (${formatBytes(res.freed_bytes || 0)} freigegeben)`);
+    await renderStorageTab();
+  } catch (err) {
+    showToast(err.detail || 'Fehler bei der Bereinigung');
+  } finally {
+    if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
+  }
+}
+
+// ---- Super-Admin Audit-Logs ----
+
+let auditDebounceTimer = null;
+let currentAuditLogs = [];
+
+function debounceAuditSearch() {
+  clearTimeout(auditDebounceTimer);
+  auditDebounceTimer = setTimeout(loadAuditLogs, 350);
+}
+
+async function loadAuditLogs() {
+  const listEl = document.getElementById('audit-logs-list');
+  if (!listEl) return;
+
+  const search = document.getElementById('audit-search')?.value.trim() || '';
+  const actionPrefix = document.getElementById('audit-action-filter')?.value || '';
+
+  listEl.innerHTML = '<div style="text-align:center;padding:30px;opacity:0.6;font-size:0.85rem;">Audit-Logs werden geladen…</div>';
+
+  const params = { limit: 100, offset: 0 };
+  if (search) params.search = search;
+  if (actionPrefix) params.action = actionPrefix;
+
+  try {
+    currentAuditLogs = await API.auditLogs(params);
+    if (!currentAuditLogs.length) {
+      listEl.innerHTML = '<div class="m3-card" style="opacity:0.6;text-align:center;padding:28px;">Keine Log-Einträge gefunden</div>';
+      return;
+    }
+
+    listEl.innerHTML = currentAuditLogs.map((log, idx) => {
+      const dt = new Date(log.created_at).toLocaleString('de-DE', {
+        day: '2-digit', month: '2-digit', year: 'numeric',
+        hour: '2-digit', minute: '2-digit', second: '2-digit'
+      });
+
+      let badgeColor = '#6750a4';
+      let badgeBg = '#f3edf7';
+      if (log.action.includes('delete')) {
+        badgeColor = '#ba1a1a'; badgeBg = '#ffdad6';
+      } else if (log.action.includes('create') || log.action.includes('upload')) {
+        badgeColor = '#006d3a'; badgeBg = '#c4eed0';
+      } else if (log.action.includes('security') || log.action.includes('malware')) {
+        badgeColor = '#ffffff'; badgeBg = '#ba1a1a';
+      } else if (log.action.includes('login')) {
+        badgeColor = '#006399'; badgeBg = '#d3e3fd';
+      }
+
+      const userStr = log.username ? `${escapeHtml(log.username)}` : 'System / Unbekannt';
+      const roleBadge = log.user_role ? `<span style="font-size:0.65rem;background:rgba(0,0,0,0.06);padding:1px 5px;border-radius:4px;">${log.user_role}</span>` : '';
+
+      return `
+        <div class="m3-card" style="margin-bottom:8px;padding:12px 14px;border-radius:16px;cursor:pointer;" onclick="openAuditDetail(${idx})">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px;flex-wrap:wrap;">
+            <div style="display:flex;align-items:center;gap:6px;">
+              <span style="font-size:0.75rem;font-weight:800;color:${badgeColor};background:${badgeBg};padding:2px 8px;border-radius:8px;">${log.action}</span>
+              <span style="font-weight:700;font-size:0.88rem;color:#1c1b1f;">${userStr}</span>
+              ${roleBadge}
+            </div>
+            <div style="font-size:0.72rem;color:#79747e;">${dt}</div>
+          </div>
+          <div style="font-size:0.8rem;color:#49454f;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+            ${escapeHtml(log.details || log.entity_type || 'Keine Zusatzdetails')}
+          </div>
+          <div style="font-size:0.7rem;color:#938f99;margin-top:3px;display:flex;align-items:center;gap:10px;">
+            <span>IP: ${log.ip_address || '–'}</span>
+          </div>
+        </div>
+      `;
+    }).join('');
+    if (window.lucide) lucide.createIcons();
+  } catch (err) {
+    listEl.innerHTML = '<div class="m3-card" style="color:#ba1a1a;text-align:center;padding:20px;">Fehler beim Laden der Audit-Logs</div>';
+  }
+}
+
+function openAuditDetail(idx) {
+  const log = currentAuditLogs[idx];
+  if (!log) return;
+
+  const dt = new Date(log.created_at).toLocaleString('de-DE');
+  openModal(`
+    <div style="padding:10px 4px 4px;">
+      <div style="font-size:1.15rem;font-weight:800;color:#1c1b1f;margin-bottom:6px;">Audit-Log Details</div>
+      <div style="font-size:0.78rem;color:#79747e;margin-bottom:14px;">Ereignis #${log.id} · ${dt}</div>
+
+      <div style="background:#f3edf7;border-radius:14px;padding:12px;font-size:0.82rem;line-height:1.6;margin-bottom:12px;">
+        <div><b>Aktion:</b> <span style="color:#6750a4;font-weight:700;">${log.action}</span></div>
+        <div><b>Benutzer:</b> ${escapeHtml(log.username || '–')} (ID: ${log.user_id || '–'}, Rolle: ${log.user_role || '–'})</div>
+        <div><b>Entität:</b> ${log.entity_type || '–'} ${log.entity_id ? `(ID: ${log.entity_id})` : ''}</div>
+        <div><b>IP-Adresse:</b> ${log.ip_address || '–'}</div>
+        <div><b>Gerät (User-Agent):</b> <span style="font-size:0.72rem;word-break:break-all;">${escapeHtml(log.user_agent || '–')}</span></div>
+      </div>
+
+      <div style="font-size:0.78rem;font-weight:700;color:#49454f;margin-bottom:4px;">Daten / Details:</div>
+      <pre style="background:#1c1b1f;color:#e6e1e5;padding:10px;border-radius:12px;font-size:0.75rem;overflow-x:auto;max-height:180px;white-space:pre-wrap;word-break:break-all;">${escapeHtml(log.details || 'Keine Daten')}</pre>
+
+      <button class="m3-btn-full" onclick="closeModal()" style="margin-top:16px;">Schließen</button>
+    </div>
+  `);
+}
 </script>
+

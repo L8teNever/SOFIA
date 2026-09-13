@@ -86,4 +86,9 @@ const API = {
   notificationSettings:       () => API.get('/notifications/settings'),
   updateNotificationSettings: (d) => API.put('/notifications/settings', d),
   adminStats:    ()       => API.get('/admin/stats'),
+  weightings:    ()       => API.get('/grades/weightings'),
+  setWeighting:  (d)      => API.post('/grades/weightings', d),
+  storageStats:  ()       => API.get('/admin/storage-stats'),
+  cleanupMealplans: ()    => API.post('/admin/cleanup-mealplans'),
+  auditLogs:     (p)      => API.get('/admin/audit-logs' + (p ? `?${new URLSearchParams(p)}` : '')),
 };

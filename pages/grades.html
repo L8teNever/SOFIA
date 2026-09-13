@@ -1,10 +1,14 @@
 <div class="page" id="page-grades" style="background:#f4f8ff;">
-  <div class="page-header">
-    <button class="back-btn"><i data-lucide="arrow-left" style="width:22px;height:22px;"></i></button>
+  <div class="page-header" style="display:flex;align-items:center;gap:12px;">
+    <button class="back-btn" title="Zurück"><i data-lucide="arrow-left" style="width:22px;height:22px;"></i></button>
     <div style="flex:1;">
       <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.5;color:#041e49;">Halbjahr 2 · 2025/26</div>
       <span class="page-title" style="color:#041e49;">Noten</span>
     </div>
+    <!-- Settings icon for shared class grade weightings -->
+    <button onclick="openGradeWeightingSheet()" class="icon-btn" title="Notenspiegel & Gewichtung anpassen" style="width:44px;height:44px;border-radius:14px;background:#e8def8;color:#21005d;">
+      <i data-lucide="sliders-horizontal" style="width:20px;height:20px;"></i>
+    </button>
   </div>
   <div class="page-scroll">
     <div id="grades-summary"></div>
@@ -14,17 +18,21 @@
       <div style="font-weight:600;">Noch keine Noten</div>
     </div>
   </div>
-  <button class="fab" onclick="openGradeSheet()">
+  <button class="fab" onclick="openGradeSheet()" title="Note eintragen">
     <i data-lucide="plus" style="width:24px;height:24px;"></i>
   </button>
 </div>
+
 <script>
-let gradeItems = [], gradeSubjects = [];
+var gradeItems = [];
+var gradeSubjects = [];
+var gradeWeightings = [];
 
 async function init_grades() {
-  [gradeItems, gradeSubjects] = await Promise.all([
+  [gradeItems, gradeSubjects, gradeWeightings] = await Promise.all([
     API.grades().catch(() => []),
     API.subjects().catch(() => []),
+    API.weightings().catch(() => []),
   ]);
   renderGrades();
 }
@@ -45,10 +53,41 @@ function gradeTextColor(v) {
   return '#410e0b';
 }
 
+function getSubjectWeighting(subjectId) {
+  const found = gradeWeightings.find(w => w.subject_id === subjectId);
+  return found || { exam_weight: 50.0, oral_weight: 50.0, planned_exams: 2 };
+}
+
+function computeSubjectAverage(grades, weighting) {
+  if (!grades.length) return 0;
+
+  const exams = grades.filter(g => (g.weight_type || 'exam') === 'exam');
+  const orals = grades.filter(g => (g.weight_type || 'exam') === 'oral');
+
+  const avgExam = exams.length ? exams.reduce((s, g) => s + (g.value * (g.weight || 1.0)), 0) / exams.reduce((s, g) => s + (g.weight || 1.0), 0) : null;
+  const avgOral = orals.length ? orals.reduce((s, g) => s + (g.value * (g.weight || 1.0)), 0) / orals.reduce((s, g) => s + (g.weight || 1.0), 0) : null;
+
+  if (avgExam !== null && avgOral !== null) {
+    const totalW = weighting.exam_weight + weighting.oral_weight;
+    if (totalW > 0) {
+      return (avgExam * weighting.exam_weight + avgOral * weighting.oral_weight) / totalW;
+    }
+  } else if (avgExam !== null) {
+    return avgExam;
+  } else if (avgOral !== null) {
+    return avgOral;
+  }
+
+  return grades.reduce((s, g) => s + g.value, 0) / grades.length;
+}
+
 function renderGrades() {
   const subMap = Object.fromEntries(gradeSubjects.map(s => [s.id, s]));
   const bySubject = {};
-  gradeItems.forEach(g => { if (!bySubject[g.subject_id]) bySubject[g.subject_id] = []; bySubject[g.subject_id].push(g); });
+  gradeItems.forEach(g => {
+    if (!bySubject[g.subject_id]) bySubject[g.subject_id] = [];
+    bySubject[g.subject_id].push(g);
+  });
 
   if (!gradeItems.length) {
     document.getElementById('grades-summary').innerHTML = '';
@@ -58,81 +97,258 @@ function renderGrades() {
   }
   document.getElementById('grades-empty').style.display = 'none';
 
-  const total = gradeItems.reduce((s,g) => s+g.value, 0) / gradeItems.length;
+  // Overall average across subjects
+  const subjectAverages = Object.entries(bySubject).map(([sid, grades]) => {
+    const weighting = getSubjectWeighting(parseInt(sid, 10));
+    return computeSubjectAverage(grades, weighting);
+  });
+  const total = subjectAverages.reduce((s, a) => s + a, 0) / (subjectAverages.length || 1);
 
-  // Build bar chart from last 7 grades (oldest→newest)
-  const last7 = [...gradeItems].sort((a,b) => (a.date||'').localeCompare(b.date||'')).slice(-7);
-  const barMax = 6;
+  // Build bar chart from last 7 grades
+  const last7 = [...gradeItems].sort((a, b) => (a.date || '').localeCompare(b.date || '')).slice(-7);
   const bars = last7.map(g => {
-    const pct = Math.round((1 - (g.value-1)/5) * 90 + 10);
+    const pct = Math.round((1 - (g.value - 1) / 5) * 90 + 10);
     return '<div style="flex:1;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:4px;">'
-      + '<div style="width:100%;border-radius:6px 6px 3px 3px;background:rgba(255,255,255,' + (g===last7[last7.length-1]?'1':'0.45') + ');height:' + pct + '%;"></div>'
+      + '<div style="width:100%;border-radius:6px 6px 3px 3px;background:rgba(255,255,255,' + (g === last7[last7.length - 1] ? '1' : '0.45') + ');height:' + pct + '%;"></div>'
       + '</div>';
   }).join('');
 
   document.getElementById('grades-summary').innerHTML =
-    '<div style="background:#21005d;color:white;border-radius:28px;padding:28px 28px 24px;margin-bottom:12px;">'
+    '<div style="background:#041e49;color:white;border-radius:28px;padding:26px 26px 22px;margin-bottom:14px;box-shadow:0 4px 16px rgba(4,30,73,0.2);">'
     + '<div style="display:flex;align-items:flex-start;justify-content:space-between;">'
     + '<div>'
-    + '<div style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;opacity:0.6;">Notenschnitt</div>'
-    + '<div style="font-size:4.5rem;font-weight:800;line-height:1;margin-top:6px;">' + total.toFixed(1) + '</div>'
-    + '<div style="display:flex;align-items:center;gap:6px;margin-top:10px;font-size:0.82rem;opacity:0.75;">'
-    + '<i data-lucide="trending-up" style="width:15px;height:15px;"></i><span>' + gradeItems.length + ' Noten · ' + Object.keys(bySubject).length + ' Fächer</span>'
+    + '<div style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;opacity:0.65;">Gesamt-Notenschnitt</div>'
+    + '<div style="font-size:4.2rem;font-weight:800;line-height:1;margin-top:6px;">' + total.toFixed(1) + '</div>'
+    + '<div style="display:flex;align-items:center;gap:6px;margin-top:10px;font-size:0.82rem;opacity:0.8;">'
+    + '<i data-lucide="trending-up" style="width:15px;height:15px;"></i><span>' + gradeItems.length + ' Noten in ' + Object.keys(bySubject).length + ' Fächern</span>'
     + '</div>'
     + '</div>'
+    + '<button onclick="openGradeWeightingSheet()" style="background:rgba(255,255,255,0.14);border:none;color:white;padding:8px 14px;border-radius:14px;font-size:0.75rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;">'
+    + '<i data-lucide="sliders-horizontal" style="width:14px;height:14px;"></i> Notenspiegel</button>'
     + '</div>'
-    + (last7.length ? '<div style="display:flex;align-items:flex-end;gap:4px;height:56px;margin-top:20px;">' + bars + '</div>' : '')
+    + (last7.length ? '<div style="display:flex;align-items:flex-end;gap:4px;height:52px;margin-top:18px;">' + bars + '</div>' : '')
     + '</div>';
 
   document.getElementById('grades-by-subject').innerHTML = Object.entries(bySubject).map(([sid, grades]) => {
-    const sub = subMap[sid] || {name:'Unbekannt',color:'#eaddff'};
-    const avg = grades.reduce((s,g)=>s+g.value,0)/grades.length;
-    const ac = gradeColor(avg); const atc = gradeTextColor(avg);
-    return '<div class="m3-card">'
-      + '<div style="display:flex;align-items:center;gap:14px;margin-bottom:14px;">'
-      + '<div style="width:40px;height:40px;border-radius:14px;background:' + (sub.color||'#eaddff') + ';flex-shrink:0;display:flex;align-items:center;justify-content:center;">'
-      + '<div style="width:10px;height:10px;border-radius:50%;background:' + (gradeTextColor(avg)) + ';opacity:0.6;"></div></div>'
-      + '<span style="font-weight:700;flex:1;font-size:1rem;">' + sub.name + '</span>'
-      + '<span style="background:' + ac + ';color:' + atc + ';padding:8px 14px;border-radius:14px;font-weight:800;font-size:1.1rem;">Ø ' + avg.toFixed(1) + '</span>'
+    const sIdNum = parseInt(sid, 10);
+    const sub = subMap[sIdNum] || { name: 'Unbekannt', color: '#eaddff' };
+    const weighting = getSubjectWeighting(sIdNum);
+    const avg = computeSubjectAverage(grades, weighting);
+    const ac = gradeColor(avg);
+    const atc = gradeTextColor(avg);
+
+    const examCount = grades.filter(g => (g.weight_type || 'exam') === 'exam').length;
+    const oralCount = grades.filter(g => (g.weight_type || 'exam') === 'oral').length;
+
+    return '<div class="m3-card" style="border-radius:24px;margin-bottom:14px;padding:18px 20px;box-shadow:0 1px 4px rgba(0,0,0,0.05);">'
+      + '<div style="display:flex;align-items:center;gap:14px;margin-bottom:8px;">'
+      + '<div style="width:40px;height:40px;border-radius:14px;background:' + (sub.color || '#eaddff') + ';flex-shrink:0;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:0.95rem;color:#1c1b1f;">'
+      + (sub.short_name || sub.name.slice(0, 2)) + '</div>'
+      + '<div style="flex:1;min-width:0;">'
+      + '<div style="font-weight:800;font-size:1.05rem;color:#1c1b1f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escapeHtml(sub.name) + '</div>'
+      + '<div style="font-size:0.75rem;color:#49454f;margin-top:2px;">'
+      + 'Arbeiten: <b>' + examCount + (weighting.planned_exams ? '/' + weighting.planned_exams : '') + '</b> (' + Math.round(weighting.exam_weight) + '%) · Mündlich: <b>' + oralCount + '</b> (' + Math.round(weighting.oral_weight) + '%)'
+      + '</div>'
+      + '</div>'
+      + '<span style="background:' + ac + ';color:' + atc + ';padding:8px 14px;border-radius:14px;font-weight:800;font-size:1.15rem;flex-shrink:0;">Ø ' + avg.toFixed(1) + '</span>'
       + '</div>'
       + grades.map(g => {
-          const c = gradeColor(g.value); const tc = gradeTextColor(g.value);
+          const c = gradeColor(g.value);
+          const tc = gradeTextColor(g.value);
+          const isExam = (g.weight_type || 'exam') === 'exam';
+          const typeBadge = isExam
+            ? '<span style="font-size:0.68rem;font-weight:700;color:#ba1a1a;background:#ffdad6;padding:2px 7px;border-radius:6px;">Arbeit</span>'
+            : '<span style="font-size:0.68rem;font-weight:700;color:#006399;background:#d3e3fd;padding:2px 7px;border-radius:6px;">Mündlich</span>';
+
           return '<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid rgba(0,0,0,0.05);">'
-            + '<div style="background:' + c + ';color:' + tc + ';width:44px;height:44px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:1.15rem;flex-shrink:0;">'
-            + (g.value%1===0?g.value:g.value.toFixed(1)) + '</div>'
-            + '<div style="flex:1;"><div style="font-weight:600;">' + (g.label||'Note') + '</div>'
-            + (g.date?'<div style="font-size:0.75rem;opacity:0.45;margin-top:1px;">'+new Date(g.date+'T00:00').toLocaleDateString('de-DE')+'</div>':'')
+            + '<div style="background:' + c + ';color:' + tc + ';width:42px;height:42px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:1.15rem;flex-shrink:0;">'
+            + (g.value % 1 === 0 ? g.value : g.value.toFixed(1)) + '</div>'
+            + '<div style="flex:1;min-width:0;">'
+            + '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">'
+            + '<span style="font-weight:700;font-size:0.92rem;color:#1c1b1f;">' + escapeHtml(g.label || 'Note') + '</span>'
+            + typeBadge
             + '</div>'
-            + '<button onclick="deleteGrade('+g.id+')" style="background:rgba(0,0,0,0.05);border:none;border-radius:10px;width:32px;height:32px;cursor:pointer;display:flex;align-items:center;justify-content:center;">'
-            + '<i data-lucide="trash-2" style="width:14px;height:14px;opacity:0.4;"></i></button>'
+            + (g.date ? '<div style="font-size:0.75rem;color:#79747e;margin-top:1px;">' + new Date(g.date + 'T00:00').toLocaleDateString('de-DE') + '</div>' : '')
+            + '</div>'
+            + '<button onclick="confirmDeleteGrade(' + g.id + ', \'' + escapeHtml(g.label || 'Note') + '\')" class="ev-action-btn delete" title="Note löschen">'
+            + '<i data-lucide="trash-2" style="width:15px;height:15px;"></i></button>'
             + '</div>';
         }).join('')
       + '</div>';
   }).join('');
+
   if (window.lucide) lucide.createIcons();
 }
 
-async function deleteGrade(id) {
-  await API.deleteGrade(id).catch(()=>{showToast('Fehler');return;});
-  gradeItems = gradeItems.filter(g=>g.id!==id); renderGrades(); showToast('Note geloescht');
+function confirmDeleteGrade(id, label) {
+  openModal(`
+    <div style="text-align:center;padding:12px 6px 6px;">
+      <div style="width:54px;height:54px;border-radius:18px;background:#ffdad6;color:#ba1a1a;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;">
+        <i data-lucide="trash-2" style="width:26px;height:26px;"></i>
+      </div>
+      <div style="font-size:1.2rem;font-weight:800;margin-bottom:8px;color:#1c1b1f;">Note löschen?</div>
+      <div style="font-size:0.92rem;color:#49454f;line-height:1.45;margin-bottom:22px;">
+        Willst du diese Note wirklich löschen?<br>
+        <span style="font-weight:700;color:#1c1b1f;display:inline-block;margin-top:6px;">„${label}“</span>
+      </div>
+      <div style="display:flex;gap:10px;">
+        <button class="m3-btn-outline" style="flex:1;" onclick="closeModal()">Abbrechen</button>
+        <button class="m3-btn-primary" style="flex:1;background:#ba1a1a;box-shadow:0 2px 8px rgba(186,26,26,0.3);" onclick="doDeleteGrade(${id})">Löschen</button>
+      </div>
+    </div>
+  `);
+}
+
+async function doDeleteGrade(id) {
+  closeModal();
+  try {
+    await API.deleteGrade(id);
+    gradeItems = gradeItems.filter(g => g.id !== id);
+    renderGrades();
+    showToast('Note gelöscht');
+  } catch {
+    showToast('Fehler beim Löschen');
+  }
 }
 
 function openGradeSheet() {
-  openSheet('<div class="sheet-title">Note eintragen</div>'
-    + '<select class="m3-select" id="g-subject">' + gradeSubjects.map(s=>'<option value="'+s.id+'">'+s.name+'</option>').join('') + '</select>'
-    + '<input class="m3-input" id="g-value" type="number" step="0.5" min="1" max="6" placeholder="Note (1-6)">'
-    + '<input class="m3-input" id="g-label" placeholder="Bezeichnung (z.B. Mathearbeit 1)">'
-    + '<input class="m3-input" id="g-date" type="date" value="' + new Date().toISOString().slice(0,10) + '">'
-    + '<button class="m3-btn-full" onclick="saveGrade()">Speichern</button>');
+  const subOpts = gradeSubjects.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+
+  openSheet(`
+    <div class="sheet-title" style="font-size:1.25rem;font-weight:800;color:#1c1b1f;margin-bottom:16px;">Note eintragen</div>
+    
+    <label style="font-size:0.78rem;font-weight:700;color:#6750a4;display:block;margin-bottom:4px;margin-left:4px;">Fach:</label>
+    <select class="m3-select" id="g-subject">${subOpts}</select>
+
+    <label style="font-size:0.78rem;font-weight:700;color:#6750a4;display:block;margin-bottom:4px;margin-left:4px;">Notenart:</label>
+    <select class="m3-select" id="g-weight-type">
+      <option value="exam">Klassenarbeit (Schriftlich)</option>
+      <option value="oral">Mündlich / Sonstige Mitarbeit</option>
+    </select>
+
+    <label style="font-size:0.78rem;font-weight:700;color:#6750a4;display:block;margin-bottom:4px;margin-left:4px;">Note:</label>
+    <input class="m3-input" id="g-value" type="number" step="0.25" min="1" max="6" placeholder="Note (1.0 bis 6.0)">
+
+    <label style="font-size:0.78rem;font-weight:700;color:#6750a4;display:block;margin-bottom:4px;margin-left:4px;">Bezeichnung:</label>
+    <input class="m3-input" id="g-label" placeholder="z. B. 2. Klassenarbeit, Referat, Vokabeltest...">
+
+    <label style="font-size:0.78rem;font-weight:700;color:#6750a4;display:block;margin-bottom:4px;margin-left:4px;">Datum:</label>
+    <input class="m3-input" id="g-date" type="date" value="${new Date().toISOString().slice(0, 10)}">
+
+    <div style="display:flex;gap:10px;margin-top:16px;">
+      <button type="button" class="m3-btn-outline" style="flex:1;" onclick="closeSheet()">Abbrechen</button>
+      <button type="button" class="m3-btn-primary" style="flex:2;" onclick="saveGrade()">Speichern</button>
+    </div>
+  `);
 }
 
 async function saveGrade() {
   const value = parseFloat(document.getElementById('g-value').value);
-  const subject_id = parseInt(document.getElementById('g-subject').value);
-  if (!value||value<1||value>6) { showToast('Gueltige Note (1-6)'); return; }
+  const subject_id = parseInt(document.getElementById('g-subject').value, 10);
+  const weight_type = document.getElementById('g-weight-type')?.value || 'exam';
+  const label = document.getElementById('g-label').value.trim() || null;
+  const date = document.getElementById('g-date').value || null;
+
+  if (isNaN(value) || value < 1 || value > 6) {
+    showToast('Bitte eine gültige Note zwischen 1.0 und 6.0 eingeben');
+    return;
+  }
+
   try {
-    const g = await API.createGrade({subject_id,value,label:document.getElementById('g-label').value||null,date:document.getElementById('g-date').value||null});
-    gradeItems.unshift(g); closeSheet(); renderGrades(); showToast('Note gespeichert');
-  } catch { showToast('Fehler'); }
+    const g = await API.createGrade({ subject_id, value, label, date, weight_type, weight: 1.0 });
+    gradeItems.unshift(g);
+    closeSheet();
+    renderGrades();
+    showToast('Note gespeichert');
+  } catch {
+    showToast('Fehler beim Speichern');
+  }
+}
+
+function openGradeWeightingSheet() {
+  if (!gradeSubjects.length) {
+    showToast('Keine Fächer verfügbar');
+    return;
+  }
+
+  const subOpts = gradeSubjects.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+  const firstId = gradeSubjects[0].id;
+  const initialWeighting = getSubjectWeighting(firstId);
+
+  openSheet(`
+    <div class="sheet-title" style="font-size:1.25rem;font-weight:800;color:#1c1b1f;margin-bottom:12px;">Notenspiegel & Gewichtung</div>
+    
+    <div style="background:#ede7f6;color:#21005d;padding:12px 14px;border-radius:16px;font-size:0.82rem;line-height:1.45;margin-bottom:16px;display:flex;align-items:flex-start;gap:10px;">
+      <i data-lucide="users" style="width:18px;height:18px;flex-shrink:0;margin-top:2px;"></i>
+      <span><b>Klassenweit einheitlich:</b> Einstellungen für ein Fach gelten automatisch für alle Mitschüler aus deiner Klasse.</span>
+    </div>
+
+    <label style="font-size:0.78rem;font-weight:700;color:#6750a4;display:block;margin-bottom:4px;margin-left:4px;">Fach auswählen:</label>
+    <select class="m3-select" id="gw-subject" onchange="onWeightingSubjectChange()">${subOpts}</select>
+
+    <div style="background:#ffffff;border-radius:18px;padding:14px;border:1px solid rgba(103,80,164,0.15);margin:14px 0;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <span style="font-weight:700;font-size:0.88rem;color:#ba1a1a;">Klassenarbeiten:</span>
+        <span id="gw-exam-label" style="font-weight:800;font-size:1rem;color:#ba1a1a;">${Math.round(initialWeighting.exam_weight)} %</span>
+      </div>
+      <input type="range" id="gw-slider" min="10" max="90" step="5" value="${Math.round(initialWeighting.exam_weight)}" oninput="syncWeightingSlider(this.value)" style="width:100%;accent-color:#6750a4;cursor:pointer;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;">
+        <span style="font-weight:700;font-size:0.88rem;color:#006399;">Mündlich / Sonstige:</span>
+        <span id="gw-oral-label" style="font-weight:800;font-size:1rem;color:#006399;">${Math.round(initialWeighting.oral_weight)} %</span>
+      </div>
+    </div>
+
+    <label style="font-size:0.78rem;font-weight:700;color:#6750a4;display:block;margin-bottom:4px;margin-left:4px;">Geplante Klassenarbeiten im Halbjahr:</label>
+    <input class="m3-input" id="gw-planned" type="number" min="1" max="10" value="${initialWeighting.planned_exams || 2}" placeholder="Anzahl z. B. 2 oder 3">
+
+    <div style="display:flex;gap:10px;margin-top:16px;">
+      <button type="button" class="m3-btn-outline" style="flex:1;" onclick="closeSheet()">Abbrechen</button>
+      <button type="button" class="m3-btn-primary" style="flex:2;" onclick="saveGradeWeighting()">Für Klasse speichern</button>
+    </div>
+  `);
+}
+
+function syncWeightingSlider(val) {
+  const examW = parseInt(val, 10);
+  const oralW = 100 - examW;
+  document.getElementById('gw-exam-label').textContent = `${examW} %`;
+  document.getElementById('gw-oral-label').textContent = `${oralW} %`;
+}
+
+function onWeightingSubjectChange() {
+  const sid = parseInt(document.getElementById('gw-subject').value, 10);
+  const w = getSubjectWeighting(sid);
+  const slider = document.getElementById('gw-slider');
+  const planned = document.getElementById('gw-planned');
+  if (slider) {
+    slider.value = Math.round(w.exam_weight);
+    syncWeightingSlider(slider.value);
+  }
+  if (planned) {
+    planned.value = w.planned_exams || 2;
+  }
+}
+
+async function saveGradeWeighting() {
+  const subject_id = parseInt(document.getElementById('gw-subject').value, 10);
+  const exam_weight = parseFloat(document.getElementById('gw-slider').value);
+  const oral_weight = 100 - exam_weight;
+  const planned_exams = parseInt(document.getElementById('gw-planned').value, 10) || 2;
+
+  try {
+    const updated = await API.setWeighting({ subject_id, exam_weight, oral_weight, planned_exams });
+    // Update local cache
+    const idx = gradeWeightings.findIndex(w => w.subject_id === subject_id);
+    if (idx >= 0) {
+      gradeWeightings[idx] = updated;
+    } else {
+      gradeWeightings.push(updated);
+    }
+    closeSheet();
+    renderGrades();
+    showToast('Notenspiegel für die Klasse gespeichert');
+  } catch {
+    showToast('Fehler beim Speichern der Gewichtung');
+  }
 }
 </script>
