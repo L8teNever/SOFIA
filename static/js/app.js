@@ -228,6 +228,78 @@ function chipRow({ items = [], onclick = '', idPrefix = '' } = {}) {
   ).join('');
 }
 
+// A small "..." popover menu (Bearbeiten/Löschen etc.) anchored to the
+// button that opened it — same portal-to-body positioning the calendar's
+// category filter menu used before this generalized it, so any list item
+// (calendar events, homework cards, ...) can get one instead of separate
+// pencil/trash icon buttons that don't scale past two actions and take up
+// more space on the card. items: [{ icon, label, onclick, danger }] —
+// onclick is a real function reference, called with no arguments after
+// the menu closes.
+let _moreMenuEl = null;
+let _moreMenuBtn = null;
+let _moreMenuOutsideHandler = null;
+
+function toggleMoreMenu(btn, items) {
+  const reopening = _moreMenuBtn === btn;
+  closeMoreMenu();
+  if (reopening) return;
+
+  const panel = document.createElement('div');
+  panel.className = 'm3-dropdown-panel dd-open';
+  panel.innerHTML = items.map((it, i) =>
+    `<div class="m3-dropdown-opt${it.danger ? ' m3-dropdown-opt-danger' : ''}" data-i="${i}" style="gap:10px;">
+      ${it.icon ? `<i data-lucide="${it.icon}" style="width:16px;height:16px;flex-shrink:0;"></i>` : ''}
+      <span>${it.label}</span>
+    </div>`
+  ).join('');
+  document.body.appendChild(panel);
+  _moreMenuEl = panel;
+  _moreMenuBtn = btn;
+
+  const r = btn.getBoundingClientRect();
+  panel.style.minWidth = '180px';
+  panel.style.left = 'auto';
+  panel.style.right = (window.innerWidth - r.right) + 'px';
+  const spaceBelow = window.innerHeight - r.bottom - 8;
+  if (spaceBelow >= 140 || spaceBelow >= r.top) {
+    panel.style.top = (r.bottom + 6) + 'px';
+  } else {
+    panel.style.bottom = (window.innerHeight - r.top + 6) + 'px';
+  }
+  if (window.lucide) lucide.createIcons();
+
+  panel.querySelectorAll('.m3-dropdown-opt').forEach(opt => {
+    opt.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const item = items[parseInt(opt.dataset.i, 10)];
+      closeMoreMenu();
+      if (item.onclick) item.onclick();
+    });
+  });
+
+  setTimeout(() => {
+    _moreMenuOutsideHandler = (e) => {
+      if (_moreMenuEl && !_moreMenuEl.contains(e.target) && !btn.contains(e.target)) closeMoreMenu();
+    };
+    document.addEventListener('click', _moreMenuOutsideHandler);
+  }, 0);
+}
+
+function closeMoreMenu() {
+  if (_moreMenuEl) { _moreMenuEl.remove(); _moreMenuEl = null; }
+  if (_moreMenuOutsideHandler) { document.removeEventListener('click', _moreMenuOutsideHandler); _moreMenuOutsideHandler = null; }
+  _moreMenuBtn = null;
+}
+
+// The "..." button itself — same size/position everywhere a card offers
+// this menu instead of separate action icons.
+function moreMenuBtn(onclick) {
+  return `<button type="button" onclick="event.stopPropagation();${onclick}" class="ev-action-btn more" title="Weitere Aktionen">
+    <i data-lucide="more-vertical" style="width:16px;height:16px;"></i>
+  </button>`;
+}
+
 function showToast(msg, duration = 3000) {
   const t = document.getElementById('toast');
   t.textContent = msg;

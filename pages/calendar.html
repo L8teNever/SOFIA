@@ -11,13 +11,7 @@
         <div class="cal-weekdays-grid">
           <div>Mo</div><div>Di</div><div>Mi</div><div>Do</div><div>Fr</div><div>Sa</div><div>So</div>
         </div>
-        <!-- Days Grid: clipped to one row's height once a day is picked,
-             with the grid sliding up inside it so only that day's week
-             stays visible — same collapse-to-week-strip behaviour as
-             Google/Apple Calendar's month view. -->
-        <div id="cal-days-viewport" class="cal-days-viewport">
-          <div id="cal-grid" class="cal-days-grid"></div>
-        </div>
+        <div id="cal-grid" class="cal-days-grid"></div>
       </div>
     </div>
 
@@ -135,19 +129,10 @@
   padding: 4px 0;
 }
 
-/* Viewport clips the grid down to one row's height when a day is picked;
-   the grid itself slides up inside it (see updateWeekCollapse() in the
-   script) so the math only has to track one number — how far to shift —
-   instead of hiding/showing individual rows. */
-.cal-days-viewport {
-  overflow: hidden;
-  transition: max-height 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
-}
 .cal-days-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
   gap: 2px 0;
-  transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 /* Day cell: a plain number by default. "Today" and "selected" borrow
@@ -309,12 +294,7 @@ document.getElementById('ph-calendar').outerHTML = pageHeader({
   backClassName: 'cal-back-btn',
   titleHtml: `<div style="flex:1;min-width:0;">
       <div style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.6;color:#6750a4;" id="cal-year-label"></div>
-      <div style="display:flex;align-items:center;gap:2px;min-width:0;">
-        <span class="page-title cal-month-title" style="color:#1c1b1f;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" id="cal-month-title">Kalender</span>
-        <button type="button" id="cal-expand-btn" onclick="clearDateSelection()" style="display:none;background:none;border:none;color:#6750a4;cursor:pointer;padding:2px;flex-shrink:0;" title="Zur Monatsansicht">
-          <i data-lucide="chevron-down" style="width:19px;height:19px;"></i>
-        </button>
-      </div>
+      <span class="page-title cal-month-title" style="color:#1c1b1f;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;" id="cal-month-title">Kalender</span>
     </div>`,
   trailing: `<div class="cal-nav-row" style="display:flex;align-items:center;flex-shrink:0;">
       <button onclick="calNav(-1)" class="icon-btn cal-nav-btn" title="Vorheriger Monat"><i data-lucide="chevron-left"></i></button>
@@ -442,15 +422,6 @@ function selectDay(dateStr) {
   renderEventList();
 }
 
-// Same effect as tapping the selected day again — the chevron next to the
-// month title in week view calls this directly, since relying on people
-// noticing they can re-tap the (now tiny) selected day isn't obvious.
-function clearDateSelection() {
-  selectedCalDate = null;
-  renderCalGridOnly();
-  renderEventList();
-}
-
 async function calToday() {
   const today = new Date();
   calYear = today.getFullYear();
@@ -460,33 +431,7 @@ async function calToday() {
   renderCal();
 }
 
-// Week-collapse (grid shrinking to one row + arrows stepping by week) only
-// makes sense on narrow/mobile screens where month and day-agenda can't
-// both fit — tablet/desktop has room for the full month grid alongside
-// the events list at all times, so a day tap there just filters the list
-// instead of also collapsing the grid.
-function calIsWeekView() {
-  return !!selectedCalDate && window.innerWidth < 760;
-}
-
 async function calNav(dir) {
-  // In week view (a day selected, on a narrow screen) the arrows step by
-  // week instead of by month, staying collapsed to whichever week that
-  // lands on — matching month view's own arrows everywhere else.
-  if (calIsWeekView()) {
-    const d = new Date(selectedCalDate + 'T00:00');
-    d.setDate(d.getDate() + dir * 7);
-    const newYear = d.getFullYear();
-    const newMonth = d.getMonth();
-    const monthChanged = newYear !== calYear || newMonth !== calMonth;
-    calYear = newYear;
-    calMonth = newMonth;
-    selectedCalDate = newYear + '-' + String(newMonth + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-    if (monthChanged) await loadCalEvents();
-    renderCal();
-    return;
-  }
-
   calMonth += dir;
   if (calMonth < 0) { calMonth = 11; calYear--; }
   if (calMonth > 11) { calMonth = 0; calYear++; }
@@ -565,46 +510,6 @@ function renderCalGridOnly() {
     grid.appendChild(el);
   }
 
-  updateWeekCollapse(startDay, daysInMonth);
-}
-
-// Collapses the month grid down to just the selected day's week (sliding
-// it up inside a clipped viewport) instead of hiding/rebuilding rows —
-// same "tap a day in month view -> week strip + that day's agenda" pattern
-// Google/Apple Calendar use. Row height is measured rather than assumed
-// fixed, since it scales with screen width (see .cal-day's max-width).
-function updateWeekCollapse(startDay, daysInMonth) {
-  const viewport = document.getElementById('cal-days-viewport');
-  const grid = document.getElementById('cal-grid');
-  if (!viewport || !grid || !grid.children.length) return;
-
-  const expandBtn = document.getElementById('cal-expand-btn');
-  const prevBtn = document.querySelector('[onclick="calNav(-1)"]');
-  const nextBtn = document.querySelector('[onclick="calNav(1)"]');
-
-  const rowGap = 2; // must match .cal-days-grid's row gap
-  // offsetHeight (layout size) rather than getBoundingClientRect (visual
-  // size) — this can run while the page is still mid scale-in transition
-  // right after opening, where the latter would measure a squashed value.
-  const cellHeight = grid.children[0].offsetHeight;
-  const rowStep = cellHeight + rowGap;
-  const totalRows = Math.ceil((startDay + daysInMonth) / 7);
-
-  if (calIsWeekView()) {
-    const dayNum = parseInt(selectedCalDate.slice(8, 10), 10);
-    const rowIndex = Math.floor((startDay + dayNum - 1) / 7);
-    viewport.style.maxHeight = cellHeight + 'px';
-    grid.style.transform = `translateY(-${rowIndex * rowStep}px)`;
-    if (expandBtn) expandBtn.style.display = 'inline-flex';
-    if (prevBtn) prevBtn.title = 'Vorherige Woche';
-    if (nextBtn) nextBtn.title = 'Nächste Woche';
-  } else {
-    viewport.style.maxHeight = (totalRows * rowStep - rowGap) + 'px';
-    grid.style.transform = 'translateY(0)';
-    if (expandBtn) expandBtn.style.display = 'none';
-    if (prevBtn) prevBtn.title = 'Vorheriger Monat';
-    if (nextBtn) nextBtn.title = 'Nächster Monat';
-  }
 }
 
 function renderEventList() {
@@ -740,13 +645,8 @@ function renderEventList() {
               </div>
             </div>
           </div>
-          <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
-            <button onclick="openEditEventSheet(${e.id})" title="Bearbeiten" class="ev-action-btn edit">
-              <i data-lucide="pencil" style="width:16px;height:16px;"></i>
-            </button>
-            <button onclick="confirmDelEvent(${e.id})" title="Löschen" class="ev-action-btn delete">
-              <i data-lucide="trash-2" style="width:16px;height:16px;"></i>
-            </button>
+          <div style="display:flex;align-items:center;flex-shrink:0;">
+            ${moreMenuBtn(`openCalEventMenu(this, ${e.id})`)}
           </div>
         </div>
       `;
@@ -754,6 +654,13 @@ function renderEventList() {
   }
 
   if (window.lucide) lucide.createIcons();
+}
+
+function openCalEventMenu(btn, eventId) {
+  toggleMoreMenu(btn, [
+    { icon: 'pencil', label: 'Bearbeiten', onclick: () => openEditEventSheet(eventId) },
+    { icon: 'trash-2', label: 'Löschen', onclick: () => confirmDelEvent(eventId), danger: true },
+  ]);
 }
 
 function setEventRangeMode(isRange) {

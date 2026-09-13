@@ -323,7 +323,11 @@ function getHwAttachments(h) {
 function hwCard(h, sub, uid, today) {
   const checked = (h.checked_by || []).includes(uid);
   const overdue = h.due_date < today && !checked;
-  const bg = sub.color || '#ffd8e4';
+  // Subject color comes from an open color picker in admin (any hex, not
+  // just soft palette tones) — mixed down to a pastel tint here so a
+  // fully-saturated pick (e.g. pure red) doesn't paint the whole card in
+  // it, matching the soft-card look every other list in the app uses.
+  const bg = `color-mix(in srgb, ${sub.color || '#ffd8e4'} 18%, white)`;
   const d = new Date(h.due_date+'T00:00');
   const isToday = h.due_date === today;
   const isTomorrow = h.due_date === new Date(Date.now()+86400000).toISOString().slice(0,10);
@@ -351,9 +355,7 @@ function hwCard(h, sub, uid, today) {
             ${attachmentBadge}
           </div>
         </div>
-        <button onclick="event.stopPropagation();confirmDelHw(${h.id})" style="background:rgba(0,0,0,0.08);border:none;border-radius:10px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;" title="Aufgabe löschen">
-          <i data-lucide="x" style="width:14px;height:14px;"></i>
-        </button>
+        ${moreMenuBtn(`openHwCardMenu(this, ${h.id})`)}
       </div>
     </div>
   `;
@@ -404,6 +406,13 @@ async function toggleHw(id) {
     }
     renderHwStats(); renderHw();
   } catch { showToast('Fehler'); }
+}
+
+function openHwCardMenu(btn, hwId) {
+  toggleMoreMenu(btn, [
+    { icon: 'pencil', label: 'Bearbeiten', onclick: () => openHwSheet(hwId) },
+    { icon: 'trash-2', label: 'Löschen', onclick: () => confirmDelHw(hwId), danger: true },
+  ]);
 }
 
 function confirmDelHw(id) {
@@ -788,9 +797,25 @@ async function executeDeleteSolution(solId) {
 
 // ---- Image Lightbox Helpers ----
 
+let hwLightboxHome = null; // { parent, nextSibling } — where to put it back on close
+
 function openHwLightbox(url, title) {
   const lb = document.getElementById('hw-lightbox');
   if (!lb) return;
+  // The lightbox lives inside #page-homework so it survives the page-swap
+  // (only .page's own top-level element is kept when a page closes —
+  // anything else in the fetched HTML is discarded). But that traps its
+  // z-index inside #page-homework's own stacking context, so opening it
+  // from the detail overlay (a separate, later-appended .page painted on
+  // top) left it invisible behind that overlay despite "being open". Move
+  // it to <body> right before showing it so it stacks above whatever page
+  // or overlay is active, and move it back on close (see closeHwLightbox)
+  // instead of leaving an orphaned copy behind if homework itself closes
+  // while the lightbox is portaled out of it.
+  if (lb.parentElement !== document.body) {
+    hwLightboxHome = { parent: lb.parentElement, nextSibling: lb.nextSibling };
+    document.body.appendChild(lb);
+  }
   const img = document.getElementById('hw-lightbox-img');
   const titleEl = document.getElementById('hw-lightbox-title');
   const link = document.getElementById('hw-lightbox-open-link');
@@ -806,7 +831,19 @@ function closeHwLightbox(isPopState = false) {
   const lb = document.getElementById('hw-lightbox');
   if (!lb) return;
   lb.style.opacity = '0';
-  setTimeout(() => { lb.style.display = 'none'; }, 220);
+  setTimeout(() => {
+    lb.style.display = 'none';
+    // Put it back where it came from if that's still around (the normal
+    // case — the user just closed the image, homework is still open);
+    // otherwise homework itself closed while the lightbox was portaled
+    // out of it, so drop it instead of leaving it stuck in <body> forever.
+    if (hwLightboxHome && document.body.contains(hwLightboxHome.parent)) {
+      hwLightboxHome.parent.insertBefore(lb, hwLightboxHome.nextSibling);
+    } else if (lb.parentElement === document.body) {
+      lb.remove();
+    }
+    hwLightboxHome = null;
+  }, 220);
 }
 
 function onHwLightboxBgClick(e) {
@@ -815,14 +852,22 @@ function onHwLightboxBgClick(e) {
 
 // ---- "New homework" sheet with multi-file support ----
 
-function openHwSheet() {
-  const defaultSubId = hwCurrentSubjectId() || (hwSubjects[0] && hwSubjects[0].id);
-  hwDueMode = 'next';
-  hwCustomDate = null;
-  hwPendingFiles = [];
-  openSheet('<div class="sheet-title">Neue Hausaufgabe</div>'
+let hwEditId = null;
+
+// Same sheet for creating and editing — passing an existing homework's id
+// pre-fills every field (including its attachments) and switches saveHw()
+// to update instead of create, rather than needing a second near-
+// identical sheet just for edits.
+function openHwSheet(editId) {
+  const editing = editId != null ? hwItems.find(h => h.id === editId) : null;
+  hwEditId = editing ? editId : null;
+  const defaultSubId = editing ? editing.subject_id : (hwCurrentSubjectId() || (hwSubjects[0] && hwSubjects[0].id));
+  hwDueMode = editing ? 'custom' : 'next';
+  hwCustomDate = editing ? editing.due_date.slice(0, 10) : null;
+  hwPendingFiles = editing ? [...(editing.attachments || [])] : [];
+  openSheet('<div class="sheet-title">' + (editing ? 'Hausaufgabe bearbeiten' : 'Neue Hausaufgabe') + '</div>'
     + '<select class="m3-select" id="hw-subject" onchange="renderHwDueSection()">' + hwSubjects.map(s=>'<option value="'+s.id+'"'+(s.id===defaultSubId?' selected':'')+'>'+escapeHtml(s.name)+'</option>').join('') + '</select>'
-    + '<textarea class="m3-input" id="hw-desc" placeholder="Beschreibung" rows="3" style="resize:none;height:auto;"></textarea>'
+    + '<textarea class="m3-input" id="hw-desc" placeholder="Beschreibung" rows="3" style="resize:none;height:auto;">' + (editing ? escapeHtml(editing.description) : '') + '</textarea>'
     + '<div class="section-label" style="margin:16px 4px 6px 4px;">Fällig am</div>'
     + '<div id="hw-due-section"></div>'
     + '<div class="section-label" style="margin:16px 4px 6px 4px;">Anhänge (mehrere möglich)</div>'
@@ -833,6 +878,7 @@ function openHwSheet() {
     + '<div id="hw-file-preview" style="margin-top:10px;"></div>'
     + '<button class="m3-btn-full" onclick="saveHw()" style="margin-top:16px;border-radius:16px;">Speichern</button>');
   renderHwDueSection();
+  renderHwFilePreview();
   if (window.lucide) lucide.createIcons();
 }
 
@@ -974,12 +1020,20 @@ async function saveHw() {
       file_url: hwPendingFiles[0]?.url || null,
       file_type: hwPendingFiles[0]?.type || null
     };
-    const hw = await API.createHomework(payload);
-    hwItems.push(hw);
+    if (hwEditId) {
+      const updated = await API.updateHomework(hwEditId, payload);
+      const idx = hwItems.findIndex(h => h.id === hwEditId);
+      if (idx >= 0) hwItems[idx] = updated;
+      hwEditId = null;
+      showToast('Aufgabe aktualisiert');
+    } else {
+      const hw = await API.createHomework(payload);
+      hwItems.push(hw);
+      showToast('Aufgabe gespeichert');
+    }
     closeSheet();
     renderHwStats();
     renderHw();
-    showToast('Aufgabe gespeichert');
   } catch (err) {
     showToast(err.detail || 'Fehler beim Speichern');
   }
