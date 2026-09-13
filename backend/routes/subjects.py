@@ -12,20 +12,30 @@ router = APIRouter(prefix="/api/v1/subjects", tags=["subjects"])
 
 @router.get("/", response_model=List[SubjectOut])
 async def list_subjects(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if current_user.role == "super_admin":
+        result = await db.execute(select(Subject).order_by(Subject.name))
+        return result.scalars().all()
     result = await db.execute(
-        select(Subject).where(or_(Subject.class_id == current_user.class_id, Subject.is_global == True))
+        select(Subject).where(
+            or_(
+                Subject.class_id == current_user.class_id,
+                Subject.is_global == True,
+                Subject.class_id.is_(None)
+            )
+        ).order_by(Subject.name)
     )
     return result.scalars().all()
 
 @router.post("/", response_model=SubjectOut)
 async def create_subject(data: SubjectCreate, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_admin)):
-    class_id = None if data.is_global else current_user.class_id
+    is_global = data.is_global or (current_user.role == "super_admin" and not current_user.class_id)
+    class_id = None if is_global else current_user.class_id
     subject = Subject(
         name=data.name,
         short_name=data.short_name,
         color=data.color,
         class_id=class_id,
-        is_global=data.is_global,
+        is_global=is_global,
     )
     db.add(subject)
     await db.commit()

@@ -259,11 +259,13 @@ function toggleEventTime() {
 }
 
 async function openNewEventSheet(defaultDate) {
-  if (!calSubjects || !calSubjects.length) {
-    calSubjects = await API.subjects().catch(() => []);
+  try {
+    calSubjects = await API.subjects();
+  } catch {
+    if (!calSubjects) calSubjects = [];
   }
   const today = defaultDate || new Date().toISOString().slice(0,10);
-  const subOpts = (calSubjects || []).map(s => '<option value="' + s.id + '">' + (s.name || s.short_name) + '</option>').join('');
+  const subOpts = (calSubjects || []).map(s => '<option value="' + s.id + '">' + escapeHtml(s.name || s.short_name || '') + '</option>').join('');
 
   openSheet('<div class="sheet-title">Neuer Termin</div>'
     + '<input class="m3-input" id="ev-title" placeholder="Titel">'
@@ -293,7 +295,7 @@ async function openNewEventSheet(defaultDate) {
     +   '<label style="font-size:0.78rem;font-weight:600;color:var(--m3-prim);display:block;margin-bottom:4px;margin-left:4px;">Fach für die Klassenarbeit:</label>'
     +   '<select class="m3-select" id="ev-subject">'
     +     '<option value="">Fach auswählen (optional)</option>'
-    +     + subOpts
+    +     subOpts
     +   '</select>'
     + '</div>'
     + '<div style="margin: 8px 0 14px 0;">'
@@ -315,7 +317,10 @@ async function openNewEventSheet(defaultDate) {
       subRow.style.display = isExam ? 'block' : 'none';
       if (!isExam) {
         const subSel = document.getElementById('ev-subject');
-        if (subSel) subSel.value = '';
+        if (subSel) {
+          subSel.value = '';
+          subSel.dispatchEvent(new Event('change', { bubbles: true }));
+        }
       }
     });
   }
