@@ -11,20 +11,28 @@ const PRECACHE = [
 ];
 
 self.addEventListener('install', e => {
-  // Pre-cache core assets; do NOT skipWaiting — let the page decide when to activate
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(PRECACHE)));
+  // Pre-cache core assets and activate immediately so PWA is installable on first visit
+  e.waitUntil(
+    caches.open(CACHE)
+      .then(c => c.addAll(PRECACHE))
+      .then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener('activate', e => {
   // Delete all old caches (different version name = old deployment)
   e.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
-    ).then(() => {
-      self.clients.claim();
-      // Notify all open tabs that a new version has taken over
-      self.clients.matchAll({ type: 'window' }).then(clients => {
-        clients.forEach(c => c.postMessage({ type: 'SW_UPDATED' }));
+    caches.keys().then(keys => {
+      const oldKeys = keys.filter(k => k !== CACHE);
+      return Promise.all(oldKeys.map(k => caches.delete(k))).then(() => {
+        return self.clients.claim().then(() => {
+          // Only notify of SW_UPDATED if an older deployment cache was actually replaced
+          if (oldKeys.length > 0) {
+            self.clients.matchAll({ type: 'window' }).then(clients => {
+              clients.forEach(c => c.postMessage({ type: 'SW_UPDATED' }));
+            });
+          }
+        });
       });
     })
   );

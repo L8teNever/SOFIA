@@ -306,7 +306,31 @@ async function triggerPwaInstall() {
     return;
   }
 
-  // 1. If native beforeinstallprompt is ready -> DIRECT 1-CLICK BROWSER DIALOG!
+  const isIosDevice = /iphone|ipad|ipod/.test(navigator.userAgent.toLowerCase()) || 
+                      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+  // If prompt is not yet cached on Android/Desktop, wait a brief moment for Chrome
+  if (!window.deferredInstallPrompt && !isIosDevice) {
+    const badge = document.getElementById('settings-pwa-badge');
+    const oldText = badge ? badge.textContent : '';
+    if (badge) badge.textContent = 'Öffne Dialog…';
+
+    const caught = await new Promise(resolve => {
+      const timer = setTimeout(() => resolve(null), 650);
+      const onPrompt = (e) => {
+        e.preventDefault();
+        clearTimeout(timer);
+        window.removeEventListener('beforeinstallprompt', onPrompt);
+        window.deferredInstallPrompt = e;
+        resolve(e);
+      };
+      window.addEventListener('beforeinstallprompt', onPrompt, { once: true });
+    });
+
+    if (badge) badge.textContent = oldText;
+  }
+
+  // 1. DIRECT 1-CLICK NATIVE BROWSER DIALOG!
   if (window.deferredInstallPrompt) {
     try {
       const promptEvent = window.deferredInstallPrompt;
@@ -323,42 +347,39 @@ async function triggerPwaInstall() {
     }
   }
 
-  const isIosDevice = /iphone|ipad|ipod/.test(navigator.userAgent.toLowerCase()) || 
-                      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-
+  // 2. iOS Safari step-by-step
   if (isIosDevice) {
-    // Apple iOS Safari guidance (Apple does NOT allow JavaScript to trigger native install prompt)
     openSheet(`
-      <div style="text-align:center;padding:6px 0 14px;">
+      <div style="text-align:center;padding:6px 0 14px;color:#1c1b1f;">
         <div style="width:58px;height:58px;border-radius:16px;background:#6750a4;color:#fff;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;box-shadow:0 8px 20px rgba(103,80,164,0.3);overflow:hidden;">
           <img src="/static/icons/icon-192.png" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display='none';this.nextElementSibling.style.display='block';">
           <i data-lucide="smartphone" style="display:none;width:30px;height:30px;"></i>
         </div>
-        <div class="sheet-title" style="margin-bottom:4px;font-size:1.15rem;">Sofia zum Home-Bildschirm</div>
-        <div style="font-size:0.84rem;opacity:0.65;line-height:1.45;max-width:320px;margin:0 auto;">
+        <div class="sheet-title" style="margin-bottom:6px;font-size:1.2rem;font-weight:800;color:#1c1b1f;">Sofia zum Home-Bildschirm</div>
+        <div style="font-size:0.86rem;color:#49454f;line-height:1.45;max-width:320px;margin:0 auto;">
           Apple erlaubt bei iOS keine automatischen 1-Klick-Buttons. In 3 kurzen Schritten hast du Sofia im Vollbildmodus ohne Safari-Balken:
         </div>
       </div>
 
-      <div style="display:flex;flex-direction:column;gap:10px;margin:10px 0 20px;">
-        <div style="display:flex;align-items:flex-start;gap:12px;background:#fff;padding:12px 14px;border-radius:16px;border:1px solid rgba(0,0,0,0.06);">
-          <div style="width:30px;height:30px;border-radius:10px;background:rgba(103,80,164,0.1);color:#6750a4;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:0.9rem;flex-shrink:0;">1</div>
-          <div style="flex:1;font-size:0.88rem;line-height:1.4;">
-            Tippe in Safari unten (beim iPad oben) auf das <b>Teilen-Symbol</b> <span style="display:inline-flex;padding:2px 6px;border-radius:6px;background:rgba(0,0,0,0.06);font-size:0.95rem;font-weight:700;">⎋</span> (Kästchen mit Pfeil nach oben).
+      <div style="display:flex;flex-direction:column;gap:12px;margin:10px 0 20px;">
+        <div style="display:flex;align-items:flex-start;gap:14px;background:#ffffff;padding:14px 16px;border-radius:16px;border:1px solid rgba(103,80,164,0.12);box-shadow:0 2px 8px rgba(0,0,0,0.04);">
+          <div style="width:32px;height:32px;border-radius:10px;background:#eaddff;color:#21005d;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:0.95rem;flex-shrink:0;">1</div>
+          <div style="flex:1;font-size:0.9rem;line-height:1.45;color:#1c1b1f;">
+            Tippe in Safari unten (beim iPad oben) auf das <b>Teilen-Symbol</b> <span style="display:inline-flex;padding:3px 8px;border-radius:6px;background:#f3edf7;color:#1c1b1f;font-size:0.95rem;font-weight:700;border:1px solid rgba(0,0,0,0.08);">⎋</span> (Kästchen mit Pfeil nach oben).
           </div>
         </div>
 
-        <div style="display:flex;align-items:flex-start;gap:12px;background:#fff;padding:12px 14px;border-radius:16px;border:1px solid rgba(0,0,0,0.06);">
-          <div style="width:30px;height:30px;border-radius:10px;background:rgba(103,80,164,0.1);color:#6750a4;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:0.9rem;flex-shrink:0;">2</div>
-          <div style="flex:1;font-size:0.88rem;line-height:1.4;">
+        <div style="display:flex;align-items:flex-start;gap:14px;background:#ffffff;padding:14px 16px;border-radius:16px;border:1px solid rgba(103,80,164,0.12);box-shadow:0 2px 8px rgba(0,0,0,0.04);">
+          <div style="width:32px;height:32px;border-radius:10px;background:#eaddff;color:#21005d;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:0.95rem;flex-shrink:0;">2</div>
+          <div style="flex:1;font-size:0.9rem;line-height:1.45;color:#1c1b1f;">
             Scrolle etwas nach unten und wähle <b>„Zum Home-Bildschirm“</b> (Plus-Symbol ➕).
           </div>
         </div>
 
-        <div style="display:flex;align-items:flex-start;gap:12px;background:#fff;padding:12px 14px;border-radius:16px;border:1px solid rgba(0,0,0,0.06);">
-          <div style="width:30px;height:30px;border-radius:10px;background:rgba(103,80,164,0.1);color:#6750a4;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:0.9rem;flex-shrink:0;">3</div>
-          <div style="flex:1;font-size:0.88rem;line-height:1.4;">
-            Tippe oben rechts auf <b>„Hinzufügen“</b>.
+        <div style="display:flex;align-items:flex-start;gap:14px;background:#ffffff;padding:14px 16px;border-radius:16px;border:1px solid rgba(103,80,164,0.12);box-shadow:0 2px 8px rgba(0,0,0,0.04);">
+          <div style="width:32px;height:32px;border-radius:10px;background:#eaddff;color:#21005d;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:0.95rem;flex-shrink:0;">3</div>
+          <div style="flex:1;font-size:0.9rem;line-height:1.45;color:#1c1b1f;">
+            Tippe oben rechts auf <b>„Hinzufügen“</b>. Fertig!
           </div>
         </div>
       </div>
@@ -368,35 +389,42 @@ async function triggerPwaInstall() {
     return;
   }
 
-  // Android fallback if deferredInstallPrompt wasn't ready
+  // 3. Android / Chrome guidance fallback
   const isHttp = (window.location.protocol === 'http:' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1');
 
   openSheet(`
-    <div style="text-align:center;padding:6px 0 14px;">
+    <div style="text-align:center;padding:6px 0 14px;color:#1c1b1f;">
       <div style="width:58px;height:58px;border-radius:16px;background:#6750a4;color:#fff;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;box-shadow:0 8px 20px rgba(103,80,164,0.3);overflow:hidden;">
         <img src="/static/icons/icon-192.png" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display='none';this.nextElementSibling.style.display='block';">
         <i data-lucide="smartphone" style="display:none;width:30px;height:30px;"></i>
       </div>
-      <div class="sheet-title" style="margin-bottom:4px;font-size:1.15rem;">App installieren</div>
-      <div style="font-size:0.84rem;opacity:0.65;line-height:1.45;max-width:320px;margin:0 auto;">
+      <div class="sheet-title" style="margin-bottom:6px;font-size:1.2rem;font-weight:800;color:#1c1b1f;">Sofia als App installieren</div>
+      <div style="font-size:0.86rem;color:#49454f;line-height:1.45;max-width:320px;margin:0 auto;">
         ${isHttp 
-          ? 'Da die Seite aktuell über HTTP ohne SSL aufgerufen wird, blockiert Chrome den direkten Dialog aus Sicherheitsgründen. Du kannst die App über das Menü hinzufügen:' 
-          : 'Der Browser bereitet den Installationsdialog vor. Du kannst die App auch direkt über das Menü hinzufügen:'}
+          ? '<b>Hinweis zu HTTP:</b> Da die Website aktuell ohne SSL-Zertifikat (HTTP) aufgerufen wird, sperrt Chrome automatische 1-Klick-Popups aus Sicherheitsgründen. Du kannst die App aber jederzeit über das Chrome-Menü installieren:' 
+          : 'Der direkte 1-Klick-Dialog ist in diesem Moment nicht aktiv. Du kannst Sofia direkt über das Menü als eigenständige App hinzufügen:'}
       </div>
     </div>
 
-    <div style="display:flex;flex-direction:column;gap:10px;margin:10px 0 20px;">
-      <div style="display:flex;align-items:flex-start;gap:12px;background:#fff;padding:12px 14px;border-radius:16px;border:1px solid rgba(0,0,0,0.06);">
-        <div style="width:30px;height:30px;border-radius:10px;background:rgba(103,80,164,0.1);color:#6750a4;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:0.9rem;flex-shrink:0;">1</div>
-        <div style="flex:1;font-size:0.88rem;line-height:1.4;">
-          Tippe oben rechts im Browser auf die <b>3 Punkte (Menü ⋮)</b>.
+    <div style="display:flex;flex-direction:column;gap:12px;margin:10px 0 20px;">
+      <div style="display:flex;align-items:flex-start;gap:14px;background:#ffffff;padding:14px 16px;border-radius:16px;border:1px solid rgba(103,80,164,0.12);box-shadow:0 2px 8px rgba(0,0,0,0.04);">
+        <div style="width:32px;height:32px;border-radius:10px;background:#eaddff;color:#21005d;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:0.95rem;flex-shrink:0;">1</div>
+        <div style="flex:1;font-size:0.9rem;line-height:1.45;color:#1c1b1f;">
+          Tippe oben rechts in Chrome auf die <b>3 Punkte (Menü ⋮)</b>.
         </div>
       </div>
 
-      <div style="display:flex;align-items:flex-start;gap:12px;background:#fff;padding:12px 14px;border-radius:16px;border:1px solid rgba(0,0,0,0.06);">
-        <div style="width:30px;height:30px;border-radius:10px;background:rgba(103,80,164,0.1);color:#6750a4;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:0.9rem;flex-shrink:0;">2</div>
-        <div style="flex:1;font-size:0.88rem;line-height:1.4;">
+      <div style="display:flex;align-items:flex-start;gap:14px;background:#ffffff;padding:14px 16px;border-radius:16px;border:1px solid rgba(103,80,164,0.12);box-shadow:0 2px 8px rgba(0,0,0,0.04);">
+        <div style="width:32px;height:32px;border-radius:10px;background:#eaddff;color:#21005d;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:0.95rem;flex-shrink:0;">2</div>
+        <div style="flex:1;font-size:0.9rem;line-height:1.45;color:#1c1b1f;">
           Wähle <b>„App installieren“</b> oder <b>„Zum Startbildschirm hinzufügen“</b>.
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:flex-start;gap:14px;background:#ffffff;padding:14px 16px;border-radius:16px;border:1px solid rgba(103,80,164,0.12);box-shadow:0 2px 8px rgba(0,0,0,0.04);">
+        <div style="width:32px;height:32px;border-radius:10px;background:#eaddff;color:#21005d;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:0.95rem;flex-shrink:0;">3</div>
+        <div style="flex:1;font-size:0.9rem;line-height:1.45;color:#1c1b1f;">
+          Bestätige im erscheinenden Chrome-Fenster mit <b>„Installieren“</b>.
         </div>
       </div>
     </div>
@@ -404,6 +432,7 @@ async function triggerPwaInstall() {
     <button class="m3-btn-full" onclick="closeSheet()">Verstanden</button>
   `);
 }
+
 
 let pendingUpdateSW = null;
 

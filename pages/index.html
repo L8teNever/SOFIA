@@ -3,6 +3,30 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <script>
+    window.__APP_VERSION__ = "1.2.0";
+    window.__BUILD_TS__ = "__BUILD__";
+    window.deferredInstallPrompt = null;
+    window.addEventListener('beforeinstallprompt', function(e) {
+      e.preventDefault();
+      window.deferredInstallPrompt = e;
+      if (typeof updatePwaInstallState === 'function') {
+        updatePwaInstallState();
+      }
+    });
+    window.addEventListener('appinstalled', function() {
+      window.deferredInstallPrompt = null;
+      if (typeof updatePwaInstallState === 'function') {
+        updatePwaInstallState();
+      }
+      if (typeof showToast === 'function') {
+        showToast('Sofia wurde erfolgreich als App installiert! ✓');
+      }
+    });
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(function(){});
+    }
+  </script>
   <title>Sofia</title>
   <link rel="manifest" href="/static/manifest.json">
   <meta name="theme-color" content="#6750a4">
@@ -21,27 +45,6 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&display=swap">
   <link rel="stylesheet" href="/static/css/base.css?v=__BUILD__">
   <link rel="stylesheet" href="/static/css/components.css?v=__BUILD__">
-  <script>
-    window.__APP_VERSION__ = "1.2.0";
-    window.__BUILD_TS__ = "__BUILD__";
-    window.deferredInstallPrompt = null;
-    window.addEventListener('beforeinstallprompt', function(e) {
-      e.preventDefault();
-      window.deferredInstallPrompt = e;
-      if (typeof updatePwaInstallState === 'function') {
-        updatePwaInstallState();
-      }
-    });
-    window.addEventListener('appinstalled', function() {
-      window.deferredInstallPrompt = null;
-      if (typeof updatePwaInstallState === 'function') {
-        updatePwaInstallState();
-      }
-      if (typeof showToast === 'function') {
-        showToast('Sofia wurde als App installiert!');
-      }
-    });
-  </script>
 </head>
 <body>
 
