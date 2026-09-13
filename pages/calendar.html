@@ -1,16 +1,20 @@
 <div class="page" id="page-calendar" style="background:#f9f6fc;">
   <!-- Header -->
-  <div class="page-header" style="display:flex;align-items:center;gap:10px;padding:max(20px,env(safe-area-inset-top,20px)) 20px 14px 20px;">
-    <button class="back-btn" title="Zurück"><i data-lucide="arrow-left" style="width:22px;height:22px;"></i></button>
+  <div class="cal-page-header" style="display:flex;align-items:center;gap:6px;padding:max(20px,env(safe-area-inset-top,20px)) 16px 14px 16px;">
+    <button class="back-btn" title="Zurück" style="width:38px;height:38px;flex-shrink:0;"><i data-lucide="arrow-left" style="width:20px;height:20px;"></i></button>
     <div style="flex:1;min-width:0;">
-      <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.6;color:#6750a4;" id="cal-year-label"></div>
-      <span class="page-title" style="color:#1c1b1f;font-size:1.45rem;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" id="cal-month-title">Kalender</span>
+      <div style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.6;color:#6750a4;" id="cal-year-label"></div>
+      <span class="page-title cal-month-title" style="color:#1c1b1f;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;" id="cal-month-title">Kalender</span>
     </div>
     <!-- Quick Nav -->
-    <div style="display:flex;align-items:center;gap:6px;">
-      <button onclick="calNav(-1)" class="icon-btn" title="Vorheriger Monat" style="width:40px;height:40px;border-radius:14px;"><i data-lucide="chevron-left" style="width:20px;height:20px;"></i></button>
-      <button onclick="calToday()" class="m3-btn-outline" style="padding:6px 14px;border-radius:12px;font-size:0.8rem;font-weight:700;height:40px;" title="Zum heutigen Tag springen">Heute</button>
-      <button onclick="calNav(1)" class="icon-btn" title="Nächster Monat" style="width:40px;height:40px;border-radius:14px;"><i data-lucide="chevron-right" style="width:20px;height:20px;"></i></button>
+    <div style="display:flex;align-items:center;gap:3px;flex-shrink:0;">
+      <button onclick="calNav(-1)" class="icon-btn" title="Vorheriger Monat" style="width:36px;height:36px;border-radius:12px;"><i data-lucide="chevron-left" style="width:18px;height:18px;"></i></button>
+      <button onclick="calToday()" class="m3-btn-outline" style="padding:6px 9px;border-radius:11px;font-size:0.74rem;font-weight:700;height:36px;" title="Zum heutigen Tag springen">Heute</button>
+      <button onclick="calNav(1)" class="icon-btn" title="Nächster Monat" style="width:36px;height:36px;border-radius:12px;"><i data-lucide="chevron-right" style="width:18px;height:18px;"></i></button>
+      <button type="button" id="cal-filter-btn" class="icon-btn" onclick="toggleCalFilterMenu(this)" title="Nach Kategorie filtern" style="width:36px;height:36px;border-radius:12px;position:relative;">
+        <i data-lucide="filter" style="width:17px;height:17px;"></i>
+        <span id="cal-filter-dot" style="display:none;position:absolute;top:6px;right:6px;width:8px;height:8px;border-radius:50%;background:#6750a4;border:2px solid #f9f6fc;"></span>
+      </button>
     </div>
   </div>
 
@@ -23,39 +27,18 @@
         <div class="cal-weekdays-grid">
           <div>Mo</div><div>Di</div><div>Mi</div><div>Do</div><div>Fr</div><div>Sa</div><div>So</div>
         </div>
-        <!-- Days Grid -->
-        <div id="cal-grid" class="cal-days-grid"></div>
-        
-        <!-- Legend / Overview -->
-        <div id="cal-overview-box" class="cal-overview-box"></div>
+        <!-- Days Grid: clipped to one row's height once a day is picked,
+             with the grid sliding up inside it so only that day's week
+             stays visible — same collapse-to-week-strip behaviour as
+             Google/Apple Calendar's month view. -->
+        <div id="cal-days-viewport" class="cal-days-viewport">
+          <div id="cal-grid" class="cal-days-grid"></div>
+        </div>
       </div>
     </div>
 
-    <!-- Right Column: Filter Bar & Events List -->
+    <!-- Right Column: Events List -->
     <div class="cal-right-pane">
-      <!-- Interactive Category Filter Chips -->
-      <div class="cal-filter-bar" id="cal-filter-bar">
-        <!-- Active day filter — appears only once a day is tapped in the
-             grid, right in the same row as the category chips, instead of
-             a separate "Alle anzeigen" button living elsewhere on the
-             page. Tapping it (or its x) clears the day, same as before. -->
-        <button type="button" id="cal-day-chip" class="cal-filter-chip active" style="display:none;" onclick="clearDateSelection()">
-          <span id="cal-day-chip-label"></span>
-          <i data-lucide="x" style="width:12px;height:12px;"></i>
-        </button>
-        <!-- One dropdown instead of six separate chips — same category
-             list as the "Neuer Termin" sheet's Kategorie field, so picking
-             a filter here works exactly like picking one there. -->
-        <select class="m3-select" id="cal-category-select" onchange="setCalCategoryFilter(this.value)">
-          <option value="all">Alle Termine</option>
-          <option value="exam">Klassenarbeiten</option>
-          <option value="holiday">Ferien</option>
-          <option value="trip">Ausflüge</option>
-          <option value="personal">Persönlich</option>
-          <option value="other">Sonstige</option>
-        </select>
-      </div>
-
       <!-- Events List Header / Active Filter Info -->
       <div id="cal-events-header"></div>
 
@@ -83,6 +66,26 @@
   </button>
 
 <style>
+/* Header — a page-local variant of .page-header/.page-title (same
+   background/border/z-index/responsive padding) so the month title can
+   shrink specifically here without affecting every other page's header.
+   Needed once nav + Heute + the filter icon all live in this one row —
+   at narrow widths there just isn't room for the shared 1.75rem title
+   next to four buttons. */
+.cal-page-header {
+  background: inherit;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  z-index: 10;
+  position: relative;
+  flex-shrink: 0;
+}
+@media (min-width: 600px)  { .cal-page-header { padding: 28px 28px 18px 28px; } }
+@media (min-width: 760px)  { .cal-page-header { padding: 32px 40px 20px 40px; margin-bottom: 12px; } }
+@media (min-width: 1100px) { .cal-page-header { padding: 36px 60px 22px 60px; margin-bottom: 16px; } }
+.cal-month-title { font-size: 1.3rem; }
+@media (min-width: 400px) { .cal-month-title { font-size: 1.45rem; } }
+@media (min-width: 600px) { .cal-month-title { font-size: 1.6rem; } }
+
 /* Layout: calendar card + filters/list, side by side from tablet up —
    same two-pane pattern as before, just breathes a bit more. */
 .cal-main-container {
@@ -142,10 +145,19 @@
   padding: 4px 0;
 }
 
+/* Viewport clips the grid down to one row's height when a day is picked;
+   the grid itself slides up inside it (see updateWeekCollapse() in the
+   script) so the math only has to track one number — how far to shift —
+   instead of hiding/showing individual rows. */
+.cal-days-viewport {
+  overflow: hidden;
+  transition: max-height 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
 .cal-days-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
   gap: 2px 0;
+  transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 /* Day cell: a plain number by default. "Today" and "selected" borrow
@@ -240,15 +252,6 @@
 .cal-day.selected .cal-dot-more {
   background: rgba(255,255,255,0.9) !important;
   color: rgba(255,255,255,0.9) !important;
-}
-
-/* Overview / quick-action row below the grid — a plain text row rather
-   than a second boxed card, so the grid stays the one thing your eye
-   lands on first. */
-.cal-overview-box {
-  margin-top: 16px;
-  padding-top: 14px;
-  border-top: 1px solid rgba(103, 80, 164, 0.1);
 }
 
 /* Date Badge in Event Cards */
@@ -349,7 +352,66 @@ function eventCoversDate(ev, dateStr) {
 
 function setCalCategoryFilter(cat) {
   activeCategoryFilter = cat;
+  const dot = document.getElementById('cal-filter-dot');
+  if (dot) dot.style.display = cat === 'all' ? 'none' : 'block';
   renderEventList();
+}
+
+const CAL_FILTER_OPTIONS = [
+  { value: 'all', label: 'Alle Termine' },
+  { value: 'exam', label: 'Klassenarbeiten' },
+  { value: 'holiday', label: 'Ferien' },
+  { value: 'trip', label: 'Ausflüge' },
+  { value: 'personal', label: 'Persönlich' },
+  { value: 'other', label: 'Sonstige' },
+];
+let calFilterMenuEl = null;
+
+// A plain icon button in the header opens this instead of a labelled
+// dropdown — reuses the app's .m3-dropdown-panel look (same portal-to-body
+// positioning trick) so it still matches every other dropdown, just
+// without a permanently-visible text trigger taking up header space.
+function toggleCalFilterMenu(btn) {
+  if (calFilterMenuEl) { closeCalFilterMenu(); return; }
+
+  const panel = document.createElement('div');
+  panel.className = 'm3-dropdown-panel dd-open';
+  panel.innerHTML = CAL_FILTER_OPTIONS.map(o =>
+    `<div class="m3-dropdown-opt${o.value === activeCategoryFilter ? ' dd-sel' : ''}" data-value="${o.value}">${o.label}</div>`
+  ).join('');
+  document.body.appendChild(panel);
+  calFilterMenuEl = panel;
+
+  const r = btn.getBoundingClientRect();
+  panel.style.minWidth = '190px';
+  panel.style.left = 'auto';
+  panel.style.right = (window.innerWidth - r.right) + 'px';
+  const spaceBelow = window.innerHeight - r.bottom - 8;
+  if (spaceBelow >= 220 || spaceBelow >= r.top) {
+    panel.style.top = (r.bottom + 6) + 'px';
+  } else {
+    panel.style.bottom = (window.innerHeight - r.top + 6) + 'px';
+  }
+
+  panel.querySelectorAll('.m3-dropdown-opt').forEach(opt => {
+    opt.addEventListener('click', () => {
+      setCalCategoryFilter(opt.dataset.value);
+      closeCalFilterMenu();
+    });
+  });
+
+  setTimeout(() => document.addEventListener('click', onCalFilterMenuOutsideClick), 0);
+}
+
+function onCalFilterMenuOutsideClick(e) {
+  if (calFilterMenuEl && !calFilterMenuEl.contains(e.target) && !e.target.closest('#cal-filter-btn')) {
+    closeCalFilterMenu();
+  }
+}
+
+function closeCalFilterMenu() {
+  if (calFilterMenuEl) { calFilterMenuEl.remove(); calFilterMenuEl = null; }
+  document.removeEventListener('click', onCalFilterMenuOutsideClick);
 }
 
 function selectDay(dateStr) {
@@ -358,12 +420,6 @@ function selectDay(dateStr) {
   } else {
     selectedCalDate = dateStr;
   }
-  renderCalGridOnly();
-  renderEventList();
-}
-
-function clearDateSelection() {
-  selectedCalDate = null;
   renderCalGridOnly();
   renderEventList();
 }
@@ -452,44 +508,36 @@ function renderCalGridOnly() {
     grid.appendChild(el);
   }
 
-  renderOverviewBox();
+  updateWeekCollapse(startDay, daysInMonth);
 }
 
-// The day chip lives in the same row as the category chips (see the
-// static markup in #cal-filter-bar) instead of a separate "Alle anzeigen"
-// button elsewhere on the page — one row for every active filter.
-function updateDayChip() {
-  const chip = document.getElementById('cal-day-chip');
-  if (!chip) return;
+// Collapses the month grid down to just the selected day's week (sliding
+// it up inside a clipped viewport) instead of hiding/rebuilding rows —
+// same "tap a day in month view -> week strip + that day's agenda" pattern
+// Google/Apple Calendar use. Row height is measured rather than assumed
+// fixed, since it scales with screen width (see .cal-day's max-width).
+function updateWeekCollapse(startDay, daysInMonth) {
+  const viewport = document.getElementById('cal-days-viewport');
+  const grid = document.getElementById('cal-grid');
+  if (!viewport || !grid || !grid.children.length) return;
+
+  const rowGap = 2; // must match .cal-days-grid's row gap
+  // offsetHeight (layout size) rather than getBoundingClientRect (visual
+  // size) — this can run while the page is still mid scale-in transition
+  // right after opening, where the latter would measure a squashed value.
+  const cellHeight = grid.children[0].offsetHeight;
+  const rowStep = cellHeight + rowGap;
+  const totalRows = Math.ceil((startDay + daysInMonth) / 7);
+
   if (selectedCalDate) {
-    const d = new Date(selectedCalDate + 'T00:00');
-    const label = document.getElementById('cal-day-chip-label');
-    if (label) label.textContent = d.toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'short' });
-    chip.style.display = 'inline-flex';
+    const dayNum = parseInt(selectedCalDate.slice(8, 10), 10);
+    const rowIndex = Math.floor((startDay + dayNum - 1) / 7);
+    viewport.style.maxHeight = cellHeight + 'px';
+    grid.style.transform = `translateY(-${rowIndex * rowStep}px)`;
   } else {
-    chip.style.display = 'none';
+    viewport.style.maxHeight = (totalRows * rowStep - rowGap) + 'px';
+    grid.style.transform = 'translateY(0)';
   }
-}
-
-function renderOverviewBox() {
-  updateDayChip();
-
-  const box = document.getElementById('cal-overview-box');
-  if (!box) return;
-
-  // The selected-day summary used to duplicate here as its own boxed
-  // row with an "Alle anzeigen" button — that info now lives in the day
-  // chip (filter row) and the events list header instead, so this stays
-  // a single, constant hint regardless of selection.
-  box.innerHTML = `
-    <div style="display:flex;align-items:center;justify-content:space-between;font-size:0.78rem;color:#49454f;">
-      <span>Tippe auf einen Tag für Details</span>
-      <button onclick="openNewEventSheet()" style="background:transparent;border:none;color:#6750a4;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:4px;">
-        <i data-lucide="plus-circle" style="width:14px;height:14px;"></i> Neuer Termin
-      </button>
-    </div>
-  `;
-  if (window.lucide) lucide.createIcons();
 }
 
 function renderEventList() {
@@ -521,31 +569,19 @@ function renderEventList() {
   // Sort chronologically
   pool.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
 
-  // Header above list
-  if (selectedCalDate) {
-    // Clearing the day now happens via its chip up in the filter row, not
-    // a second "Alle anzeigen" button duplicated here.
-    const d = new Date(selectedCalDate + 'T00:00');
-    const fullStr = d.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-    headerEl.innerHTML = `
-      <div style="margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:10px;">
-        <div style="min-width:0;">
-          <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#6750a4;">Termine am</div>
-          <div style="font-size:1.15rem;font-weight:800;color:#1c1b1f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${fullStr}</div>
-        </div>
-        <span style="font-size:0.75rem;color:#49454f;font-weight:600;flex-shrink:0;">${pool.length} ${pool.length === 1 ? 'Eintrag' : 'Einträge'}</span>
-      </div>
-    `;
-  } else {
-    headerEl.innerHTML = `
-      <div style="margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;">
-        <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#6750a4;">
-          ${activeCategoryFilter === 'all' ? 'Alle Termine dieses Monats' : 'Gefilterte Termine'}
-        </div>
-        <span style="font-size:0.75rem;color:#49454f;font-weight:600;">${pool.length} ${pool.length === 1 ? 'Eintrag' : 'Einträge'}</span>
-      </div>
-    `;
-  }
+  // Header above list — same styled row either way, just a different label.
+  // The selected-day one skips repeating the date itself (the collapsed
+  // week strip above already shows it as the filled circle) but keeps the
+  // count, same as the whole-month view does.
+  const headerLabel = selectedCalDate
+    ? 'Termine an diesem Tag'
+    : (activeCategoryFilter === 'all' ? 'Alle Termine dieses Monats' : 'Gefilterte Termine');
+  headerEl.innerHTML = `
+    <div style="margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;">
+      <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#6750a4;">${headerLabel}</div>
+      <span style="font-size:0.75rem;color:#49454f;font-weight:600;">${pool.length} ${pool.length === 1 ? 'Eintrag' : 'Einträge'}</span>
+    </div>
+  `;
 
   if (pool.length === 0) {
     list.innerHTML = '';
@@ -720,9 +756,29 @@ async function openNewEventSheet(defaultDate) {
       <input class="m3-input" id="ev-end-date" type="date" value="${today}">
     </div>
 
-    <!-- Dauer, Kategorie and Uhrzeit default to Einzelner Tag / Sonstiges /
-         ohne Uhrzeit for most events, so they stay collapsed behind one
-         toggle instead of all showing at once. -->
+    <div class="m3-field">
+      <label class="m3-field-label">Kategorie:</label>
+      <select class="m3-select" id="ev-type">
+        <option value="other">Sonstiges</option>
+        <option value="exam">Klassenarbeit</option>
+        <option value="trip">Ausflug / Klassenfahrt</option>
+        <option value="holiday">Ferien</option>
+        <option value="personal">Persönlich (nur für dich sichtbar)</option>
+      </select>
+    </div>
+
+    <div id="ev-subject-row" class="m3-field" style="display:none;">
+      <label class="m3-field-label">Fach für die Klassenarbeit:</label>
+      <select class="m3-select" id="ev-subject">
+        <option value="">Fach auswählen (optional)</option>
+        ${subOpts}
+      </select>
+    </div>
+
+    <!-- Dauer and Uhrzeit default to Einzelner Tag / ohne Uhrzeit for most
+         events, so they stay collapsed behind one toggle instead of
+         showing at once — Kategorie moved out of here since it's a
+         primary field, not a secondary one. -->
     <div class="m3-field" id="ev-more-toggle-wrap">
       <button type="button" id="ev-more-toggle" class="m3-inline-toggle m3-more-toggle" onclick="toggleEventMore()">
         <span style="display:flex;align-items:center;gap:6px;"><i data-lucide="sliders-horizontal" style="width:16px;height:16px;"></i> Weitere Optionen</span>
@@ -743,25 +799,6 @@ async function openNewEventSheet(defaultDate) {
             <span>Zeitraum (mehrere Tage)</span>
           </button>
         </div>
-      </div>
-
-      <div class="m3-field">
-        <label class="m3-field-label">Kategorie:</label>
-        <select class="m3-select" id="ev-type">
-          <option value="other">Sonstiges</option>
-          <option value="exam">Klassenarbeit</option>
-          <option value="trip">Ausflug / Klassenfahrt</option>
-          <option value="holiday">Ferien</option>
-          <option value="personal">Persönlich (nur für dich sichtbar)</option>
-        </select>
-      </div>
-
-      <div id="ev-subject-row" class="m3-field" style="display:none;">
-        <label class="m3-field-label">Fach für die Klassenarbeit:</label>
-        <select class="m3-select" id="ev-subject">
-          <option value="">Fach auswählen (optional)</option>
-          ${subOpts}
-        </select>
       </div>
 
       <div class="m3-field">
@@ -839,8 +876,9 @@ async function openEditEventSheet(eventId) {
   const hasTime = Boolean(ev.time);
   // Expand "Weitere Optionen" upfront whenever the event already uses one of
   // the fields hidden behind it — otherwise editing would silently hide an
-  // already-set category/range/time instead of just defaulting to it.
-  const hasMore = isRange || ev.event_type !== 'other' || hasTime;
+  // already-set range/time instead of just defaulting to it. Kategorie
+  // isn't part of this anymore since it's always shown now.
+  const hasMore = isRange || hasTime;
 
   openSheet(`
     <div class="sheet-title" style="font-size:1.25rem;font-weight:800;color:#1c1b1f;margin-bottom:16px;">Termin bearbeiten</div>
@@ -858,6 +896,21 @@ async function openEditEventSheet(eventId) {
     <div id="ev-end-date-wrap" class="m3-field" style="display:${isRange ? 'block' : 'none'};">
       <label class="m3-field-label">Enddatum (Bis einschließlich):</label>
       <input class="m3-input" id="ev-end-date" type="date" value="${ev.end_date || ev.date}">
+    </div>
+
+    <div class="m3-field">
+      <label class="m3-field-label">Kategorie:</label>
+      <select class="m3-select" id="ev-type">
+        ${typeOpts}
+      </select>
+    </div>
+
+    <div id="ev-subject-row" class="m3-field" style="display:${ev.event_type === 'exam' ? 'block' : 'none'};">
+      <label class="m3-field-label">Fach für die Klassenarbeit:</label>
+      <select class="m3-select" id="ev-subject">
+        <option value="">Fach auswählen (optional)</option>
+        ${subOpts}
+      </select>
     </div>
 
     <div class="m3-field" id="ev-more-toggle-wrap" style="display:${hasMore ? 'none' : 'block'};">
@@ -880,21 +933,6 @@ async function openEditEventSheet(eventId) {
             <span>Zeitraum (mehrere Tage)</span>
           </button>
         </div>
-      </div>
-
-      <div class="m3-field">
-        <label class="m3-field-label">Kategorie:</label>
-        <select class="m3-select" id="ev-type">
-          ${typeOpts}
-        </select>
-      </div>
-
-      <div id="ev-subject-row" class="m3-field" style="display:${ev.event_type === 'exam' ? 'block' : 'none'};">
-        <label class="m3-field-label">Fach für die Klassenarbeit:</label>
-        <select class="m3-select" id="ev-subject">
-          <option value="">Fach auswählen (optional)</option>
-          ${subOpts}
-        </select>
       </div>
 
       <div class="m3-field">
