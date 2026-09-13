@@ -96,6 +96,8 @@ def _fetch_two_weeks(server: str, school: str, username: str, password: str,
         except Exception:
             pass
 
+from backend.services.timetable_cache import get_cached_timetable, set_cached_timetable
+
 @router.get("/")
 async def get_timetable(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     if not current_user.class_id:
@@ -104,6 +106,15 @@ async def get_timetable(db: AsyncSession = Depends(get_db), current_user: User =
     cls = result.scalar_one_or_none()
     if not cls or not cls.untis_url:
         return {"configured": False}
+
+    # 1. Return from 5-minute cache if available
+    cached = get_cached_timetable(cls.id)
+    if cached and not cached.get("error"):
+        return {
+            "configured": True,
+            "this_week": cached["this_week"],
+            "next_week": cached["next_week"],
+        }
 
     try:
         password = decrypt_password(cls.untis_password_enc) if cls.untis_password_enc else ""
@@ -118,13 +129,18 @@ async def get_timetable(db: AsyncSession = Depends(get_db), current_user: User =
             cls.untis_user, password, cls.untis_class or "", this_monday,
         )
 
+        this_week = {"start": this_monday.isoformat(), "lessons": this_lessons}
+        next_week = {"start": next_monday.isoformat(), "lessons": next_lessons}
+        set_cached_timetable(cls.id, this_week, next_week)
+
         return {
             "configured": True,
-            "this_week": {"start": this_monday.isoformat(), "lessons": this_lessons},
-            "next_week": {"start": next_monday.isoformat(), "lessons": next_lessons},
+            "this_week": this_week,
+            "next_week": next_week,
         }
     except Exception as e:
         return {"configured": True, "error": str(e)}
+
 
 
 # In-memory: class_id -> set of (date, startTime, subject_short) keys that were

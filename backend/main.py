@@ -7,8 +7,8 @@ from backend.database import init_db
 from backend.config import settings
 from backend.auth import get_current_user
 from backend.models.user import User
-from backend.routes import auth_routes, users, classes, subjects, calendar, homework, grades, files, vapid, admin, timetable, mealplan
-from backend.routes.timetable import poll_cancelled_lessons_loop
+from backend.routes import auth_routes, users, classes, subjects, calendar, homework, grades, files, vapid, admin, timetable, mealplan, notifications
+from backend.services.notification_scheduler import start_notification_scheduler
 from backend.version import get_version_info
 import os, time, mimetypes, asyncio, logging
 
@@ -27,15 +27,16 @@ mimetypes.add_type("image/webp", ".webp")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
-    poll_task = asyncio.create_task(poll_cancelled_lessons_loop())
+    sched_task = asyncio.create_task(start_notification_scheduler())
     yield
-    poll_task.cancel()
+    sched_task.cancel()
 
 app = FastAPI(title="Sofia", lifespan=lifespan)
 
 # API routes
-for r in [auth_routes, users, classes, subjects, calendar, homework, grades, files, vapid, admin, timetable, mealplan]:
+for r in [auth_routes, users, classes, subjects, calendar, homework, grades, files, vapid, admin, timetable, mealplan, notifications]:
     app.include_router(r.router)
+
 
 # Static files
 if os.path.exists("static"):

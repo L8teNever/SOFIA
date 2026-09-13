@@ -149,6 +149,10 @@ class MealPlanOut(BaseModel):
 # Push
 class PushSubscriptionIn(BaseModel):
     subscription: Any
+    user_agent: Optional[str] = None
+
+class PushUnsubscribeIn(BaseModel):
+    endpoint: Optional[str] = None
 
 class PushNotificationIn(BaseModel):
     title: str
@@ -162,3 +166,55 @@ class NotificationOut(BaseModel):
     is_read: bool
     created_at: datetime
     class Config: from_attributes = True
+
+# Notification Settings
+class ReminderItem(BaseModel):
+    type: str  # "days" | "hours"
+    value: int
+
+class NotificationSettingOut(BaseModel):
+    user_id: int
+    enabled: bool
+    homework_new: bool
+    homework_reminders: List[ReminderItem]
+    homework_daily_reminder: bool
+    homework_daily_time: str
+    event_new: bool
+    event_reminders: List[ReminderItem]
+    meal_reminder_mode: str
+    meal_reminder_time: str
+    timetable_changes: bool
+    timetable_before_first_lesson: bool
+    timetable_first_lesson_lead_minutes: int
+    timetable_before_lesson_end: bool
+    timetable_lesson_end_lead_minutes: int
+    timetable_before_break: bool
+    timetable_break_lead_minutes: int
+    timetable_before_break_end: bool
+    timetable_break_end_lead_minutes: int
+    timetable_end_of_day_summary: bool
+    timetable_end_of_day_delay_minutes: int
+    class Config: from_attributes = True
+
+class NotificationSettingUpdate(BaseModel):
+    enabled: Optional[bool] = None
+    homework_new: Optional[bool] = None
+    homework_reminders: Optional[List[ReminderItem]] = None
+    homework_daily_reminder: Optional[bool] = None
+    homework_daily_time: Optional[str] = None
+    event_new: Optional[bool] = None
+    event_reminders: Optional[List[ReminderItem]] = None
+    meal_reminder_mode: Optional[str] = None
+    meal_reminder_time: Optional[str] = None
+    timetable_changes: Optional[bool] = None
+    timetable_before_first_lesson: Optional[bool] = None
+    timetable_first_lesson_lead_minutes: Optional[int] = None
+    timetable_before_lesson_end: Optional[bool] = None
+    timetable_lesson_end_lead_minutes: Optional[int] = None
+    timetable_before_break: Optional[bool] = None
+    timetable_break_lead_minutes: Optional[int] = None
+    timetable_before_break_end: Optional[bool] = None
+    timetable_break_end_lead_minutes: Optional[int] = None
+    timetable_end_of_day_summary: Optional[bool] = None
+    timetable_end_of_day_delay_minutes: Optional[int] = None
+

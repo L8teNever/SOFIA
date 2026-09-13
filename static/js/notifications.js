@@ -17,16 +17,18 @@ const Push = {
       userVisibleOnly: true,
       applicationServerKey: Push._urlBase64ToUint8Array(Push._vapidKey),
     });
-    await API.subscribe(sub.toJSON());
+    await API.subscribe(sub.toJSON(), navigator.userAgent);
     return true;
   },
 
   async unsubscribe() {
     const reg = await navigator.serviceWorker.ready;
     const sub = await reg.pushManager.getSubscription();
+    const endpoint = sub ? sub.endpoint : null;
     if (sub) await sub.unsubscribe();
-    await API.unsubscribe();
+    await API.unsubscribe(endpoint);
   },
+
 
   _urlBase64ToUint8Array(base64) {
     const pad = '='.repeat((4 - (base64.length % 4)) % 4);

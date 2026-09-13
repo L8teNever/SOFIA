@@ -47,7 +47,15 @@ async def create_homework(data: HomeworkCreate, db: AsyncSession = Depends(get_d
     db.add(hw)
     await db.commit()
     await db.refresh(hw)
+
+    try:
+        from backend.services.notification_scheduler import notify_new_homework
+        await notify_new_homework(db, hw, current_user)
+    except Exception as e:
+        logger.warning("Error dispatching new homework notification: %s", e)
+
     return hw
+
 
 @router.post("/{hw_id}/check")
 async def toggle_check(hw_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):

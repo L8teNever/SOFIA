@@ -5,34 +5,50 @@ from backend.database import get_db
 from backend.auth import get_current_user, require_admin
 from backend.models.user import User
 from backend.models.notification import Notification
-from backend.schemas import PushSubscriptionIn, PushNotificationIn, NotificationOut
-from backend.config import settings
-from typing import List
-import json, asyncio, logging
-
-logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api/v1/push", tags=["push"])
+from backend.models.push_subscription import PushSubscription
+from backend.schemas import PushSubscriptionIn, PushUnsubscribeIn, PushNotificationIn, NotificationOut
 
 async def push_to_users(db: AsyncSession, users: List[User], title: str, body: str) -> int:
-    """Sends a web push to every subscribed user in `users`, persists a
+    """Sends a web push to every subscribed device of `users`, persists a
     Notification row for each (even unsubscribed ones, so it shows up in
     their in-app notification list), and cleans up expired subscriptions."""
+    if not users:
+        return 0
+
     sent = 0
+    user_ids = [u.id for u in users]
+
     if settings.vapid_private_key:
         from pywebpush import webpush, WebPushException
 
-        # Each webpush call is a blocking HTTP request run on a thread; firing
-        # them one at a time made the total time scale with the class size
-        # (25 users x ~300ms was ~7.5s). Run them concurrently instead — total
-        # time is then roughly the slowest single push, not the sum.
-        async def _send_one(u: User):
-            if not u.push_subscription:
-                return None
+        # Fetch all device subscriptions for these users
+        sub_rows_res = await db.execute(select(PushSubscription).where(PushSubscription.user_id.in_(user_ids)))
+        sub_rows = list(sub_rows_res.scalars().all())
+
+        # Collect targets: list of (subscription_dict, push_sub_id, user_id)
+        targets = []
+        covered_user_ids = set()
+        for s in sub_rows:
             try:
-                sub = json.loads(u.push_subscription)
+                targets.append((json.loads(s.subscription_json), s.id, s.user_id))
+                covered_user_ids.add(s.user_id)
+            except Exception:
+                pass
+
+        # Also support legacy users.push_subscription if user has no PushSubscription row
+        for u in users:
+            if u.id not in covered_user_ids and u.push_subscription:
+                try:
+                    targets.append((json.loads(u.push_subscription), None, u.id))
+                except Exception:
+                    pass
+
+        async def _send_one(target):
+            sub_dict, sub_id, uid = target
+            try:
                 await asyncio.to_thread(
                     webpush,
-                    subscription_info=sub,
+                    subscription_info=sub_dict,
                     data=json.dumps({"title": title, "body": body}),
                     vapid_private_key=settings.vapid_private_key,
                     vapid_claims={"sub": settings.vapid_claim_email},
@@ -40,20 +56,30 @@ async def push_to_users(db: AsyncSession, users: List[User], title: str, body: s
                 return "sent"
             except WebPushException as e:
                 if e.response is not None and e.response.status_code in (404, 410):
-                    return ("expired", u.id)
-                logger.warning("Push failed for user %s: %s", u.id, e)
+                    return ("expired", sub_id, uid)
+                logger.warning("Push failed for user %s: %s", uid, e)
                 return None
             except Exception as e:
-                logger.warning("Push error for user %s: %s", u.id, e)
+                logger.warning("Push error for user %s: %s", uid, e)
                 return None
 
-        results = await asyncio.gather(*(_send_one(u) for u in users))
-        sent = sum(1 for r in results if r == "sent")
-        expired_ids = [r[1] for r in results if isinstance(r, tuple)]
-        if expired_ids:
-            expired_result = await db.execute(select(User).where(User.id.in_(expired_ids)))
-            for u in expired_result.scalars().all():
-                u.push_subscription = None
+        if targets:
+            results = await asyncio.gather(*(_send_one(t) for t in targets))
+            sent = sum(1 for r in results if r == "sent")
+
+            # Clean up expired endpoints
+            expired = [r for r in results if isinstance(r, tuple) and r[0] == "expired"]
+            for _, sub_id, uid in expired:
+                if sub_id is not None:
+                    del_sub = await db.execute(select(PushSubscription).where(PushSubscription.id == sub_id))
+                    s_obj = del_sub.scalar_one_or_none()
+                    if s_obj:
+                        await db.delete(s_obj)
+                else:
+                    u_res = await db.execute(select(User).where(User.id == uid))
+                    u_obj = u_res.scalar_one_or_none()
+                    if u_obj:
+                        u_obj.push_subscription = None
 
     for u in users:
         db.add(Notification(user_id=u.id, title=title, body=body))
@@ -66,15 +92,55 @@ async def get_vapid_key():
 
 @router.post("/subscribe")
 async def subscribe(data: PushSubscriptionIn, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
-    current_user.push_subscription = json.dumps(data.subscription)
+    sub_data = data.subscription
+    raw_sub = json.dumps(sub_data)
+    endpoint = sub_data.get("endpoint") if isinstance(sub_data, dict) else None
+
+    if endpoint:
+        # Check if this endpoint already exists
+        res = await db.execute(select(PushSubscription).where(PushSubscription.endpoint == endpoint))
+        existing = res.scalar_one_or_none()
+        if existing:
+            existing.user_id = current_user.id
+            existing.subscription_json = raw_sub
+            if data.user_agent:
+                existing.user_agent = data.user_agent
+        else:
+            new_sub = PushSubscription(
+                user_id=current_user.id,
+                endpoint=endpoint,
+                subscription_json=raw_sub,
+                user_agent=data.user_agent
+            )
+            db.add(new_sub)
+
+    current_user.push_subscription = raw_sub
     await db.commit()
     return {"ok": True}
 
 @router.post("/unsubscribe")
-async def unsubscribe(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
-    current_user.push_subscription = None
+async def unsubscribe(data: Optional[PushUnsubscribeIn] = None, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    endpoint = data.endpoint if data else None
+    if endpoint:
+        res = await db.execute(
+            select(PushSubscription).where(
+                PushSubscription.user_id == current_user.id,
+                PushSubscription.endpoint == endpoint
+            )
+        )
+        existing = res.scalar_one_or_none()
+        if existing:
+            await db.delete(existing)
+    else:
+        # Unsubscribe all devices of this user
+        res = await db.execute(select(PushSubscription).where(PushSubscription.user_id == current_user.id))
+        for s in res.scalars().all():
+            await db.delete(s)
+        current_user.push_subscription = None
+
     await db.commit()
     return {"ok": True}
+
 
 @router.post("/send")
 async def send_notification(data: PushNotificationIn, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_admin)):

@@ -27,16 +27,241 @@
     </div>
 
     <!-- Notifications -->
-    <div class="section-label">Benachrichtigungen</div>
-    <div class="m3-card">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+    <div class="section-label">Benachrichtigungen & Erinnerungen</div>
+    <div class="m3-card" style="margin-bottom:12px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;">
         <div>
-          <div style="font-weight:600;">Push-Benachrichtigungen</div>
-          <div style="font-size:0.8rem;opacity:0.6;">Für neue Hausaufgaben, Termine & mehr</div>
+          <div style="font-weight:700;font-size:0.95rem;">Push auf diesem Gerät</div>
+          <div id="device-push-desc" style="font-size:0.78rem;opacity:0.6;margin-top:2px;">Wird geprüft…</div>
         </div>
         <div class="m3-switch" id="push-switch" onclick="togglePush(this)"></div>
       </div>
+      <div style="font-size:0.75rem;opacity:0.5;margin-top:8px;line-height:1.3;border-top:1px solid rgba(0,0,0,0.05);padding-top:8px;">
+        💡 Jedes deiner Geräte (Handy, Tablet, PC) kann Push separat aktivieren. Deine Einstellungen unten gelten für deinen Account auf all deinen Geräten.
+      </div>
     </div>
+
+    <!-- Notification Preferences Card -->
+    <div class="m3-card" id="notif-settings-card">
+      <!-- Master Switch -->
+      <div style="display:flex;align-items:center;justify-content:space-between;padding-bottom:12px;border-bottom:1px solid rgba(0,0,0,0.06);margin-bottom:14px;">
+        <div>
+          <div style="font-weight:700;font-size:0.98rem;">Alle Benachrichtigungen</div>
+          <div style="font-size:0.8rem;opacity:0.6;">Hauptschalter für automatische Erinnerungen</div>
+        </div>
+        <div class="m3-switch on" id="ns-master-switch" onclick="toggleNotifMaster(this)"></div>
+      </div>
+
+      <div id="ns-options-body">
+        <!-- 1. Hausaufgaben -->
+        <div style="margin-bottom:18px;">
+          <div style="display:flex;align-items:center;gap:8px;font-weight:700;color:var(--m3-prim);font-size:0.92rem;margin-bottom:10px;">
+            <i data-lucide="book-open" style="width:18px;height:18px;"></i>
+            Hausaufgaben
+          </div>
+          
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;padding-left:4px;">
+            <div>
+              <div style="font-size:0.86rem;font-weight:600;">Bei neuer Hausaufgabe</div>
+              <div style="font-size:0.76rem;opacity:0.6;">Sofortige Benachrichtigung bei Erstellung</div>
+            </div>
+            <div class="m3-switch on" id="ns-hw-new" onclick="toggleNotifProp('homework_new', this)"></div>
+          </div>
+
+          <!-- Staggered Reminders -->
+          <div style="margin-bottom:12px;padding-left:4px;">
+            <div style="font-size:0.84rem;font-weight:600;margin-bottom:6px;">Erinnerungen vor Abgabe:</div>
+            <div id="ns-hw-reminders-list" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;"></div>
+            <button type="button" class="m3-btn-tonal" onclick="openAddReminderDialog('hw')" style="font-size:0.78rem;padding:6px 12px;border-radius:10px;display:inline-flex;align-items:center;gap:6px;">
+              <i data-lucide="plus" style="width:14px;height:14px;"></i> Erinnerung hinzufügen
+            </button>
+          </div>
+
+          <!-- Daily Reminder -->
+          <div style="display:flex;align-items:center;justify-content:space-between;padding-left:4px;margin-top:10px;">
+            <div>
+              <div style="font-size:0.86rem;font-weight:600;">Täglich erinnern bis erledigt</div>
+              <div style="font-size:0.76rem;opacity:0.6;">Solange noch Aufgaben unfertig sind</div>
+            </div>
+            <div class="m3-switch" id="ns-hw-daily" onclick="toggleNotifProp('homework_daily_reminder', this)"></div>
+          </div>
+          <div id="ns-hw-daily-wrap" style="display:none;margin-top:8px;padding-left:4px;">
+            <label style="font-size:0.76rem;font-weight:600;opacity:0.7;display:block;margin-bottom:4px;">Uhrzeit für tägliche Erinnerung:</label>
+            <input type="time" class="m3-input" id="ns-hw-daily-time" style="max-width:140px;" onchange="updateNotifProp('homework_daily_time', this.value)">
+          </div>
+        </div>
+
+        <div style="height:1px;background:rgba(0,0,0,0.06);margin:14px 0;"></div>
+
+        <!-- 2. Termine & Kalender -->
+        <div style="margin-bottom:18px;">
+          <div style="display:flex;align-items:center;gap:8px;font-weight:700;color:var(--m3-prim);font-size:0.92rem;margin-bottom:10px;">
+            <i data-lucide="calendar" style="width:18px;height:18px;"></i>
+            Termine & Kalender
+          </div>
+
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;padding-left:4px;">
+            <div>
+              <div style="font-size:0.86rem;font-weight:600;">Bei neuem Termin</div>
+              <div style="font-size:0.76rem;opacity:0.6;">Sofortige Benachrichtigung bei Erstellung</div>
+            </div>
+            <div class="m3-switch on" id="ns-event-new" onclick="toggleNotifProp('event_new', this)"></div>
+          </div>
+
+          <div style="margin-bottom:12px;padding-left:4px;">
+            <div style="font-size:0.84rem;font-weight:600;margin-bottom:6px;">Erinnerungen vor Termin:</div>
+            <div id="ns-event-reminders-list" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;"></div>
+            <button type="button" class="m3-btn-tonal" onclick="openAddReminderDialog('event')" style="font-size:0.78rem;padding:6px 12px;border-radius:10px;display:inline-flex;align-items:center;gap:6px;">
+              <i data-lucide="plus" style="width:14px;height:14px;"></i> Erinnerung hinzufügen
+            </button>
+          </div>
+        </div>
+
+        <div style="height:1px;background:rgba(0,0,0,0.06);margin:14px 0;"></div>
+
+        <!-- 3. Speiseplan -->
+        <div style="margin-bottom:18px;">
+          <div style="display:flex;align-items:center;gap:8px;font-weight:700;color:var(--m3-prim);font-size:0.92rem;margin-bottom:10px;">
+            <i data-lucide="utensils" style="width:18px;height:18px;"></i>
+            Speiseplan / Mensa
+          </div>
+
+          <div style="padding-left:4px;">
+            <label style="font-size:0.78rem;font-weight:600;opacity:0.7;display:block;margin-bottom:4px;">Erinnerungs-Zeitpunkt:</label>
+            <select class="m3-select" id="ns-meal-mode" onchange="onMealModeChange(this.value)" style="margin-bottom:8px;">
+              <option value="same_day">Am selben Tag morgens</option>
+              <option value="day_before">Am Vortag abends</option>
+              <option value="none">Deaktiviert</option>
+            </select>
+            <div id="ns-meal-time-wrap">
+              <label style="font-size:0.76rem;font-weight:600;opacity:0.7;display:block;margin-bottom:4px;">Uhrzeit:</label>
+              <input type="time" class="m3-input" id="ns-meal-time" style="max-width:140px;" onchange="updateNotifProp('meal_reminder_time', this.value)">
+            </div>
+          </div>
+        </div>
+
+        <div style="height:1px;background:rgba(0,0,0,0.06);margin:14px 0;"></div>
+
+        <!-- 4. Stundenplan (WebUntis) -->
+        <div>
+          <div style="display:flex;align-items:center;gap:8px;font-weight:700;color:var(--m3-prim);font-size:0.92rem;margin-bottom:4px;">
+            <i data-lucide="clock" style="width:18px;height:18px;"></i>
+            Stundenplan & Unterricht (Untis)
+          </div>
+          <div style="font-size:0.76rem;opacity:0.6;margin-bottom:12px;padding-left:4px;">
+            Wird alle 5 Min. live überwacht & serverseitig gecacht
+          </div>
+
+          <!-- Live Changes -->
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding-left:4px;">
+            <div>
+              <div style="font-size:0.86rem;font-weight:600;">Live-Stundenplan-Änderungen</div>
+              <div style="font-size:0.76rem;opacity:0.6;">Sofortiger Push bei Ausfall, Vertretung oder Raumwechsel</div>
+            </div>
+            <div class="m3-switch on" id="ns-tt-changes" onclick="toggleNotifProp('timetable_changes', this)"></div>
+          </div>
+
+          <!-- First Lesson -->
+          <div style="margin-bottom:12px;padding-left:4px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;">
+              <div>
+                <div style="font-size:0.86rem;font-weight:600;">Vor der ersten Stunde</div>
+                <div style="font-size:0.76rem;opacity:0.6;">Erinnerung mit Fach und Raum</div>
+              </div>
+              <div class="m3-switch on" id="ns-tt-first-lesson" onclick="toggleNotifProp('timetable_before_first_lesson', this)"></div>
+            </div>
+            <div id="ns-tt-first-lead-wrap" style="margin-top:6px;display:flex;align-items:center;gap:8px;">
+              <span style="font-size:0.78rem;opacity:0.7;">Vorlaufzeit:</span>
+              <select class="m3-select" id="ns-tt-first-lead" style="max-width:140px;" onchange="updateNotifProp('timetable_first_lesson_lead_minutes', parseInt(this.value))">
+                <option value="15">15 Minuten</option>
+                <option value="30">30 Minuten</option>
+                <option value="45">45 Minuten</option>
+                <option value="60">1 Stunde</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Lesson End -->
+          <div style="margin-bottom:12px;padding-left:4px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;">
+              <div>
+                <div style="font-size:0.86rem;font-weight:600;">Vor Stundenende</div>
+                <div style="font-size:0.76rem;opacity:0.6;">Kurz vor Ende des Unterrichts</div>
+              </div>
+              <div class="m3-switch" id="ns-tt-lesson-end" onclick="toggleNotifProp('timetable_before_lesson_end', this)"></div>
+            </div>
+            <div id="ns-tt-lesson-end-lead-wrap" style="margin-top:6px;display:none;align-items:center;gap:8px;">
+              <span style="font-size:0.78rem;opacity:0.7;">Vorlaufzeit:</span>
+              <select class="m3-select" id="ns-tt-lesson-end-lead" style="max-width:140px;" onchange="updateNotifProp('timetable_lesson_end_lead_minutes', parseInt(this.value))">
+                <option value="3">3 Minuten</option>
+                <option value="5">5 Minuten</option>
+                <option value="10">10 Minuten</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Before Break -->
+          <div style="margin-bottom:12px;padding-left:4px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;">
+              <div>
+                <div style="font-size:0.86rem;font-weight:600;">Vor Pausenbeginn</div>
+                <div style="font-size:0.76rem;opacity:0.6;">Kurz vor Beginn einer großen Pause</div>
+              </div>
+              <div class="m3-switch" id="ns-tt-break-start" onclick="toggleNotifProp('timetable_before_break', this)"></div>
+            </div>
+            <div id="ns-tt-break-start-lead-wrap" style="margin-top:6px;display:none;align-items:center;gap:8px;">
+              <span style="font-size:0.78rem;opacity:0.7;">Vorlaufzeit:</span>
+              <select class="m3-select" id="ns-tt-break-start-lead" style="max-width:140px;" onchange="updateNotifProp('timetable_break_lead_minutes', parseInt(this.value))">
+                <option value="3">3 Minuten</option>
+                <option value="5">5 Minuten</option>
+                <option value="10">10 Minuten</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Before Break End / Next Lesson -->
+          <div style="margin-bottom:12px;padding-left:4px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;">
+              <div>
+                <div style="font-size:0.86rem;font-weight:600;">Vor Pausenende / nächster Stunde</div>
+                <div style="font-size:0.76rem;opacity:0.6;">Erinnert vor dem Gong zum Raumwechsel</div>
+              </div>
+              <div class="m3-switch on" id="ns-tt-break-end" onclick="toggleNotifProp('timetable_before_break_end', this)"></div>
+            </div>
+            <div id="ns-tt-break-end-lead-wrap" style="margin-top:6px;display:flex;align-items:center;gap:8px;">
+              <span style="font-size:0.78rem;opacity:0.7;">Vorlaufzeit:</span>
+              <select class="m3-select" id="ns-tt-break-end-lead" style="max-width:140px;" onchange="updateNotifProp('timetable_break_end_lead_minutes', parseInt(this.value))">
+                <option value="2">2 Minuten</option>
+                <option value="3">3 Minuten</option>
+                <option value="5">5 Minuten</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- School End Summary -->
+          <div style="margin-bottom:8px;padding-left:4px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;">
+              <div>
+                <div style="font-size:0.86rem;font-weight:600;">Schulschluss-Zusammenfassung</div>
+                <div style="font-size:0.76rem;opacity:0.6;">Status der offenen Hausaufgaben nach Schulende</div>
+              </div>
+              <div class="m3-switch on" id="ns-tt-summary" onclick="toggleNotifProp('timetable_end_of_day_summary', this)"></div>
+            </div>
+            <div id="ns-tt-summary-delay-wrap" style="margin-top:6px;display:flex;align-items:center;gap:8px;">
+              <span style="font-size:0.78rem;opacity:0.7;">Senden nach:</span>
+              <select class="m3-select" id="ns-tt-summary-delay" style="max-width:210px;" onchange="updateNotifProp('timetable_end_of_day_delay_minutes', parseInt(this.value))">
+                <option value="15">15 Min nach Unterricht</option>
+                <option value="30">30 Min nach Unterricht</option>
+                <option value="60">1 Stunde nach Unterricht</option>
+                <option value="90">1,5 Std nach Unterricht</option>
+                <option value="120">2 Std nach Unterricht</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
 
     <!-- Class -->
     <div class="section-label">Meine Klasse</div>
@@ -142,14 +367,9 @@ async function init_settings() {
     document.getElementById('settings-admin-card').style.display = 'block';
   }
 
-  // Check push status
-  if ('serviceWorker' in navigator && 'PushManager' in window) {
-    const reg = await navigator.serviceWorker.ready.catch(()=>null);
-    if (reg) {
-      const sub = await reg.pushManager.getSubscription().catch(()=>null);
-      if (sub) document.getElementById('push-switch').classList.add('on');
-    }
-  }
+  // Check push status & notification settings
+  await checkDevicePushStatus();
+  await loadNotificationSettings();
 
   // Load class info
   if (settingsUser.class_id) {
@@ -218,14 +438,48 @@ async function removeAvatar() {
   }
 }
 
+let notifSettings = null;
+
+
+async function checkDevicePushStatus() {
+  const sw = document.getElementById('push-switch');
+  const desc = document.getElementById('device-push-desc');
+  if (!sw || !desc) return;
+
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    desc.textContent = 'Push wird von diesem Browser nicht unterstützt';
+    desc.style.color = '#79747e';
+    sw.style.display = 'none';
+    return;
+  }
+
+  if (Notification.permission === 'denied') {
+    desc.textContent = 'Im Browser blockiert (bitte Berechtigung erlauben)';
+    desc.style.color = '#b3261e';
+    sw.classList.remove('on');
+    return;
+  }
+
+  const reg = await navigator.serviceWorker.ready.catch(() => null);
+  const sub = reg ? await reg.pushManager.getSubscription().catch(() => null) : null;
+  if (sub) {
+    sw.classList.add('on');
+    desc.textContent = 'Auf diesem Gerät aktiv ✓';
+    desc.style.color = '#146c2e';
+  } else {
+    sw.classList.remove('on');
+    desc.textContent = 'Auf diesem Gerät nicht aktiv';
+    desc.style.color = 'inherit';
+  }
+}
+
 async function togglePush(sw) {
   if (sw.classList.contains('on')) {
     await Push.unsubscribe().catch(()=>{});
     sw.classList.remove('on');
-    showToast('Benachrichtigungen deaktiviert');
+    showToast('Push auf diesem Gerät deaktiviert');
   } else {
     if (!Push._vapidKey) {
-      // Try re-initializing once (key may have been generated after page load)
       await Push.init().catch(()=>{});
       if (!Push._vapidKey) { showToast('Push nicht verfügbar'); return; }
     }
@@ -235,15 +489,244 @@ async function togglePush(sw) {
     }
     try {
       const ok = await Push.subscribe();
-      if (ok) { sw.classList.add('on'); showToast('Benachrichtigungen aktiviert'); }
-      else showToast('Berechtigung verweigert');
+      if (ok) {
+        sw.classList.add('on');
+        showToast('Push auf diesem Gerät aktiviert');
+      } else {
+        showToast('Berechtigung verweigert');
+      }
     } catch(e) {
       console.error('Push subscribe error:', e);
       if (Notification.permission === 'denied') showToast('Berechtigung verweigert');
-      else showToast('Fehler: ' + (e.message || 'Aktivierung fehlgeschlagen'));
+      else showToast('Fehler bei Aktivierung');
     }
   }
+  await checkDevicePushStatus();
 }
+
+async function loadNotificationSettings() {
+  notifSettings = await API.notificationSettings().catch(() => null);
+  if (!notifSettings) return;
+
+  const masterSw = document.getElementById('ns-master-switch');
+  if (masterSw) masterSw.classList.toggle('on', !!notifSettings.enabled);
+  syncMasterVisibility(!!notifSettings.enabled);
+
+  // Hausaufgaben
+  const hwNew = document.getElementById('ns-hw-new');
+  if (hwNew) hwNew.classList.toggle('on', !!notifSettings.homework_new);
+  renderReminderChips('hw');
+
+  const hwDaily = document.getElementById('ns-hw-daily');
+  if (hwDaily) hwDaily.classList.toggle('on', !!notifSettings.homework_daily_reminder);
+  const hwDailyWrap = document.getElementById('ns-hw-daily-wrap');
+  if (hwDailyWrap) hwDailyWrap.style.display = notifSettings.homework_daily_reminder ? 'block' : 'none';
+  const hwDailyTime = document.getElementById('ns-hw-daily-time');
+  if (hwDailyTime) hwDailyTime.value = notifSettings.homework_daily_time || '16:00';
+
+  // Termine
+  const evNew = document.getElementById('ns-event-new');
+  if (evNew) evNew.classList.toggle('on', !!notifSettings.event_new);
+  renderReminderChips('event');
+
+  // Speiseplan
+  const mealMode = document.getElementById('ns-meal-mode');
+  if (mealMode) mealMode.value = notifSettings.meal_reminder_mode || 'same_day';
+  const mealTimeWrap = document.getElementById('ns-meal-time-wrap');
+  if (mealTimeWrap) mealTimeWrap.style.display = notifSettings.meal_reminder_mode === 'none' ? 'none' : 'block';
+  const mealTime = document.getElementById('ns-meal-time');
+  if (mealTime) mealTime.value = notifSettings.meal_reminder_time || '07:00';
+
+  // Stundenplan
+  const ttChanges = document.getElementById('ns-tt-changes');
+  if (ttChanges) ttChanges.classList.toggle('on', !!notifSettings.timetable_changes);
+
+  const ttFirst = document.getElementById('ns-tt-first-lesson');
+  if (ttFirst) ttFirst.classList.toggle('on', !!notifSettings.timetable_before_first_lesson);
+  const ttFirstWrap = document.getElementById('ns-tt-first-lead-wrap');
+  if (ttFirstWrap) ttFirstWrap.style.display = notifSettings.timetable_before_first_lesson ? 'flex' : 'none';
+  const ttFirstLead = document.getElementById('ns-tt-first-lead');
+  if (ttFirstLead) ttFirstLead.value = String(notifSettings.timetable_first_lesson_lead_minutes || 30);
+
+  const ttEnd = document.getElementById('ns-tt-lesson-end');
+  if (ttEnd) ttEnd.classList.toggle('on', !!notifSettings.timetable_before_lesson_end);
+  const ttEndWrap = document.getElementById('ns-tt-lesson-end-lead-wrap');
+  if (ttEndWrap) ttEndWrap.style.display = notifSettings.timetable_before_lesson_end ? 'flex' : 'none';
+  const ttEndLead = document.getElementById('ns-tt-lesson-end-lead');
+  if (ttEndLead) ttEndLead.value = String(notifSettings.timetable_lesson_end_lead_minutes || 5);
+
+  const ttBrk = document.getElementById('ns-tt-break-start');
+  if (ttBrk) ttBrk.classList.toggle('on', !!notifSettings.timetable_before_break);
+  const ttBrkWrap = document.getElementById('ns-tt-break-start-lead-wrap');
+  if (ttBrkWrap) ttBrkWrap.style.display = notifSettings.timetable_before_break ? 'flex' : 'none';
+  const ttBrkLead = document.getElementById('ns-tt-break-start-lead');
+  if (ttBrkLead) ttBrkLead.value = String(notifSettings.timetable_break_lead_minutes || 5);
+
+  const ttBrkEnd = document.getElementById('ns-tt-break-end');
+  if (ttBrkEnd) ttBrkEnd.classList.toggle('on', !!notifSettings.timetable_before_break_end);
+  const ttBrkEndWrap = document.getElementById('ns-tt-break-end-lead-wrap');
+  if (ttBrkEndWrap) ttBrkEndWrap.style.display = notifSettings.timetable_before_break_end ? 'flex' : 'none';
+  const ttBrkEndLead = document.getElementById('ns-tt-break-end-lead');
+  if (ttBrkEndLead) ttBrkEndLead.value = String(notifSettings.timetable_break_end_lead_minutes || 3);
+
+  const ttSum = document.getElementById('ns-tt-summary');
+  if (ttSum) ttSum.classList.toggle('on', !!notifSettings.timetable_end_of_day_summary);
+  const ttSumWrap = document.getElementById('ns-tt-summary-delay-wrap');
+  if (ttSumWrap) ttSumWrap.style.display = notifSettings.timetable_end_of_day_summary ? 'flex' : 'none';
+  const ttSumDelay = document.getElementById('ns-tt-summary-delay');
+  if (ttSumDelay) ttSumDelay.value = String(notifSettings.timetable_end_of_day_delay_minutes || 60);
+
+  if (window.lucide) lucide.createIcons();
+}
+
+function syncMasterVisibility(enabled) {
+  const body = document.getElementById('ns-options-body');
+  if (body) {
+    body.style.opacity = enabled ? '1' : '0.45';
+    body.style.pointerEvents = enabled ? 'auto' : 'none';
+  }
+}
+
+async function toggleNotifMaster(sw) {
+  const newState = !sw.classList.contains('on');
+  sw.classList.toggle('on', newState);
+  syncMasterVisibility(newState);
+  if (!notifSettings) notifSettings = {};
+  notifSettings.enabled = newState;
+  await API.updateNotificationSettings({ enabled: newState }).catch(()=>{});
+  showToast(newState ? 'Benachrichtigungen aktiviert' : 'Benachrichtigungen pausiert');
+}
+
+async function toggleNotifProp(prop, sw) {
+  const newState = !sw.classList.contains('on');
+  sw.classList.toggle('on', newState);
+  if (!notifSettings) notifSettings = {};
+  notifSettings[prop] = newState;
+
+  // Conditional wraps
+  if (prop === 'homework_daily_reminder') {
+    const wrap = document.getElementById('ns-hw-daily-wrap');
+    if (wrap) wrap.style.display = newState ? 'block' : 'none';
+  } else if (prop === 'timetable_before_first_lesson') {
+    const wrap = document.getElementById('ns-tt-first-lead-wrap');
+    if (wrap) wrap.style.display = newState ? 'flex' : 'none';
+  } else if (prop === 'timetable_before_lesson_end') {
+    const wrap = document.getElementById('ns-tt-lesson-end-lead-wrap');
+    if (wrap) wrap.style.display = newState ? 'flex' : 'none';
+  } else if (prop === 'timetable_before_break') {
+    const wrap = document.getElementById('ns-tt-break-start-lead-wrap');
+    if (wrap) wrap.style.display = newState ? 'flex' : 'none';
+  } else if (prop === 'timetable_before_break_end') {
+    const wrap = document.getElementById('ns-tt-break-end-lead-wrap');
+    if (wrap) wrap.style.display = newState ? 'flex' : 'none';
+  } else if (prop === 'timetable_end_of_day_summary') {
+    const wrap = document.getElementById('ns-tt-summary-delay-wrap');
+    if (wrap) wrap.style.display = newState ? 'flex' : 'none';
+  }
+
+  await API.updateNotificationSettings({ [prop]: newState }).catch(()=>{});
+}
+
+async function updateNotifProp(prop, val) {
+  if (!notifSettings) notifSettings = {};
+  notifSettings[prop] = val;
+  await API.updateNotificationSettings({ [prop]: val }).catch(()=>{});
+}
+
+async function onMealModeChange(val) {
+  const wrap = document.getElementById('ns-meal-time-wrap');
+  if (wrap) wrap.style.display = val === 'none' ? 'none' : 'block';
+  await updateNotifProp('meal_reminder_mode', val);
+}
+
+function renderReminderChips(type) {
+  const listEl = document.getElementById(type === 'hw' ? 'ns-hw-reminders-list' : 'ns-event-reminders-list');
+  if (!listEl) return;
+  const arr = (type === 'hw' ? notifSettings?.homework_reminders : notifSettings?.event_reminders) || [];
+
+  if (!arr.length) {
+    listEl.innerHTML = '<span style="font-size:0.75rem;opacity:0.5;font-style:italic;">Keine Erinnerungen eingestellt</span>';
+    return;
+  }
+
+  listEl.innerHTML = arr.map((r, idx) => {
+    const label = r.type === 'days'
+      ? (r.value === 1 ? '1 Tag vorher' : r.value + ' Tage vorher')
+      : (r.value === 1 ? '1 Stunde vorher' : r.value + ' Stunden vorher');
+
+    return `<div style="background:#f3edf7;border:1px solid rgba(103,80,164,0.2);padding:4px 10px;border-radius:12px;font-size:0.78rem;font-weight:600;color:#21005d;display:inline-flex;align-items:center;gap:6px;">
+      <span>${label}</span>
+      <button type="button" onclick="removeReminder('${type}', ${idx})" style="background:none;border:none;cursor:pointer;padding:0;display:flex;align-items:center;color:#6750a4;opacity:0.7;">
+        <i data-lucide="x" style="width:13px;height:13px;"></i>
+      </button>
+    </div>`;
+  }).join('');
+
+  if (window.lucide) lucide.createIcons();
+}
+
+async function removeReminder(type, index) {
+  const key = type === 'hw' ? 'homework_reminders' : 'event_reminders';
+  const arr = notifSettings[key] || [];
+  arr.splice(index, 1);
+  notifSettings[key] = arr;
+  renderReminderChips(type);
+  await API.updateNotificationSettings({ [key]: arr }).catch(()=>{});
+}
+
+function openAddReminderDialog(type) {
+  const typeLabel = type === 'hw' ? 'Hausaufgabe' : 'Termin';
+  openSheet(`
+    <div class="sheet-title" style="margin-bottom:14px;">Erinnerung für ${typeLabel}</div>
+    <div style="margin-bottom:14px;">
+      <label style="font-size:0.78rem;font-weight:600;color:var(--m3-prim);display:block;margin-bottom:4px;">Wie viel vorher erinnern?</label>
+      <div style="display:flex;gap:8px;">
+        <input type="number" id="add-rem-val" class="m3-input" value="1" min="1" max="30" style="flex:1;">
+        <select id="add-rem-unit" class="m3-select" style="flex:1.5;">
+          <option value="days">Tag(e) vorher</option>
+          <option value="hours">Stunde(n) vorher</option>
+        </select>
+      </div>
+    </div>
+    <button class="m3-btn-full" onclick="saveNewReminder('${type}')">Hinzufügen</button>
+  `);
+}
+
+async function saveNewReminder(type) {
+  const valEl = document.getElementById('add-rem-val');
+  const unitEl = document.getElementById('add-rem-unit');
+  if (!valEl || !unitEl) return;
+
+  const val = parseInt(valEl.value, 10);
+  const unit = unitEl.value;
+  if (!val || val < 1) { showToast('Ungültige Anzahl'); return; }
+
+  const key = type === 'hw' ? 'homework_reminders' : 'event_reminders';
+  if (!notifSettings) notifSettings = {};
+  const arr = notifSettings[key] || [];
+
+  // Check if duplicate already exists
+  if (arr.some(r => r.type === unit && r.value === val)) {
+    closeSheet();
+    showToast('Diese Erinnerung existiert bereits');
+    return;
+  }
+
+  arr.push({ type: unit, value: val });
+  // Sort descending: days first, then hours
+  arr.sort((a,b) => {
+    const aSec = a.type === 'days' ? a.value * 24 : a.value;
+    const bSec = b.type === 'days' ? b.value * 24 : b.value;
+    return bSec - aSec;
+  });
+
+  notifSettings[key] = arr;
+  closeSheet();
+  renderReminderChips(type);
+  await API.updateNotificationSettings({ [key]: arr }).catch(()=>{});
+  showToast('Erinnerung hinzugefügt');
+}
+
 
 function updatePwaInstallState() {
   const badge = document.getElementById('settings-pwa-badge');

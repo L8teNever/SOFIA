@@ -43,7 +43,15 @@ async def create_event(data: CalendarEventCreate, db: AsyncSession = Depends(get
     db.add(event)
     await db.commit()
     await db.refresh(event)
+
+    try:
+        from backend.services.notification_scheduler import notify_new_event
+        await notify_new_event(db, event, current_user)
+    except Exception as e:
+        logger.warning("Error dispatching new event notification: %s", e)
+
     return event
+
 
 # --- Schulferien Endpunkte ---
 
