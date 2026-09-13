@@ -714,6 +714,17 @@ function toggleEventTime() {
   }
 }
 
+// Dauer/Kategorie/Uhrzeit start collapsed behind "Weitere Optionen" so the
+// sheet opens with just title + date instead of every field at once — they
+// were already enhanced (dropdowns, date/time inputs) when the sheet itself
+// opened, hidden or not, so revealing the wrapper here is enough.
+function toggleEventMore() {
+  const wrap = document.getElementById('ev-more-wrap');
+  const toggleWrap = document.getElementById('ev-more-toggle-wrap');
+  if (wrap) wrap.style.display = 'block';
+  if (toggleWrap) toggleWrap.style.display = 'none';
+}
+
 async function openNewEventSheet(defaultDate) {
   await loadCalSubjects();
   const today = defaultDate || selectedCalDate || new Date().toISOString().slice(0, 10);
@@ -721,67 +732,78 @@ async function openNewEventSheet(defaultDate) {
 
   openSheet(`
     <div class="sheet-title" style="font-size:1.25rem;font-weight:800;color:#1c1b1f;margin-bottom:16px;">Neuer Termin</div>
-    
-    <label style="font-size:0.78rem;font-weight:700;color:#6750a4;display:block;margin-bottom:4px;margin-left:4px;">Titel des Termins:</label>
-    <input class="m3-input" id="ev-title" placeholder="z. B. Mathearbeit, Schulausflug, Zahnarzt...">
 
-    <!-- Segmented Toggle: Single vs Multi-Day -->
-    <label style="font-size:0.78rem;font-weight:700;color:#6750a4;display:block;margin-bottom:6px;margin-left:4px;">Dauer:</label>
-    <div class="ev-segmented-wrap">
-      <button type="button" id="ev-mode-single" class="ev-seg-btn active" onclick="setEventRangeMode(false)">
-        <i data-lucide="calendar" style="width:16px;height:16px;"></i>
-        <span>Einzelner Tag</span>
-      </button>
-      <button type="button" id="ev-mode-range" class="ev-seg-btn" onclick="setEventRangeMode(true)">
-        <i data-lucide="calendar-range" style="width:16px;height:16px;"></i>
-        <span>Zeitraum (mehrere Tage)</span>
-      </button>
+    <div class="m3-field">
+      <label class="m3-field-label">Titel des Termins:</label>
+      <input class="m3-input" id="ev-title" placeholder="z. B. Mathearbeit, Schulausflug, Zahnarzt...">
     </div>
 
-    <!-- Dates -->
-    <div id="ev-start-date-wrap">
-      <label id="ev-start-label" style="font-size:0.78rem;font-weight:700;color:#6750a4;display:block;margin-bottom:4px;margin-left:4px;">Datum:</label>
+    <div class="m3-field" id="ev-start-date-wrap">
+      <label id="ev-start-label" class="m3-field-label">Datum:</label>
       <input class="m3-input" id="ev-date" type="date" value="${today}">
     </div>
 
-    <div id="ev-end-date-wrap" style="display:none;margin-top:8px;">
-      <label style="font-size:0.78rem;font-weight:700;color:#6750a4;display:block;margin-bottom:4px;margin-left:4px;">Enddatum (Bis einschließlich):</label>
+    <div id="ev-end-date-wrap" class="m3-field" style="display:none;">
+      <label class="m3-field-label">Enddatum (Bis einschließlich):</label>
       <input class="m3-input" id="ev-end-date" type="date" value="${today}">
     </div>
 
-    <!-- Category -->
-    <div style="margin-top:12px;">
-      <label style="font-size:0.78rem;font-weight:700;color:#6750a4;display:block;margin-bottom:4px;margin-left:4px;">Kategorie:</label>
-      <select class="m3-select" id="ev-type">
-        <option value="other">Sonstiges</option>
-        <option value="exam">Klassenarbeit</option>
-        <option value="trip">Ausflug / Klassenfahrt</option>
-        <option value="holiday">Ferien</option>
-        <option value="personal">Persönlich (nur für dich sichtbar)</option>
-      </select>
-    </div>
-
-    <!-- Subject for exam -->
-    <div id="ev-subject-row" style="display:none;margin-top:10px;margin-bottom:12px;">
-      <label style="font-size:0.78rem;font-weight:700;color:#6750a4;display:block;margin-bottom:4px;margin-left:4px;">Fach für die Klassenarbeit:</label>
-      <select class="m3-select" id="ev-subject">
-        <option value="">Fach auswählen (optional)</option>
-        ${subOpts}
-      </select>
-    </div>
-
-    <!-- Optional Time -->
-    <div style="margin: 12px 0 18px 0;">
-      <button type="button" id="ev-time-toggle" onclick="toggleEventTime()" style="background:none;border:none;color:#6750a4;font-size:0.85rem;font-weight:700;cursor:pointer;padding:6px 0;display:flex;align-items:center;gap:6px;">
-        <i data-lucide="clock" style="width:16px;height:16px;"></i> + Uhrzeit hinzufügen (optional)
+    <!-- Dauer, Kategorie and Uhrzeit default to Einzelner Tag / Sonstiges /
+         ohne Uhrzeit for most events, so they stay collapsed behind one
+         toggle instead of all showing at once. -->
+    <div class="m3-field" id="ev-more-toggle-wrap">
+      <button type="button" id="ev-more-toggle" class="m3-inline-toggle m3-more-toggle" onclick="toggleEventMore()">
+        <span style="display:flex;align-items:center;gap:6px;"><i data-lucide="sliders-horizontal" style="width:16px;height:16px;"></i> Weitere Optionen</span>
+        <i data-lucide="chevron-down" style="width:16px;height:16px;"></i>
       </button>
-      <div id="ev-time-wrap" style="display:none;margin-top:6px;">
-        <label style="font-size:0.78rem;font-weight:700;color:#6750a4;display:block;margin-bottom:4px;margin-left:4px;">Uhrzeit:</label>
-        <input class="m3-input" id="ev-time" type="time" placeholder="Uhrzeit (optional)">
+    </div>
+
+    <div id="ev-more-wrap" style="display:none;">
+      <div class="m3-field">
+        <label class="m3-field-label">Dauer:</label>
+        <div class="ev-segmented-wrap">
+          <button type="button" id="ev-mode-single" class="ev-seg-btn active" onclick="setEventRangeMode(false)">
+            <i data-lucide="calendar" style="width:16px;height:16px;"></i>
+            <span>Einzelner Tag</span>
+          </button>
+          <button type="button" id="ev-mode-range" class="ev-seg-btn" onclick="setEventRangeMode(true)">
+            <i data-lucide="calendar-range" style="width:16px;height:16px;"></i>
+            <span>Zeitraum (mehrere Tage)</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="m3-field">
+        <label class="m3-field-label">Kategorie:</label>
+        <select class="m3-select" id="ev-type">
+          <option value="other">Sonstiges</option>
+          <option value="exam">Klassenarbeit</option>
+          <option value="trip">Ausflug / Klassenfahrt</option>
+          <option value="holiday">Ferien</option>
+          <option value="personal">Persönlich (nur für dich sichtbar)</option>
+        </select>
+      </div>
+
+      <div id="ev-subject-row" class="m3-field" style="display:none;">
+        <label class="m3-field-label">Fach für die Klassenarbeit:</label>
+        <select class="m3-select" id="ev-subject">
+          <option value="">Fach auswählen (optional)</option>
+          ${subOpts}
+        </select>
+      </div>
+
+      <div class="m3-field">
+        <button type="button" id="ev-time-toggle" class="m3-inline-toggle" onclick="toggleEventTime()">
+          <i data-lucide="clock" style="width:16px;height:16px;"></i> + Uhrzeit hinzufügen (optional)
+        </button>
+        <div id="ev-time-wrap" style="display:none;margin-top:6px;">
+          <label class="m3-field-label">Uhrzeit:</label>
+          <input class="m3-input" id="ev-time" type="time" placeholder="Uhrzeit (optional)">
+        </div>
       </div>
     </div>
 
-    <div style="display:flex;gap:10px;margin-top:16px;">
+    <div class="m3-sheet-actions">
       <button type="button" class="m3-btn-outline" style="flex:1;" onclick="closeSheet()">Abbrechen</button>
       <button type="button" class="m3-btn-primary" style="flex:2;" onclick="saveEvent()">Speichern</button>
     </div>
@@ -843,64 +865,78 @@ async function openEditEventSheet(eventId) {
   ].map(t => `<option value="${t.value}" ${t.value === ev.event_type ? 'selected' : ''}>${t.label}</option>`).join('');
 
   const hasTime = Boolean(ev.time);
+  // Expand "Weitere Optionen" upfront whenever the event already uses one of
+  // the fields hidden behind it — otherwise editing would silently hide an
+  // already-set category/range/time instead of just defaulting to it.
+  const hasMore = isRange || ev.event_type !== 'other' || hasTime;
 
   openSheet(`
     <div class="sheet-title" style="font-size:1.25rem;font-weight:800;color:#1c1b1f;margin-bottom:16px;">Termin bearbeiten</div>
-    
-    <label style="font-size:0.78rem;font-weight:700;color:#6750a4;display:block;margin-bottom:4px;margin-left:4px;">Titel des Termins:</label>
-    <input class="m3-input" id="ev-title" placeholder="Titel" value="${escapeHtml(ev.title)}">
 
-    <!-- Segmented Toggle -->
-    <label style="font-size:0.78rem;font-weight:700;color:#6750a4;display:block;margin-bottom:6px;margin-left:4px;">Dauer:</label>
-    <div class="ev-segmented-wrap">
-      <button type="button" id="ev-mode-single" class="ev-seg-btn ${!isRange ? 'active' : ''}" onclick="setEventRangeMode(false)">
-        <i data-lucide="calendar" style="width:16px;height:16px;"></i>
-        <span>Einzelner Tag</span>
-      </button>
-      <button type="button" id="ev-mode-range" class="ev-seg-btn ${isRange ? 'active' : ''}" onclick="setEventRangeMode(true)">
-        <i data-lucide="calendar-range" style="width:16px;height:16px;"></i>
-        <span>Zeitraum (mehrere Tage)</span>
-      </button>
+    <div class="m3-field">
+      <label class="m3-field-label">Titel des Termins:</label>
+      <input class="m3-input" id="ev-title" placeholder="Titel" value="${escapeHtml(ev.title)}">
     </div>
 
-    <!-- Dates -->
-    <div id="ev-start-date-wrap">
-      <label id="ev-start-label" style="font-size:0.78rem;font-weight:700;color:#6750a4;display:block;margin-bottom:4px;margin-left:4px;">${isRange ? 'Startdatum (Ab):' : 'Datum:'}</label>
+    <div class="m3-field" id="ev-start-date-wrap">
+      <label id="ev-start-label" class="m3-field-label">${isRange ? 'Startdatum (Ab):' : 'Datum:'}</label>
       <input class="m3-input" id="ev-date" type="date" value="${ev.date}">
     </div>
 
-    <div id="ev-end-date-wrap" style="display:${isRange ? 'block' : 'none'};margin-top:8px;">
-      <label style="font-size:0.78rem;font-weight:700;color:#6750a4;display:block;margin-bottom:4px;margin-left:4px;">Enddatum (Bis einschließlich):</label>
+    <div id="ev-end-date-wrap" class="m3-field" style="display:${isRange ? 'block' : 'none'};">
+      <label class="m3-field-label">Enddatum (Bis einschließlich):</label>
       <input class="m3-input" id="ev-end-date" type="date" value="${ev.end_date || ev.date}">
     </div>
 
-    <!-- Category -->
-    <div style="margin-top:12px;">
-      <label style="font-size:0.78rem;font-weight:700;color:#6750a4;display:block;margin-bottom:4px;margin-left:4px;">Kategorie:</label>
-      <select class="m3-select" id="ev-type">
-        ${typeOpts}
-      </select>
-    </div>
-
-    <div id="ev-subject-row" style="display:${ev.event_type === 'exam' ? 'block' : 'none'};margin-top:10px;margin-bottom:12px;">
-      <label style="font-size:0.78rem;font-weight:700;color:#6750a4;display:block;margin-bottom:4px;margin-left:4px;">Fach für die Klassenarbeit:</label>
-      <select class="m3-select" id="ev-subject">
-        <option value="">Fach auswählen (optional)</option>
-        ${subOpts}
-      </select>
-    </div>
-
-    <div style="margin: 12px 0 18px 0;">
-      <button type="button" id="ev-time-toggle" onclick="toggleEventTime()" style="background:none;border:none;color:#6750a4;font-size:0.85rem;font-weight:700;cursor:pointer;padding:6px 0;display:${hasTime ? 'none' : 'flex'};align-items:center;gap:6px;">
-        <i data-lucide="clock" style="width:16px;height:16px;"></i> + Uhrzeit hinzufügen (optional)
+    <div class="m3-field" id="ev-more-toggle-wrap" style="display:${hasMore ? 'none' : 'block'};">
+      <button type="button" id="ev-more-toggle" class="m3-inline-toggle m3-more-toggle" onclick="toggleEventMore()">
+        <span style="display:flex;align-items:center;gap:6px;"><i data-lucide="sliders-horizontal" style="width:16px;height:16px;"></i> Weitere Optionen</span>
+        <i data-lucide="chevron-down" style="width:16px;height:16px;"></i>
       </button>
-      <div id="ev-time-wrap" style="display:${hasTime ? 'block' : 'none'};margin-top:6px;">
-        <label style="font-size:0.78rem;font-weight:700;color:#6750a4;display:block;margin-bottom:4px;margin-left:4px;">Uhrzeit:</label>
-        <input class="m3-input" id="ev-time" type="time" placeholder="Uhrzeit (optional)" value="${ev.time || ''}">
+    </div>
+
+    <div id="ev-more-wrap" style="display:${hasMore ? 'block' : 'none'};">
+      <div class="m3-field">
+        <label class="m3-field-label">Dauer:</label>
+        <div class="ev-segmented-wrap">
+          <button type="button" id="ev-mode-single" class="ev-seg-btn ${!isRange ? 'active' : ''}" onclick="setEventRangeMode(false)">
+            <i data-lucide="calendar" style="width:16px;height:16px;"></i>
+            <span>Einzelner Tag</span>
+          </button>
+          <button type="button" id="ev-mode-range" class="ev-seg-btn ${isRange ? 'active' : ''}" onclick="setEventRangeMode(true)">
+            <i data-lucide="calendar-range" style="width:16px;height:16px;"></i>
+            <span>Zeitraum (mehrere Tage)</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="m3-field">
+        <label class="m3-field-label">Kategorie:</label>
+        <select class="m3-select" id="ev-type">
+          ${typeOpts}
+        </select>
+      </div>
+
+      <div id="ev-subject-row" class="m3-field" style="display:${ev.event_type === 'exam' ? 'block' : 'none'};">
+        <label class="m3-field-label">Fach für die Klassenarbeit:</label>
+        <select class="m3-select" id="ev-subject">
+          <option value="">Fach auswählen (optional)</option>
+          ${subOpts}
+        </select>
+      </div>
+
+      <div class="m3-field">
+        <button type="button" id="ev-time-toggle" class="m3-inline-toggle" style="display:${hasTime ? 'none' : 'flex'};" onclick="toggleEventTime()">
+          <i data-lucide="clock" style="width:16px;height:16px;"></i> + Uhrzeit hinzufügen (optional)
+        </button>
+        <div id="ev-time-wrap" style="display:${hasTime ? 'block' : 'none'};margin-top:6px;">
+          <label class="m3-field-label">Uhrzeit:</label>
+          <input class="m3-input" id="ev-time" type="time" placeholder="Uhrzeit (optional)" value="${ev.time || ''}">
+        </div>
       </div>
     </div>
 
-    <div style="display:flex;gap:10px;margin-top:16px;">
+    <div class="m3-sheet-actions">
       <button type="button" class="m3-btn-outline" style="flex:1;" onclick="closeSheet()">Abbrechen</button>
       <button type="button" class="m3-btn-primary" style="flex:2;" onclick="saveEditedEvent(${ev.id})">Speichern</button>
     </div>

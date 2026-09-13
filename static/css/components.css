@@ -47,7 +47,11 @@
   background: #fef7ff;
   color: #1c1b1f;
   border-radius: 28px 28px 0 0;
-  padding: 8px 24px env(safe-area-inset-bottom, 32px) 24px;
+  /* Bottom padding is the device's safe area (home indicator / gesture bar,
+     0 where there is none) PLUS a fixed 24px cushion — using the safe area
+     alone left content sitting flush against the edge of it, which reads as
+     cramped/cut off rather than as intentional breathing room. */
+  padding: 8px 24px calc(env(safe-area-inset-bottom, 0px) + 24px) 24px;
   z-index: 210; transform: translateY(100%);
   transition: transform 0.4s var(--m3-easing);
   box-shadow: 0 -4px 32px rgba(103,80,164,0.12), 0 -1px 0 rgba(0,0,0,0.06);
@@ -755,6 +759,26 @@
   color: #ffffff !important;
   stroke: #ffffff !important;
 }
+
+/* Sheet form field: consistent label + spacing rhythm instead of every
+   field carrying its own ad-hoc inline margin. */
+.m3-field { margin-bottom: 14px; }
+.m3-field-label {
+  font-size: 0.78rem; font-weight: 700; color: #6750a4;
+  display: block; margin-bottom: 6px; margin-left: 4px;
+}
+
+/* Optional-section toggle, e.g. "+ Uhrzeit hinzufügen", "Weitere Optionen" */
+.m3-inline-toggle {
+  background: none; border: none; color: #6750a4;
+  font-size: 0.85rem; font-weight: 700; cursor: pointer;
+  padding: 6px 0; display: flex; align-items: center; gap: 6px;
+  font-family: inherit;
+}
+.m3-more-toggle { width: 100%; justify-content: space-between; }
+.m3-more-toggle svg { opacity: 0.6; flex-shrink: 0; }
+
+.m3-sheet-actions { display: flex; gap: 10px; margin-top: 16px; }
 
 /* Event Card Action Buttons (Pencil & Trash) */
 .ev-action-btn {
