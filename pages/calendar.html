@@ -1,6 +1,6 @@
 <div class="page" id="page-calendar" style="background:#f9f6fc;">
   <!-- Header -->
-  <div class="cal-page-header cal-header-row">
+  <div class="page-header cal-header-row">
     <button class="back-btn cal-back-btn" title="Zurück"><i data-lucide="arrow-left"></i></button>
     <div style="flex:1;min-width:0;">
       <div style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.6;color:#6750a4;" id="cal-year-label"></div>
@@ -74,45 +74,8 @@
   </button>
 
 <style>
-/* Header — a page-local variant of .page-header/.page-title (same
-   background/border/z-index/responsive padding) so the month title can
-   shrink specifically here without affecting every other page's header.
-   Needed once nav + Heute + the filter icon all live in this one row —
-   at narrow widths there just isn't room for the shared 1.75rem title
-   next to four buttons. */
-/* Capped at the same 960px every other page's .page-header.capped uses —
-   NOT .cal-main-container's own 1140px. The back button needs to start at
-   the same spot on every page regardless of how wide that particular
-   page's own content happens to be; matching this page's own (wider,
-   two-pane) content instead of the site-wide header convention just
-   swapped "misaligned with this page's content" for "misaligned with
-   every other page's header", which is the more noticeable of the two
-   since it's the one thing present on every single page. */
-.cal-page-header {
-  display: flex;
-  align-items: center;
-  /* Padding, like the max-width above, must live here rather than as an
-     inline style on the element — an inline style would outrank the
-     media queries below regardless of specificity, silently keeping the
-     base padding active at every width and making them all dead code. */
-  padding: max(24px, env(safe-area-inset-top, 24px)) 20px 16px 20px;
-  background: inherit;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
-  z-index: 10;
-  position: relative;
-  flex-shrink: 0;
-  max-width: 960px;
-  margin: 0 auto;
-  width: 100%;
-  box-sizing: border-box;
-}
-/* Matches .page-header's own progression exactly (20 -> 28 -> 40 -> 60px
-   sides) — same reasoning as the max-width above: the back button's
-   distance from the edge should be identical on every page, not just
-   independently "reasonable" on each one. */
-@media (min-width: 600px)  { .cal-page-header { padding: 28px 28px 18px 28px; } }
-@media (min-width: 760px)  { .cal-page-header { padding: 32px 40px 20px 40px; margin-bottom: 12px; } }
-@media (min-width: 1100px) { .cal-page-header { padding: 36px 60px 22px 60px; margin-bottom: 16px; } }
+/* .page-header now supplies background/border/z-index/padding/capping —
+   only the calendar-specific month-title sizing lives here. */
 .cal-month-title { font-size: 1.3rem; }
 @media (min-width: 400px) { .cal-month-title { font-size: 1.45rem; } }
 @media (min-width: 600px) { .cal-month-title { font-size: 1.6rem; } }

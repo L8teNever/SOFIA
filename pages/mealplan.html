@@ -1,5 +1,5 @@
 <div class="page" id="page-mealplan" style="background:#f0faf3;">
-  <div class="page-header capped">
+  <div class="page-header">
     <button class="back-btn"><i data-lucide="arrow-left" style="width:22px;height:22px;"></i></button>
     <div style="flex:1;">
       <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.5;color:#072711;" id="meal-header-sub">Mensa Speiseplan</div>
@@ -11,7 +11,7 @@
   </div>
 
   <!-- Day Filter Chips (Consistent with SOFIA UI) -->
-  <div style="padding:0 20px 8px;display:flex;gap:8px;overflow-x:auto;flex-shrink:0;" class="no-scrollbar" id="meal-day-chips">
+  <div class="no-scrollbar page-subbar" id="meal-day-chips" style="padding-top:0;padding-bottom:8px;display:flex;gap:8px;overflow-x:auto;flex-shrink:0;">
     <button onclick="mealFilter('all',this)" class="chip active" id="meal-chip-all">Ganze Woche</button>
     <button onclick="mealFilter('today',this)" class="chip" id="meal-chip-today">Heute</button>
     <button onclick="mealFilter('1',this)" class="chip" id="meal-chip-1">Mo</button>

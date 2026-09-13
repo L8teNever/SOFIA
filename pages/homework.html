@@ -1,21 +1,23 @@
 <div class="page" id="page-homework" style="background:#fff5f8;">
-  <div class="page-header capped">
+  <div class="page-header">
     <button class="back-btn"><i data-lucide="arrow-left" style="width:22px;height:22px;"></i></button>
     <div style="flex:1;">
       <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.5;color:#31111d;" id="hw-header-sub">Lade…</div>
       <span class="page-title" style="color:#31111d;">Aufgaben</span>
     </div>
   </div>
-  <div style="padding:0 20px 8px;display:flex;gap:8px;overflow-x:auto;flex-shrink:0;" class="no-scrollbar">
+  <div class="no-scrollbar page-subbar" style="padding-top:0;padding-bottom:8px;display:flex;gap:8px;overflow-x:auto;flex-shrink:0;">
     <button onclick="hwFilter('all',this)" class="chip active" id="hw-f-all">Alle</button>
     <button onclick="hwFilter('open',this)" class="chip" id="hw-f-open">Offen</button>
     <button onclick="hwFilter('done',this)" class="chip" id="hw-f-done">Erledigt</button>
   </div>
   <div class="page-scroll no-scrollbar">
-    <div id="hw-list"></div>
-    <div id="hw-empty" style="display:none;text-align:center;padding:60px 20px;opacity:0.4;">
-      <i data-lucide="check-circle" style="width:48px;height:48px;margin-bottom:12px;display:block;margin-left:auto;margin-right:auto;"></i>
-      <div style="font-weight:600;">Keine Hausaufgaben!</div>
+    <div class="page-inner-wide">
+      <div id="hw-list"></div>
+      <div id="hw-empty" style="display:none;text-align:center;padding:60px 20px;opacity:0.4;">
+        <i data-lucide="check-circle" style="width:48px;height:48px;margin-bottom:12px;display:block;margin-left:auto;margin-right:auto;"></i>
+        <div style="font-weight:600;">Keine Hausaufgaben!</div>
+      </div>
     </div>
   </div>
   <button class="fab" onclick="openHwSheet()" title="Neue Aufgabe erstellen">
@@ -25,7 +27,7 @@
   <!-- Detail overlay: opened on top of this page when a homework card is tapped -->
   <template id="tpl-hw-detail">
     <div class="page page-overlay" id="page-hw-detail" style="background:#fff5f8;">
-      <div class="page-header capped">
+      <div class="page-header">
         <button class="icon-btn" onclick="event.stopPropagation();closeHwDetail();" title="Zurück"><i data-lucide="arrow-left" style="width:22px;height:22px;"></i></button>
         <div style="flex:1;min-width:0;">
           <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.6;color:#31111d;" id="hwd-subject">–</div>

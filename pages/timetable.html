@@ -1,5 +1,5 @@
 <div class="page" id="page-timetable" style="background:#fff8ef;">
-  <div class="page-header capped">
+  <div class="page-header">
     <button class="back-btn"><i data-lucide="arrow-left" style="width:22px;height:22px;"></i></button>
     <div style="flex:1;">
       <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.5;color:#442b00;" id="tt-header-sub"></div>
@@ -10,7 +10,7 @@
   </div>
 
   <!-- Mode chips (same pattern as homework) -->
-  <div style="padding:0 20px 8px;display:flex;gap:8px;flex-shrink:0;">
+  <div class="page-subbar" style="padding-top:0;padding-bottom:8px;display:flex;gap:8px;flex-shrink:0;">
     <button onclick="ttSetMode('day',this)"  class="chip active" id="tt-chip-day">Tag</button>
     <button onclick="ttSetMode('week',this)" class="chip"        id="tt-chip-week">Woche</button>
   </div>

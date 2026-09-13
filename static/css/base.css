@@ -332,9 +332,21 @@ body.has-active-page .app-container {
   .page-scroll > * > * { break-inside: avoid; -webkit-column-break-inside: avoid; }
   .page-scroll .section-label,
   .page-scroll > .full-span { column-span: all; }
-  /* Limit column width for readability on wide tablets */
+  /* Limit column width for readability on wide tablets. column-span:all
+     is required, not optional — without it, .page-inner is just one more
+     piece of content flowed into .page-scroll's own columns (like
+     .full-span above), so it renders squeezed into a single column
+     instead of becoming its own centered box spanning the full row. */
   .page-scroll > .page-inner {
-    max-width: 720px; margin: 0 auto; column-count: inherit;
+    max-width: 720px; width: 100%; margin: 0 auto;
+    column-span: all; column-count: inherit;
+  }
+  /* Same centering, but capped to the header's 960px instead — for
+     multi-column card grids (e.g. homework's list) where 720px squeezes
+     3 columns down to unreadably narrow cards. */
+  .page-scroll > .page-inner-wide {
+    max-width: 960px; width: 100%; margin: 0 auto;
+    column-span: all; column-count: inherit;
   }
 }
 @media (min-width: 1100px) {
@@ -390,6 +402,13 @@ body.has-active-page .app-container {
   .page-2col-left { width: 380px; }
 }
 
+/* The one header definition every page uses — capped and centered like
+   .page-inner below it, so the back button lands at the same distance
+   from the edge on every page instead of spreading toward a much wider
+   desktop window's actual corners. A page whose own content isn't capped
+   the same way (right now: admin's sidebar+tabs layout) will show a gap
+   between this and its content on wide screens — the fix there is to cap
+   that page's content to match, not to special-case its header. */
 .page-header {
   display: flex; align-items: center; gap: 16px;
   padding: max(24px, env(safe-area-inset-top, 24px)) 20px 16px 20px; flex-shrink: 0;
@@ -397,15 +416,6 @@ body.has-active-page .app-container {
   border-bottom: 1px solid rgba(0, 0, 0, 0.08);
   z-index: 10;
   position: relative;
-}
-/* Opt-in: caps and centers the header like .page-inner below it does for
-   content, so a header with buttons on both ends doesn't spread them out
-   toward the edges of a much wider desktop window than the actual
-   (narrower, centered) content ever reaches. Only add this on a page
-   whose own content is ALSO capped (via .page-inner or similar) — capping
-   just the header while the content underneath still runs full width
-   only trades one mismatch for the opposite one. */
-.page-header.capped {
   max-width: 960px;
   margin: 0 auto;
   width: 100%;
@@ -418,6 +428,24 @@ body.has-active-page .app-container {
 @media (min-width: 760px) { .page-header { padding: 32px 40px 20px 40px; margin-bottom: 12px; } }
 @media (min-width: 1100px) { .page-header { padding: 36px 60px 22px 60px; margin-bottom: 16px; } }
 .page-title { font-size: 1.75rem; font-weight: 700; letter-spacing: -0.01em; }
+
+/* A toolbar row (filter chips, mode toggles) sitting directly under
+   .page-header, outside the scrollable content — capped/centered/padded
+   with the exact same values as the header so its content starts at the
+   same x position as the back button, instead of running flush to the
+   page edge once the header (but not this row) is capped. Only sets
+   horizontal padding — pages keep their own vertical padding inline. */
+.page-subbar {
+  max-width: 960px;
+  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
+  padding-left: 20px;
+  padding-right: 20px;
+}
+@media (min-width: 600px)  { .page-subbar { padding-left: 28px; padding-right: 28px; } }
+@media (min-width: 760px)  { .page-subbar { padding-left: 40px; padding-right: 40px; } }
+@media (min-width: 1100px) { .page-subbar { padding-left: 60px; padding-right: 60px; } }
 
 .section-label {
   font-size: 0.72rem; font-weight: 700;
