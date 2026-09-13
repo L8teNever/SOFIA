@@ -45,7 +45,9 @@ const API = {
   deleteSubject: (id)     => API.delete(`/subjects/${id}`),
   events:        (month)  => API.get('/calendar/' + (month ? `?month=${month}` : '')),
   createEvent:   (d)      => API.post('/calendar/', d),
+  updateEvent:   (id, d)  => API.put(`/calendar/${id}`, d),
   deleteEvent:   (id)     => API.delete(`/calendar/${id}`),
+
   holidayStates: ()       => API.get('/calendar/holidays/states'),
   holidayPreview:(st, yr) => API.get(`/calendar/holidays/preview?state=${st}&year=${yr}`),
   importHolidays:(d)      => API.post('/calendar/holidays/import', d),

@@ -96,10 +96,11 @@ async def notify_new_homework(db: AsyncSession, hw: Homework, creator: User):
 
 async def notify_new_event(db: AsyncSession, ev: CalendarEvent, creator: User):
     """Sends notification to all class members who have event_new enabled."""
-    if not ev.class_id:
+    if not ev.class_id or str(ev.event_type) == "personal" or getattr(ev.event_type, "value", str(ev.event_type)) == "personal":
         return
 
     users_res = await db.execute(select(User).where(User.class_id == ev.class_id, User.id != creator.id))
+
     members = list(users_res.scalars().all())
     if not members:
         return

@@ -9,12 +9,21 @@ from backend.models.user import User
 from backend.schemas import CalendarEventOut, CalendarEventCreate, HolidayImportRequest
 from backend.services.holidays import GERMAN_STATES, fetch_holidays
 from typing import List, Optional
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/calendar", tags=["calendar"])
 
 @router.get("/", response_model=List[CalendarEventOut])
 async def list_events(month: Optional[str] = None, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
-    query = select(CalendarEvent).where(CalendarEvent.class_id == current_user.class_id)
+    query = select(CalendarEvent).where(
+        CalendarEvent.class_id == current_user.class_id,
+        or_(
+            CalendarEvent.event_type != "personal",
+            CalendarEvent.created_by == current_user.id
+        )
+    )
     if month:
         first_day = f"{month}-01"
         last_day = f"{month}-31"
@@ -27,6 +36,7 @@ async def list_events(month: Optional[str] = None, db: AsyncSession = Depends(ge
         )
     result = await db.execute(query.order_by(CalendarEvent.date))
     return result.scalars().all()
+
 
 @router.post("/", response_model=CalendarEventOut)
 async def create_event(data: CalendarEventCreate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -147,7 +157,31 @@ async def delete_all_holidays(
     await db.commit()
     return {"ok": True, "deleted_count": count}
 
-# --- Einzelne Termine löschen ---
+# --- Einzelne Termine bearbeiten & löschen ---
+
+@router.put("/{event_id}", response_model=CalendarEventOut)
+async def update_event(event_id: int, data: CalendarEventCreate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    result = await db.execute(select(CalendarEvent).where(CalendarEvent.id == event_id))
+    event = result.scalar_one_or_none()
+    if not event:
+        raise HTTPException(404, "Termin nicht gefunden")
+    if event.class_id != current_user.class_id:
+        raise HTTPException(403)
+    if event.event_type == "personal" and event.created_by != current_user.id:
+        raise HTTPException(403, "Persönliche Termine können nur vom Ersteller bearbeitet werden")
+    if event.created_by != current_user.id and current_user.role not in ("admin", "super_admin"):
+        raise HTTPException(403)
+
+    event.title = data.title
+    event.date = data.date
+    event.end_date = data.end_date
+    event.time = data.time
+    event.event_type = data.event_type
+    event.subject_id = data.subject_id
+
+    await db.commit()
+    await db.refresh(event)
+    return event
 
 @router.delete("/{event_id}")
 async def delete_event(event_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -157,8 +191,11 @@ async def delete_event(event_id: int, db: AsyncSession = Depends(get_db), curren
         raise HTTPException(404)
     if event.class_id != current_user.class_id:
         raise HTTPException(403)
+    if event.event_type == "personal" and event.created_by != current_user.id:
+        raise HTTPException(403, "Persönliche Termine können nur vom Ersteller gelöscht werden")
     if event.created_by != current_user.id and current_user.role not in ("admin", "super_admin"):
         raise HTTPException(403)
     await db.delete(event)
     await db.commit()
     return {"ok": True}
+
