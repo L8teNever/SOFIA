@@ -45,6 +45,7 @@ let currentUser = null;
 let currentPage = null;
 let pageHistory = [];
 let isSelfPopping = false;
+let lastDashboardLoadAt = 0;
 
 function updateAppHeight() {
   const h = (window.visualViewport ? window.visualViewport.height : window.innerHeight);
@@ -409,13 +410,24 @@ function closePage() {
   pageHistory.pop();
   currentPage = pageHistory[pageHistory.length - 1] || null;
 
-  // Restore dashboard if returning to the root/start page
+  // Restore dashboard if returning to the root/start page — and refresh
+  // its widgets, which otherwise kept showing whatever was true at boot
+  // (e.g. an "Aufgaben" count from before a task got checked off on the
+  // page you're now leaving). Throttled: rapidly bouncing in and out of
+  // several pages would otherwise re-fire every one of loadDashboard's
+  // several API calls each time, easily enough to trip rate limiting for
+  // no real benefit — nothing changes twice in three seconds anyway.
   if (pageHistory.length === 0) {
     document.body.classList.remove('has-active-page');
     const appContainer = document.getElementById('app');
     if (appContainer) {
       appContainer.removeAttribute('inert');
       appContainer.removeAttribute('aria-hidden');
+    }
+    const now = Date.now();
+    if (now - lastDashboardLoadAt > 3000) {
+      lastDashboardLoadAt = now;
+      loadDashboard();
     }
   }
 

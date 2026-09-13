@@ -335,6 +335,31 @@ async function init_calendar() {
   ]);
   calCurrentUser = me;
   renderCal();
+  initCalSwipe();
+}
+
+// Swipe left/right on the month card to step months, same direction
+// convention as every native calendar app — left = forward, right = back.
+// Deliberately requires a mostly-horizontal drag well past a small
+// threshold, so a vertical scroll or tapping a day cell doesn't
+// accidentally flip the month underneath the user.
+function initCalSwipe() {
+  const card = document.querySelector('.cal-card');
+  if (!card) return;
+  let startX = null, startY = null;
+  card.addEventListener('touchstart', (e) => {
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+  }, { passive: true });
+  card.addEventListener('touchend', (e) => {
+    if (startX == null) return;
+    const dx = e.changedTouches[0].clientX - startX;
+    const dy = e.changedTouches[0].clientY - startY;
+    startX = null;
+    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+      calNav(dx < 0 ? 1 : -1);
+    }
+  }, { passive: true });
 }
 
 // Matches the backend's own rule for PUT/DELETE on an event exactly — the

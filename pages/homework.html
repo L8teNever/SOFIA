@@ -688,7 +688,7 @@ async function loadHwSolutions(hwId) {
         <div class="hw-solution-card">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
             <div style="display:flex;align-items:center;gap:10px;">
-              <div class="hw-user-avatar">${initials}</div>
+              <div class="hw-user-avatar" style="${avatarImgStyle(u)}">${u.avatar_url ? '' : initials}</div>
               <div>
                 <div style="font-weight:700;font-size:0.9rem;color:#1c1b1f;">${name}</div>
                 <div style="font-size:0.72rem;opacity:0.55;">${timeFmt}</div>

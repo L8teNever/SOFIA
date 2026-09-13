@@ -168,7 +168,11 @@ body.has-update-banner { padding-top: 52px; transition: padding-top 0.3s ease; }
      rest of the (equally dark, but not gradient-tinted) card. */
   background: var(--m3-bg);
   margin: 0 -16px;
-  padding: 40px 20px 16px 20px;
+  /* Matches .page-header's own safe-area handling — a flat 40px landed
+     short on some devices and left a visibly oversized dark strip above
+     the greeting on others, since it never actually measured the real
+     status bar / notch height it was supposed to clear. */
+  padding: max(24px, env(safe-area-inset-top, 24px)) 20px 16px 20px;
   transition: transform 0.35s cubic-bezier(0.2,0.8,0.2,1), opacity 0.35s;
   will-change: transform;
 }
