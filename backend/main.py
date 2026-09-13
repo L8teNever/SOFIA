@@ -83,6 +83,17 @@ async def favicon():
         return FileResponse("static/icons/favicon.ico")
     return HTMLResponse(content="", status_code=204)
 
+# Apple touch icon root endpoints for iOS Home Screen
+@app.get("/apple-touch-icon.png", include_in_schema=False)
+@app.get("/apple-touch-icon-precomposed.png", include_in_schema=False)
+@app.get("/apple-touch-icon-180x180.png", include_in_schema=False)
+@app.get("/apple-touch-icon-180x180-precomposed.png", include_in_schema=False)
+async def apple_touch_icon():
+    for p in ["static/icons/apple-touch-icon.png", "static/icons/icon-192.png"]:
+        if os.path.exists(p):
+            return FileResponse(p, media_type="image/png")
+    raise HTTPException(status_code=404)
+
 # Serve frontend SPA — inject build timestamp for cache busting
 @app.get("/{full_path:path}", include_in_schema=False)
 async def spa(full_path: str, request: Request):
