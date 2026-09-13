@@ -150,21 +150,6 @@
 }
 .chip.active { background: var(--m3-on-prim-cont); color: white; border-color: transparent; }
 
-/* Calendar day */
-.cal-day {
-  aspect-ratio: 1/1; display: flex; align-items: center; justify-content: center;
-  border-radius: 14px; font-size: 0.85rem; font-weight: 500;
-  position: relative; cursor: pointer; transition: background 0.15s;
-}
-.cal-day.today { background: var(--m3-on-prim-cont); color: white; }
-.cal-day.has-event::after {
-  content: ''; position: absolute; bottom: 4px;
-  width: 4px; height: 4px; border-radius: 50%; background: var(--m3-prim);
-}
-.cal-day.today.has-event::after { background: white; }
-.cal-day.muted { opacity: 0.3; }
-.cal-day:not(.today):hover { background: rgba(103,80,164,0.1); }
-
 /* Timetable */
 .tt-block {
   border-radius: 20px; padding: 14px 16px; margin-bottom: 8px;
@@ -828,10 +813,10 @@
 .cal-filter-bar {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   overflow-x: auto;
-  padding: 4px 0 14px 0;
-  margin-bottom: 8px;
+  padding: 4px 0 12px 0;
+  margin-bottom: 4px;
   scrollbar-width: none;
 }
 .cal-filter-bar::-webkit-scrollbar {
@@ -840,12 +825,12 @@
 .cal-filter-chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 7px 14px;
-  border-radius: 12px;
+  gap: 5px;
+  padding: 6px 11px;
+  border-radius: 10px;
   background: #ffffff;
   color: #49454f;
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   font-weight: 600;
   border: 1px solid rgba(0, 0, 0, 0.08);
   cursor: pointer;

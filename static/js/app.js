@@ -121,7 +121,15 @@ function runScripts(container) {
       // on the second run. var allows redeclaration. Page-level onclick
       // handlers and init_<page>() must stay on the global scope, so we
       // can't wrap in an IIFE.
-      s.textContent = old.textContent.replace(/^(\s*)(?:let|const)\s+/gm, '$1var ');
+      // The anchor requires zero leading whitespace so this only touches
+      // genuinely top-level declarations — every page here indents nested
+      // code, so a `const`/`let` inside a loop or block always starts with
+      // whitespace and is left alone. Matching indented ones too (as an
+      // earlier version of this regex did) silently turned per-iteration
+      // `const` loop variables into one shared `var`, breaking any closure
+      // that captured it (e.g. a day cell's onclick keeps the *last*
+      // iteration's date instead of its own).
+      s.textContent = old.textContent.replace(/^(?:let|const)\s+/gm, 'var ');
     }
     old.parentNode.replaceChild(s, old);
   });
