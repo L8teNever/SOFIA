@@ -2,10 +2,7 @@
   <div id="ph-timetable"></div>
 
   <!-- Mode chips (same pattern as homework) -->
-  <div class="page-subbar" style="padding-top:0;padding-bottom:8px;display:flex;gap:8px;flex-shrink:0;">
-    <button onclick="ttSetMode('day',this)"  class="chip active" id="tt-chip-day">Tag</button>
-    <button onclick="ttSetMode('week',this)" class="chip"        id="tt-chip-week">Woche</button>
-  </div>
+  <div id="tt-chips-slot" class="page-subbar" style="padding-top:0;padding-bottom:8px;display:flex;gap:8px;flex-shrink:0;"></div>
 
   <div id="tt-loading" style="text-align:center;padding:60px;opacity:0.5;">Stundenplan wird geladen…</div>
   <div id="tt-not-configured" style="display:none;text-align:center;padding:60px 20px;">
@@ -35,6 +32,14 @@ document.getElementById('ph-timetable').outerHTML = pageHeader({
   subtitleStyle: 'color:#442b00;',
   trailing: `<button onclick="ttNav(-1)" class="icon-btn"><i data-lucide="chevron-left" style="width:20px;height:20px;"></i></button>
     <button onclick="ttNav(1)"  class="icon-btn"><i data-lucide="chevron-right" style="width:20px;height:20px;"></i></button>`
+});
+document.getElementById('tt-chips-slot').innerHTML = chipRow({
+  onclick: 'ttSetMode',
+  idPrefix: 'tt-chip',
+  items: [
+    { value: 'day', label: 'Tag', active: true },
+    { value: 'week', label: 'Woche' },
+  ],
 });
 const TT_COLORS  = ['#eaddff','#d3e3fd','#c4eed0','#ffdec1','#ffd8e4','#e8def8','#cfe2ff'];
 const TT_DAYS_S  = ['So','Mo','Di','Mi','Do','Fr','Sa'];

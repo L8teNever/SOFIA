@@ -879,10 +879,7 @@ async function openNewEventSheet(defaultDate) {
       </div>
     </div>
 
-    <div class="m3-sheet-actions">
-      <button type="button" class="m3-btn-outline" style="flex:1;" onclick="closeSheet()">Abbrechen</button>
-      <button type="button" class="m3-btn-primary" style="flex:2;" onclick="saveEvent()">Speichern</button>
-    </div>
+    ${sheetActions({ saveAction: 'saveEvent()' })}
   `);
 
   const typeEl = document.getElementById('ev-type');
@@ -1013,10 +1010,7 @@ async function openEditEventSheet(eventId) {
       </div>
     </div>
 
-    <div class="m3-sheet-actions">
-      <button type="button" class="m3-btn-outline" style="flex:1;" onclick="closeSheet()">Abbrechen</button>
-      <button type="button" class="m3-btn-primary" style="flex:2;" onclick="saveEditedEvent(${ev.id})">Speichern</button>
-    </div>
+    ${sheetActions({ saveAction: `saveEditedEvent(${ev.id})` })}
   `);
 
   const typeEl = document.getElementById('ev-type');
@@ -1059,22 +1053,11 @@ function confirmDelEvent(eventId) {
   const ev = calEvents.find(x => x.id === eventId);
   const title = ev ? escapeHtml(ev.title) : 'diesen Termin';
 
-  openModal(`
-    <div style="text-align:center;padding:12px 6px 6px;">
-      <div style="width:54px;height:54px;border-radius:18px;background:#ffdad6;color:#ba1a1a;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;">
-        <i data-lucide="trash-2" style="width:26px;height:26px;"></i>
-      </div>
-      <div style="font-size:1.2rem;font-weight:800;margin-bottom:8px;color:#1c1b1f;">Termin löschen?</div>
-      <div style="font-size:0.92rem;color:#49454f;line-height:1.45;margin-bottom:22px;">
-        Willst du das wirklich löschen?<br>
-        <span style="font-weight:700;color:#1c1b1f;display:inline-block;margin-top:6px;">„${title}“</span>
-      </div>
-      <div style="display:flex;gap:10px;">
-        <button class="m3-btn-outline" style="flex:1;" onclick="closeModal()">Abbrechen</button>
-        <button class="m3-btn-primary" style="flex:1;background:#ba1a1a;box-shadow:0 2px 8px rgba(186,26,26,0.3);" onclick="doDelEvent(${eventId})">Löschen</button>
-      </div>
-    </div>
-  `);
+  openModal(confirmDelete({
+    title: 'Termin löschen?',
+    message: `Willst du das wirklich löschen?<br><span style="font-weight:700;color:#1c1b1f;display:inline-block;margin-top:6px;">„${title}“</span>`,
+    onConfirm: `doDelEvent(${eventId})`,
+  }));
 }
 
 async function doDelEvent(eventId) {

@@ -411,8 +411,16 @@ async function createClass() {
   showToast('Klasse erstellt');
 }
 
-async function deleteClass(id) {
-  if (!confirm('Klasse wirklich löschen?')) return;
+function deleteClass(id) {
+  openModal(confirmDelete({
+    title: 'Klasse löschen?',
+    message: 'Willst du diese Klasse wirklich löschen?',
+    onConfirm: `executeDeleteClass(${id})`,
+  }));
+}
+
+async function executeDeleteClass(id) {
+  closeModal();
   await API.deleteClass(id).catch(()=>{ showToast('Fehler'); return; });
   adminClasses = adminClasses.filter(c=>c.id!==id);
   renderAdminClasses();
@@ -553,7 +561,16 @@ async function createSubject() {
   showToast('Fach erstellt');
 }
 
-async function deleteSubject(id) {
+function deleteSubject(id) {
+  openModal(confirmDelete({
+    title: 'Fach löschen?',
+    message: 'Willst du dieses Fach wirklich löschen?',
+    onConfirm: `executeDeleteSubject(${id})`,
+  }));
+}
+
+async function executeDeleteSubject(id) {
+  closeModal();
   await API.deleteSubject(id).catch(()=>{ showToast('Fehler'); return; });
   adminSubjects = adminSubjects.filter(s=>s.id!==id);
   renderAdminSubjects();
@@ -635,8 +652,16 @@ async function importHolidaysAction() {
   }
 }
 
-async function deleteAllHolidaysAction() {
-  if (!confirm('Möchtest du wirklich alle Ferien-Termine aus dem Kalender löschen?')) return;
+function deleteAllHolidaysAction() {
+  openModal(confirmDelete({
+    title: 'Alle Ferien löschen?',
+    message: 'Möchtest du wirklich alle Ferien-Termine aus dem Kalender löschen?',
+    onConfirm: 'executeDeleteAllHolidays()',
+  }));
+}
+
+async function executeDeleteAllHolidays() {
+  closeModal();
   const btn = document.getElementById('btn-delete-holidays');
   if (btn) { btn.disabled = true; btn.style.opacity = '0.6'; }
   try {

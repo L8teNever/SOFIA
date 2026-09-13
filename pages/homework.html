@@ -1,10 +1,6 @@
 <div class="page" id="page-homework" style="background:#fff5f8;">
   <div id="ph-homework"></div>
-  <div class="no-scrollbar page-subbar" style="padding-top:0;padding-bottom:8px;display:flex;gap:8px;overflow-x:auto;flex-shrink:0;">
-    <button onclick="hwFilter('all',this)" class="chip active" id="hw-f-all">Alle</button>
-    <button onclick="hwFilter('open',this)" class="chip" id="hw-f-open">Offen</button>
-    <button onclick="hwFilter('done',this)" class="chip" id="hw-f-done">Erledigt</button>
-  </div>
+  <div id="hw-chips-slot" class="no-scrollbar page-subbar" style="padding-top:0;padding-bottom:8px;display:flex;gap:8px;overflow-x:auto;flex-shrink:0;"></div>
   <div class="page-scroll no-scrollbar">
     <div class="page-inner-wide">
       <div id="hw-list"></div>
@@ -216,6 +212,15 @@ document.getElementById('hw-empty-slot').outerHTML = emptyState({
 document.getElementById('hw-fab-slot').outerHTML = fab({
   onclick: 'openHwSheet()', title: 'Neue Aufgabe erstellen'
 });
+document.getElementById('hw-chips-slot').innerHTML = chipRow({
+  onclick: 'hwFilter',
+  idPrefix: 'hw-f',
+  items: [
+    { value: 'all', label: 'Alle', active: true },
+    { value: 'open', label: 'Offen' },
+    { value: 'done', label: 'Erledigt' },
+  ],
+});
 let hwItems = [], hwSubjects = [], hwCurrentFilter = 'all', hwCurrentUser = null, hwTimetable = null;
 let hwDueMode = 'next', hwCustomDate = null;
 let hwPendingFiles = []; // Array of { url, type, name }
@@ -404,19 +409,11 @@ async function toggleHw(id) {
 function confirmDelHw(id) {
   const hw = hwItems.find(h => h.id === id);
   const title = hw ? `„${escapeHtml(hw.description.slice(0, 40))}${hw.description.length > 40 ? '…' : ''}“` : 'diese Aufgabe';
-  openModal(`
-    <div style="text-align:center;padding:8px 4px;">
-      <div style="width:52px;height:52px;border-radius:26px;background:#ffdad6;color:#ba1a1a;display:inline-flex;align-items:center;justify-content:center;margin-bottom:14px;">
-        <i data-lucide="alert-triangle" style="width:28px;height:28px;"></i>
-      </div>
-      <div style="font-size:1.2rem;font-weight:700;color:#1c1b1f;margin-bottom:8px;">Aufgabe löschen?</div>
-      <div style="font-size:0.92rem;color:#49454f;line-height:1.45;margin-bottom:22px;">Willst du ${title} wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.</div>
-      <div style="display:flex;gap:10px;">
-        <button type="button" class="m3-btn-outline" style="flex:1;" onclick="closeModal()">Abbrechen</button>
-        <button type="button" class="m3-btn-primary" style="flex:1;background:#ba1a1a;color:#fff;border:none;" onclick="executeDeleteHw(${id})">Löschen</button>
-      </div>
-    </div>
-  `);
+  openModal(confirmDelete({
+    title: 'Aufgabe löschen?',
+    message: `Willst du ${title} wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.`,
+    onConfirm: `executeDeleteHw(${id})`,
+  }));
 }
 
 async function executeDeleteHw(id) {
@@ -770,19 +767,11 @@ async function submitSolution() {
 }
 
 function confirmDelSolution(solId) {
-  openModal(`
-    <div style="text-align:center;padding:8px 4px;">
-      <div style="width:52px;height:52px;border-radius:26px;background:#ffdad6;color:#ba1a1a;display:inline-flex;align-items:center;justify-content:center;margin-bottom:14px;">
-        <i data-lucide="alert-triangle" style="width:28px;height:28px;"></i>
-      </div>
-      <div style="font-size:1.15rem;font-weight:700;color:#1c1b1f;margin-bottom:8px;">Lösung löschen?</div>
-      <div style="font-size:0.9rem;color:#49454f;line-height:1.45;margin-bottom:20px;">Willst du deine hochgeladene Lösung wirklich löschen?</div>
-      <div style="display:flex;gap:10px;">
-        <button type="button" class="m3-btn-outline" style="flex:1;" onclick="closeModal()">Abbrechen</button>
-        <button type="button" class="m3-btn-primary" style="flex:1;background:#ba1a1a;color:#fff;border:none;" onclick="executeDeleteSolution(${solId})">Löschen</button>
-      </div>
-    </div>
-  `);
+  openModal(confirmDelete({
+    title: 'Lösung löschen?',
+    message: 'Willst du deine hochgeladene Lösung wirklich löschen?',
+    onConfirm: `executeDeleteSolution(${solId})`,
+  }));
 }
 
 async function executeDeleteSolution(solId) {

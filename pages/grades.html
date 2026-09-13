@@ -184,22 +184,11 @@ function renderGrades() {
 }
 
 function confirmDeleteGrade(id, label) {
-  openModal(`
-    <div style="text-align:center;padding:12px 6px 6px;">
-      <div style="width:54px;height:54px;border-radius:18px;background:#ffdad6;color:#ba1a1a;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;">
-        <i data-lucide="trash-2" style="width:26px;height:26px;"></i>
-      </div>
-      <div style="font-size:1.2rem;font-weight:800;margin-bottom:8px;color:#1c1b1f;">Note löschen?</div>
-      <div style="font-size:0.92rem;color:#49454f;line-height:1.45;margin-bottom:22px;">
-        Willst du diese Note wirklich löschen?<br>
-        <span style="font-weight:700;color:#1c1b1f;display:inline-block;margin-top:6px;">„${label}“</span>
-      </div>
-      <div style="display:flex;gap:10px;">
-        <button class="m3-btn-outline" style="flex:1;" onclick="closeModal()">Abbrechen</button>
-        <button class="m3-btn-primary" style="flex:1;background:#ba1a1a;box-shadow:0 2px 8px rgba(186,26,26,0.3);" onclick="doDeleteGrade(${id})">Löschen</button>
-      </div>
-    </div>
-  `);
+  openModal(confirmDelete({
+    title: 'Note löschen?',
+    message: `Willst du diese Note wirklich löschen?<br><span style="font-weight:700;color:#1c1b1f;display:inline-block;margin-top:6px;">„${label}“</span>`,
+    onConfirm: `doDeleteGrade(${id})`,
+  }));
 }
 
 async function doDeleteGrade(id) {
@@ -238,10 +227,7 @@ function openGradeSheet() {
     <label style="font-size:0.78rem;font-weight:700;color:#6750a4;display:block;margin-bottom:4px;margin-left:4px;">Datum:</label>
     <input class="m3-input" id="g-date" type="date" value="${new Date().toISOString().slice(0, 10)}">
 
-    <div style="display:flex;gap:10px;margin-top:16px;">
-      <button type="button" class="m3-btn-outline" style="flex:1;" onclick="closeSheet()">Abbrechen</button>
-      <button type="button" class="m3-btn-primary" style="flex:2;" onclick="saveGrade()">Speichern</button>
-    </div>
+    ${sheetActions({ saveAction: 'saveGrade()' })}
   `);
 }
 
@@ -304,10 +290,7 @@ function openGradeWeightingSheet() {
     <label style="font-size:0.78rem;font-weight:700;color:#6750a4;display:block;margin-bottom:4px;margin-left:4px;">Geplante Klassenarbeiten im Halbjahr:</label>
     <input class="m3-input" id="gw-planned" type="number" min="1" max="10" value="${initialWeighting.planned_exams || 2}" placeholder="Anzahl z. B. 2 oder 3">
 
-    <div style="display:flex;gap:10px;margin-top:16px;">
-      <button type="button" class="m3-btn-outline" style="flex:1;" onclick="closeSheet()">Abbrechen</button>
-      <button type="button" class="m3-btn-primary" style="flex:2;" onclick="saveGradeWeighting()">Für Klasse speichern</button>
-    </div>
+    ${sheetActions({ saveLabel: 'Für Klasse speichern', saveAction: 'saveGradeWeighting()' })}
   `);
 }
 

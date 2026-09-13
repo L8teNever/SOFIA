@@ -172,6 +172,62 @@ function fab({ icon = 'plus', onclick = '', title = '', id = '' } = {}) {
   </button>`;
 }
 
+// The "are you sure?" destructive-action modal — content for openModal().
+// Was drifting into two different looks (a circle+alert-triangle version
+// on homework, a rounded-square+trash-2 version everywhere else) and admin
+// used the browser's native confirm() instead of either. One version now,
+// content passed as data (message may include simple inline HTML like a
+// bolded item name).
+function confirmDelete({
+  icon = 'trash-2',
+  title = 'Wirklich löschen?',
+  message = '',
+  confirmLabel = 'Löschen',
+  onConfirm = '',
+} = {}) {
+  return `<div style="text-align:center;padding:12px 6px 6px;">
+    <div style="width:54px;height:54px;border-radius:18px;background:#ffdad6;color:#ba1a1a;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;">
+      <i data-lucide="${icon}" style="width:26px;height:26px;"></i>
+    </div>
+    <div style="font-size:1.2rem;font-weight:800;margin-bottom:8px;color:#1c1b1f;">${title}</div>
+    <div style="font-size:0.92rem;color:#49454f;line-height:1.45;margin-bottom:22px;">${message}</div>
+    <div style="display:flex;gap:10px;">
+      <button type="button" class="m3-btn-outline" style="flex:1;" onclick="closeModal()">Abbrechen</button>
+      <button type="button" class="m3-btn-primary" style="flex:1;background:#ba1a1a;box-shadow:0 2px 8px rgba(186,26,26,0.3);" onclick="${onConfirm}">${confirmLabel}</button>
+    </div>
+  </div>`;
+}
+
+// The Cancel/Save footer row on bottom sheets that have a real two-way
+// choice (as opposed to the single full-width .m3-btn-full "just save"
+// sheets, which stay as they are — there's nothing to cancel back to
+// there). Some pages already used the shared .m3-sheet-actions class for
+// this, others hand-typed the identical inline style instead; this closes
+// that gap the same way pageHeader() did for headers.
+function sheetActions({
+  cancelLabel = 'Abbrechen',
+  cancelAction = 'closeSheet()',
+  saveLabel = 'Speichern',
+  saveAction = '',
+} = {}) {
+  return `<div class="m3-sheet-actions">
+    <button type="button" class="m3-btn-outline" style="flex:1;" onclick="${cancelAction}">${cancelLabel}</button>
+    <button type="button" class="m3-btn-primary" style="flex:2;" onclick="${saveAction}">${saveLabel}</button>
+  </div>`;
+}
+
+// The filter/mode toggle row directly under a page-subbar header (Alle/
+// Offen/Erledigt, Ganze Woche/Heute/Mo.../Fr, Tag/Woche) — same .chip
+// markup and active-state class hand-typed once per button on homework,
+// mealplan and timetable. items: [{value, label, active}]; onclick is the
+// page's filter function name, called as onclick(value, this) exactly
+// like the hand-written versions did.
+function chipRow({ items = [], onclick = '', idPrefix = '' } = {}) {
+  return items.map(it =>
+    `<button onclick="${onclick}('${it.value}',this)" class="chip${it.active ? ' active' : ''}"${idPrefix ? ` id="${idPrefix}-${it.value}"` : ''}>${it.label}</button>`
+  ).join('');
+}
+
 function showToast(msg, duration = 3000) {
   const t = document.getElementById('toast');
   t.textContent = msg;

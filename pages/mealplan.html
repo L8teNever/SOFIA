@@ -2,15 +2,7 @@
   <div id="ph-mealplan"></div>
 
   <!-- Day Filter Chips (Consistent with SOFIA UI) -->
-  <div class="no-scrollbar page-subbar" id="meal-day-chips" style="padding-top:0;padding-bottom:8px;display:flex;gap:8px;overflow-x:auto;flex-shrink:0;">
-    <button onclick="mealFilter('all',this)" class="chip active" id="meal-chip-all">Ganze Woche</button>
-    <button onclick="mealFilter('today',this)" class="chip" id="meal-chip-today">Heute</button>
-    <button onclick="mealFilter('1',this)" class="chip" id="meal-chip-1">Mo</button>
-    <button onclick="mealFilter('2',this)" class="chip" id="meal-chip-2">Di</button>
-    <button onclick="mealFilter('3',this)" class="chip" id="meal-chip-3">Mi</button>
-    <button onclick="mealFilter('4',this)" class="chip" id="meal-chip-4">Do</button>
-    <button onclick="mealFilter('5',this)" class="chip" id="meal-chip-5">Fr</button>
-  </div>
+  <div class="no-scrollbar page-subbar" id="meal-day-chips" style="padding-top:0;padding-bottom:8px;display:flex;gap:8px;overflow-x:auto;flex-shrink:0;"></div>
 
   <div class="page-scroll-1col no-scrollbar"><div class="page-inner">
     <!-- Empty state -->
@@ -131,6 +123,19 @@ document.getElementById('meal-empty-slot').outerHTML = emptyState({
   subtitle: 'Tippe auf das Plus-Symbol, um den neuen Wochenplan hinzuzufügen.',
   subtitleId: 'meal-empty-sub',
   wrapperId: 'meal-empty',
+});
+document.getElementById('meal-day-chips').innerHTML = chipRow({
+  onclick: 'mealFilter',
+  idPrefix: 'meal-chip',
+  items: [
+    { value: 'all', label: 'Ganze Woche', active: true },
+    { value: 'today', label: 'Heute' },
+    { value: '1', label: 'Mo' },
+    { value: '2', label: 'Di' },
+    { value: '3', label: 'Mi' },
+    { value: '4', label: 'Do' },
+    { value: '5', label: 'Fr' },
+  ],
 });
 let mealPlan = null;
 let mealCanDelete = false;
@@ -416,21 +421,11 @@ function renderMealPlan(res) {
 
 function deleteMealPlanConfirm() {
   if (!mealPlan) return;
-  openModal(`
-    <div style="text-align:center;padding:12px 6px 6px;">
-      <div style="width:54px;height:54px;border-radius:18px;background:#ffdad6;color:#ba1a1a;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;">
-        <i data-lucide="trash-2" style="width:26px;height:26px;"></i>
-      </div>
-      <div style="font-size:1.2rem;font-weight:800;margin-bottom:8px;color:#1c1b1f;">Speiseplan löschen?</div>
-      <div style="font-size:0.92rem;color:#49454f;line-height:1.45;margin-bottom:22px;">
-        Willst du diesen Speiseplan wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.
-      </div>
-      <div style="display:flex;gap:10px;">
-        <button class="m3-btn-outline" style="flex:1;" onclick="closeModal()">Abbrechen</button>
-        <button class="m3-btn-primary" style="flex:1;background:#ba1a1a;box-shadow:0 2px 8px rgba(186,26,26,0.3);" onclick="doDeleteMealPlan()">Löschen</button>
-      </div>
-    </div>
-  `);
+  openModal(confirmDelete({
+    title: 'Speiseplan löschen?',
+    message: 'Willst du diesen Speiseplan wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.',
+    onConfirm: 'doDeleteMealPlan()',
+  }));
 }
 
 async function doDeleteMealPlan() {
