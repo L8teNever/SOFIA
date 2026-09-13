@@ -21,6 +21,25 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&display=swap">
   <link rel="stylesheet" href="/static/css/base.css?v=__BUILD__">
   <link rel="stylesheet" href="/static/css/components.css?v=__BUILD__">
+  <script>
+    window.deferredInstallPrompt = null;
+    window.addEventListener('beforeinstallprompt', function(e) {
+      e.preventDefault();
+      window.deferredInstallPrompt = e;
+      if (typeof updatePwaInstallState === 'function') {
+        updatePwaInstallState();
+      }
+    });
+    window.addEventListener('appinstalled', function() {
+      window.deferredInstallPrompt = null;
+      if (typeof updatePwaInstallState === 'function') {
+        updatePwaInstallState();
+      }
+      if (typeof showToast === 'function') {
+        showToast('Sofia wurde als App installiert!');
+      }
+    });
+  </script>
 </head>
 <body>
 
