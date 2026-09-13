@@ -70,9 +70,11 @@ async def service_worker():
     return HTMLResponse(content, media_type="application/javascript",
                         headers={"Service-Worker-Allowed": "/", "Cache-Control": "no-store"})
 
-# Favicon handler to prevent catching by wildcard SPA route
+# Favicon handler
 @app.get("/favicon.ico", include_in_schema=False)
 async def favicon():
+    if os.path.exists("static/icons/favicon.ico"):
+        return FileResponse("static/icons/favicon.ico")
     return HTMLResponse(content="", status_code=204)
 
 # Serve frontend SPA — inject build timestamp for cache busting
