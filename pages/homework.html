@@ -374,6 +374,7 @@ function renderHwDueSection() {
 
   if (!untisReady) {
     container.innerHTML = `<input class="m3-input" id="hw-due" type="date" value="${hwCustomDate || hwDefaultTomorrow()}" onchange="hwCustomDate=this.value">`;
+    if (typeof enhanceDateTimeInputs === 'function') enhanceDateTimeInputs(container);
     return;
   }
 
@@ -413,6 +414,7 @@ function renderHwDueSection() {
   }
 
   container.innerHTML = html;
+  if (typeof enhanceDateTimeInputs === 'function') enhanceDateTimeInputs(container);
 }
 
 function setHwDueMode(mode) {

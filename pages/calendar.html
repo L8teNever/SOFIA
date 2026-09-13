@@ -42,13 +42,17 @@
 let calYear = new Date().getFullYear();
 let calMonth = new Date().getMonth();
 let calEvents = [];
+let calSubjects = [];
 
 const CAL_TYPE_COLORS = { exam:'#ffd8e4', trip:'#c4eed0', other:'#eaddff', personal:'#d3e3fd' };
 const CAL_TYPE_BORDER = { exam:'#b3261e', trip:'#146c2e', other:'#6750a4', personal:'#1a73e8' };
 const CAL_TYPE_LABEL  = { exam:'Klassenarbeit', trip:'Ausflug', other:'Sonstiges', personal:'Persönlich' };
 
 async function init_calendar() {
-  await loadCalEvents();
+  await Promise.all([
+    loadCalEvents(),
+    API.subjects().then(subs => { calSubjects = subs || []; }).catch(() => { calSubjects = []; })
+  ]);
   renderCal();
 }
 
@@ -107,11 +111,18 @@ function renderEventList() {
     const isTomorrow = e.date === new Date(Date.now()+86400000).toISOString().slice(0,10);
     const dayLabel = isToday ? 'Heute' : isTomorrow ? 'Morgen' : d.toLocaleDateString('de-DE',{weekday:'long',day:'numeric',month:'long'});
     const isExam = e.event_type === 'exam';
+    const sub = e.subject_id ? calSubjects.find(s => s.id === e.subject_id) : null;
+    const subName = sub ? (sub.name || sub.short_name) : '';
+    const subBadge = subName ? `<span style="font-size:0.72rem;font-weight:600;background:rgba(255,255,255,0.22);padding:2px 8px;border-radius:8px;margin-left:8px;letter-spacing:normal;text-transform:none;">${subName}</span>` : '';
+
     if (isExam) {
       return '<div class="m3-card-tonal" style="background:#21005d;color:#fff;margin-bottom:10px;">'
         + '<div style="display:flex;align-items:flex-start;justify-content:space-between;">'
         + '<div>'
+        + '<div style="display:flex;align-items:center;">'
         + '<span style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.7;">' + label + '</span>'
+        + subBadge
+        + '</div>'
         + '<div style="font-size:1.15rem;font-weight:700;margin-top:4px;">' + e.title + '</div>'
         + '<div style="font-size:0.82rem;opacity:0.75;margin-top:4px;">' + dayLabel + (e.time ? ' · ' + e.time : '') + '</div>'
         + '</div>'
@@ -122,7 +133,10 @@ function renderEventList() {
     return '<div style="background:white;border-radius:22px;padding:14px 16px;margin-bottom:10px;display:flex;gap:0;align-items:center;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,0.06);">'
       + '<div style="width:4px;height:48px;background:' + border + ';border-radius:2px;flex-shrink:0;margin-right:14px;"></div>'
       + '<div style="flex:1;min-width:0;">'
-      + '<div style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:' + border + ';margin-bottom:2px;">' + label + '</div>'
+      + '<div style="display:flex;align-items:center;">'
+      + '<span style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:' + border + ';margin-bottom:2px;">' + label + '</span>'
+      + (subName ? `<span style="font-size:0.72rem;font-weight:600;background:rgba(0,0,0,0.06);padding:1px 6px;border-radius:6px;margin-left:6px;margin-bottom:2px;">${subName}</span>` : '')
+      + '</div>'
       + '<div style="font-weight:700;font-size:0.95rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + e.title + '</div>'
       + '<div style="font-size:0.78rem;opacity:0.55;margin-top:2px;">' + dayLabel + (e.time ? ' · ' + e.time : '') + '</div>'
       + '</div>'
@@ -144,24 +158,81 @@ async function calNav(dir) {
 function showDayEvents(date) {
   const dayEvts = calEvents.filter(e => e.date.slice(0,10) === date);
   if (!dayEvts.length) { openNewEventSheet(date); return; }
+
+  const d = new Date(date + 'T00:00');
+  const dTitle = d.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const evtsHtml = dayEvts.map(e => {
+    const sub = e.subject_id ? calSubjects.find(s => s.id === e.subject_id) : null;
+    const subText = sub ? ` (${sub.name || sub.short_name})` : '';
+    return `<div style="background:#f3edf7;border-radius:16px;padding:12px 14px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;">
+      <div>
+        <div style="font-weight:700;font-size:0.95rem;color:#1c1b1f;">${e.title}${subText}</div>
+        <div style="font-size:0.78rem;color:#49454f;margin-top:2px;">${CAL_TYPE_LABEL[e.event_type] || 'Termin'}${e.time ? ' · ' + e.time : ''}</div>
+      </div>
+      <button onclick="delEvent(${e.id});closeSheet();" style="background:none;border:none;cursor:pointer;opacity:0.6;padding:6px;"><i data-lucide="trash-2" style="width:18px;height:18px;color:#ba1a1a;"></i></button>
+    </div>`;
+  }).join('');
+
+  openSheet('<div class="sheet-title">' + dTitle + '</div>'
+    + '<div style="margin-bottom:16px;">' + evtsHtml + '</div>'
+    + '<button class="m3-btn-full" onclick="closeSheet();openNewEventSheet(\'' + date + '\')">+ Weiteren Termin hinzufügen</button>');
 }
 
-function openNewEventSheet(defaultDate) {
+async function openNewEventSheet(defaultDate) {
+  if (!calSubjects || !calSubjects.length) {
+    calSubjects = await API.subjects().catch(() => []);
+  }
   const today = defaultDate || new Date().toISOString().slice(0,10);
+  const subOpts = (calSubjects || []).map(s => '<option value="' + s.id + '">' + (s.name || s.short_name) + '</option>').join('');
+
   openSheet('<div class="sheet-title">Neuer Termin</div>'
     + '<input class="m3-input" id="ev-title" placeholder="Titel">'
     + '<input class="m3-input" id="ev-date" type="date" value="' + today + '">'
     + '<input class="m3-input" id="ev-time" type="time" placeholder="Uhrzeit (optional)">'
-    + '<select class="m3-select" id="ev-type"><option value="other">Sonstiges</option><option value="exam">Klassenarbeit</option><option value="trip">Ausflug</option><option value="personal">Persönlich</option></select>'
-    + '<button class="m3-btn-full" onclick="saveEvent()">Speichern</button>');
+    + '<select class="m3-select" id="ev-type">'
+    +   '<option value="other">Sonstiges</option>'
+    +   '<option value="exam">Klassenarbeit</option>'
+    +   '<option value="trip">Ausflug</option>'
+    +   '<option value="personal">Persönlich</option>'
+    + '</select>'
+    + '<div id="ev-subject-row" style="display:none;margin-bottom:12px;">'
+    +   '<label style="font-size:0.78rem;font-weight:600;color:var(--m3-prim);display:block;margin-bottom:4px;margin-left:4px;">Fach für die Klassenarbeit:</label>'
+    +   '<select class="m3-select" id="ev-subject">'
+    +     '<option value="">Fach auswählen (optional)</option>'
+    +     + subOpts
+    +   '</select>'
+    + '</div>'
+    + '<button class="m3-btn-full" onclick="saveEvent()" style="margin-top:12px;">Speichern</button>');
+
+  const typeEl = document.getElementById('ev-type');
+  const subRow = document.getElementById('ev-subject-row');
+  if (typeEl && subRow) {
+    typeEl.addEventListener('change', () => {
+      const isExam = typeEl.value === 'exam';
+      subRow.style.display = isExam ? 'block' : 'none';
+      if (!isExam) {
+        const subSel = document.getElementById('ev-subject');
+        if (subSel) subSel.value = '';
+      }
+    });
+  }
 }
 
 async function saveEvent() {
   const title = document.getElementById('ev-title').value.trim();
   const date = document.getElementById('ev-date').value;
   if (!title || !date) { showToast('Titel und Datum erforderlich'); return; }
+  const event_type = document.getElementById('ev-type').value;
+  const subEl = document.getElementById('ev-subject');
+  const subject_id = (event_type === 'exam' && subEl && subEl.value) ? parseInt(subEl.value, 10) : null;
   try {
-    await API.createEvent({ title, date, time: document.getElementById('ev-time').value || null, event_type: document.getElementById('ev-type').value });
+    await API.createEvent({
+      title,
+      date,
+      time: document.getElementById('ev-time').value || null,
+      event_type,
+      subject_id
+    });
     closeSheet(); await loadCalEvents(); renderCal(); showToast('Termin gespeichert');
   } catch { showToast('Fehler beim Speichern'); }
 }

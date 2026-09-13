@@ -179,6 +179,7 @@ async function openPage(name, triggerEl, preserveUrl = false) {
   currentPage = name;
   if (window.lucide) lucide.createIcons();
   enhanceDropdowns(page);
+  enhanceDateTimeInputs(page);
   const initFn = window['init_' + name];
   if (initFn) initFn();
 }
@@ -364,11 +365,454 @@ function enhanceDropdowns(root) {
   });
 }
 
+function formatDateGerman(isoStr) {
+  if (!isoStr) return '';
+  const parts = isoStr.split('-');
+  if (parts.length !== 3) return isoStr;
+  const y = parseInt(parts[0], 10);
+  const m = parseInt(parts[1], 10) - 1;
+  const d = parseInt(parts[2], 10);
+  const dt = new Date(y, m, d);
+  if (isNaN(dt.getTime())) return isoStr;
+
+  const weekdays = ['So.', 'Mo.', 'Di.', 'Mi.', 'Do.', 'Fr.', 'Sa.'];
+  const months = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
+  
+  const now = new Date();
+  const todayIso = now.toISOString().slice(0, 10);
+  const tomorrowIso = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+
+  const wd = weekdays[dt.getDay()];
+  const mName = months[m];
+
+  if (isoStr === todayIso) {
+    return `Heute (${wd}, ${d}. ${mName})`;
+  } else if (isoStr === tomorrowIso) {
+    return `Morgen (${wd}, ${d}. ${mName})`;
+  }
+  return `${wd}, ${d}. ${mName} ${y}`;
+}
+
+function formatTimeGerman(timeStr) {
+  if (!timeStr) return '';
+  return timeStr + ' Uhr';
+}
+
+function openDatePicker(options = {}) {
+  let scrim = document.getElementById('m3-picker-scrim');
+  if (!scrim) {
+    scrim = document.createElement('div');
+    scrim.id = 'm3-picker-scrim';
+    document.body.appendChild(scrim);
+  }
+
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const tomorrowIso = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+  const nextWeekIso = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
+
+  let selectedIso = options.value && options.value.match(/^\d{4}-\d{2}-\d{2}$/) ? options.value : todayIso;
+  let viewYear = parseInt(selectedIso.slice(0, 4), 10);
+  let viewMonth = parseInt(selectedIso.slice(5, 7), 10) - 1;
+
+  function close() {
+    scrim.classList.remove('active');
+    setTimeout(() => { scrim.innerHTML = ''; }, 220);
+    document.removeEventListener('keydown', onKeyDown);
+  }
+
+  function onKeyDown(e) {
+    if (e.key === 'Escape') {
+      close();
+      if (options.onCancel) options.onCancel();
+    }
+  }
+  document.addEventListener('keydown', onKeyDown);
+
+  function render() {
+    const months = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+    const firstDay = new Date(viewYear, viewMonth, 1);
+    const startWeekday = (firstDay.getDay() + 6) % 7; // 0=Mo ... 6=So
+    const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+    const prevMonthDays = new Date(viewYear, viewMonth, 0).getDate();
+
+    let gridHtml = '';
+    // Leading days from previous month
+    for (let i = startWeekday - 1; i >= 0; i--) {
+      gridHtml += `<div class="m3-cal-day-cell muted">${prevMonthDays - i}</div>`;
+    }
+    // Current month days
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dStr = String(d).padStart(2, '0');
+      const mStr = String(viewMonth + 1).padStart(2, '0');
+      const iso = `${viewYear}-${mStr}-${dStr}`;
+      const isSel = iso === selectedIso;
+      const isToday = iso === todayIso;
+      gridHtml += `<button type="button" class="m3-cal-day-cell ${isSel ? 'selected' : ''} ${isToday ? 'today' : ''}" data-date="${iso}">${d}</button>`;
+    }
+    // Trailing days for neat grid
+    const totalCells = startWeekday + daysInMonth;
+    const remaining = (7 - (totalCells % 7)) % 7;
+    for (let i = 1; i <= remaining; i++) {
+      gridHtml += `<div class="m3-cal-day-cell muted">${i}</div>`;
+    }
+
+    const headerLabel = formatDateGerman(selectedIso) || 'Datum auswählen';
+
+    scrim.innerHTML = `
+      <div class="m3-picker-dialog" onclick="event.stopPropagation()">
+        <div class="m3-picker-header">
+          <div class="m3-picker-label">${options.title || 'DATUM AUSWÄHLEN'}</div>
+          <div class="m3-picker-display">${headerLabel}</div>
+        </div>
+        <div class="m3-picker-chips">
+          <button type="button" class="m3-picker-chip ${selectedIso === todayIso ? 'active' : ''}" id="m3-chip-today">Heute</button>
+          <button type="button" class="m3-picker-chip ${selectedIso === tomorrowIso ? 'active' : ''}" id="m3-chip-tomorrow">Morgen</button>
+          <button type="button" class="m3-picker-chip ${selectedIso === nextWeekIso ? 'active' : ''}" id="m3-chip-nextweek">+1 Woche</button>
+        </div>
+        <div class="m3-cal-nav">
+          <button type="button" class="m3-cal-btn" id="m3-cal-prev" title="Vorheriger Monat"><svg style="width:18px;height:18px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg></button>
+          <div class="m3-cal-month-title">${months[viewMonth]} ${viewYear}</div>
+          <button type="button" class="m3-cal-btn" id="m3-cal-next" title="Nächster Monat"><svg style="width:18px;height:18px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg></button>
+        </div>
+        <div class="m3-cal-weekdays">
+          <span>Mo</span><span>Di</span><span>Mi</span><span>Do</span><span>Fr</span><span>Sa</span><span>So</span>
+        </div>
+        <div class="m3-cal-grid">
+          ${gridHtml}
+        </div>
+        <div class="m3-picker-actions">
+          <button type="button" class="m3-btn-text" id="m3-dp-cancel">Abbrechen</button>
+          <button type="button" class="m3-btn-primary" id="m3-dp-confirm">Übernehmen</button>
+        </div>
+      </div>
+    `;
+
+    document.getElementById('m3-cal-prev').onclick = () => {
+      viewMonth--;
+      if (viewMonth < 0) { viewMonth = 11; viewYear--; }
+      render();
+    };
+    document.getElementById('m3-cal-next').onclick = () => {
+      viewMonth++;
+      if (viewMonth > 11) { viewMonth = 0; viewYear++; }
+      render();
+    };
+    document.getElementById('m3-chip-today').onclick = () => {
+      selectedIso = todayIso;
+      viewYear = parseInt(todayIso.slice(0, 4), 10);
+      viewMonth = parseInt(todayIso.slice(5, 7), 10) - 1;
+      render();
+    };
+    document.getElementById('m3-chip-tomorrow').onclick = () => {
+      selectedIso = tomorrowIso;
+      viewYear = parseInt(tomorrowIso.slice(0, 4), 10);
+      viewMonth = parseInt(tomorrowIso.slice(5, 7), 10) - 1;
+      render();
+    };
+    document.getElementById('m3-chip-nextweek').onclick = () => {
+      selectedIso = nextWeekIso;
+      viewYear = parseInt(nextWeekIso.slice(0, 4), 10);
+      viewMonth = parseInt(nextWeekIso.slice(5, 7), 10) - 1;
+      render();
+    };
+
+    scrim.querySelectorAll('.m3-cal-day-cell[data-date]').forEach(btn => {
+      btn.onclick = () => {
+        selectedIso = btn.dataset.date;
+        render();
+      };
+    });
+
+    document.getElementById('m3-dp-cancel').onclick = () => {
+      close();
+      if (options.onCancel) options.onCancel();
+    };
+    document.getElementById('m3-dp-confirm').onclick = () => {
+      close();
+      if (options.onSelect) options.onSelect(selectedIso);
+    };
+  }
+
+  scrim.onclick = (e) => {
+    if (e.target === scrim) {
+      close();
+      if (options.onCancel) options.onCancel();
+    }
+  };
+
+  render();
+  scrim.classList.add('active');
+}
+
+function openTimePicker(options = {}) {
+  let scrim = document.getElementById('m3-picker-scrim');
+  if (!scrim) {
+    scrim = document.createElement('div');
+    scrim.id = 'm3-picker-scrim';
+    document.body.appendChild(scrim);
+  }
+
+  let selectedHours = 8;
+  let selectedMinutes = 0;
+  if (options.value && options.value.includes(':')) {
+    const parts = options.value.split(':').map(Number);
+    if (!isNaN(parts[0])) selectedHours = parts[0];
+    if (!isNaN(parts[1])) selectedMinutes = parts[1];
+  }
+  let activeTab = 'hours'; // 'hours' | 'minutes'
+
+  const schoolPresets = [
+    { label: '1. Stunde', time: '07:50' },
+    { label: '2. Stunde', time: '08:40' },
+    { label: '3. Stunde', time: '09:45' },
+    { label: '4. Stunde', time: '10:35' },
+    { label: '5. Stunde', time: '11:40' },
+    { label: '6. Stunde', time: '12:30' },
+    { label: '7. Stunde', time: '13:30' },
+    { label: '8. Stunde', time: '14:15' }
+  ];
+
+  function close() {
+    scrim.classList.remove('active');
+    setTimeout(() => { scrim.innerHTML = ''; }, 220);
+    document.removeEventListener('keydown', onKeyDown);
+  }
+
+  function onKeyDown(e) {
+    if (e.key === 'Escape') {
+      close();
+      if (options.onCancel) options.onCancel();
+    }
+  }
+  document.addEventListener('keydown', onKeyDown);
+
+  function render() {
+    const hhStr = String(selectedHours).padStart(2, '0');
+    const mmStr = String(selectedMinutes).padStart(2, '0');
+    const currentTime = `${hhStr}:${mmStr}`;
+
+    let presetsHtml = '';
+    for (const p of schoolPresets) {
+      const isAct = p.time === currentTime;
+      presetsHtml += `
+        <button type="button" class="m3-tp-preset-chip ${isAct ? 'active' : ''}" data-time="${p.time}">
+          <span>${p.time}</span>
+          <span>${p.label}</span>
+        </button>
+      `;
+    }
+
+    let digitsHtml = '';
+    if (activeTab === 'hours') {
+      const hoursList = [7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,0,1,2,3,4,5,6];
+      digitsHtml = hoursList.map(h => {
+        const str = String(h).padStart(2, '0');
+        const isAct = h === selectedHours;
+        return `<button type="button" class="m3-tp-digit-btn ${isAct ? 'active' : ''}" data-hour="${h}">${str}</button>`;
+      }).join('');
+    } else {
+      const minutesList = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
+      digitsHtml = minutesList.map(m => {
+        const str = String(m).padStart(2, '0');
+        const isAct = m === selectedMinutes;
+        return `<button type="button" class="m3-tp-digit-btn ${isAct ? 'active' : ''}" data-minute="${m}">${str}</button>`;
+      }).join('');
+    }
+
+    scrim.innerHTML = `
+      <div class="m3-picker-dialog" onclick="event.stopPropagation()">
+        <div class="m3-picker-header" style="text-align:center;">
+          <div class="m3-picker-label">${options.title || 'UHRZEIT AUSWÄHLEN'}</div>
+          <div class="m3-time-boxes">
+            <button type="button" class="m3-time-box ${activeTab === 'hours' ? 'active' : ''}" id="m3-tb-hh">${hhStr}</button>
+            <span class="m3-time-colon">:</span>
+            <button type="button" class="m3-time-box ${activeTab === 'minutes' ? 'active' : ''}" id="m3-tb-mm">${mmStr}</button>
+          </div>
+        </div>
+
+        <div class="m3-tp-section-title">Typische Schulzeiten</div>
+        <div class="m3-tp-presets-grid">
+          ${presetsHtml}
+        </div>
+
+        <div class="m3-tp-section-title">${activeTab === 'hours' ? 'Stunde auswählen' : 'Minute auswählen'}</div>
+        <div class="m3-tp-digits-grid no-scrollbar">
+          ${digitsHtml}
+        </div>
+
+        <div class="m3-picker-actions">
+          ${options.optional !== false ? '<button type="button" class="m3-btn-text" id="m3-tp-clear" style="margin-right:auto;color:#ba1a1a;">Keine Zeit</button>' : ''}
+          <button type="button" class="m3-btn-text" id="m3-tp-cancel">Abbrechen</button>
+          <button type="button" class="m3-btn-primary" id="m3-tp-confirm">Übernehmen</button>
+        </div>
+      </div>
+    `;
+
+    document.getElementById('m3-tb-hh').onclick = () => { activeTab = 'hours'; render(); };
+    document.getElementById('m3-tb-mm').onclick = () => { activeTab = 'minutes'; render(); };
+
+    scrim.querySelectorAll('.m3-tp-preset-chip[data-time]').forEach(chip => {
+      chip.onclick = () => {
+        const parts = chip.dataset.time.split(':').map(Number);
+        selectedHours = parts[0];
+        selectedMinutes = parts[1];
+        render();
+      };
+    });
+
+    scrim.querySelectorAll('.m3-tp-digit-btn[data-hour]').forEach(btn => {
+      btn.onclick = () => {
+        selectedHours = parseInt(btn.dataset.hour, 10);
+        activeTab = 'minutes';
+        render();
+      };
+    });
+
+    scrim.querySelectorAll('.m3-tp-digit-btn[data-minute]').forEach(btn => {
+      btn.onclick = () => {
+        selectedMinutes = parseInt(btn.dataset.minute, 10);
+        render();
+      };
+    });
+
+    const clearBtn = document.getElementById('m3-tp-clear');
+    if (clearBtn) {
+      clearBtn.onclick = () => {
+        close();
+        if (options.onSelect) options.onSelect('');
+      };
+    }
+    document.getElementById('m3-tp-cancel').onclick = () => {
+      close();
+      if (options.onCancel) options.onCancel();
+    };
+    document.getElementById('m3-tp-confirm').onclick = () => {
+      close();
+      if (options.onSelect) options.onSelect(currentTime);
+    };
+  }
+
+  scrim.onclick = (e) => {
+    if (e.target === scrim) {
+      close();
+      if (options.onCancel) options.onCancel();
+    }
+  };
+
+  render();
+  scrim.classList.add('active');
+}
+
+function enhanceDateTimeInputs(root = document) {
+  if (!root || !root.querySelectorAll) return;
+  const inputs = root.querySelectorAll('input[type="date"], input[type="time"]');
+
+  inputs.forEach(input => {
+    if (input.dataset.m3Enhanced === 'true') return;
+    input.dataset.m3Enhanced = 'true';
+
+    const isDate = input.type === 'date';
+    input.style.display = 'none';
+
+    const trigger = document.createElement('button');
+    trigger.type = 'button';
+    trigger.className = 'm3-dt-trigger';
+    if (input.id) trigger.id = input.id + '-trigger';
+
+    const iconSvg = isDate
+      ? '<svg class="m3-dt-trigger-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>'
+      : '<svg class="m3-dt-trigger-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>';
+
+    const chevSvg = '<svg class="m3-dt-trigger-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>';
+
+    trigger.innerHTML = `
+      <div class="m3-dt-trigger-left">
+        ${iconSvg}
+        <span class="m3-dt-trigger-text"></span>
+      </div>
+      ${chevSvg}
+    `;
+
+    input.parentNode.insertBefore(trigger, input.nextSibling);
+
+    const textSpan = trigger.querySelector('.m3-dt-trigger-text');
+    function syncLabel() {
+      const val = input.value;
+      if (isDate) {
+        if (val) {
+          textSpan.textContent = formatDateGerman(val);
+          textSpan.style.opacity = '1';
+        } else {
+          textSpan.textContent = input.placeholder || 'Datum auswählen';
+          textSpan.style.opacity = '0.55';
+        }
+      } else {
+        if (val) {
+          textSpan.textContent = val + ' Uhr';
+          textSpan.style.opacity = '1';
+        } else {
+          textSpan.textContent = input.placeholder || 'Uhrzeit (optional)';
+          textSpan.style.opacity = '0.55';
+        }
+      }
+    }
+    syncLabel();
+
+    // Intercept .value setter so programmatic changes immediately update the label
+    const desc = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+    if (desc && desc.set) {
+      Object.defineProperty(input, 'value', {
+        get() { return desc.get.call(this); },
+        set(newVal) {
+          desc.set.call(this, newVal);
+          syncLabel();
+        },
+        configurable: true
+      });
+    }
+
+    input.addEventListener('change', syncLabel);
+    input.addEventListener('input', syncLabel);
+
+    trigger.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (isDate) {
+        openDatePicker({
+          value: input.value,
+          title: input.getAttribute('placeholder') || 'Datum auswählen',
+          onSelect: (newVal) => {
+            input.value = newVal;
+            syncLabel();
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+            if (typeof input.onchange === 'function') input.onchange();
+          }
+        });
+      } else {
+        openTimePicker({
+          value: input.value,
+          title: input.getAttribute('placeholder') || 'Uhrzeit auswählen',
+          optional: true,
+          onSelect: (newVal) => {
+            input.value = newVal;
+            syncLabel();
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+            if (typeof input.onchange === 'function') input.onchange();
+          }
+        });
+      }
+    });
+  });
+}
+
 function openSheet(html) {
   let sheet = document.querySelector('.bottom-sheet');
   if (!sheet) { sheet = document.createElement('div'); sheet.className = 'bottom-sheet'; document.body.appendChild(sheet); }
   sheet.innerHTML = '<div class="sheet-handle"></div>' + html;
   enhanceDropdowns(sheet);
+  enhanceDateTimeInputs(sheet);
   if (window.lucide) lucide.createIcons();
   document.getElementById('bottom-sheet-scrim').classList.add('active');
   requestAnimationFrame(() => sheet.classList.add('active'));
@@ -391,6 +835,7 @@ function openModal(html) {
   document.getElementById('modal-content').innerHTML = html;
   document.getElementById('modal-scrim').classList.add('active');
   enhanceDropdowns(document.getElementById('modal-content'));
+  enhanceDateTimeInputs(document.getElementById('modal-content'));
   if (window.lucide) lucide.createIcons();
   
   history.pushState({ page: currentPage, modal: true }, '', window.location.pathname);
