@@ -1,8 +1,5 @@
 ﻿<div class="page" id="page-drive" style="background:#f8f5fc;">
-  <div class="page-header">
-    <button class="back-btn"><i data-lucide="arrow-left" style="width:22px;height:22px;"></i></button>
-    <span class="page-title">Drive</span>
-  </div>
+  <div id="ph-drive"></div>
   <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px;text-align:center;">
     <div style="background:#e8def8;border-radius:32px;width:100px;height:100px;display:flex;align-items:center;justify-content:center;margin-bottom:24px;">
       <i data-lucide="hard-drive" style="width:48px;height:48px;color:#1d192b;"></i>
@@ -25,4 +22,7 @@
     </div>
   </div>
 </div>
-<script>function init_drive(){}</script>
+<script>
+document.getElementById('ph-drive').outerHTML = pageHeader({ title: 'Drive' });
+function init_drive(){}
+</script>

@@ -1,11 +1,5 @@
 <div class="page" id="page-homework" style="background:#fff5f8;">
-  <div class="page-header">
-    <button class="back-btn"><i data-lucide="arrow-left" style="width:22px;height:22px;"></i></button>
-    <div style="flex:1;">
-      <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.5;color:#31111d;" id="hw-header-sub">Lade…</div>
-      <span class="page-title" style="color:#31111d;">Aufgaben</span>
-    </div>
-  </div>
+  <div id="ph-homework"></div>
   <div class="no-scrollbar page-subbar" style="padding-top:0;padding-bottom:8px;display:flex;gap:8px;overflow-x:auto;flex-shrink:0;">
     <button onclick="hwFilter('all',this)" class="chip active" id="hw-f-all">Alle</button>
     <button onclick="hwFilter('open',this)" class="chip" id="hw-f-open">Offen</button>
@@ -27,14 +21,7 @@
   <!-- Detail overlay: opened on top of this page when a homework card is tapped -->
   <template id="tpl-hw-detail">
     <div class="page page-overlay" id="page-hw-detail" style="background:#fff5f8;">
-      <div class="page-header">
-        <button class="icon-btn" onclick="event.stopPropagation();closeHwDetail();" title="Zurück"><i data-lucide="arrow-left" style="width:22px;height:22px;"></i></button>
-        <div style="flex:1;min-width:0;">
-          <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.6;color:#31111d;" id="hwd-subject">–</div>
-          <span class="page-title" style="color:#31111d;font-size:1.25rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" id="hwd-title">–</span>
-        </div>
-        <button class="icon-btn" onclick="deleteHwFromDetail()" style="color:#ba1a1a;" title="Aufgabe löschen"><i data-lucide="trash-2" style="width:20px;height:20px;"></i></button>
-      </div>
+      <div id="ph-hwd"></div>
 
       <div class="page-scroll-1col no-scrollbar"><div class="page-inner" style="padding-bottom:90px;">
         <!-- Due Date Card -->
@@ -221,6 +208,13 @@
 </div>
 
 <script>
+document.getElementById('ph-homework').outerHTML = pageHeader({
+  title: 'Aufgaben',
+  titleStyle: 'color:#31111d;',
+  subtitle: 'Lade…',
+  subtitleId: 'hw-header-sub',
+  subtitleStyle: 'color:#31111d;',
+});
 let hwItems = [], hwSubjects = [], hwCurrentFilter = 'all', hwCurrentUser = null, hwTimetable = null;
 let hwDueMode = 'next', hwCustomDate = null;
 let hwPendingFiles = []; // Array of { url, type, name }
@@ -445,6 +439,16 @@ function openHwDetail(id) {
   if (existing) existing.remove();
   const tpl = document.getElementById('tpl-hw-detail').content.cloneNode(true);
   document.body.appendChild(tpl);
+  document.getElementById('ph-hwd').outerHTML = pageHeader({
+    title: '–',
+    titleId: 'hwd-title',
+    titleStyle: 'color:#31111d;font-size:1.25rem;',
+    subtitle: '–',
+    subtitleId: 'hwd-subject',
+    subtitleStyle: 'color:#31111d;opacity:0.6;',
+    backAction: 'event.stopPropagation();closeHwDetail();',
+    trailing: `<button class="icon-btn" onclick="deleteHwFromDetail()" style="color:#ba1a1a;" title="Aufgabe löschen"><i data-lucide="trash-2" style="width:20px;height:20px;"></i></button>`
+  });
   const page = document.getElementById('page-hw-detail');
   page.style.setProperty('--ox', '50%');
   page.style.setProperty('--oy', '50%');

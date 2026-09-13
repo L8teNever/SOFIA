@@ -95,6 +95,41 @@ function escapeHtml(str) {
   return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 }
 
+// The one place a page header's markup is written. Every page fills in a
+// <div id="...page-header slot..."></div> and replaces it with this at
+// script-run time (before openPage()'s lucide.createIcons() call, so the
+// icons inside still get converted) — never hand-write a .page-header div.
+// The back button is the part this exists to guarantee: every page gets
+// the same one, wired to the same close behavior, without having to
+// remember to include it correctly each time.
+function pageHeader({
+  title = '',
+  titleId = '',
+  titleStyle = '',
+  subtitle = '',
+  subtitleId = '',
+  subtitleStyle = '',
+  titleHtml = '',    // full override for the title block, for headers too custom for title/subtitle (e.g. calendar's inline expand chevron) — back button + wrapper are still guaranteed
+  backAction = '',   // custom onclick JS (e.g. for a manually-managed overlay); omit for the default closePage() via .back-btn
+  backClassName = '', // extra class(es) on the back button itself (e.g. a page-local size override)
+  trailing = '',     // raw HTML for whatever comes after the title (icon buttons, badges, spacers) — the one flexible slot
+  className = '',    // extra class(es) on the .page-header wrapper (e.g. calendar's compact-row variant)
+  style = '',        // extra inline style on the wrapper (e.g. a tighter gap)
+} = {}) {
+  const back = backAction
+    ? `<button class="icon-btn${backClassName ? ' ' + backClassName : ''}" onclick="${backAction}" title="Zurück"><i data-lucide="arrow-left" style="width:22px;height:22px;"></i></button>`
+    : `<button class="back-btn${backClassName ? ' ' + backClassName : ''}" title="Zurück"><i data-lucide="arrow-left" style="width:22px;height:22px;"></i></button>`;
+
+  const titleBlock = titleHtml || ((subtitle || subtitleId)
+    ? `<div style="flex:1;min-width:0;">
+        <div${subtitleId ? ` id="${subtitleId}"` : ''} style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.5;${subtitleStyle}">${subtitle}</div>
+        <span class="page-title"${titleId ? ` id="${titleId}"` : ''} style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${titleStyle}">${title}</span>
+      </div>`
+    : `<span class="page-title"${titleId ? ` id="${titleId}"` : ''} style="flex:1;min-width:0;${titleStyle}">${title}</span>`);
+
+  return `<div class="page-header${className ? ' ' + className : ''}"${style ? ` style="${style}"` : ''}>${back}${titleBlock}${trailing}</div>`;
+}
+
 function showToast(msg, duration = 3000) {
   const t = document.getElementById('toast');
   t.textContent = msg;

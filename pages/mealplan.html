@@ -1,14 +1,5 @@
 <div class="page" id="page-mealplan" style="background:#f0faf3;">
-  <div class="page-header">
-    <button class="back-btn"><i data-lucide="arrow-left" style="width:22px;height:22px;"></i></button>
-    <div style="flex:1;">
-      <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.5;color:#072711;" id="meal-header-sub">Mensa Speiseplan</div>
-      <span class="page-title" style="color:#072711;">Essensplan</span>
-    </div>
-    <button class="icon-btn" id="meal-delete-btn" onclick="deleteMealPlanConfirm()" style="display:none;color:#b3261e;">
-      <i data-lucide="trash-2" style="width:20px;height:20px;"></i>
-    </button>
-  </div>
+  <div id="ph-mealplan"></div>
 
   <!-- Day Filter Chips (Consistent with SOFIA UI) -->
   <div class="no-scrollbar page-subbar" id="meal-day-chips" style="padding-top:0;padding-bottom:8px;display:flex;gap:8px;overflow-x:auto;flex-shrink:0;">
@@ -126,6 +117,16 @@
 </div>
 
 <script>
+document.getElementById('ph-mealplan').outerHTML = pageHeader({
+  title: 'Essensplan',
+  titleStyle: 'color:#072711;',
+  subtitle: 'Mensa Speiseplan',
+  subtitleId: 'meal-header-sub',
+  subtitleStyle: 'color:#072711;',
+  trailing: `<button class="icon-btn" id="meal-delete-btn" onclick="deleteMealPlanConfirm()" style="display:none;color:#b3261e;">
+      <i data-lucide="trash-2" style="width:20px;height:20px;"></i>
+    </button>`
+});
 let mealPlan = null;
 let mealCanDelete = false;
 let mealActiveFilter = 'all';

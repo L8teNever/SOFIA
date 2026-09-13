@@ -1,10 +1,5 @@
 <div class="page" id="page-admin" style="background:#f5f3f9;">
-  <div class="page-header">
-    <button class="back-btn"><i data-lucide="arrow-left" style="width:22px;height:22px;"></i></button>
-    <span class="page-title">Admin</span>
-    <div style="flex:1;"></div>
-    <div id="admin-role-badge" style="background:#25232a;color:white;padding:6px 14px;border-radius:12px;font-size:0.8rem;font-weight:600;"></div>
-  </div>
+  <div id="ph-admin"></div>
 
   <!-- Stats bar -->
   <div id="admin-stats-row" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:0 20px 16px 20px;flex-shrink:0;"></div>
@@ -169,6 +164,11 @@
 </div>
 
 <script>
+document.getElementById('ph-admin').outerHTML = pageHeader({
+  title: 'Admin',
+  trailing: `<div style="flex:1;"></div>
+    <div id="admin-role-badge" style="background:#25232a;color:white;padding:6px 14px;border-radius:12px;font-size:0.8rem;font-weight:600;"></div>`
+});
 let adminUsers=[], adminClasses=[], adminSubjects=[], adminMe=null;
 
 async function init_admin() {

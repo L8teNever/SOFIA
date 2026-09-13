@@ -1,15 +1,5 @@
 <div class="page" id="page-grades" style="background:#f4f8ff;">
-  <div class="page-header" style="gap:12px;">
-    <button class="back-btn" title="Zurück"><i data-lucide="arrow-left" style="width:22px;height:22px;"></i></button>
-    <div style="flex:1;">
-      <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.5;color:#041e49;">Halbjahr 2 · 2025/26</div>
-      <span class="page-title" style="color:#041e49;">Noten</span>
-    </div>
-    <!-- Settings icon for shared class grade weightings -->
-    <button onclick="openGradeWeightingSheet()" class="icon-btn" title="Notenspiegel & Gewichtung anpassen" style="width:44px;height:44px;border-radius:14px;background:#e8def8;color:#21005d;">
-      <i data-lucide="sliders-horizontal" style="width:20px;height:20px;"></i>
-    </button>
-  </div>
+  <div id="ph-grades"></div>
   <div class="page-scroll">
     <div class="page-inner">
       <div id="grades-summary"></div>
@@ -26,6 +16,16 @@
 </div>
 
 <script>
+document.getElementById('ph-grades').outerHTML = pageHeader({
+  title: 'Noten',
+  titleStyle: 'color:#041e49;',
+  subtitle: 'Halbjahr 2 · 2025/26',
+  subtitleStyle: 'color:#041e49;',
+  style: 'gap:12px;',
+  trailing: `<button onclick="openGradeWeightingSheet()" class="icon-btn" title="Notenspiegel & Gewichtung anpassen" style="width:44px;height:44px;border-radius:14px;background:#e8def8;color:#21005d;">
+      <i data-lucide="sliders-horizontal" style="width:20px;height:20px;"></i>
+    </button>`
+});
 var gradeItems = [];
 var gradeSubjects = [];
 var gradeWeightings = [];

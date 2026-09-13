@@ -1,8 +1,5 @@
 <div class="page" id="page-settings" style="background:#f5f3f9;">
-  <div class="page-header">
-    <button class="back-btn"><i data-lucide="arrow-left" style="width:22px;height:22px;"></i></button>
-    <span class="page-title">Einstellungen</span>
-  </div>
+  <div id="ph-settings"></div>
 
   <div class="page-scroll-1col"><div class="page-inner">
     <!-- Profile -->
@@ -127,6 +124,7 @@
 </div>
 
 <script>
+document.getElementById('ph-settings').outerHTML = pageHeader({ title: 'Einstellungen' });
 let settingsUser = null;
 
 async function init_settings() {

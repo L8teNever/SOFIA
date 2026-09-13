@@ -1,30 +1,6 @@
 <div class="page" id="page-calendar" style="background:#f9f6fc;">
   <!-- Header -->
-  <div class="page-header cal-header-row">
-    <button class="back-btn cal-back-btn" title="Zurück"><i data-lucide="arrow-left"></i></button>
-    <div style="flex:1;min-width:0;">
-      <div style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.6;color:#6750a4;" id="cal-year-label"></div>
-      <div style="display:flex;align-items:center;gap:2px;min-width:0;">
-        <span class="page-title cal-month-title" style="color:#1c1b1f;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" id="cal-month-title">Kalender</span>
-        <!-- Only shown in week view (a day selected) — taps back out to
-             the full month instead of relying on tapping the tiny
-             selected day again, which isn't obvious on its own. -->
-        <button type="button" id="cal-expand-btn" onclick="clearDateSelection()" style="display:none;background:none;border:none;color:#6750a4;cursor:pointer;padding:2px;flex-shrink:0;" title="Zur Monatsansicht">
-          <i data-lucide="chevron-down" style="width:19px;height:19px;"></i>
-        </button>
-      </div>
-    </div>
-    <!-- Quick Nav -->
-    <div class="cal-nav-row" style="display:flex;align-items:center;flex-shrink:0;">
-      <button onclick="calNav(-1)" class="icon-btn cal-nav-btn" title="Vorheriger Monat"><i data-lucide="chevron-left"></i></button>
-      <button onclick="calToday()" class="m3-btn-outline cal-today-btn" title="Zum heutigen Tag springen">Heute</button>
-      <button onclick="calNav(1)" class="icon-btn cal-nav-btn" title="Nächster Monat"><i data-lucide="chevron-right"></i></button>
-      <button type="button" id="cal-filter-btn" class="icon-btn cal-nav-btn" onclick="toggleCalFilterMenu(this)" title="Nach Kategorie filtern" style="position:relative;">
-        <i data-lucide="filter"></i>
-        <span id="cal-filter-dot" style="display:none;position:absolute;top:6px;right:6px;width:8px;height:8px;border-radius:50%;background:#6750a4;border:2px solid #f9f6fc;"></span>
-      </button>
-    </div>
-  </div>
+  <div id="ph-calendar"></div>
 
   <!-- Main 2-Column Responsive Layout -->
   <div class="cal-main-container">
@@ -330,6 +306,28 @@
 </div>
 
 <script>
+document.getElementById('ph-calendar').outerHTML = pageHeader({
+  className: 'cal-header-row',
+  backClassName: 'cal-back-btn',
+  titleHtml: `<div style="flex:1;min-width:0;">
+      <div style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.6;color:#6750a4;" id="cal-year-label"></div>
+      <div style="display:flex;align-items:center;gap:2px;min-width:0;">
+        <span class="page-title cal-month-title" style="color:#1c1b1f;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" id="cal-month-title">Kalender</span>
+        <button type="button" id="cal-expand-btn" onclick="clearDateSelection()" style="display:none;background:none;border:none;color:#6750a4;cursor:pointer;padding:2px;flex-shrink:0;" title="Zur Monatsansicht">
+          <i data-lucide="chevron-down" style="width:19px;height:19px;"></i>
+        </button>
+      </div>
+    </div>`,
+  trailing: `<div class="cal-nav-row" style="display:flex;align-items:center;flex-shrink:0;">
+      <button onclick="calNav(-1)" class="icon-btn cal-nav-btn" title="Vorheriger Monat"><i data-lucide="chevron-left"></i></button>
+      <button onclick="calToday()" class="m3-btn-outline cal-today-btn" title="Zum heutigen Tag springen">Heute</button>
+      <button onclick="calNav(1)" class="icon-btn cal-nav-btn" title="Nächster Monat"><i data-lucide="chevron-right"></i></button>
+      <button type="button" id="cal-filter-btn" class="icon-btn cal-nav-btn" onclick="toggleCalFilterMenu(this)" title="Nach Kategorie filtern" style="position:relative;">
+        <i data-lucide="filter"></i>
+        <span id="cal-filter-dot" style="display:none;position:absolute;top:6px;right:6px;width:8px;height:8px;border-radius:50%;background:#6750a4;border:2px solid #f9f6fc;"></span>
+      </button>
+    </div>`
+});
 var calYear = new Date().getFullYear();
 var calMonth = new Date().getMonth();
 var calEvents = [];

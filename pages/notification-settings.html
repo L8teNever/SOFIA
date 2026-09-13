@@ -1,8 +1,5 @@
 <div class="page" id="page-notification-settings" style="background:#f5f3f9;">
-  <div class="page-header">
-    <button class="back-btn"><i data-lucide="arrow-left" style="width:22px;height:22px;"></i></button>
-    <span class="page-title">Benachrichtigungen & Erinnerungen</span>
-  </div>
+  <div id="ph-notification-settings"></div>
 
   <div class="page-scroll-1col"><div class="page-inner">
     <div class="m3-card" style="margin-bottom:12px;">
@@ -242,6 +239,7 @@
 </div>
 
 <script>
+document.getElementById('ph-notification-settings').outerHTML = pageHeader({ title: 'Benachrichtigungen & Erinnerungen' });
 let notifSettings = null;
 
 async function init_notification_settings() {

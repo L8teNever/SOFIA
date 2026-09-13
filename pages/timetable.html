@@ -1,13 +1,5 @@
 <div class="page" id="page-timetable" style="background:#fff8ef;">
-  <div class="page-header">
-    <button class="back-btn"><i data-lucide="arrow-left" style="width:22px;height:22px;"></i></button>
-    <div style="flex:1;">
-      <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.5;color:#442b00;" id="tt-header-sub"></div>
-      <span class="page-title" style="color:#442b00;">Stundenplan</span>
-    </div>
-    <button onclick="ttNav(-1)" class="icon-btn"><i data-lucide="chevron-left" style="width:20px;height:20px;"></i></button>
-    <button onclick="ttNav(1)"  class="icon-btn"><i data-lucide="chevron-right" style="width:20px;height:20px;"></i></button>
-  </div>
+  <div id="ph-timetable"></div>
 
   <!-- Mode chips (same pattern as homework) -->
   <div class="page-subbar" style="padding-top:0;padding-bottom:8px;display:flex;gap:8px;flex-shrink:0;">
@@ -35,6 +27,15 @@
 </div>
 
 <script>
+document.getElementById('ph-timetable').outerHTML = pageHeader({
+  title: 'Stundenplan',
+  titleStyle: 'color:#442b00;',
+  subtitle: '',
+  subtitleId: 'tt-header-sub',
+  subtitleStyle: 'color:#442b00;',
+  trailing: `<button onclick="ttNav(-1)" class="icon-btn"><i data-lucide="chevron-left" style="width:20px;height:20px;"></i></button>
+    <button onclick="ttNav(1)"  class="icon-btn"><i data-lucide="chevron-right" style="width:20px;height:20px;"></i></button>`
+});
 const TT_COLORS  = ['#eaddff','#d3e3fd','#c4eed0','#ffdec1','#ffd8e4','#e8def8','#cfe2ff'];
 const TT_DAYS_S  = ['So','Mo','Di','Mi','Do','Fr','Sa'];
 const TT_DAYS_L  = ['Sonntag','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag'];
