@@ -14,6 +14,21 @@
 
   </div>
   </div>
+
+  <div id="drive-preview-lightbox" style="display:none;position:fixed;inset:0;z-index:2000;background:#fff;flex-direction:column;opacity:0;transition:opacity 0.22s ease;">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:max(16px, env(safe-area-inset-top)) 16px 16px;border-bottom:1px solid rgba(0,0,0,0.08);flex-shrink:0;">
+      <div style="min-width:0;flex:1;">
+        <div id="drive-preview-title" style="font-weight:700;font-size:1rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></div>
+        <div id="drive-preview-meta" style="font-size:0.75rem;opacity:0.55;"></div>
+      </div>
+      <button onclick="closeDriveFilePreview()" style="width:40px;height:40px;border-radius:50%;background:rgba(0,0,0,0.06);border:none;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;" title="Schließen">
+        <i data-lucide="x" style="width:20px;height:20px;"></i>
+      </button>
+    </div>
+    <div id="drive-preview-body" style="flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;padding:16px;"></div>
+    <div id="drive-preview-actions" style="display:flex;gap:10px;padding:16px;padding-bottom:max(16px, env(safe-area-inset-bottom));border-top:1px solid rgba(0,0,0,0.08);flex-shrink:0;"></div>
+  </div>
+
   <style>
   .drive-folder-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; }
   @media (min-width:560px) { .drive-folder-grid { grid-template-columns:repeat(3,1fr); } }
@@ -475,56 +490,81 @@ async function executeDeleteDriveFile(id) {
 
 // --- Preview / inline text editing ---
 
+let drivePreviewHome = null; // { parent, nextSibling } — where the lightbox lives when not portaled to <body>
+
 async function openDriveFilePreview(id) {
   const f = driveFiles.find(x => x.id === id);
   if (!f) return;
   drivePreviewFileId = id;
+  const lb = document.getElementById('drive-preview-lightbox');
+  if (!lb) return;
+  // Portal to <body> so it stacks above the page (and any overlay) it was
+  // opened from, same reasoning as the homework/mealplan image lightboxes —
+  // and move it back on close so it doesn't get discarded if Drive itself
+  // closes while the preview is portaled out.
+  if (lb.parentElement !== document.body) {
+    drivePreviewHome = { parent: lb.parentElement, nextSibling: lb.nextSibling };
+    document.body.appendChild(lb);
+  }
+
+  document.getElementById('drive-preview-title').textContent = f.original_name;
+  document.getElementById('drive-preview-meta').textContent = `${formatBytes(f.file_size)} · ${f.uploader_name||'?'} · ${driveRelTime(f.created_at)}`;
+
   const ext = driveExt(f.original_name);
   const isImage = DRIVE_IMAGE_EXTS.includes(ext);
   const isPdf = ext === 'pdf';
   const isText = DRIVE_TEXT_EXTS.includes(ext);
 
-  let bodyHtml;
+  const body = document.getElementById('drive-preview-body');
+  body.style.padding = isPdf ? '0' : '16px';
+  body.style.alignItems = (isImage || (!isText && !isPdf)) ? 'center' : '';
+  body.style.justifyContent = (isImage || (!isText && !isPdf)) ? 'center' : '';
+
   if (isImage) {
-    bodyHtml = `<img src="/api/v1/drive/preview/${id}" style="max-width:100%;border-radius:14px;display:block;margin:0 auto;">`;
+    body.innerHTML = `<img src="/api/v1/drive/preview/${id}" style="max-width:100%;max-height:100%;object-fit:contain;border-radius:12px;">`;
   } else if (isPdf) {
-    bodyHtml = `<iframe src="/api/v1/drive/preview/${id}" style="width:100%;height:60vh;border:none;border-radius:14px;background:#f3edf7;"></iframe>`;
+    body.innerHTML = `<iframe src="/api/v1/drive/preview/${id}" style="width:100%;height:100%;border:none;background:#f3edf7;flex:1;"></iframe>`;
   } else if (isText) {
-    bodyHtml = `<div style="text-align:center;padding:20px;opacity:0.5;">Lädt…</div>`;
+    body.innerHTML = `<div style="text-align:center;margin:auto;opacity:0.5;">Lädt…</div>`;
   } else {
-    bodyHtml = `<div style="text-align:center;padding:30px 10px;opacity:0.5;">
-      <i data-lucide="${driveIcon(f.original_name)}" style="width:40px;height:40px;margin-bottom:10px;"></i>
+    body.innerHTML = `<div style="text-align:center;opacity:0.5;">
+      <i data-lucide="${driveIcon(f.original_name)}" style="width:48px;height:48px;margin-bottom:12px;"></i>
       <div>Keine Vorschau für diesen Dateityp verfügbar.</div>
     </div>`;
   }
 
-  openModal(`
-    <div style="text-align:left;">
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:14px;">
-        <div style="min-width:0;">
-          <div style="font-weight:700;font-size:1rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(f.original_name)}</div>
-          <div style="font-size:0.75rem;opacity:0.55;">${formatBytes(f.file_size)} · ${escapeHtml(f.uploader_name||'?')} · ${driveRelTime(f.created_at)}</div>
-        </div>
-        <button class="icon-btn" onclick="closeModal()" style="flex-shrink:0;"><i data-lucide="x" style="width:18px;height:18px;"></i></button>
-      </div>
-      <div id="drive-preview-body">${bodyHtml}</div>
-      <div style="display:flex;gap:10px;margin-top:16px;" id="drive-preview-actions">
-        <a href="/api/v1/drive/download/${id}" download class="m3-btn-outline" style="flex:1;text-align:center;text-decoration:none;">Herunterladen</a>
-        ${isText ? `<button class="m3-btn-primary" style="flex:1;" onclick="startDriveTextEdit(${id})" id="drive-edit-toggle-btn">Bearbeiten</button>` : ''}
-      </div>
-    </div>
-  `);
+  document.getElementById('drive-preview-actions').innerHTML = `
+    <a href="/api/v1/drive/download/${id}" download class="m3-btn-outline" style="flex:1;text-align:center;text-decoration:none;">Herunterladen</a>
+    ${isText ? `<button class="m3-btn-primary" style="flex:1;" onclick="startDriveTextEdit(${id})" id="drive-edit-toggle-btn">Bearbeiten</button>` : ''}
+  `;
+
+  lb.style.display = 'flex';
+  requestAnimationFrame(() => lb.style.opacity = '1');
+  if (window.lucide) lucide.createIcons();
 
   if (isText) {
     try {
       const res = await API.driveFileText(id);
-      const el = document.getElementById('drive-preview-body');
-      if (el) el.innerHTML = `<textarea id="drive-preview-textarea" readonly style="width:100%;min-height:40vh;border:1px solid rgba(0,0,0,0.1);border-radius:12px;padding:12px;font-family:monospace;font-size:0.85rem;resize:vertical;background:#faf9fc;">${escapeHtml(res.content)}</textarea>`;
+      body.innerHTML = `<textarea id="drive-preview-textarea" readonly style="flex:1;width:100%;border:1px solid rgba(0,0,0,0.1);border-radius:12px;padding:14px;font-family:monospace;font-size:0.9rem;resize:none;background:#faf9fc;">${escapeHtml(res.content)}</textarea>`;
     } catch {
-      const el = document.getElementById('drive-preview-body');
-      if (el) el.innerHTML = `<div style="text-align:center;padding:20px;opacity:0.5;">Inhalt konnte nicht geladen werden.</div>`;
+      body.innerHTML = `<div style="text-align:center;margin:auto;opacity:0.5;">Inhalt konnte nicht geladen werden.</div>`;
     }
   }
+}
+
+function closeDriveFilePreview(isPopState = false) {
+  const lb = document.getElementById('drive-preview-lightbox');
+  if (!lb) return;
+  lb.style.opacity = '0';
+  setTimeout(() => {
+    lb.style.display = 'none';
+    if (drivePreviewHome && document.body.contains(drivePreviewHome.parent)) {
+      drivePreviewHome.parent.insertBefore(lb, drivePreviewHome.nextSibling);
+    } else if (lb.parentElement === document.body) {
+      lb.remove();
+    }
+    drivePreviewHome = null;
+  }, 220);
 }
 
 function startDriveTextEdit(id) {

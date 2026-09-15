@@ -595,6 +595,12 @@ window.addEventListener('popstate', (e) => {
     return;
   }
 
+  const drivePreview = document.getElementById('drive-preview-lightbox');
+  if (drivePreview && drivePreview.style.display !== 'none' && typeof closeDriveFilePreview === 'function') {
+    closeDriveFilePreview(true);
+    return;
+  }
+
   // Detail overlays (e.g. a homework item opened on top of the list page)
   // stack on top of a regular .page rather than replacing it — close the
   // overlay first so back-navigation doesn't yank the page underneath it.
