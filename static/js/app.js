@@ -58,7 +58,7 @@ if (window.visualViewport) {
   window.visualViewport.addEventListener('resize', updateAppHeight);
 }
 
-const KNOWN_PAGES = ['calendar','homework','grades','timetable','mealplan','drive','quickshare','settings','admin','notifications','notification-settings'];
+const KNOWN_PAGES = ['calendar','homework','grades','timetable','mealplan','drive','quickshare','settings','admin','notifications','notification-settings','google-sync'];
 const pageCache = new Map();
 
 function prefetchPages() {
@@ -491,7 +491,11 @@ async function openPage(name, triggerEl, preserveUrl = false) {
   // never shows a "wird geladen…" placeholder mid-animation, and the
   // outgoing page/dashboard stays live on screen for the whole wait
   // instead of both views going blank at once.
-  const initFn = window['init_' + name];
+  // Page names can contain hyphens (notification-settings, google-sync) but
+  // a JS function name can't, so the page's own init_<name>() is always
+  // declared with underscores — normalize here or the lookup silently
+  // misses and the page never actually fetches its data.
+  const initFn = window['init_' + name.replace(/-/g, '_')];
   if (initFn) {
     const result = initFn();
     if (result && typeof result.then === 'function') await result;

@@ -128,6 +128,12 @@ async def create_homework(request: Request, data: HomeworkCreate, db: AsyncSessi
     except Exception as e:
         logger.warning("Error dispatching new homework notification: %s", e)
 
+    try:
+        from backend.services.google_sync_service import sync_homework_created
+        await sync_homework_created(db, hw)
+    except Exception as e:
+        logger.warning("Error syncing new homework to Google Tasks: %s", e)
+
     return hw
 
 
@@ -193,6 +199,13 @@ async def delete_homework(request: Request, hw_id: int, db: AsyncSession = Depen
         raise HTTPException(404)
     if hw.created_by != current_user.id and current_user.role not in ("admin", "super_admin"):
         raise HTTPException(403)
+
+    try:
+        from backend.services.google_sync_service import sync_homework_deleted
+        await sync_homework_deleted(db, hw.id)
+    except Exception as e:
+        logger.warning("Error removing deleted homework from Google Tasks: %s", e)
+
     await db.delete(hw)
     await db.commit()
 

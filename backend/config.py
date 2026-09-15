@@ -108,6 +108,15 @@ class Settings:
     dev_email:         Optional[str] = os.getenv("DEV_EMAIL")
     gemini_api_key:    str           = os.getenv("GEMINI_API_KEY", "")
     gemini_model:      str           = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
+    # Google OAuth ("Google Sync": push calendar events / homework to each
+    # user's own Google Calendar & Tasks). Must come from a Google Cloud
+    # Console project a human sets up — there's no way to self-generate a
+    # valid OAuth client, unlike the self-healing keys above. Every route
+    # that needs these checks for an empty string and reports "not
+    # configured" instead of failing, same as the Gemini key.
+    google_client_id:     str        = os.getenv("GOOGLE_CLIENT_ID", "")
+    google_client_secret: str        = os.getenv("GOOGLE_CLIENT_SECRET", "")
+    google_redirect_uri:  str        = os.getenv("GOOGLE_REDIRECT_URI", "")
     impressum_business_name: str     = os.getenv("IMPRESSUM_BUSINESS_NAME", "Sofia Schulbegleiter PWA")
     impressum_name:    str           = os.getenv("IMPRESSUM_NAME", "Max Mustermann")
     impressum_address: str           = os.getenv("IMPRESSUM_ADDRESS", "Musterstraße 123<br>12345 Musterstadt")

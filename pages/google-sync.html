@@ -1,0 +1,133 @@
+<div class="page" id="page-google-sync" style="background:#f5f3f9;">
+  <div id="ph-google-sync"></div>
+
+  <div class="page-scroll-1col"><div class="page-inner">
+
+    <div id="gs-not-configured" style="display:none;text-align:center;padding:50px 20px;opacity:0.6;">
+      <i data-lucide="cloud-off" style="width:44px;height:44px;margin-bottom:14px;"></i>
+      <div style="font-weight:700;font-size:1.05rem;margin-bottom:6px;">Noch nicht eingerichtet</div>
+      <div style="font-size:0.85rem;line-height:1.5;max-width:320px;margin:0 auto;">Die Google-Anmeldung ist serverseitig noch nicht konfiguriert. Ein Admin muss dafür erst einen Google-Cloud-Projekt-Zugang einrichten.</div>
+    </div>
+
+    <div id="gs-body" style="display:none;">
+      <div class="m3-card" style="margin-bottom:16px;">
+        <div style="display:flex;align-items:center;gap:14px;">
+          <div class="icon-box" style="width:44px;height:44px;background:rgba(66,133,244,0.12);flex-shrink:0;">
+            <i data-lucide="chrome" style="width:22px;height:22px;color:#4285f4;"></i>
+          </div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-weight:700;font-size:0.98rem;" id="gs-status-title">Nicht verbunden</div>
+            <div style="font-size:0.8rem;opacity:0.6;" id="gs-status-sub">Mit deinem Google-Konto anmelden</div>
+          </div>
+        </div>
+        <button class="m3-btn-full" style="margin-top:14px;" id="gs-connect-btn" onclick="connectGoogle()">Mit Google verbinden</button>
+        <button class="m3-btn-outline" style="margin-top:10px;width:100%;display:none;" id="gs-disconnect-btn" onclick="disconnectGoogleConfirm()">Verbindung trennen</button>
+      </div>
+
+      <div class="section-label">Synchronisation</div>
+      <div class="m3-card" id="gs-sync-options" style="opacity:0.4;pointer-events:none;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+          <div>
+            <div style="font-size:0.86rem;font-weight:600;">Kalender synchronisieren</div>
+            <div style="font-size:0.76rem;opacity:0.6;">Neue Termine landen automatisch auch in deinem Google Kalender</div>
+          </div>
+          <div class="m3-switch" id="gs-sync-calendar" onclick="toggleGoogleSetting('sync_calendar', this)"></div>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <div>
+            <div style="font-size:0.86rem;font-weight:600;">Hausaufgaben als Google Tasks</div>
+            <div style="font-size:0.76rem;opacity:0.6;">Neue Hausaufgaben werden automatisch als Aufgabe angelegt</div>
+          </div>
+          <div class="m3-switch" id="gs-sync-homework" onclick="toggleGoogleSetting('sync_homework_tasks', this)"></div>
+        </div>
+      </div>
+    </div>
+
+  </div></div>
+</div>
+
+<script>
+document.getElementById('ph-google-sync').outerHTML = pageHeader({ title: 'Google Sync' });
+
+let gsStatus = null;
+
+async function init_google_sync() {
+  const params = new URLSearchParams(location.search);
+  if (params.has('google_connected')) {
+    showToast('Google-Konto verbunden!');
+    history.replaceState({}, '', location.pathname);
+  } else if (params.has('google_error')) {
+    showToast('Google-Verbindung fehlgeschlagen');
+    history.replaceState({}, '', location.pathname);
+  }
+
+  gsStatus = await API.googleStatus().catch(() => null);
+  renderGoogleSync();
+}
+
+function renderGoogleSync() {
+  if (!gsStatus || !gsStatus.configured) {
+    document.getElementById('gs-not-configured').style.display = 'block';
+    document.getElementById('gs-body').style.display = 'none';
+    return;
+  }
+  document.getElementById('gs-not-configured').style.display = 'none';
+  document.getElementById('gs-body').style.display = 'block';
+
+  document.getElementById('gs-status-title').textContent = gsStatus.connected ? (gsStatus.email || 'Verbunden') : 'Nicht verbunden';
+  document.getElementById('gs-status-sub').textContent = gsStatus.connected ? 'Dein Google-Konto ist verbunden' : 'Mit deinem Google-Konto anmelden';
+  document.getElementById('gs-connect-btn').style.display = gsStatus.connected ? 'none' : 'block';
+  document.getElementById('gs-disconnect-btn').style.display = gsStatus.connected ? 'block' : 'none';
+
+  const opts = document.getElementById('gs-sync-options');
+  opts.style.opacity = gsStatus.connected ? '1' : '0.4';
+  opts.style.pointerEvents = gsStatus.connected ? 'auto' : 'none';
+  document.getElementById('gs-sync-calendar').classList.toggle('on', !!gsStatus.sync_calendar);
+  document.getElementById('gs-sync-homework').classList.toggle('on', !!gsStatus.sync_homework_tasks);
+
+  if (window.lucide) lucide.createIcons();
+}
+
+async function connectGoogle() {
+  try {
+    const res = await API.googleAuthUrl();
+    window.location.href = res.url;
+  } catch {
+    showToast('Google-Verbindung konnte nicht gestartet werden');
+  }
+}
+
+function disconnectGoogleConfirm() {
+  openModal(confirmDelete({
+    icon: 'unlink',
+    title: 'Verbindung trennen?',
+    message: 'Dein Google-Konto wird getrennt. Bereits synchronisierte Termine und Aufgaben bleiben in Google erhalten, werden aber nicht mehr aktualisiert.',
+    confirmLabel: 'Trennen',
+    onConfirm: 'executeDisconnectGoogle()',
+  }));
+}
+
+async function executeDisconnectGoogle() {
+  try {
+    await API.disconnectGoogle();
+  } catch {
+    showToast('Fehler beim Trennen');
+    return;
+  }
+  closeModal();
+  gsStatus = await API.googleStatus().catch(() => gsStatus);
+  renderGoogleSync();
+  showToast('Verbindung getrennt');
+}
+
+async function toggleGoogleSetting(prop, el) {
+  const next = !el.classList.contains('on');
+  el.classList.toggle('on', next);
+  try {
+    gsStatus = await API.updateGoogleSettings({ [prop]: next });
+  } catch {
+    el.classList.toggle('on', !next);
+    showToast('Fehler beim Speichern');
+  }
+}
+</script>

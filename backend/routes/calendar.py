@@ -69,6 +69,12 @@ async def create_event(request: Request, data: CalendarEventCreate, db: AsyncSes
     except Exception as e:
         logger.warning("Error dispatching new event notification: %s", e)
 
+    try:
+        from backend.services.google_sync_service import sync_event_created
+        await sync_event_created(db, event)
+    except Exception as e:
+        logger.warning("Error syncing new event to Google Calendar: %s", e)
+
     return event
 
 
@@ -204,6 +210,12 @@ async def update_event(request: Request, event_id: int, data: CalendarEventCreat
         request=request,
     )
 
+    try:
+        from backend.services.google_sync_service import sync_event_updated
+        await sync_event_updated(db, event)
+    except Exception as e:
+        logger.warning("Error syncing updated event to Google Calendar: %s", e)
+
     return event
 
 @router.delete("/{event_id}")
@@ -218,6 +230,13 @@ async def delete_event(request: Request, event_id: int, db: AsyncSession = Depen
         raise HTTPException(403, "Persönliche Termine können nur vom Ersteller gelöscht werden")
     title = event.title
     dt = event.date
+
+    try:
+        from backend.services.google_sync_service import sync_event_deleted
+        await sync_event_deleted(db, event.id)
+    except Exception as e:
+        logger.warning("Error removing deleted event from Google Calendar: %s", e)
+
     await db.delete(event)
     await db.commit()
 

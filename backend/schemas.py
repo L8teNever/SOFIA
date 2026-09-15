@@ -208,6 +208,18 @@ class DriveTopicCreate(BaseModel):
 class DriveTopicRename(BaseModel):
     name: str
 
+# Google Sync
+class GoogleStatusOut(BaseModel):
+    configured: bool
+    connected: bool
+    email: Optional[str] = None
+    sync_calendar: bool = False
+    sync_homework_tasks: bool = False
+
+class GoogleSettingsUpdate(BaseModel):
+    sync_calendar: Optional[bool] = None
+    sync_homework_tasks: Optional[bool] = None
+
 # Meal plan
 class MealPlanDayOut(BaseModel):
     id: int
