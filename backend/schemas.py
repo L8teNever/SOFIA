@@ -55,6 +55,7 @@ class SubjectCreate(BaseModel):
 class CalendarEventOut(BaseModel):
     id: int
     title: str
+    description: Optional[str] = None
     date: str
     end_date: Optional[str] = None
     time: Optional[str]
@@ -66,6 +67,7 @@ class CalendarEventOut(BaseModel):
 
 class CalendarEventCreate(BaseModel):
     title: str
+    description: Optional[str] = None
     date: str
     end_date: Optional[str] = None
     time: Optional[str] = None

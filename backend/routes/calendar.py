@@ -40,6 +40,7 @@ async def list_events(month: Optional[str] = None, db: AsyncSession = Depends(ge
 async def create_event(request: Request, data: CalendarEventCreate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     event = CalendarEvent(
         title=data.title,
+        description=data.description,
         date=data.date,
         end_date=data.end_date,
         time=data.time,
@@ -181,6 +182,7 @@ async def update_event(request: Request, event_id: int, data: CalendarEventCreat
         raise HTTPException(403)
 
     event.title = data.title
+    event.description = data.description
     event.date = data.date
     event.end_date = data.end_date
     event.time = data.time

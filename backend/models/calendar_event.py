@@ -15,6 +15,7 @@ class CalendarEvent(Base):
     __tablename__ = "calendar_events"
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String, nullable=False)
+    description = Column(String, nullable=True)
     date = Column(String, nullable=False)      # ISO date YYYY-MM-DD
     end_date = Column(String, nullable=True)  # ISO date YYYY-MM-DD (optional, for multi-day periods)
     time = Column(String, nullable=True)       # HH:MM optional

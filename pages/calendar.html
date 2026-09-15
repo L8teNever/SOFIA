@@ -736,6 +736,7 @@ function renderEventList() {
                 <span>${dayLabel}</span>
                 ${e.time ? `<span style="opacity:0.4;">·</span><i data-lucide="clock" style="width:13px;height:13px;opacity:0.6;"></i><span>${e.time} Uhr</span>` : ''}
               </div>
+              ${e.description ? `<div style="font-size:0.78rem;color:#49454f;opacity:0.75;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(e.description)}</div>` : ''}
             </div>
           </div>
           <div style="display:flex;align-items:center;flex-shrink:0;">
@@ -811,6 +812,11 @@ async function openNewEventSheet(defaultDate) {
     <div class="m3-field">
       <label class="m3-field-label">Titel des Termins:</label>
       <input class="m3-input" id="ev-title" placeholder="z. B. Mathearbeit, Schulausflug, Zahnarzt...">
+    </div>
+
+    <div class="m3-field">
+      <label class="m3-field-label">Beschreibung (optional):</label>
+      <textarea class="m3-input" id="ev-description" rows="3" placeholder="Weitere Details zum Termin..." style="resize:none;height:auto;font-family:inherit;line-height:1.4;"></textarea>
     </div>
 
     <div class="m3-field" id="ev-start-date-wrap">
@@ -897,6 +903,7 @@ async function saveEvent() {
   const date = document.getElementById('ev-date').value;
   if (!title || !date) { showToast('Titel und Datum erforderlich'); return; }
 
+  const description = document.getElementById('ev-description').value.trim() || null;
   const isRange = document.getElementById('ev-mode-range')?.classList.contains('active');
   const endVal = document.getElementById('ev-end-date')?.value;
   const end_date = isRange && endVal && endVal >= date ? endVal : (isRange && endVal ? date : null);
@@ -908,7 +915,7 @@ async function saveEvent() {
   const time = (timeEl && timeEl.value) ? timeEl.value : null;
 
   try {
-    await API.createEvent({ title, date, end_date, time, event_type, subject_id });
+    await API.createEvent({ title, description, date, end_date, time, event_type, subject_id });
     closeSheet();
     await loadCalEvents();
     renderCal();
@@ -950,6 +957,11 @@ async function openEditEventSheet(eventId) {
     <div class="m3-field">
       <label class="m3-field-label">Titel des Termins:</label>
       <input class="m3-input" id="ev-title" placeholder="Titel" value="${escapeHtml(ev.title)}">
+    </div>
+
+    <div class="m3-field">
+      <label class="m3-field-label">Beschreibung (optional):</label>
+      <textarea class="m3-input" id="ev-description" rows="3" placeholder="Weitere Details zum Termin..." style="resize:none;height:auto;font-family:inherit;line-height:1.4;">${escapeHtml(ev.description || '')}</textarea>
     </div>
 
     <div class="m3-field" id="ev-start-date-wrap">
@@ -1028,6 +1040,7 @@ async function saveEditedEvent(eventId) {
   const date = document.getElementById('ev-date').value;
   if (!title || !date) { showToast('Titel und Datum erforderlich'); return; }
 
+  const description = document.getElementById('ev-description').value.trim() || null;
   const isRange = document.getElementById('ev-mode-range')?.classList.contains('active');
   const endVal = document.getElementById('ev-end-date')?.value;
   const end_date = isRange && endVal && endVal >= date ? endVal : (isRange && endVal ? date : null);
@@ -1039,7 +1052,7 @@ async function saveEditedEvent(eventId) {
   const time = (timeEl && timeEl.value) ? timeEl.value : null;
 
   try {
-    await API.updateEvent(eventId, { title, date, end_date, time, event_type, subject_id });
+    await API.updateEvent(eventId, { title, description, date, end_date, time, event_type, subject_id });
     closeSheet();
     await loadCalEvents();
     renderCal();
