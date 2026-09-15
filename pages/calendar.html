@@ -707,7 +707,7 @@ function renderEventList() {
         : '';
 
       return `
-        <div class="m3-card list-card-enter" style="margin-bottom:10px;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;border-radius:20px;box-shadow:0 1px 4px rgba(0,0,0,0.05);transition:transform 0.1s ease;">
+        <div class="m3-card list-card-enter" data-id="${e.id}" style="margin-bottom:10px;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;border-radius:20px;box-shadow:0 1px 4px rgba(0,0,0,0.05);transition:transform 0.1s ease;">
           <div style="display:flex;align-items:center;flex:1;min-width:0;">
             <div class="ev-date-badge ${isEvToday ? 'is-today' : ''}">
               <span class="ev-date-num">${dayNum}</span>
@@ -1051,13 +1051,15 @@ function confirmDelEvent(eventId) {
 
 async function doDelEvent(eventId) {
   closeModal();
+  animateCardRemoval(document.getElementById('cal-events-list'), eventId);
   try {
     await API.deleteEvent(eventId);
-    await loadCalEvents();
-    renderCal();
+    calEvents = calEvents.filter(e => e.id !== eventId);
     showToast('Termin gelöscht');
   } catch {
     showToast('Fehler beim Löschen');
   }
+  renderCalGridOnly(false); // dots on the grid can change too — no month-change animation for a single delete
+  renderEventList();
 }
 </script>

@@ -301,6 +301,37 @@ function moreMenuBtn(onclick) {
   </button>`;
 }
 
+// Purely visual: shrinks the one card being deleted (found via data-id,
+// which every list card carries) out of view, immediately — this never
+// waits on the network, so the delete feels instant regardless of
+// connection speed, same as the local-first checkbox toggle elsewhere.
+// Deliberately doesn't touch any data or trigger a re-render itself —
+// an earlier version had this fire onDone() (which removed the item and
+// re-rendered) on its own 240ms timer, racing an API-failure handler
+// that tried to revert on a *different* timer if the request happened
+// to fail faster than that: the animation's timer always ran last and
+// silently re-deleted the item the revert had just restored. Callers
+// now only mutate their array/re-render once they actually know the
+// outcome (on success, the card's own already-collapsed DOM node is
+// seamlessly replaced by the fresh, one-shorter render; on failure, a
+// plain re-render from the still-untouched array brings it right back —
+// no separate undo path needed, since nothing was ever removed from the
+// data to begin with).
+function animateCardRemoval(container, id) {
+  const cardEl = container ? container.querySelector(`[data-id="${id}"]`) : null;
+  if (!cardEl) return;
+  cardEl.style.overflow = 'hidden';
+  cardEl.style.transition = 'opacity 0.22s ease, transform 0.22s ease, max-height 0.22s ease, margin 0.22s ease, padding 0.22s ease';
+  cardEl.style.maxHeight = cardEl.offsetHeight + 'px'; // lock current height so max-height has something real to animate from
+  requestAnimationFrame(() => {
+    cardEl.style.opacity = '0';
+    cardEl.style.transform = 'scale(0.96)';
+    cardEl.style.maxHeight = '0px';
+    cardEl.style.marginTop = '0px'; cardEl.style.marginBottom = '0px';
+    cardEl.style.paddingTop = '0px'; cardEl.style.paddingBottom = '0px';
+  });
+}
+
 function showToast(msg, duration = 3000) {
   const t = document.getElementById('toast');
   t.textContent = msg;

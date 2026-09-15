@@ -163,7 +163,7 @@ function renderGrades() {
             ? '<span style="font-size:0.68rem;font-weight:700;color:#ba1a1a;background:#ffdad6;padding:2px 7px;border-radius:6px;">Arbeit</span>'
             : '<span style="font-size:0.68rem;font-weight:700;color:#006399;background:#d3e3fd;padding:2px 7px;border-radius:6px;">Mündlich</span>';
 
-          return '<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid rgba(0,0,0,0.05);">'
+          return '<div data-id="' + g.id + '" style="display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid rgba(0,0,0,0.05);">'
             + '<div style="background:' + c + ';color:' + tc + ';width:42px;height:42px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:1.15rem;flex-shrink:0;">'
             + (g.value % 1 === 0 ? g.value : g.value.toFixed(1)) + '</div>'
             + '<div style="flex:1;min-width:0;">'
@@ -192,14 +192,15 @@ function confirmDeleteGrade(id, label) {
 
 async function doDeleteGrade(id) {
   closeModal();
+  animateCardRemoval(document.getElementById('grades-by-subject'), id);
   try {
     await API.deleteGrade(id);
     gradeItems = gradeItems.filter(g => g.id !== id);
-    renderGrades();
     showToast('Note gelöscht');
   } catch {
     showToast('Fehler beim Löschen');
   }
+  renderGrades();
 }
 
 let gradeEditId = null;
