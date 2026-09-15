@@ -204,7 +204,13 @@ function ttRenderDay() {
           +'</div>';
       }
     }
-    const color = isPast ? '#ebebeb' : (l.cancelled ? '#f9dedc' : (ttColorMap[l.subject_short]||'#eaddff'));
+    // Same "neutral hatch instead of the subject's own color" treatment as
+    // the week grid — a cancelled lesson should read as an empty slot at a
+    // glance, not as a normal colored block that happens to have
+    // struck-through text.
+    const fillStyle = l.cancelled
+      ? 'background-color:#f7f3ef;background-image:repeating-linear-gradient(135deg, rgba(179,26,26,0.09) 0, rgba(179,26,26,0.09) 4px, transparent 4px, transparent 12px);'
+      : 'background:'+(isPast ? '#ebebeb' : (ttColorMap[l.subject_short]||'#eaddff'))+';';
     const dblStyle = l._double ? 'min-height:'+(SINGLE_H*2+GAP)+'px;align-items:flex-start;padding-top:16px;' : '';
     // A changed room/teacher gets its own amber chip showing old → new,
     // instead of a plain chip that looks identical to a normal lesson's —
@@ -215,14 +221,14 @@ function ttRenderDay() {
     const roomChip = l.original_room
       ? '<span style="font-size:0.68rem;font-weight:700;background:#ffdec1;color:#7d3c00;padding:2px 7px;border-radius:8px;">'+l.original_room+' → '+(l.room||'–')+'</span>'
       : (l.room ? '<span style="font-size:0.68rem;font-weight:600;background:rgba(0,0,0,0.08);padding:2px 7px;border-radius:8px;">'+l.room+'</span>' : '');
-    html += '<div class="tt-block" style="background:'+color+';margin-bottom:'+GAP+'px;opacity:'+(isPast?.55:(l.cancelled?.7:1))+';'+dblStyle+'">'
+    html += '<div class="tt-block" style="'+fillStyle+'margin-bottom:'+GAP+'px;opacity:'+(isPast?.55:1)+';'+dblStyle+(l.cancelled?'border:1px dashed rgba(179,26,26,0.3);':'')+'">'
       +'<div style="min-width:44px;text-align:center;">'
       +'<div style="font-size:0.72rem;font-weight:700;">'+_fmtTime(l.startTime)+'</div>'
       +'<div style="font-size:0.62rem;opacity:0.4;">–</div>'
       +'<div style="font-size:0.72rem;font-weight:700;">'+_fmtTime(l.endTime)+'</div>'
       +'</div>'
       +'<div style="flex:1;min-width:0;">'
-      +'<div style="font-weight:700;font-size:0.95rem;'+(l.cancelled?'text-decoration:line-through;':'')+'">'+( l.subject||'–')+'</div>'
+      +'<div style="font-weight:700;font-size:0.95rem;'+(l.cancelled?'text-decoration:line-through;color:#8a3a3a;':'')+'">'+( l.subject||'–')+'</div>'
       +'<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:4px;">'
       +teacherChip+roomChip
       +'</div>'
@@ -291,20 +297,41 @@ function ttRenderWeek() {
     const blocks = lessons.map(l => {
       const top = (_toMin(l.startTime) - minStart) * TT_WEEK_PX_PER_MIN;
       const height = Math.max((_toMin(l.endTime) - _toMin(l.startTime)) * TT_WEEK_PX_PER_MIN, TT_WEEK_MIN_BLOCK_H);
-      const color = dayPast ? '#ebebeb' : (l.cancelled ? '#f9dedc' : (ttColorMap[l.subject_short]||'#eaddff'));
-      // A changed period gets a left accent bar — enough to notice at a
-      // glance that something's different, without needing room for a
-      // "Vertr." badge like the day view has space for.
-      const changedBorder = l.substituted ? 'border-left:3px solid #b3720a;' : '';
+
+      // Cancelled periods used to keep their subject's normal color, just
+      // with struck-through text — at a glance that reads as "a real
+      // lesson, weirdly crossed out" rather than "nothing happening here",
+      // and a whole grid of those looks busy. A neutral diagonal-hatch
+      // fill (the same "unavailable" language calendar apps use) instead
+      // of the subject color makes a cancelled slot visually recede, so
+      // the lessons that ARE happening are what actually draws the eye.
+      // A substituted period keeps its full subject color (it IS still
+      // happening) but gets an amber accent + a small "changed" glyph —
+      // enough to notice without needing room for a text badge.
+      let fillStyle, borderStyle;
+      if (l.cancelled) {
+        fillStyle = 'background-color:#f7f3ef;background-image:repeating-linear-gradient(135deg, rgba(179,26,26,0.09) 0, rgba(179,26,26,0.09) 3px, transparent 3px, transparent 10px);';
+        borderStyle = 'border:1px dashed rgba(179,26,26,0.3);';
+      } else {
+        fillStyle = 'background:'+(dayPast ? '#ebebeb' : (ttColorMap[l.subject_short]||'#eaddff'))+';';
+        borderStyle = l.substituted ? 'border-left:3px solid #b3720a;' : '';
+      }
+
       const roomLine = l.room
         ? (l.original_room
             ? '<div style="font-size:0.54rem;font-weight:700;color:#7d3c00;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+l.original_room+'→'+l.room+'</div>'
             : '<div style="font-size:0.54rem;opacity:0.45;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+l.room+'</div>')
         : '';
-      return '<div style="position:absolute;top:'+top+'px;left:1px;right:1px;height:'+height+'px;background:'+color+';border-radius:8px;padding:4px 5px;overflow:hidden;opacity:'+(dayPast?.5:(l.cancelled?.6:1))+';'+changedBorder+'">'
-        +'<div style="font-size:0.68rem;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;'+(l.cancelled?'text-decoration:line-through;':'')+'">'+(l.subject_short||l.subject||'–')+(l._double?' <span style="font-size:0.56rem;opacity:0.6;">2×</span>':'')+'</div>'
-        +(height >= 44 ? '<div style="font-size:0.56rem;opacity:0.55;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+_fmtTime(l.startTime)+'–'+_fmtTime(l.endTime)+'</div>' : '')
-        +(height >= 60 ? roomLine : '')
+      const opacity = dayPast ? 0.5 : 1;
+
+      return '<div style="position:absolute;top:'+top+'px;left:1px;right:1px;height:'+height+'px;'+fillStyle+borderStyle+'border-radius:8px;padding:4px 5px;overflow:hidden;opacity:'+opacity+';">'
+        +'<div style="font-size:0.68rem;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;'+(l.cancelled?'text-decoration:line-through;color:#8a3a3a;':'')+'">'
+          +(l.subject_short||l.subject||'–')
+          +(l._double?' <span style="font-size:0.56rem;opacity:0.6;">2×</span>':'')
+          +(l.substituted?' <span style="font-size:0.62rem;">↻</span>':'')
+        +'</div>'
+        +(height >= 44 ? '<div style="font-size:0.56rem;opacity:'+(l.cancelled?0.55:0.55)+';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;'+(l.cancelled?'color:#8a3a3a;':'')+'">'+(l.cancelled?'Ausfall · ':'')+_fmtTime(l.startTime)+'–'+_fmtTime(l.endTime)+'</div>' : '')
+        +(height >= 60 && !l.cancelled ? roomLine : '')
         +'</div>';
     }).join('');
     return '<div style="position:relative;height:'+gridHeight+'px;">'+hourLines+blocks+'</div>';
