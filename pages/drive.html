@@ -620,6 +620,22 @@ function applyDriveZoomTransform() {
   target.style.cursor = driveZoom.scale > 1 ? 'grab' : '';
 }
 
+// Changes scale while keeping the content point under (anchorX, anchorY) —
+// wrap-local coordinates — visually fixed in place, the way pinch/double-
+// tap/wheel zoom is expected to behave everywhere else. Without this, only
+// changing driveZoom.scale and re-clamping snaps the view toward whichever
+// corner the clamp happens to land on instead of zooming from where the
+// gesture actually happened.
+function driveZoomTo(newScale, anchorX, anchorY) {
+  newScale = Math.min(5, Math.max(1, newScale));
+  const contentX = (anchorX - driveZoom.x) / driveZoom.scale;
+  const contentY = (anchorY - driveZoom.y) / driveZoom.scale;
+  driveZoom.scale = newScale;
+  driveZoom.x = anchorX - contentX * newScale;
+  driveZoom.y = anchorY - contentY * newScale;
+  applyDriveZoomTransform();
+}
+
 function initDriveZoomPan(wrapId, targetId) {
   const wrap = document.getElementById(wrapId);
   const target = document.getElementById(targetId);
@@ -644,8 +660,8 @@ function initDriveZoomPan(wrapId, targetId) {
       const now = Date.now();
       if (now - driveZoom.lastTapTime < 300) {
         target.style.transition = 'transform 0.2s ease';
-        driveZoom.scale = driveZoom.scale > 1 ? 1 : 2.5;
-        applyDriveZoomTransform();
+        const rect = wrap.getBoundingClientRect();
+        driveZoomTo(driveZoom.scale > 1 ? 1 : 2.5, e.clientX - rect.left, e.clientY - rect.top);
         setTimeout(() => { target.style.transition = ''; }, 200);
       }
       driveZoom.lastTapTime = now;
@@ -668,8 +684,10 @@ function initDriveZoomPan(wrapId, targetId) {
     if (pointers.size === 2 && driveZoom.startDist) {
       const pts = [...pointers.values()];
       const d = dist(pts[0], pts[1]);
-      driveZoom.scale = Math.min(5, Math.max(1, driveZoom.startScale * (d / driveZoom.startDist)));
-      applyDriveZoomTransform();
+      const rect = wrap.getBoundingClientRect();
+      const midX = (pts[0].x + pts[1].x) / 2 - rect.left;
+      const midY = (pts[0].y + pts[1].y) / 2 - rect.top;
+      driveZoomTo(driveZoom.startScale * (d / driveZoom.startDist), midX, midY);
     } else if (pointers.size === 1 && driveZoom.dragging) {
       driveZoom.x = driveZoom.panStartX + (e.clientX - driveZoom.dragStartX);
       driveZoom.y = driveZoom.panStartY + (e.clientY - driveZoom.dragStartY);
@@ -687,8 +705,8 @@ function initDriveZoomPan(wrapId, targetId) {
 
   wrap.onwheel = (e) => {
     e.preventDefault();
-    driveZoom.scale = Math.min(5, Math.max(1, driveZoom.scale - e.deltaY * 0.0015));
-    applyDriveZoomTransform();
+    const rect = wrap.getBoundingClientRect();
+    driveZoomTo(driveZoom.scale - e.deltaY * 0.0015, e.clientX - rect.left, e.clientY - rect.top);
   };
 }
 
