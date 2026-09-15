@@ -517,21 +517,31 @@ async function openDriveFilePreview(id) {
 
   const body = document.getElementById('drive-preview-body');
   body.style.padding = (isPdf || isImage) ? '0' : '16px';
-  body.style.overflow = isImage ? 'hidden' : 'auto';
+  body.style.overflow = 'hidden';
   body.style.alignItems = (isImage || (!isText && !isPdf)) ? 'center' : '';
   body.style.justifyContent = (isImage || (!isText && !isPdf)) ? 'center' : '';
 
   if (isImage) {
     // A plain <img> has no zoom of its own, and the app's viewport meta
     // sets user-scalable=no (so the browser's native pinch-zoom is off
-    // everywhere else too) — initDriveImageZoom() below adds pinch/wheel/
+    // everywhere else too) — initDriveZoomPan() below adds pinch/wheel/
     // double-tap zoom + pan by hand instead of relying on either.
-    body.innerHTML = `<div id="drive-preview-image-wrap" style="width:100%;height:100%;overflow:hidden;touch-action:none;display:flex;align-items:center;justify-content:center;">
-      <img id="drive-preview-image" src="/api/v1/drive/preview/${id}" style="max-width:100%;max-height:100%;object-fit:contain;will-change:transform;">
+    body.innerHTML = `<div id="drive-preview-image-wrap" style="width:100%;height:100%;overflow:hidden;touch-action:none;position:relative;">
+      <img id="drive-preview-image" src="/api/v1/drive/preview/${id}" style="max-width:100%;max-height:100%;position:absolute;top:0;left:0;transform-origin:0 0;will-change:transform;">
     </div>`;
-    requestAnimationFrame(initDriveImageZoom);
+    const img = document.getElementById('drive-preview-image');
+    if (img.complete) initDriveZoomPan('drive-preview-image-wrap', 'drive-preview-image');
+    else img.onload = () => initDriveZoomPan('drive-preview-image-wrap', 'drive-preview-image');
   } else if (isPdf) {
-    body.innerHTML = `<iframe src="/api/v1/drive/preview/${id}" style="width:100%;height:100%;border:none;background:#f3edf7;flex:1;"></iframe>`;
+    // Rendered via PDF.js onto stacked <canvas> pages instead of an <iframe>
+    // with the browser's native PDF viewer — an iframe is a separate
+    // browsing context, so pointer/touch gestures over its content never
+    // reach our own zoom/pan handlers (and the native viewer's own touch
+    // support is inconsistent across mobile browsers anyway).
+    body.innerHTML = `<div id="drive-preview-pdf-wrap" style="width:100%;height:100%;overflow:hidden;touch-action:none;position:relative;background:#f3edf7;">
+      <div id="drive-preview-pdf-pages" style="position:absolute;top:0;left:0;transform-origin:0 0;"></div>
+    </div>`;
+    renderDrivePdfPreview(id);
   } else if (isText) {
     body.innerHTML = `<div style="text-align:center;margin:auto;opacity:0.5;">Lädt…</div>`;
   } else {
@@ -575,23 +585,47 @@ function closeDriveFilePreview(isPopState = false) {
   }, 220);
 }
 
-// --- Pinch/wheel/double-tap zoom for the image preview ---
+// --- Pinch/wheel/double-tap zoom + drag-to-pan, shared by the image and PDF
+// previews ---
 // Hand-rolled because the app's viewport meta has user-scalable=no (so the
-// browser's own pinch-zoom is off everywhere), and a plain <img> has no
-// zoom of its own otherwise.
+// browser's own pinch-zoom is off everywhere), and neither a plain <img>
+// nor (see renderDrivePdfPreview) a canvas-rendered PDF has any zoom of its
+// own otherwise. Panning is always active (not just once zoomed in) so it
+// doubles as the scroll mechanism for a multi-page PDF taller than the
+// viewport — bounds are clamped in clampDriveZoomPan() so content can't be
+// dragged arbitrarily far off-screen, and centered automatically whenever
+// it's smaller than the wrap in a given dimension.
 let driveZoom = { scale: 1, x: 0, y: 0, startDist: null, startScale: 1, dragging: false, dragStartX: 0, dragStartY: 0, panStartX: 0, panStartY: 0, lastTapTime: 0 };
+let driveZoomWrapId = null, driveZoomTargetId = null;
 
-function applyDriveZoomTransform() {
-  const img = document.getElementById('drive-preview-image');
-  if (!img) return;
-  img.style.transform = `translate(${driveZoom.x}px, ${driveZoom.y}px) scale(${driveZoom.scale})`;
-  img.style.cursor = driveZoom.scale > 1 ? 'grab' : '';
+function clampDriveZoomPan() {
+  const wrap = document.getElementById(driveZoomWrapId);
+  const target = document.getElementById(driveZoomTargetId);
+  if (!wrap || !target) return;
+  const wrapW = wrap.clientWidth, wrapH = wrap.clientHeight;
+  const naturalW = target.scrollWidth || target.offsetWidth;
+  const naturalH = target.scrollHeight || target.offsetHeight;
+  const scaledW = naturalW * driveZoom.scale;
+  const scaledH = naturalH * driveZoom.scale;
+
+  driveZoom.x = scaledW <= wrapW ? (wrapW - scaledW) / 2 : Math.min(0, Math.max(wrapW - scaledW, driveZoom.x));
+  driveZoom.y = scaledH <= wrapH ? (wrapH - scaledH) / 2 : Math.min(0, Math.max(wrapH - scaledH, driveZoom.y));
 }
 
-function initDriveImageZoom() {
-  const wrap = document.getElementById('drive-preview-image-wrap');
-  const img = document.getElementById('drive-preview-image');
-  if (!wrap || !img) return;
+function applyDriveZoomTransform() {
+  const target = document.getElementById(driveZoomTargetId);
+  if (!target) return;
+  clampDriveZoomPan();
+  target.style.transform = `translate(${driveZoom.x}px, ${driveZoom.y}px) scale(${driveZoom.scale})`;
+  target.style.cursor = driveZoom.scale > 1 ? 'grab' : '';
+}
+
+function initDriveZoomPan(wrapId, targetId) {
+  const wrap = document.getElementById(wrapId);
+  const target = document.getElementById(targetId);
+  if (!wrap || !target) return;
+  driveZoomWrapId = wrapId;
+  driveZoomTargetId = targetId;
   driveZoom = { scale: 1, x: 0, y: 0, startDist: null, startScale: 1, dragging: false, dragStartX: 0, dragStartY: 0, panStartX: 0, panStartY: 0, lastTapTime: 0 };
   applyDriveZoomTransform();
 
@@ -609,20 +643,17 @@ function initDriveImageZoom() {
     if (pointers.size === 1) {
       const now = Date.now();
       if (now - driveZoom.lastTapTime < 300) {
-        img.style.transition = 'transform 0.2s ease';
+        target.style.transition = 'transform 0.2s ease';
         driveZoom.scale = driveZoom.scale > 1 ? 1 : 2.5;
-        driveZoom.x = 0; driveZoom.y = 0;
         applyDriveZoomTransform();
-        setTimeout(() => { img.style.transition = ''; }, 200);
+        setTimeout(() => { target.style.transition = ''; }, 200);
       }
       driveZoom.lastTapTime = now;
-      if (driveZoom.scale > 1) {
-        driveZoom.dragging = true;
-        driveZoom.dragStartX = e.clientX;
-        driveZoom.dragStartY = e.clientY;
-        driveZoom.panStartX = driveZoom.x;
-        driveZoom.panStartY = driveZoom.y;
-      }
+      driveZoom.dragging = true;
+      driveZoom.dragStartX = e.clientX;
+      driveZoom.dragStartY = e.clientY;
+      driveZoom.panStartX = driveZoom.x;
+      driveZoom.panStartY = driveZoom.y;
     } else if (pointers.size === 2) {
       driveZoom.dragging = false;
       const pts = [...pointers.values()];
@@ -649,10 +680,7 @@ function initDriveImageZoom() {
   const endPointer = (e) => {
     pointers.delete(e.pointerId);
     if (pointers.size < 2) driveZoom.startDist = null;
-    if (pointers.size === 0) {
-      driveZoom.dragging = false;
-      if (driveZoom.scale <= 1) { driveZoom.x = 0; driveZoom.y = 0; applyDriveZoomTransform(); }
-    }
+    if (pointers.size === 0) driveZoom.dragging = false;
   };
   wrap.onpointerup = endPointer;
   wrap.onpointercancel = endPointer;
@@ -660,9 +688,53 @@ function initDriveImageZoom() {
   wrap.onwheel = (e) => {
     e.preventDefault();
     driveZoom.scale = Math.min(5, Math.max(1, driveZoom.scale - e.deltaY * 0.0015));
-    if (driveZoom.scale <= 1) { driveZoom.x = 0; driveZoom.y = 0; }
     applyDriveZoomTransform();
   };
+}
+
+// Renders every page of the PDF onto its own <canvas>, stacked vertically,
+// so initDriveZoomPan() can treat the whole document as one zoomable/
+// pannable block — a multi-page PDF scrolls by dragging exactly like a
+// single tall image, with pinch/wheel/double-tap zoom on top.
+let pdfjsLibPromise = null;
+function loadPdfJs() {
+  if (!pdfjsLibPromise) {
+    const base = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/6.3.289/';
+    pdfjsLibPromise = import(base + 'pdf.min.mjs').then(mod => {
+      mod.GlobalWorkerOptions.workerSrc = base + 'pdf.worker.min.mjs';
+      return mod;
+    });
+  }
+  return pdfjsLibPromise;
+}
+
+async function renderDrivePdfPreview(id) {
+  const wrap = document.getElementById('drive-preview-pdf-wrap');
+  const pagesEl = document.getElementById('drive-preview-pdf-pages');
+  if (!wrap || !pagesEl) return;
+  try {
+    const pdfjsLib = await loadPdfJs();
+    const pdf = await pdfjsLib.getDocument({ url: '/api/v1/drive/preview/' + id }).promise;
+    const wrapWidth = wrap.clientWidth || 320;
+    const dpr = window.devicePixelRatio || 1;
+    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+      const page = await pdf.getPage(pageNum);
+      const fitScale = wrapWidth / page.getViewport({ scale: 1 }).width;
+      const viewport = page.getViewport({ scale: fitScale * dpr });
+      const canvas = document.createElement('canvas');
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      canvas.style.width = (viewport.width / dpr) + 'px';
+      canvas.style.height = (viewport.height / dpr) + 'px';
+      canvas.style.display = 'block';
+      if (pageNum < pdf.numPages) canvas.style.marginBottom = '6px';
+      pagesEl.appendChild(canvas);
+      await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+    }
+    initDriveZoomPan('drive-preview-pdf-wrap', 'drive-preview-pdf-pages');
+  } catch (e) {
+    wrap.innerHTML = '<div style="text-align:center;margin:auto;padding:20px;opacity:0.6;">PDF konnte nicht geladen werden.</div>';
+  }
 }
 
 function startDriveTextEdit(id) {
