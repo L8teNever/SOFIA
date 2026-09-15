@@ -1304,7 +1304,6 @@ async function loadDashboard() {
     // Fetch and update Essensplan widget
     API.mealplanCurrent().then(res => {
       const el = document.getElementById('w-meal-today');
-      const badge = document.getElementById('w-meal-badge');
       const sub = document.getElementById('w-meal-sub');
       if (!el) return;
 
@@ -1312,46 +1311,26 @@ async function loadDashboard() {
       if (dayOfWeek === 0 || dayOfWeek === 6) {
         if (sub) sub.textContent = 'Mensa';
         el.textContent = 'Wochenende';
-        if (badge) badge.style.display = 'none';
         return;
       }
       if (!res || !res.today || !res.today.meal) {
         if (sub) sub.textContent = 'Heute';
         el.textContent = 'Kein Essen eingetragen';
-        if (badge) badge.style.display = 'none';
         return;
       }
 
       const lines = res.today.meal.split('\n').map(l => l.trim()).filter(Boolean);
       let mainDish = null;
-      let hasVeggie = false;
-      let extraCount = 0;
-
       for (const l of lines) {
         const m = l.match(/^(?:hauptgericht|menü|menü 1):\s*(.*)/i);
-        if (m) { mainDish = m[1]; continue; }
-        if (/^(?:vegetarisch|veggie|menü 2):/i.test(l)) { hasVeggie = true; continue; }
-        if (/^(?:muslimisch|halal|suppe|dessert):/i.test(l)) { extraCount++; }
+        if (m) { mainDish = m[1]; break; }
       }
-
       if (!mainDish && lines.length > 0) {
         mainDish = lines[0].replace(/^[^:]+:\s*/, '');
       }
 
       if (sub) sub.textContent = 'Heute';
       el.textContent = mainDish || 'Kein Plan';
-
-      if (badge) {
-        if (hasVeggie) {
-          badge.textContent = '🌱 Veggie';
-          badge.style.display = 'block';
-        } else if (extraCount > 0) {
-          badge.textContent = `+${extraCount} Menüs`;
-          badge.style.display = 'block';
-        } else {
-          badge.style.display = 'none';
-        }
-      }
     }).catch(() => {});
   } catch (e) {}
 }
