@@ -1,19 +1,26 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from backend.database import get_db
+from sqlalchemy import select, or_, delete, func
+from backend.database import get_db, AsyncSessionLocal
 from backend.auth import get_current_user, require_super_admin, require_admin
 from backend.models.class_group import ClassGroup
 from backend.models.subject import Subject
+from backend.models.manual_timetable_entry import ManualTimetableEntry
 from backend.models.user import User
 from backend.schemas import ClassGroupOut, ClassGroupCreate
 from backend.config import settings
+from backend.gemini_client import extract_timetable, GeminiError
+from backend.services.virus_scanner import scan_file
+from backend.services.audit_service import log_audit
 from cryptography.fernet import Fernet
 from typing import List, Optional
 from pydantic import BaseModel
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 import asyncio
+import logging
 import httpx
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/classes", tags=["classes"])
 
@@ -203,3 +210,166 @@ async def import_untis_subjects(class_id: int, db: AsyncSession = Depends(get_db
         raise
     except Exception as e:
         raise HTTPException(500, str(e))
+
+
+# ---------------------------------------------------------------------------
+# Photo-recognized ("manual") timetable — fallback for when a class can't
+# connect via WebUntis. Admin uploads a photo of the printed Stundenplan,
+# Gemini reads it into weekday/time/subject entries, subjects are matched
+# onto existing Subject rows (or created) so homework/grades keep working
+# unchanged, and the class can switch between 'untis' and 'manual' anytime.
+# ---------------------------------------------------------------------------
+
+_tt_upload_status: dict[int, dict] = {}
+
+def _tt_status_for(class_id: int) -> dict:
+    return _tt_upload_status.setdefault(class_id, {"status": "idle", "message": "", "started_at": None, "error": None})
+
+def _check_class_access(current_user: User, class_id: int):
+    if current_user.role != "super_admin" and current_user.class_id != class_id:
+        raise HTTPException(403, "Not your class")
+
+async def _resolve_subject(db: AsyncSession, class_id: int, existing: list[Subject], name: str, short: str, color_i: int) -> tuple[int, list[Subject]]:
+    name_l, short_l = name.lower(), short.lower()
+    for s in existing:
+        if (s.name or "").lower() == name_l or (short_l and (s.short_name or "").lower() == short_l):
+            return s.id, existing
+    subj = Subject(name=name, short_name=short or None, color=SUBJECT_COLORS[color_i % len(SUBJECT_COLORS)], class_id=class_id, is_global=False)
+    db.add(subj)
+    await db.flush()
+    existing.append(subj)
+    return subj.id, existing
+
+async def _process_timetable_photo(raw: bytes, content_type: str, class_id: int):
+    st = _tt_status_for(class_id)
+    try:
+        entries = await extract_timetable(raw, content_type)
+        async with AsyncSessionLocal() as db:
+            await db.execute(delete(ManualTimetableEntry).where(ManualTimetableEntry.class_id == class_id))
+
+            subj_res = await db.execute(
+                select(Subject).where(or_(Subject.class_id == class_id, Subject.is_global == True, Subject.class_id.is_(None)))
+            )
+            existing_subjects = list(subj_res.scalars().all())
+
+            subject_cache: dict[str, int] = {}
+            color_i = 0
+            for e in entries:
+                cache_key = e["subject"].lower() + "|" + e["subject_short"].lower()
+                if cache_key not in subject_cache:
+                    subj_id, existing_subjects = await _resolve_subject(
+                        db, class_id, existing_subjects, e["subject"], e["subject_short"], color_i
+                    )
+                    subject_cache[cache_key] = subj_id
+                    color_i += 1
+                db.add(ManualTimetableEntry(
+                    class_id=class_id, weekday=e["weekday"], start_time=e["start_time"],
+                    end_time=e["end_time"], subject_id=subject_cache[cache_key], room=e["room"],
+                ))
+
+            cls_res = await db.execute(select(ClassGroup).where(ClassGroup.id == class_id))
+            cls = cls_res.scalar_one_or_none()
+            if cls:
+                cls.timetable_source = "manual"
+            await db.commit()
+
+        st["status"] = "ready"
+        st["message"] = f"{len(entries)} Unterrichtsstunden erkannt!"
+        st["error"] = None
+        logger.info("Foto-Stundenplan erfolgreich verarbeitet (Klasse %s, %s Einträge)", class_id, len(entries))
+    except GeminiError as e:
+        logger.error("Hintergrund-Verarbeitung Stundenplan fehlgeschlagen: %s", e)
+        st["status"] = "error"
+        st["error"] = str(e)
+        st["message"] = f"Fehler bei KI-Erkennung: {e}"
+    except Exception as e:
+        logger.exception("Unerwarteter Fehler bei Hintergrund-Verarbeitung Stundenplan: %s", e)
+        st["status"] = "error"
+        st["error"] = "Unerwarteter Fehler bei der Bilderkennung"
+        st["message"] = "Unerwarteter Fehler bei der Bilderkennung"
+
+
+@router.post("/{class_id}/timetable-photo/upload")
+async def upload_timetable_photo(
+    class_id: int, request: Request, file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db), current_user: User = Depends(require_admin),
+):
+    _check_class_access(current_user, class_id)
+    if not (file.content_type or "").startswith("image/"):
+        raise HTTPException(400, "Nur Bilddateien erlaubt")
+    raw = await file.read()
+    if len(raw) > settings.max_file_size:
+        raise HTTPException(413, "Datei zu groß (max. 1 GB)")
+
+    await scan_file(raw, file.filename or "stundenplan.jpg", file.content_type)
+
+    st = _tt_status_for(class_id)
+    if st["status"] == "processing" and st.get("started_at"):
+        try:
+            started = datetime.fromisoformat(st["started_at"])
+            if (datetime.now() - started).total_seconds() < 90:
+                raise HTTPException(409, "Ein Stundenplan wird gerade bereits im Hintergrund verarbeitet.")
+        except HTTPException:
+            raise
+        except Exception:
+            pass
+
+    st["status"] = "processing"
+    st["message"] = "KI erkennt den Stundenplan im Hintergrund…"
+    st["started_at"] = datetime.now().isoformat()
+    st["error"] = None
+
+    await log_audit(
+        db, action="timetable.upload_photo", user=current_user, entity_type="class_group",
+        details={"filename": file.filename, "size": len(raw), "class_id": class_id},
+        request=request,
+    )
+
+    asyncio.create_task(_process_timetable_photo(raw, file.content_type, class_id))
+
+    return {"ok": True, "status": "processing", "message": "Foto hochgeladen! Die KI erkennt den Stundenplan im Hintergrund."}
+
+
+@router.get("/{class_id}/timetable-photo/status")
+async def timetable_photo_status(class_id: int, current_user: User = Depends(require_admin)):
+    _check_class_access(current_user, class_id)
+    return _tt_status_for(class_id)
+
+
+class TimetableSourceUpdate(BaseModel):
+    source: str  # 'untis' | 'manual'
+
+@router.get("/{class_id}/timetable-source")
+async def get_timetable_source(class_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_admin)):
+    _check_class_access(current_user, class_id)
+    result = await db.execute(select(ClassGroup).where(ClassGroup.id == class_id))
+    cls = result.scalar_one_or_none()
+    if not cls:
+        raise HTTPException(404)
+    count_res = await db.execute(select(func.count()).select_from(ManualTimetableEntry).where(ManualTimetableEntry.class_id == class_id))
+    manual_count = count_res.scalar() or 0
+    return {
+        "source": cls.timetable_source or "untis",
+        "has_untis": bool(cls.untis_url),
+        "has_manual": manual_count > 0,
+        "manual_entry_count": manual_count,
+    }
+
+@router.post("/{class_id}/timetable-source")
+async def set_timetable_source(class_id: int, data: TimetableSourceUpdate, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_admin)):
+    _check_class_access(current_user, class_id)
+    if data.source not in ("untis", "manual"):
+        raise HTTPException(400, "Ungültige Quelle")
+    result = await db.execute(select(ClassGroup).where(ClassGroup.id == class_id))
+    cls = result.scalar_one_or_none()
+    if not cls:
+        raise HTTPException(404)
+    if data.source == "untis" and not cls.untis_url:
+        raise HTTPException(400, "Untis ist für diese Klasse nicht konfiguriert")
+    if data.source == "manual":
+        count_res = await db.execute(select(func.count()).select_from(ManualTimetableEntry).where(ManualTimetableEntry.class_id == class_id))
+        if (count_res.scalar() or 0) == 0:
+            raise HTTPException(400, "Kein Foto-Stundenplan vorhanden")
+    cls.timetable_source = data.source
+    await db.commit()
+    return {"ok": True, "source": data.source}

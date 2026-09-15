@@ -39,7 +39,7 @@ async def init_db():
         user, class_group, subject, calendar_event, homework, homework_solution,
         grade, shared_file, notification, meal_plan,
         push_subscription, notification_setting, sent_notification_log,
-        subject_weighting, audit_log
+        subject_weighting, audit_log, manual_timetable_entry
     )
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -73,6 +73,11 @@ async def _migrate_columns(conn):
         await conn.execute(text("ALTER TABLE grades ADD COLUMN weight_type TEXT DEFAULT 'exam'"))
     if "weight" not in existing_gr:
         await conn.execute(text("ALTER TABLE grades ADD COLUMN weight FLOAT DEFAULT 1.0"))
+
+    result_cls = await conn.execute(text("PRAGMA table_info(class_groups)"))
+    existing_cls = {row[1] for row in result_cls.fetchall()}
+    if "timetable_source" not in existing_cls:
+        await conn.execute(text("ALTER TABLE class_groups ADD COLUMN timetable_source TEXT DEFAULT 'untis'"))
 
     # Migrate legacy users.push_subscription into push_subscriptions table
     try:

@@ -8,7 +8,10 @@
   <div id="tt-not-configured" style="display:none;text-align:center;padding:60px 20px;">
     <i data-lucide="settings" style="width:48px;height:48px;margin-bottom:16px;opacity:0.4;display:block;margin-left:auto;margin-right:auto;"></i>
     <div style="font-weight:700;margin-bottom:8px;">Nicht konfiguriert</div>
-    <div style="opacity:0.6;font-size:0.9rem;">Der Klassen-Admin muss Untis-Zugangsdaten hinterlegen.</div>
+    <div id="tt-not-configured-sub" style="opacity:0.6;font-size:0.9rem;">Der Klassen-Admin muss Untis-Zugangsdaten hinterlegen oder ein Foto vom Stundenplan hochladen.</div>
+    <button id="tt-admin-cta" onclick="openPage('admin')" style="display:none;margin-top:18px;background:#442b00;color:#fff8ef;border:none;border-radius:14px;padding:12px 20px;font-size:0.85rem;font-weight:700;cursor:pointer;font-family:inherit;">
+      Zur Konfiguration
+    </button>
   </div>
   <div id="tt-error" style="display:none;text-align:center;padding:40px 20px;color:#b3261e;"></div>
 
@@ -87,7 +90,13 @@ async function init_timetable() {
   try {
     const data = await API.timetable();
     document.getElementById('tt-loading').style.display = 'none';
-    if (!data.configured) { document.getElementById('tt-not-configured').style.display='block'; return; }
+    if (!data.configured) {
+      document.getElementById('tt-not-configured').style.display='block';
+      if (currentUser && (currentUser.role === 'admin' || currentUser.role === 'super_admin')) {
+        document.getElementById('tt-admin-cta').style.display = 'inline-block';
+      }
+      return;
+    }
     if (data.error) {
       document.getElementById('tt-error').style.display = 'block';
       document.getElementById('tt-error').textContent = 'Fehler: ' + data.error;

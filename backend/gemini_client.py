@@ -46,6 +46,44 @@ Respond with ONLY a JSON array (no markdown fences, no commentary), like:
 ]
 """
 
+TIMETABLE_PROMPT = """This image shows a German school weekly timetable ("Stundenplan"), typically a
+grid with weekdays (Montag-Freitag) as columns and lesson periods as rows, each
+row labelled with a period number and/or a time range (e.g. "1. 08:00-08:45").
+
+For EVERY filled cell in the grid (ignore empty/free cells), extract one entry with:
+- weekday: the German weekday name for that column — "Montag", "Dienstag", "Mittwoch", "Donnerstag", or "Freitag". Ignore Saturday/Sunday columns entirely if present.
+- start_time / end_time: the lesson's start and end time as "HH:MM" (24h). Read this from the row's time label if shown; otherwise infer from a visible period schedule (periods are usually 45 or 50 minutes with short breaks between).
+- subject: the full German subject name, expanded from any abbreviation shown using standard school abbreviations (e.g. "M"/"Ma" -> "Mathematik", "D" -> "Deutsch", "E"/"En" -> "Englisch", "Sp" -> "Sport", "Bio" -> "Biologie", "Ph"/"Phy" -> "Physik", "Ch" -> "Chemie", "Geo"/"Erdk" -> "Erdkunde", "Ge"/"Gesch" -> "Geschichte", "Ku" -> "Kunst", "Mu" -> "Musik", "Reli"/"Re" -> "Religion", "Eth" -> "Ethik", "Inf" -> "Informatik", "WiPo"/"Pol" -> "Politik", "Fr"/"Frz" -> "Französisch", "La" -> "Latein"). If you cannot confidently expand it, just use the abbreviation as shown.
+- subject_short: the short form/abbreviation exactly as printed on the timetable, if visible (otherwise omit).
+- room: the room number/name if shown in the cell, otherwise omit.
+
+If one subject visibly spans two consecutive periods (a double lesson / "Doppelstunde" shown as one merged cell), output it as TWO separate entries, one per period's time range, both with the same subject.
+
+Respond with ONLY a JSON array (no markdown fences, no commentary), like:
+[
+  {"weekday": "Montag", "start_time": "08:00", "end_time": "08:45", "subject": "Mathematik", "subject_short": "M", "room": "204"},
+  ...
+]
+"""
+
+_WEEKDAY_MAP = {
+    "montag": 0, "mo": 0,
+    "dienstag": 1, "di": 1,
+    "mittwoch": 2, "mi": 2,
+    "donnerstag": 3, "do": 3,
+    "freitag": 4, "fr": 4,
+}
+
+def _parse_hhmm(raw) -> int | None:
+    s = str(raw or "").strip()
+    m = re.match(r'^(\d{1,2}):?(\d{2})$', s)
+    if not m:
+        return None
+    h, mi = int(m.group(1)), int(m.group(2))
+    if not (0 <= h <= 23 and 0 <= mi <= 59):
+        return None
+    return h * 100 + mi
+
 class GeminiError(Exception):
     pass
 
@@ -71,7 +109,11 @@ def _optimize_image(image_bytes: bytes) -> tuple[bytes, str]:
         logger.warning("Konnte Bild nicht via Pillow vorverarbeiten: %s", e)
         return image_bytes, "image/jpeg"
 
-async def extract_meal_days(image_bytes: bytes, mime_type: str) -> list[dict]:
+async def _call_gemini_json(prompt: str, image_bytes: bytes, mime_type: str):
+    """Shared Gemini vision call used by every photo-recognition feature: sends
+    a prompt + image, returns the parsed JSON response body. Raises GeminiError
+    on any failure (missing key, blocked prompt, bad response shape, unparsable
+    JSON) so callers only need to handle their own field-level validation."""
     if not settings.gemini_api_key:
         logger.error("Gemini API key is missing. Set GEMINI_API_KEY in your .env and recreate container.")
         raise GeminiError("Gemini ist nicht konfiguriert (GEMINI_API_KEY fehlt in Umgebungsvariablen)")
@@ -82,7 +124,7 @@ async def extract_meal_days(image_bytes: bytes, mime_type: str) -> list[dict]:
     body = {
         "contents": [{
             "parts": [
-                {"text": PROMPT.format(today=date.today().isoformat())},
+                {"text": prompt},
                 {"inline_data": {"mime_type": target_mime, "data": base64.b64encode(optimized_bytes).decode()}},
             ]
         }],
@@ -153,10 +195,14 @@ async def extract_meal_days(image_bytes: bytes, mime_type: str) -> list[dict]:
         text = text.strip()
 
     try:
-        parsed = json.loads(text)
+        return json.loads(text)
     except json.JSONDecodeError:
         logger.warning("Could not parse Gemini JSON: %s", text[:500])
         raise GeminiError("Konnte die Antwort von Gemini nicht als JSON lesen")
+
+
+async def extract_meal_days(image_bytes: bytes, mime_type: str) -> list[dict]:
+    parsed = await _call_gemini_json(PROMPT.format(today=date.today().isoformat()), image_bytes, mime_type)
 
     days = []
     for item in parsed if isinstance(parsed, list) else []:
@@ -200,3 +246,32 @@ async def extract_meal_days(image_bytes: bytes, mime_type: str) -> list[dict]:
     if not days:
         raise GeminiError("Es konnten keine Tage aus dem Bild erkannt werden")
     return days
+
+
+async def extract_timetable(image_bytes: bytes, mime_type: str) -> list[dict]:
+    parsed = await _call_gemini_json(TIMETABLE_PROMPT, image_bytes, mime_type)
+
+    entries = []
+    for item in parsed if isinstance(parsed, list) else []:
+        if not isinstance(item, dict):
+            continue
+        weekday = _WEEKDAY_MAP.get(str(item.get("weekday", "")).strip().lower())
+        start = _parse_hhmm(item.get("start_time"))
+        end = _parse_hhmm(item.get("end_time"))
+        subject = str(item.get("subject") or "").strip()
+        if weekday is None or start is None or end is None or not subject or end <= start:
+            continue
+        short = str(item.get("subject_short") or "").strip()
+        entries.append({
+            "weekday": weekday,
+            "start_time": start,
+            "end_time": end,
+            "subject": subject,
+            "subject_short": short or subject[:4].upper(),
+            "room": str(item.get("room") or "").strip() or None,
+        })
+
+    if not entries:
+        raise GeminiError("Es konnten keine Unterrichtsstunden aus dem Bild erkannt werden")
+    entries.sort(key=lambda e: (e["weekday"], e["start_time"]))
+    return entries

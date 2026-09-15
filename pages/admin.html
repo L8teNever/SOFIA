@@ -42,7 +42,7 @@
       <div id="tab-untis" style="display:none;">
         <div class="m3-card-tonal" style="background:#ffdec1;color:#442b00;margin-bottom:12px;">
           <div style="font-weight:700;margin-bottom:6px;">WebUntis Stundenplan</div>
-          <div style="font-size:0.82rem;opacity:0.75;line-height:1.5;">Trage pro Klasse die WebUntis-Zugangsdaten ein. Der Stundenplan wird dann automatisch geladen. Die Daten findest du in deinem WebUntis-Konto unter <strong>Einstellungen → API-Zugang</strong>.</div>
+          <div style="font-size:0.82rem;opacity:0.75;line-height:1.5;">Trage pro Klasse die WebUntis-Zugangsdaten ein. Der Stundenplan wird dann automatisch geladen. Die Daten findest du in deinem WebUntis-Konto unter <strong>Einstellungen → API-Zugang</strong>. Falls Untis nicht verbunden werden kann, lässt sich weiter unten stattdessen ein Foto vom gedruckten Stundenplan hochladen — die KI erkennt Fächer und Zeiten daraus.</div>
         </div>
         <div id="untis-classes-list"></div>
       </div>
@@ -255,6 +255,19 @@ async function renderUntisTab() {
         </div>
         <div id="untis-import-result-${c.id}" style="font-size:0.78rem;padding:0 4px;min-height:16px;"></div>
       </div>
+      <div style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(0,0,0,0.06);">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;">
+          <div style="font-size:0.82rem;font-weight:700;">
+            <i data-lucide="camera" style="width:14px;height:14px;vertical-align:-2px;margin-right:5px;"></i>Foto-Stundenplan
+          </div>
+          <div id="tt-source-toggle-${c.id}"></div>
+        </div>
+        <input type="file" accept="image/*" id="tt-photo-input-${c.id}" style="display:none;" onchange="ttPhotoFileSelected(${c.id}, this)">
+        <button onclick="document.getElementById('tt-photo-input-${c.id}').click()" id="tt-photo-btn-${c.id}" style="background:#eaddff;color:#21005d;border:none;border-radius:12px;padding:9px 14px;font-size:0.82rem;font-weight:700;cursor:pointer;font-family:inherit;width:100%;">
+          <i data-lucide="upload" style="width:14px;height:14px;vertical-align:-2px;margin-right:5px;"></i>Foto hochladen
+        </button>
+        <div id="tt-photo-status-${c.id}" style="font-size:0.78rem;padding:6px 4px 0;min-height:16px;"></div>
+      </div>
     </div>`).join('');
   lucide.createIcons();
   // Load status for each class
@@ -273,6 +286,102 @@ async function renderUntisTab() {
       const el = document.getElementById('untis-status-' + c.id);
       if (el) el.innerHTML = '<span style="color:#b3261e;">Nicht konfiguriert</span>';
     });
+    renderTtSourceToggle(c.id);
+    checkTtPhotoStatus(c.id);
+  }
+}
+
+let ttPollIntervals = {};
+
+async function renderTtSourceToggle(classId) {
+  const el = document.getElementById('tt-source-toggle-' + classId);
+  if (!el) return;
+  let d;
+  try { d = await API.getTimetableSource(classId); } catch { el.innerHTML = ''; return; }
+  if (!el.isConnected) return;
+  if (!d.has_untis || !d.has_manual) { el.innerHTML = ''; return; }
+  el.innerHTML = `
+    <div style="display:flex;background:#f3edf7;border-radius:10px;padding:2px;">
+      <button onclick="setTtSource(${classId},'untis')" style="border:none;border-radius:8px;padding:5px 10px;font-size:0.72rem;font-weight:700;cursor:pointer;font-family:inherit;${d.source==='untis'?'background:#fff;box-shadow:0 1px 2px rgba(0,0,0,0.15);':'opacity:0.55;background:none;'}">Untis</button>
+      <button onclick="setTtSource(${classId},'manual')" style="border:none;border-radius:8px;padding:5px 10px;font-size:0.72rem;font-weight:700;cursor:pointer;font-family:inherit;${d.source==='manual'?'background:#fff;box-shadow:0 1px 2px rgba(0,0,0,0.15);':'opacity:0.55;background:none;'}">Foto</button>
+    </div>`;
+}
+
+async function setTtSource(classId, source) {
+  try {
+    await API.setTimetableSource(classId, { source });
+    showToast(source === 'manual' ? 'Foto-Stundenplan aktiv' : 'Untis-Stundenplan aktiv');
+    renderTtSourceToggle(classId);
+  } catch (e) {
+    showToast(e.detail || 'Fehler beim Wechseln');
+  }
+}
+
+async function checkTtPhotoStatus(classId) {
+  let st;
+  try { st = await API.timetablePhotoStatus(classId); } catch { return; }
+  if (st.status === 'processing') {
+    setTtPhotoUiProcessing(classId, st.message);
+    startTtPhotoPolling(classId);
+  }
+}
+
+function setTtPhotoUiProcessing(classId, message) {
+  const btn = document.getElementById('tt-photo-btn-' + classId);
+  const status = document.getElementById('tt-photo-status-' + classId);
+  if (btn) btn.disabled = true;
+  if (status) status.innerHTML = '<span style="opacity:0.6;">' + (message || 'KI erkennt den Stundenplan…') + '</span>';
+}
+
+async function ttPhotoFileSelected(classId, inputEl) {
+  const file = inputEl.files[0];
+  inputEl.value = '';
+  if (!file) return;
+
+  setTtPhotoUiProcessing(classId, 'Foto wird hochgeladen…');
+  try {
+    const form = new FormData();
+    form.append('file', file);
+    await API.uploadTimetablePhoto(classId, form);
+    showToast('Foto hochgeladen! Die KI erkennt den Stundenplan im Hintergrund.', 5000);
+    startTtPhotoPolling(classId);
+  } catch (e) {
+    const btn = document.getElementById('tt-photo-btn-' + classId);
+    const status = document.getElementById('tt-photo-status-' + classId);
+    if (btn) btn.disabled = false;
+    if (status) status.innerHTML = '';
+    showToast(e.detail || 'Upload fehlgeschlagen');
+  }
+}
+
+function startTtPhotoPolling(classId) {
+  if (ttPollIntervals[classId]) return;
+  ttPollIntervals[classId] = setInterval(async () => {
+    if (!document.getElementById('tt-photo-btn-' + classId)) { stopTtPhotoPolling(classId); return; }
+    let st;
+    try { st = await API.timetablePhotoStatus(classId); } catch { return; }
+    if (st.status === 'ready' || st.status === 'error') {
+      stopTtPhotoPolling(classId);
+      const btn = document.getElementById('tt-photo-btn-' + classId);
+      const status = document.getElementById('tt-photo-status-' + classId);
+      if (btn) btn.disabled = false;
+      if (status) status.innerHTML = st.status === 'ready'
+        ? '<span style="color:#146c2e;font-weight:600;">✓ ' + st.message + '</span>'
+        : '<span style="color:#b3261e;">' + (st.error || 'Fehler') + '</span>';
+      if (st.status === 'ready') {
+        showToast(st.message || 'Stundenplan erkannt!');
+        adminSubjects = await API.subjects().catch(() => adminSubjects);
+        renderAdminSubjects();
+        renderTtSourceToggle(classId);
+      }
+    }
+  }, 2500);
+}
+
+function stopTtPhotoPolling(classId) {
+  if (ttPollIntervals[classId]) {
+    clearInterval(ttPollIntervals[classId]);
+    delete ttPollIntervals[classId];
   }
 }
 

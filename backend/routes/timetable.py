@@ -4,6 +4,8 @@ from sqlalchemy import select
 from backend.database import get_db, AsyncSessionLocal
 from backend.auth import get_current_user
 from backend.models.class_group import ClassGroup
+from backend.models.manual_timetable_entry import ManualTimetableEntry
+from backend.models.subject import Subject
 from backend.models.user import User
 from backend.config import settings
 from backend.routes.vapid import push_to_users
@@ -98,13 +100,56 @@ def _fetch_two_weeks(server: str, school: str, username: str, password: str,
 
 from backend.services.timetable_cache import get_cached_timetable, set_cached_timetable
 
+async def _manual_week(db: AsyncSession, class_id: int, monday: date) -> dict:
+    """Projects a class's recurring weekly manual/photo timetable onto one
+    real week's dates, in the exact same lesson-dict shape Untis produces —
+    everything downstream (day/week views, homework's current-subject
+    lookup) reads that shape and doesn't care which source it came from."""
+    result = await db.execute(
+        select(ManualTimetableEntry, Subject)
+        .join(Subject, ManualTimetableEntry.subject_id == Subject.id)
+        .where(ManualTimetableEntry.class_id == class_id)
+    )
+    lessons = []
+    for entry, subject in result.all():
+        d = monday + timedelta(days=entry.weekday)
+        lessons.append({
+            "date":          d.strftime("%Y%m%d"),
+            "startTime":     entry.start_time,
+            "endTime":       entry.end_time,
+            "subject":       subject.name,
+            "subject_short": subject.short_name or subject.name,
+            "teacher":       "",
+            "room":          entry.room or "",
+            "cancelled":     False,
+            "substituted":   False,
+        })
+    lessons.sort(key=lambda x: (x["date"], x["startTime"]))
+    return {"start": monday.isoformat(), "lessons": lessons}
+
+async def _get_manual_timetable(db: AsyncSession, class_id: int) -> dict:
+    today = date.today()
+    this_monday = today - timedelta(days=today.weekday())
+    next_monday = this_monday + timedelta(days=7)
+    this_week = await _manual_week(db, class_id, this_monday)
+    next_week = await _manual_week(db, class_id, next_monday)
+    if not this_week["lessons"] and not next_week["lessons"]:
+        return {"configured": False}
+    return {"configured": True, "this_week": this_week, "next_week": next_week}
+
 @router.get("/")
 async def get_timetable(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     if not current_user.class_id:
         raise HTTPException(400, "No class assigned")
     result = await db.execute(select(ClassGroup).where(ClassGroup.id == current_user.class_id))
     cls = result.scalar_one_or_none()
-    if not cls or not cls.untis_url:
+    if not cls:
+        return {"configured": False}
+
+    if cls.timetable_source == "manual":
+        return await _get_manual_timetable(db, cls.id)
+
+    if not cls.untis_url:
         return {"configured": False}
 
     # 1. Return from 5-minute cache if available
@@ -199,7 +244,9 @@ async def poll_cancelled_lessons_loop():
     while True:
         try:
             async with AsyncSessionLocal() as db:
-                result = await db.execute(select(ClassGroup).where(ClassGroup.untis_url.isnot(None)))
+                result = await db.execute(select(ClassGroup).where(
+                    ClassGroup.untis_url.isnot(None), ClassGroup.timetable_source == "untis"
+                ))
                 for cls in result.scalars().all():
                     await _check_class_cancellations(db, cls)
         except Exception as e:

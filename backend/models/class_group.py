@@ -18,8 +18,14 @@ class ClassGroup(Base):
     untis_class = Column(String, nullable=True)
     untis_user = Column(String, nullable=True)
     untis_password_enc = Column(String, nullable=True)
+    # 'untis' (default) or 'manual' — which source get_timetable() serves.
+    # Independent of whether untis_url is set, so admins can flip back and
+    # forth without losing either the Untis credentials or an uploaded photo
+    # timetable's recognized entries.
+    timetable_source = Column(String, nullable=False, default="untis")
 
     members = relationship("User", back_populates="class_group")
     subjects = relationship("Subject", back_populates="class_group", cascade="all, delete-orphan")
     calendar_events = relationship("CalendarEvent", back_populates="class_group", cascade="all, delete-orphan")
     homework_items = relationship("Homework", back_populates="class_group", cascade="all, delete-orphan")
+    manual_timetable_entries = relationship("ManualTimetableEntry", back_populates="class_group", cascade="all, delete-orphan")
