@@ -413,17 +413,6 @@ async function openPage(name, triggerEl, preserveUrl = false) {
   page.style.setProperty('--oy', oy);
   document.body.appendChild(page);
   container.innerHTML = '';
-  // Force layout reflow so animation starts immediately
-  page.getBoundingClientRect();
-  requestAnimationFrame(() => page.classList.add('active'));
-  
-  // Completely isolate background dashboard from touch/scroll/selection bleedthrough
-  document.body.classList.add('has-active-page');
-  const appContainer = document.getElementById('app');
-  if (appContainer) {
-    appContainer.setAttribute('inert', '');
-    appContainer.setAttribute('aria-hidden', 'true');
-  }
 
   if (!preserveUrl) {
     history.pushState({ page: name }, '', '/' + name);
@@ -436,8 +425,32 @@ async function openPage(name, triggerEl, preserveUrl = false) {
   enhanceDropdowns(page);
   enhanceDateTimeInputs(page);
   enhanceInputAutofill(page);
+
+  // Run the page's own data-fetch/render before revealing anything: .page
+  // is opacity:0 + pointer-events:none by default regardless of where it
+  // sits in the DOM, so it can sit here fully invisible while init_<name>
+  // awaits its API calls and fills in the real content. Only once that's
+  // done do we hide the outgoing view and animate the new page in — so it
+  // never shows a "wird geladen…" placeholder mid-animation, and the
+  // outgoing page/dashboard stays live on screen for the whole wait
+  // instead of both views going blank at once.
   const initFn = window['init_' + name];
-  if (initFn) initFn();
+  if (initFn) {
+    const result = initFn();
+    if (result && typeof result.then === 'function') await result;
+  }
+
+  // Force layout reflow so animation starts immediately
+  page.getBoundingClientRect();
+  requestAnimationFrame(() => page.classList.add('active'));
+
+  // Completely isolate background dashboard from touch/scroll/selection bleedthrough
+  document.body.classList.add('has-active-page');
+  const appContainer = document.getElementById('app');
+  if (appContainer) {
+    appContainer.setAttribute('inert', '');
+    appContainer.setAttribute('aria-hidden', 'true');
+  }
 }
 
 // Shared by closePage() (in-app back button) and the popstate handler
