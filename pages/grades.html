@@ -231,7 +231,7 @@ function openGradeSheet(editGrade) {
     <input class="m3-input" id="g-label" placeholder="z. B. 2. Klassenarbeit, Referat, Vokabeltest..." value="${editGrade ? escapeHtml(editGrade.label || '') : ''}">
 
     <label style="font-size:0.78rem;font-weight:700;color:#6750a4;display:block;margin-bottom:4px;margin-left:4px;">Datum:</label>
-    <input class="m3-input" id="g-date" type="date" value="${editGrade ? (editGrade.date || '') : new Date().toISOString().slice(0, 10)}">
+    <input class="m3-input" id="g-date" type="date" value="${editGrade ? (editGrade.date || '') : localDateStr()}">
 
     ${sheetActions({ saveAction: 'saveGrade()' })}
   `);

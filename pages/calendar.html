@@ -500,7 +500,7 @@ async function calToday() {
   const today = new Date();
   calYear = today.getFullYear();
   calMonth = today.getMonth();
-  selectedCalDate = today.toISOString().slice(0, 10);
+  selectedCalDate = localDateStr(today);
   await loadCalEvents();
   renderCal();
 }
@@ -511,36 +511,47 @@ async function calNav(dir) {
   if (calMonth > 11) { calMonth = 0; calYear++; }
   selectedCalDate = null;
   await loadCalEvents();
-  renderCal();
+  renderCal(dir);
 }
 
-function renderCal() {
+function renderCal(dir) {
   const months = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
   document.getElementById('cal-month-title').textContent = months[calMonth];
   document.getElementById('cal-year-label').textContent = String(calYear);
 
-  renderCalGridOnly(true);
+  renderCalGridOnly(true, dir);
   renderEventList();
 }
 
 // animate: only for an actual month change (arrows, "Heute") — day-select
 // and category-filter re-renders call this without it, since fading the
 // whole grid on every single day tap would feel busier than helpful.
-function renderCalGridOnly(animate) {
+function renderCalGridOnly(animate, dir) {
   const grid = document.getElementById('cal-grid');
   if (!grid) return;
+
+  const build = () => { grid.innerHTML = ''; _buildCalGrid(grid); };
+
+  // A real month change (arrows, swipe) gets a directional slide — old
+  // month exits the way you navigated, new one enters from the other side.
+  // "Heute" and other non-directional refreshes (day-select, filter,
+  // background sync, after creating/editing something) keep the simpler
+  // fade+lift, or no animation at all for the quiet ones.
+  if (dir) { slideNav(grid, dir, build); return; }
   if (animate) {
     grid.classList.remove('cal-grid-enter');
     void grid.offsetWidth;
     grid.classList.add('cal-grid-enter');
   }
-  grid.innerHTML = '';
+  build();
+}
 
+function _buildCalGrid(grid) {
   const first = new Date(calYear, calMonth, 1);
   const startDay = (first.getDay() + 6) % 7; // 0=Mo ... 6=So
   const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
   const prevDays = new Date(calYear, calMonth, 0).getDate();
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = localDateStr();
 
   // Leading days from previous month
   for (let i = startDay - 1; i >= 0; i--) {
@@ -656,7 +667,7 @@ function renderEventList() {
   } else {
     emptyEl.style.display = 'none';
     const subMap = Object.fromEntries((calSubjects || []).map(s => [s.id, s]));
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayStr = localDateStr();
 
     list.innerHTML = pool.map(e => {
       const isEvToday = eventCoversDate(e, todayStr);
@@ -791,7 +802,7 @@ function toggleEventMore() {
 
 async function openNewEventSheet(defaultDate) {
   await loadCalSubjects();
-  const today = defaultDate || selectedCalDate || new Date().toISOString().slice(0, 10);
+  const today = defaultDate || selectedCalDate || localDateStr();
   const subOpts = (calSubjects || []).map(s => `<option value="${s.id}">${escapeHtml(s.name || s.short_name || '')}</option>`).join('');
 
   openSheet(`

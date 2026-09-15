@@ -161,10 +161,10 @@ function ttNav(dir) {
     const dow = _addDays(_today(), ttDayOffset).getDay();
     if (dow === 0) ttDayOffset += dir > 0 ? 1 : -2;
     else if (dow === 6) ttDayOffset += dir > 0 ? 2 : -1;
-    ttRenderDay();
+    slideNav(document.getElementById('tt-day-lessons'), dir, ttRenderDay);
   } else {
     ttWeekOffset = Math.max(0, Math.min(1, ttWeekOffset + dir));
-    ttRenderWeek();
+    slideNav(document.getElementById('tt-week-grid'), dir, ttRenderWeek);
   }
 }
 
@@ -185,9 +185,6 @@ function ttRenderDay() {
     el.innerHTML = '<div style="text-align:center;padding:60px 20px;opacity:0.4;">'
       + '<div style="font-size:2rem;margin-bottom:8px;">🎉</div>'
       + '<div style="font-weight:600;">Kein Unterricht</div></div>';
-    el.classList.remove('tt-day-enter');
-    void el.offsetWidth;
-    el.classList.add('tt-day-enter');
     return;
   }
   // 1 card ≈ 68px content + 8px gap → double = 68*2+8 = 144px
@@ -227,9 +224,6 @@ function ttRenderDay() {
       +'</div>';
   }
   el.innerHTML = html;
-  el.classList.remove('tt-day-enter');
-  void el.offsetWidth; // force reflow so the animation restarts every nav, not just the first render
-  el.classList.add('tt-day-enter');
   if (window.lucide) lucide.createIcons();
 }
 

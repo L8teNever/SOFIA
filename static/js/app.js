@@ -96,6 +96,63 @@ function escapeHtml(str) {
   return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 }
 
+// "Today" (or any date) as a local YYYY-MM-DD string. Date.toISOString()
+// converts to UTC first, so for the ~1-2 hours right after local midnight
+// in Germany (UTC+1/+2) it silently reports YESTERDAY's date instead —
+// every "is this today/tomorrow" check across the app used that pattern
+// and was wrong during exactly that window. Always use this instead of
+// `d.toISOString().slice(0, 10)` for a *local calendar day* string.
+function localDateStr(d = new Date()) {
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
+// Directional slide transition for a swipeable container (calendar's month
+// grid, the timetable's day view, ...): the current content slides out one
+// side while the freshly-rendered content slides in from the other, like a
+// standard mobile pager, instead of the content just instantly swapping.
+// container: the element whose content changes. dir: 1 = forward/next
+// (old exits left, new enters from the right), -1 = back/prev (mirrored).
+// renderFn: does the actual content update (e.g. sets .innerHTML) — called
+// synchronously in between capturing the old frame and animating the new one.
+function slideNav(container, dir, renderFn) {
+  if (!container) { renderFn(); return; }
+  const parent = container.parentElement;
+  if (!parent) { renderFn(); return; }
+  if (getComputedStyle(parent).position === 'static') parent.style.position = 'relative';
+
+  const rect = container.getBoundingClientRect();
+  const ghost = container.cloneNode(true);
+  ghost.style.position = 'absolute';
+  ghost.style.top = container.offsetTop + 'px';
+  ghost.style.left = container.offsetLeft + 'px';
+  ghost.style.width = rect.width + 'px';
+  ghost.style.margin = '0';
+  ghost.style.pointerEvents = 'none';
+  ghost.style.zIndex = '1';
+  ghost.style.transition = 'transform 0.24s cubic-bezier(0.2,0.7,0.3,1), opacity 0.24s ease';
+  parent.appendChild(ghost);
+
+  renderFn();
+
+  container.style.transition = 'none';
+  container.style.transform = 'translateX(' + (dir * 28) + 'px)';
+  container.style.opacity = '0';
+  void container.offsetWidth; // force reflow before re-enabling the transition
+  container.style.transition = 'transform 0.24s cubic-bezier(0.2,0.7,0.3,1), opacity 0.24s ease';
+  container.style.transform = 'translateX(0)';
+  container.style.opacity = '1';
+
+  requestAnimationFrame(() => {
+    ghost.style.transform = 'translateX(' + (dir * -28) + 'px)';
+    ghost.style.opacity = '0';
+  });
+  setTimeout(() => {
+    ghost.remove();
+    container.style.transition = '';
+    container.style.transform = '';
+  }, 260);
+}
+
 // The one place a page header's markup is written. Every page fills in a
 // <div id="...page-header slot..."></div> and replaces it with this at
 // script-run time (before openPage()'s lucide.createIcons() call, so the
@@ -676,8 +733,8 @@ function formatDateGerman(isoStr) {
   const months = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
   
   const now = new Date();
-  const todayIso = now.toISOString().slice(0, 10);
-  const tomorrowIso = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+  const todayIso = localDateStr(now);
+  const tomorrowIso = localDateStr(new Date(Date.now() + 86400000));
 
   const wd = weekdays[dt.getDay()];
   const mName = months[m];
@@ -703,9 +760,9 @@ function openDatePicker(options = {}) {
     document.body.appendChild(scrim);
   }
 
-  const todayIso = new Date().toISOString().slice(0, 10);
-  const tomorrowIso = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
-  const nextWeekIso = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
+  const todayIso = localDateStr();
+  const tomorrowIso = localDateStr(new Date(Date.now() + 86400000));
+  const nextWeekIso = localDateStr(new Date(Date.now() + 7 * 86400000));
 
   let selectedIso = options.value && options.value.match(/^\d{4}-\d{2}-\d{2}$/) ? options.value : todayIso;
   let viewYear = parseInt(selectedIso.slice(0, 4), 10);
@@ -1174,14 +1231,14 @@ async function loadDashboard() {
       API.grades().catch(() => []),
       API.files().catch(() => []),
     ]);
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localDateStr();
     const openHw = hw.filter(h => h.due_date >= today && !(h.checked_by || []).includes(currentUser && currentUser.id));
     document.getElementById('w-hw-count').textContent = openHw.length;
     const upcoming = events.filter(e => e.date >= today).sort((a, b) => a.date.localeCompare(b.date));
     if (upcoming.length) {
       const ev = upcoming[0];
       const d = new Date(ev.date + 'T00:00');
-      const isTomorrow = ev.date === new Date(Date.now()+86400000).toISOString().slice(0,10);
+      const isTomorrow = ev.date === localDateStr(new Date(Date.now()+86400000));
       const dayLabel = ev.date === today ? 'Heute' : isTomorrow ? 'Morgen' : d.toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'short' });
       document.getElementById('w-next-event').textContent = ev.title;
       const sub = document.getElementById('w-next-event-sub');

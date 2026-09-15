@@ -343,7 +343,7 @@ function stopMealStatusPolling() {
 }
 
 function renderMealPlan(res) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDateStr();
   const sub = document.getElementById('meal-header-sub');
   const deleteBtn = document.getElementById('meal-delete-btn');
   const dayOfWeek = new Date().getDay();
@@ -518,7 +518,7 @@ async function saveMealDay(dayId) {
     const day = mealPlan.days.find(d => d.id === dayId);
     if (day) { day.meal = meal; day.edited = true; }
     closeSheet();
-    renderMealPlan({ plan: mealPlan, today: mealPlan.days.find(d => d.date === new Date().toISOString().slice(0,10)) });
+    renderMealPlan({ plan: mealPlan, today: mealPlan.days.find(d => d.date === localDateStr()) });
     showToast('Gespeichert');
   } catch {
     showToast('Fehler beim Speichern');

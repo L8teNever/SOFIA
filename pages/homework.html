@@ -309,7 +309,7 @@ function yyyymmddToIso(d) {
 }
 
 function hwDefaultTomorrow() {
-  return new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+  return localDateStr(new Date(Date.now() + 86400000));
 }
 
 function hwFormatDueLabel(iso) {
@@ -352,7 +352,7 @@ function hwCard(h, sub, uid, today) {
   const bg = `color-mix(in srgb, ${sub.color || '#ffd8e4'} 18%, white)`;
   const d = new Date(h.due_date+'T00:00');
   const isToday = h.due_date === today;
-  const isTomorrow = h.due_date === new Date(Date.now()+86400000).toISOString().slice(0,10);
+  const isTomorrow = h.due_date === localDateStr(new Date(Date.now()+86400000));
   const dateLabel = isToday ? 'Heute' : isTomorrow ? 'Morgen' : d.toLocaleDateString('de-DE',{weekday:'short',day:'numeric',month:'short'});
 
   const atts = getHwAttachments(h);
@@ -391,8 +391,8 @@ function hwCard(h, sub, uid, today) {
 // that actually moved. Pass true to cut that animation short immediately
 // after render so only the checkbox's own pop reads as feedback.
 function renderHw(skipEnterAnim) {
-  const today = new Date().toISOString().slice(0,10);
-  const thisWeekEnd = new Date(Date.now() + 6*86400000).toISOString().slice(0,10);
+  const today = localDateStr();
+  const thisWeekEnd = localDateStr(new Date(Date.now() + 6*86400000));
   const uid = hwCurrentUser && hwCurrentUser.id;
   const subMap = Object.fromEntries(hwSubjects.map(s => [s.id, s]));
   let items = [...hwItems].sort((a,b) => a.due_date.localeCompare(b.due_date));
@@ -544,7 +544,7 @@ function renderHwDetail(hw) {
   const sub = hwSubjects.find(s => s.id === hw.subject_id) || {};
   const uid = hwCurrentUser && hwCurrentUser.id;
   const checked = (hw.checked_by || []).includes(uid);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDateStr();
   const overdue = hw.due_date < today && !checked;
   const isToday = hw.due_date === today;
 
@@ -1007,7 +1007,7 @@ function renderHwDueSection() {
   } else {
     const chipDays = [];
     for (let i = 0; i < 14; i++) {
-      const iso = new Date(Date.now() + i*86400000).toISOString().slice(0,10);
+      const iso = localDateStr(new Date(Date.now() + i*86400000));
       chipDays.push({ iso, num: iso.replace(/-/g,''), hasLesson: dates.includes(iso.replace(/-/g,'')) });
     }
     if (!hwCustomDate) hwCustomDate = (chipDays[1] || chipDays[0]).iso;
