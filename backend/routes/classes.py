@@ -373,3 +373,104 @@ async def set_timetable_source(class_id: int, data: TimetableSourceUpdate, db: A
     cls.timetable_source = data.source
     await db.commit()
     return {"ok": True, "source": data.source}
+
+
+# ---------------------------------------------------------------------------
+# Manual editing of individual timetable entries — lets an admin fix up or
+# build out the manual/photo timetable by hand (correcting a misread entry,
+# or adding one from scratch) without needing a fresh photo each time.
+# ---------------------------------------------------------------------------
+
+class ManualTimetableEntryIn(BaseModel):
+    weekday: int      # 0=Montag .. 4=Freitag
+    start_time: str   # "HH:MM"
+    end_time: str     # "HH:MM"
+    subject_id: int
+    room: Optional[str] = None
+
+def _hhmm_to_int(s: str) -> int:
+    h, m = s.split(":")
+    return int(h) * 100 + int(m)
+
+def _int_to_hhmm(v: int) -> str:
+    return f"{v // 100:02d}:{v % 100:02d}"
+
+async def _validate_manual_entry(db: AsyncSession, class_id: int, data: ManualTimetableEntryIn):
+    if not (0 <= data.weekday <= 4):
+        raise HTTPException(400, "Ungültiger Wochentag")
+    try:
+        start, end = _hhmm_to_int(data.start_time), _hhmm_to_int(data.end_time)
+    except Exception:
+        raise HTTPException(400, "Ungültige Uhrzeit")
+    if end <= start:
+        raise HTTPException(400, "Endzeit muss nach der Startzeit liegen")
+    result = await db.execute(select(Subject).where(
+        Subject.id == data.subject_id,
+        or_(Subject.class_id == class_id, Subject.is_global == True, Subject.class_id.is_(None)),
+    ))
+    if not result.scalar_one_or_none():
+        raise HTTPException(400, "Fach nicht gefunden")
+
+@router.get("/{class_id}/timetable-manual")
+async def list_manual_entries(class_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_admin)):
+    _check_class_access(current_user, class_id)
+    result = await db.execute(
+        select(ManualTimetableEntry, Subject)
+        .join(Subject, ManualTimetableEntry.subject_id == Subject.id)
+        .where(ManualTimetableEntry.class_id == class_id)
+        .order_by(ManualTimetableEntry.weekday, ManualTimetableEntry.start_time)
+    )
+    return [
+        {
+            "id": e.id, "weekday": e.weekday,
+            "start_time": _int_to_hhmm(e.start_time), "end_time": _int_to_hhmm(e.end_time),
+            "subject_id": e.subject_id, "subject_name": s.name, "subject_short": s.short_name,
+            "room": e.room,
+        }
+        for e, s in result.all()
+    ]
+
+@router.post("/{class_id}/timetable-manual")
+async def create_manual_entry(class_id: int, data: ManualTimetableEntryIn, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_admin)):
+    _check_class_access(current_user, class_id)
+    await _validate_manual_entry(db, class_id, data)
+    entry = ManualTimetableEntry(
+        class_id=class_id, weekday=data.weekday,
+        start_time=_hhmm_to_int(data.start_time), end_time=_hhmm_to_int(data.end_time),
+        subject_id=data.subject_id, room=data.room,
+    )
+    db.add(entry)
+    await db.commit()
+    await db.refresh(entry)
+    return {"ok": True, "id": entry.id}
+
+@router.put("/{class_id}/timetable-manual/{entry_id}")
+async def update_manual_entry(class_id: int, entry_id: int, data: ManualTimetableEntryIn, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_admin)):
+    _check_class_access(current_user, class_id)
+    await _validate_manual_entry(db, class_id, data)
+    result = await db.execute(select(ManualTimetableEntry).where(
+        ManualTimetableEntry.id == entry_id, ManualTimetableEntry.class_id == class_id
+    ))
+    entry = result.scalar_one_or_none()
+    if not entry:
+        raise HTTPException(404)
+    entry.weekday = data.weekday
+    entry.start_time = _hhmm_to_int(data.start_time)
+    entry.end_time = _hhmm_to_int(data.end_time)
+    entry.subject_id = data.subject_id
+    entry.room = data.room
+    await db.commit()
+    return {"ok": True}
+
+@router.delete("/{class_id}/timetable-manual/{entry_id}")
+async def delete_manual_entry(class_id: int, entry_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_admin)):
+    _check_class_access(current_user, class_id)
+    result = await db.execute(select(ManualTimetableEntry).where(
+        ManualTimetableEntry.id == entry_id, ManualTimetableEntry.class_id == class_id
+    ))
+    entry = result.scalar_one_or_none()
+    if not entry:
+        raise HTTPException(404)
+    await db.delete(entry)
+    await db.commit()
+    return {"ok": True}

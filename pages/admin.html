@@ -263,9 +263,14 @@ async function renderUntisTab() {
           <div id="tt-source-toggle-${c.id}"></div>
         </div>
         <input type="file" accept="image/*" id="tt-photo-input-${c.id}" style="display:none;" onchange="ttPhotoFileSelected(${c.id}, this)">
-        <button onclick="document.getElementById('tt-photo-input-${c.id}').click()" id="tt-photo-btn-${c.id}" style="background:#eaddff;color:#21005d;border:none;border-radius:12px;padding:9px 14px;font-size:0.82rem;font-weight:700;cursor:pointer;font-family:inherit;width:100%;">
-          <i data-lucide="upload" style="width:14px;height:14px;vertical-align:-2px;margin-right:5px;"></i>Foto hochladen
-        </button>
+        <div style="display:flex;gap:8px;">
+          <button onclick="document.getElementById('tt-photo-input-${c.id}').click()" id="tt-photo-btn-${c.id}" style="background:#eaddff;color:#21005d;border:none;border-radius:12px;padding:9px 14px;font-size:0.82rem;font-weight:700;cursor:pointer;font-family:inherit;flex:1;min-width:120px;">
+            <i data-lucide="upload" style="width:14px;height:14px;vertical-align:-2px;margin-right:5px;"></i>Foto hochladen
+          </button>
+          <button onclick="openManualTimetableSheet(${c.id})" style="background:#f3edf7;color:#442b00;border:none;border-radius:12px;padding:9px 14px;font-size:0.82rem;font-weight:700;cursor:pointer;font-family:inherit;flex:1;min-width:120px;">
+            <i data-lucide="pencil" style="width:14px;height:14px;vertical-align:-2px;margin-right:5px;"></i>Manuell bearbeiten
+          </button>
+        </div>
         <div id="tt-photo-status-${c.id}" style="font-size:0.78rem;padding:6px 4px 0;min-height:16px;"></div>
       </div>
     </div>`).join('');
@@ -383,6 +388,121 @@ function stopTtPhotoPolling(classId) {
     clearInterval(ttPollIntervals[classId]);
     delete ttPollIntervals[classId];
   }
+}
+
+// Manual editing of individual timetable entries — lets an admin fix up a
+// misread entry or build the schedule out by hand, whether or not a photo
+// was ever uploaded (the underlying data is the same either way).
+const MT_DAYS = ['Montag','Dienstag','Mittwoch','Donnerstag','Freitag'];
+let mtClassId = null, mtEntries = [], mtEditId = null;
+
+async function openManualTimetableSheet(classId) {
+  mtClassId = classId;
+  let list;
+  try { list = await API.listManualTimetable(classId); } catch { showToast('Fehler beim Laden'); return; }
+  mtEntries = list;
+  renderManualTimetableSheet();
+}
+
+function renderManualTimetableSheet() {
+  const byDay = MT_DAYS.map((_, i) => mtEntries.filter(e => e.weekday === i));
+  const body = byDay.some(d => d.length)
+    ? MT_DAYS.map((label, i) => {
+        if (!byDay[i].length) return '';
+        return `<div style="font-size:0.75rem;font-weight:700;color:#6750a4;margin:14px 4px 6px;">${label}</div>`
+          + byDay[i].map(e => `
+            <div style="display:flex;align-items:center;gap:10px;padding:9px 10px;background:#f7f2fa;border-radius:12px;margin-bottom:6px;">
+              <div style="flex:1;min-width:0;">
+                <div style="font-weight:700;font-size:0.88rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(e.subject_name)}</div>
+                <div style="font-size:0.75rem;opacity:0.6;">${e.start_time}–${e.end_time}${e.room ? ' · ' + escapeHtml(e.room) : ''}</div>
+              </div>
+              <button onclick="openManualEntryForm(${e.id})" style="background:none;border:none;cursor:pointer;opacity:0.55;padding:5px;flex-shrink:0;"><i data-lucide="pencil" style="width:15px;height:15px;"></i></button>
+              <button onclick="confirmDeleteManualEntry(${e.id})" style="background:none;border:none;cursor:pointer;opacity:0.55;padding:5px;flex-shrink:0;"><i data-lucide="trash-2" style="width:15px;height:15px;"></i></button>
+            </div>`).join('');
+      }).join('')
+    : '<div style="text-align:center;padding:30px 10px;opacity:0.5;font-size:0.85rem;">Noch keine Einträge — leg direkt einen an oder lade ein Foto hoch.</div>';
+
+  openSheet(`
+    <div class="sheet-title" style="font-size:1.25rem;font-weight:800;color:#1c1b1f;margin-bottom:12px;">Stundenplan bearbeiten</div>
+    <div style="max-height:50vh;overflow-y:auto;">${body}</div>
+    <button class="m3-btn-full" style="margin-top:14px;" onclick="openManualEntryForm(null)">+ Eintrag hinzufügen</button>
+  `);
+}
+
+function openManualEntryForm(entryId) {
+  mtEditId = entryId;
+  const editEntry = entryId ? mtEntries.find(e => e.id === entryId) : null;
+  const dayOpts = MT_DAYS.map((label, i) => `<option value="${i}"${editEntry && editEntry.weekday === i ? ' selected' : ''}>${label}</option>`).join('');
+  const subOpts = adminSubjects.map(s => `<option value="${s.id}"${editEntry && s.id === editEntry.subject_id ? ' selected' : ''}>${escapeHtml(s.name)}</option>`).join('');
+
+  openSheet(`
+    <div class="sheet-title" style="font-size:1.25rem;font-weight:800;color:#1c1b1f;margin-bottom:16px;">${editEntry ? 'Eintrag bearbeiten' : 'Neuer Eintrag'}</div>
+
+    <label style="font-size:0.78rem;font-weight:700;color:#6750a4;display:block;margin-bottom:4px;margin-left:4px;">Wochentag:</label>
+    <select class="m3-select" id="mt-day">${dayOpts}</select>
+
+    <label style="font-size:0.78rem;font-weight:700;color:#6750a4;display:block;margin-bottom:4px;margin-left:4px;">Fach:</label>
+    <select class="m3-select" id="mt-subject">${subOpts}</select>
+
+    <div style="display:flex;gap:10px;">
+      <div style="flex:1;">
+        <label style="font-size:0.78rem;font-weight:700;color:#6750a4;display:block;margin-bottom:4px;margin-left:4px;">Von:</label>
+        <input class="m3-input" id="mt-start" type="time" value="${editEntry ? editEntry.start_time : '08:00'}">
+      </div>
+      <div style="flex:1;">
+        <label style="font-size:0.78rem;font-weight:700;color:#6750a4;display:block;margin-bottom:4px;margin-left:4px;">Bis:</label>
+        <input class="m3-input" id="mt-end" type="time" value="${editEntry ? editEntry.end_time : '08:45'}">
+      </div>
+    </div>
+
+    <label style="font-size:0.78rem;font-weight:700;color:#6750a4;display:block;margin-bottom:4px;margin-left:4px;">Raum (optional):</label>
+    <input class="m3-input" id="mt-room" placeholder="z. B. 204" value="${editEntry ? escapeHtml(editEntry.room || '') : ''}">
+
+    ${sheetActions({ saveAction: 'saveManualEntry()', cancelAction: 'openManualTimetableSheet(mtClassId)' })}
+  `);
+}
+
+async function saveManualEntry() {
+  const data = {
+    weekday: parseInt(document.getElementById('mt-day').value),
+    subject_id: parseInt(document.getElementById('mt-subject').value),
+    start_time: document.getElementById('mt-start').value,
+    end_time: document.getElementById('mt-end').value,
+    room: document.getElementById('mt-room').value.trim() || null,
+  };
+  if (!data.start_time || !data.end_time) { showToast('Bitte Uhrzeiten angeben'); return; }
+  try {
+    if (mtEditId) await API.updateManualTimetableEntry(mtClassId, mtEditId, data);
+    else await API.createManualTimetableEntry(mtClassId, data);
+    showToast(mtEditId ? 'Eintrag aktualisiert' : 'Eintrag hinzugefügt');
+    mtEntries = await API.listManualTimetable(mtClassId);
+    renderManualTimetableSheet();
+    renderTtSourceToggle(mtClassId);
+  } catch (e) {
+    showToast(e.detail || 'Fehler beim Speichern');
+  }
+}
+
+function confirmDeleteManualEntry(entryId) {
+  const e = mtEntries.find(x => x.id === entryId);
+  openModal(confirmDelete({
+    title: 'Eintrag löschen?',
+    message: e ? `${e.subject_name}, ${MT_DAYS[e.weekday]} ${e.start_time}–${e.end_time}` : '',
+    onConfirm: `doDeleteManualEntry(${entryId})`,
+  }));
+}
+
+async function doDeleteManualEntry(entryId) {
+  closeModal();
+  try {
+    await API.deleteManualTimetableEntry(mtClassId, entryId);
+    mtEntries = mtEntries.filter(e => e.id !== entryId);
+    showToast('Eintrag gelöscht');
+  } catch {
+    showToast('Fehler beim Löschen');
+  }
+  renderManualTimetableSheet();
+  renderTtSourceToggle(mtClassId);
 }
 
 function renderAdminUsers() {

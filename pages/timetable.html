@@ -114,6 +114,7 @@ async function init_timetable() {
     let savedMode = 'day';
     try { savedMode = localStorage.getItem('tt_mode') === 'week' ? 'week' : 'day'; } catch {}
     ttSetMode(savedMode, document.getElementById('tt-chip-' + savedMode));
+    initTtSwipe();
     if (window.lucide) lucide.createIcons();
   } catch {
     document.getElementById('tt-loading').style.display = 'none';
@@ -130,6 +131,28 @@ function ttSetMode(mode, btn) {
   document.getElementById('tt-day-view').style.display  = mode==='day'  ? 'block' : 'none';
   document.getElementById('tt-week-view').style.display = mode==='week' ? 'block' : 'none';
   if (mode === 'day') ttRenderDay(); else ttRenderWeek();
+}
+
+// Same pattern as the calendar page's swipe-to-change-month gesture — lets
+// you swipe left/right across the day view to do exactly what the chevron
+// buttons above already do.
+function initTtSwipe() {
+  const el = document.getElementById('tt-day-lessons');
+  if (!el) return;
+  let startX = null, startY = null;
+  el.addEventListener('touchstart', (e) => {
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+  }, { passive: true });
+  el.addEventListener('touchend', (e) => {
+    if (startX == null) return;
+    const dx = e.changedTouches[0].clientX - startX;
+    const dy = e.changedTouches[0].clientY - startY;
+    startX = null;
+    if (ttMode === 'day' && Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+      ttNav(dx < 0 ? 1 : -1);
+    }
+  }, { passive: true });
 }
 
 function ttNav(dir) {
@@ -162,6 +185,9 @@ function ttRenderDay() {
     el.innerHTML = '<div style="text-align:center;padding:60px 20px;opacity:0.4;">'
       + '<div style="font-size:2rem;margin-bottom:8px;">🎉</div>'
       + '<div style="font-weight:600;">Kein Unterricht</div></div>';
+    el.classList.remove('tt-day-enter');
+    void el.offsetWidth;
+    el.classList.add('tt-day-enter');
     return;
   }
   // 1 card ≈ 68px content + 8px gap → double = 68*2+8 = 144px
@@ -201,6 +227,9 @@ function ttRenderDay() {
       +'</div>';
   }
   el.innerHTML = html;
+  el.classList.remove('tt-day-enter');
+  void el.offsetWidth; // force reflow so the animation restarts every nav, not just the first render
+  el.classList.add('tt-day-enter');
   if (window.lucide) lucide.createIcons();
 }
 
