@@ -553,6 +553,7 @@ async function openDriveFilePreview(id) {
 
   document.getElementById('drive-preview-actions').innerHTML = `
     <a href="/api/v1/drive/download/${id}" download class="m3-btn-outline" style="flex:1;text-align:center;text-decoration:none;">Herunterladen</a>
+    ${!isText ? `<a href="/api/v1/drive/preview/${id}" target="_blank" rel="noopener" class="m3-btn-outline" style="flex:1;text-align:center;text-decoration:none;">In neuem Tab öffnen</a>` : ''}
     ${isText ? `<button class="m3-btn-primary" style="flex:1;" onclick="startDriveTextEdit(${id})" id="drive-edit-toggle-btn">Bearbeiten</button>` : ''}
   `;
 
