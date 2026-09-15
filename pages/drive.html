@@ -193,9 +193,14 @@ function renderDriveFolderGrid() {
   const hasUnsorted = driveFiles.some(f => !f.subject_id);
   const tiles = driveSubjects.map(s => {
     const count = driveFiles.filter(f => f.subject_id === s.id).length;
+    // subject.color is almost always still the DB's shared default (every
+    // subject that was never given a custom color looks identical, barely
+    // visible at low opacity) — driveColorFor() instead gives each subject
+    // its own distinct, fully-saturated pastel from the same palette
+    // already used for file icons elsewhere in Drive.
     return `<div class="drive-folder-tile" onclick="openDriveSubjectFolder(${s.id})">
-      <div class="icon-box" style="width:40px;height:40px;border-radius:12px;background:${s.color || '#eaddff'}22;color:${s.color || '#6750a4'};">
-        <i data-lucide="folder" style="width:20px;height:20px;"></i>
+      <div class="icon-box" style="width:44px;height:44px;border-radius:14px;background:${driveColorFor(s.id)};">
+        <i data-lucide="folder" style="width:22px;height:22px;color:#442b7a;"></i>
       </div>
       <div style="font-weight:700;font-size:0.92rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(s.name)}</div>
       <div style="font-size:0.75rem;opacity:0.5;">${count} Datei${count===1?'':'en'}</div>
