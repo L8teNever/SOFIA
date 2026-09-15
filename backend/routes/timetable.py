@@ -97,8 +97,26 @@ def _period_to_dict(p) -> dict:
         "subst_text":        subst_text or None,
     }
 
+def _fetch_holidays(sess) -> list:
+    """Fetches the school's official holiday periods (e.g. "Ferien") so they
+    can be shown on the timetable the same way Untis itself shows them —
+    Session.holidays() returns every holiday the school has configured, not
+    scoped to a date range, so the frontend filters to what's relevant."""
+    try:
+        return [
+            {
+                "start": h.start.strftime("%Y%m%d"),
+                "end": h.end.strftime("%Y%m%d"),
+                "name": h.name,
+                "short_name": h.short_name,
+            }
+            for h in sess.holidays()
+        ]
+    except Exception:
+        return []
+
 def _fetch_two_weeks(server: str, school: str, username: str, password: str,
-                     class_name: str, this_monday: date) -> tuple[list, list]:
+                     class_name: str, this_monday: date) -> tuple[list, list, list]:
     """Fetches both weeks in a single session to avoid concurrent login issues."""
     next_monday = this_monday + timedelta(days=7)
 
@@ -128,7 +146,8 @@ def _fetch_two_weeks(server: str, school: str, username: str, password: str,
 
         this_lessons = fetch_week(this_monday, this_monday + timedelta(days=4))
         next_lessons = fetch_week(next_monday, next_monday + timedelta(days=4))
-        return this_lessons, next_lessons
+        holidays = _fetch_holidays(sess)
+        return this_lessons, next_lessons, holidays
     finally:
         try:
             sess.logout()
@@ -231,6 +250,7 @@ async def get_timetable(db: AsyncSession = Depends(get_db), current_user: User =
             "configured": True,
             "this_week": cached["this_week"],
             "next_week": cached["next_week"],
+            "holidays": cached.get("holidays", []),
         }
 
     try:
@@ -241,19 +261,20 @@ async def get_timetable(db: AsyncSession = Depends(get_db), current_user: User =
         next_monday = this_monday + timedelta(days=7)
 
         loop = asyncio.get_event_loop()
-        this_lessons, next_lessons = await loop.run_in_executor(
+        this_lessons, next_lessons, holidays = await loop.run_in_executor(
             None, _fetch_two_weeks, server, cls.untis_school,
             cls.untis_user, password, cls.untis_class or "", this_monday,
         )
 
         this_week = {"start": this_monday.isoformat(), "lessons": this_lessons}
         next_week = {"start": next_monday.isoformat(), "lessons": next_lessons}
-        set_cached_timetable(cls.id, this_week, next_week)
+        set_cached_timetable(cls.id, this_week, next_week, holidays)
 
         return {
             "configured": True,
             "this_week": this_week,
             "next_week": next_week,
+            "holidays": holidays,
         }
     except Exception as e:
         return {"configured": True, "error": str(e)}
@@ -272,7 +293,7 @@ async def _check_class_cancellations(db: AsyncSession, cls: ClassGroup):
         today = date.today()
         this_monday = today - timedelta(days=today.weekday())
         loop = asyncio.get_event_loop()
-        this_lessons, _ = await loop.run_in_executor(
+        this_lessons, _, _ = await loop.run_in_executor(
             None, _fetch_two_weeks, server, cls.untis_school,
             cls.untis_user, password, cls.untis_class or "", this_monday,
         )

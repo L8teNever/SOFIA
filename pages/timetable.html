@@ -51,6 +51,13 @@ const TT_MONTHS  = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt'
 
 let ttLessons = [], ttColorMap = {}, ttMode = 'day';
 let ttDayOffset = 0, ttWeekOffset = 0;
+let ttHolidays = [];
+
+// Returns the holiday covering date `dateStr` (YYYYMMDD), if any — start/end
+// from Untis are inclusive, so a plain string-range compare is enough.
+function ttHolidayFor(dateStr) {
+  return ttHolidays.find(h => dateStr >= h.start && dateStr <= h.end) || null;
+}
 
 function _today() { const d = new Date(); d.setHours(0,0,0,0); return d; }
 function _addDays(d, n) { const r = new Date(d); r.setDate(r.getDate()+n); return r; }
@@ -59,6 +66,35 @@ function _dateStr(d) {
 }
 function _fmtTime(t) { const s=String(t).padStart(4,'0'); return s.slice(0,2)+':'+s.slice(2); }
 function _toMin(t) { return Math.floor(t/100)*60 + (t%100); }
+
+// Untis frequently reports a cancelled period AND a separate substitute
+// ("irregular") period for the exact same time slot — e.g. "TPh" cancelled
+// and "Wahlfach/KL" taking its place. Without combining them, the week
+// grid's absolute positioning stacks both blocks exactly on top of each
+// other (same top/height) and only one is visible; the day view would also
+// show two redundant cards for what is really one lesson slot. Fold them
+// into a single block that carries the substitute's info plus the name of
+// what it replaced.
+function ttCombineSubstitutions(lessons) {
+  const used = new Set();
+  const out = [];
+  for (let i = 0; i < lessons.length; i++) {
+    if (used.has(i)) continue;
+    const l = lessons[i];
+    if (l.cancelled) {
+      const j = lessons.findIndex((o, oi) => oi !== i && !used.has(oi) &&
+        o.startTime === l.startTime && o.endTime === l.endTime && !o.cancelled);
+      if (j !== -1) {
+        used.add(i); used.add(j);
+        out.push({ ...lessons[j], substituted: true, cancelled_subject: l.subject, cancelled_subject_short: l.subject_short });
+        continue;
+      }
+    }
+    used.add(i);
+    out.push(l);
+  }
+  return out;
+}
 
 function ttMerge(lessons) {
   if (!lessons.length) return lessons;
@@ -103,6 +139,7 @@ async function init_timetable() {
       return;
     }
     ttLessons = [...(data.this_week?.lessons||[]), ...(data.next_week?.lessons||[])];
+    ttHolidays = data.holidays || [];
     let ci = 0;
     ttLessons.forEach(l => { if (l.subject_short && !ttColorMap[l.subject_short]) ttColorMap[l.subject_short] = TT_COLORS[ci++ % TT_COLORS.length]; });
 
@@ -179,10 +216,17 @@ function ttRenderDay() {
   // of appending it.
   sub.textContent = (isToday ? 'Heute' : TT_DAYS_L[d.getDay()]) + ', ' + d.getDate() + '. ' + TT_MONTHS[d.getMonth()] + ' ' + d.getFullYear();
 
-  const lessons = ttMerge(ttLessons.filter(l => l.date === _dateStr(d)));
+  const dateStr = _dateStr(d);
+  const lessons = ttMerge(ttCombineSubstitutions(ttLessons.filter(l => l.date === dateStr)));
   const el = document.getElementById('tt-day-lessons');
+  const holiday = ttHolidayFor(dateStr);
   if (!lessons.length) {
-    el.innerHTML = '<div style="text-align:center;padding:60px 20px;opacity:0.4;">'
+    el.innerHTML = holiday
+      ? '<div style="text-align:center;padding:60px 20px;opacity:0.6;">'
+        + '<div style="font-size:2rem;margin-bottom:8px;">🏖️</div>'
+        + '<div style="font-weight:600;">Ferien</div>'
+        + '<div style="font-size:0.85rem;opacity:0.75;margin-top:4px;">'+holiday.name+'</div></div>'
+      : '<div style="text-align:center;padding:60px 20px;opacity:0.4;">'
       + '<div style="font-size:2rem;margin-bottom:8px;">🎉</div>'
       + '<div style="font-weight:600;">Kein Unterricht</div></div>';
     return;
@@ -232,6 +276,7 @@ function ttRenderDay() {
       +'<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:4px;">'
       +teacherChip+roomChip
       +'</div>'
+      +(l.cancelled_subject?'<div style="font-size:0.7rem;opacity:0.65;font-style:italic;margin-top:4px;">statt '+l.cancelled_subject+'</div>':'')
       +(l.subst_text?'<div style="font-size:0.7rem;opacity:0.65;font-style:italic;margin-top:4px;">'+l.subst_text+'</div>':'')
       +'</div>'
       +(l._double    ?'<span style="background:rgba(0,0,0,0.08);color:inherit;padding:3px 8px;border-radius:8px;font-size:0.66rem;font-weight:700;flex-shrink:0;">2×</span>':'')
@@ -261,7 +306,7 @@ function ttRenderWeek() {
 
   const grid = document.getElementById('tt-week-grid');
   const days = Array.from({length:5}, (_,i) => _addDays(monday, i));
-  const dayLessons = days.map(d => ttMerge(ttLessons.filter(l => l.date === _dateStr(d))));
+  const dayLessons = days.map(d => ttMerge(ttCombineSubstitutions(ttLessons.filter(l => l.date === _dateStr(d)))));
   const allLessons = dayLessons.flat();
 
   // Shared time range for the whole week, rounded out to full hours; a
@@ -287,8 +332,10 @@ function ttRenderWeek() {
 
   const headerHtml = '<div></div>' + days.map(d => {
     const isToday = _dateStr(d) === todayStr;
+    const isHoliday = !!ttHolidayFor(_dateStr(d));
     return '<div style="text-align:center;font-size:0.72rem;font-weight:700;padding:6px 2px;border-radius:10px;'
-      +(isToday?'background:#442b00;color:#fff;':'opacity:0.55;color:#442b00;')+'">'+TT_DAYS_S[d.getDay()]+' '+d.getDate()+'.</div>';
+      +(isToday?'background:#442b00;color:#fff;':'opacity:0.55;color:#442b00;')+'">'+TT_DAYS_S[d.getDay()]+' '+d.getDate()+'.'
+      +(isHoliday?'<div style="font-size:0.6rem;font-weight:600;margin-top:1px;">🏖️ Ferien</div>':'')+'</div>';
   }).join('');
 
   const colsHtml = days.map((d, di) => {
@@ -330,11 +377,12 @@ function ttRenderWeek() {
           +(l._double?' <span style="font-size:0.56rem;opacity:0.6;">2×</span>':'')
           +(l.substituted?' <span style="font-size:0.62rem;">↻</span>':'')
         +'</div>'
-        +(height >= 44 ? '<div style="font-size:0.56rem;opacity:'+(l.cancelled?0.55:0.55)+';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;'+(l.cancelled?'color:#8a3a3a;':'')+'">'+(l.cancelled?'Ausfall · ':'')+_fmtTime(l.startTime)+'–'+_fmtTime(l.endTime)+'</div>' : '')
+        +(height >= 44 ? '<div style="font-size:0.56rem;opacity:0.55;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;'+(l.cancelled?'color:#8a3a3a;':'')+'">'+(l.cancelled?'Ausfall · ':(l.cancelled_subject_short?'statt '+l.cancelled_subject_short+' · ':''))+_fmtTime(l.startTime)+'–'+_fmtTime(l.endTime)+'</div>' : '')
         +(height >= 60 && !l.cancelled ? roomLine : '')
         +'</div>';
     }).join('');
-    return '<div style="position:relative;height:'+gridHeight+'px;">'+hourLines+blocks+'</div>';
+    const holidayBg = ttHolidayFor(_dateStr(d)) ? 'background:repeating-linear-gradient(135deg, rgba(68,43,0,0.035) 0, rgba(68,43,0,0.035) 6px, transparent 6px, transparent 16px);' : '';
+    return '<div style="position:relative;height:'+gridHeight+'px;'+holidayBg+'">'+hourLines+blocks+'</div>';
   }).join('');
 
   grid.innerHTML = headerHtml + axisHtml + colsHtml;

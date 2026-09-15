@@ -23,11 +23,12 @@ def get_cached_timetable(class_id: int) -> Optional[Dict[str, Any]]:
         return None
     return cached
 
-def set_cached_timetable(class_id: int, this_week: dict, next_week: dict, error: Optional[str] = None) -> Dict[str, Any]:
+def set_cached_timetable(class_id: int, this_week: dict, next_week: dict, holidays: Optional[List[dict]] = None, error: Optional[str] = None) -> Dict[str, Any]:
     entry = {
         "timestamp": time.time(),
         "this_week": this_week,
         "next_week": next_week,
+        "holidays": holidays or [],
         "error": error
     }
     _timetable_cache[class_id] = entry

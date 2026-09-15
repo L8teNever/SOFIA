@@ -128,8 +128,8 @@ document.getElementById('meal-day-chips').innerHTML = chipRow({
   onclick: 'mealFilter',
   idPrefix: 'meal-chip',
   items: [
-    { value: 'all', label: 'Ganze Woche', active: true },
-    { value: 'today', label: 'Heute' },
+    { value: 'all', label: 'Ganze Woche' },
+    { value: 'today', label: 'Heute', active: true },
     { value: '1', label: 'Mo' },
     { value: '2', label: 'Di' },
     { value: '3', label: 'Mi' },
@@ -139,7 +139,7 @@ document.getElementById('meal-day-chips').innerHTML = chipRow({
 });
 let mealPlan = null;
 let mealCanDelete = false;
-let mealActiveFilter = 'all';
+let mealActiveFilter = 'today';
 let mealPollInterval = null;
 
 const MEAL_CATEGORY_CONFIG = {
