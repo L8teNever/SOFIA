@@ -3,22 +3,9 @@
   <div class="page-scroll-1col">
   <div class="page-inner">
 
-    <div class="drop-zone" id="drive-drop-zone" onclick="document.getElementById('drive-file-input').click()">
-      <i data-lucide="upload-cloud" style="width:40px;height:40px;opacity:0.4;margin-bottom:10px;"></i>
-      <div style="font-weight:600;margin-bottom:4px;">Datei hier ablegen</div>
-      <div style="font-size:0.85rem;opacity:0.5;">oder tippen zum Hochladen · wird per KI automatisch einsortiert</div>
-      <input type="file" id="drive-file-input" style="display:none;" onchange="handleDriveFileSelect(this.files[0])">
-    </div>
+    <input type="file" id="drive-file-input" style="display:none;" onchange="handleDriveFileSelect(this.files[0])">
 
-    <div style="display:flex;align-items:center;gap:8px;margin-top:16px;background:#fff;border-radius:14px;padding:2px 6px 2px 14px;box-shadow:0 1px 4px rgba(0,0,0,0.06);">
-      <i data-lucide="search" style="width:18px;height:18px;opacity:0.4;flex-shrink:0;"></i>
-      <input type="text" id="drive-search-input" placeholder="Dateien durchsuchen..." style="flex:1;border:none;outline:none;background:transparent;padding:11px 0;font-size:0.95rem;" oninput="onDriveSearchInput(this.value)">
-      <button type="button" id="drive-search-clear" onclick="clearDriveSearch()" style="display:none;background:none;border:none;cursor:pointer;opacity:0.4;padding:8px;">
-        <i data-lucide="x" style="width:16px;height:16px;"></i>
-      </button>
-    </div>
-
-    <div id="drive-view-chips" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;">
+    <div id="drive-view-chips" style="display:flex;gap:8px;flex-wrap:wrap;">
       <button onclick="setDriveMode('folders',this)" class="chip active" id="drive-chip-folders">Fächer</button>
       <button onclick="setDriveMode('recent',this)" class="chip" id="drive-chip-recent">Zuletzt hochgeladen</button>
     </div>
@@ -35,13 +22,32 @@
   .drive-topic-group { margin-bottom:18px; }
   .drive-topic-label { font-size:0.78rem; font-weight:700; opacity:0.55; margin:0 0 8px 4px; display:flex; align-items:center; gap:6px; }
   .drive-file-tag { font-size:0.66rem; font-weight:700; padding:2px 8px; border-radius:8px; background:#eaddff; color:#442b7a; white-space:nowrap; }
+  .drive-header-search-wrap {
+    display: flex; align-items: center; gap: 4px;
+    position: absolute; top: 0; left: 0; height: 100%;
+    width: 0; opacity: 0; overflow: hidden;
+    transition: width 0.28s cubic-bezier(0.2,0.8,0.2,1), opacity 0.18s ease;
+  }
+  .drive-header-search-wrap.open { width: 100%; opacity: 1; }
   </style>
 </div>
 
 <script>
 document.getElementById('ph-drive').outerHTML = pageHeader({
-  title: 'Drive',
-  trailing: `<button class="icon-btn" onclick="document.getElementById('drive-file-input').click()" title="Datei hochladen">
+  titleHtml: `<div style="flex:1;min-width:0;position:relative;height:100%;display:flex;align-items:center;">
+      <span class="page-title" id="drive-title-text" style="transition:opacity 0.15s;">Drive</span>
+      <div id="drive-header-search-wrap" class="drive-header-search-wrap">
+        <input type="text" id="drive-search-input" placeholder="Dateien durchsuchen..." style="flex:1;min-width:0;border:none;outline:none;background:transparent;padding:6px 0;font-size:1.05rem;font-weight:600;color:inherit;" oninput="onDriveSearchInput(this.value)">
+        <button type="button" id="drive-search-clear" onclick="clearDriveSearch()" style="display:none;background:none;border:none;cursor:pointer;opacity:0.4;padding:6px;flex-shrink:0;">
+          <i data-lucide="x" style="width:16px;height:16px;"></i>
+        </button>
+      </div>
+    </div>`,
+  trailing: `<button class="icon-btn" id="drive-search-btn" onclick="toggleDriveHeaderSearch()" title="Suchen">
+      <i data-lucide="search" id="drive-search-btn-icon" style="width:20px;height:20px;"></i>
+      <i data-lucide="x" id="drive-search-btn-icon-close" style="width:20px;height:20px;display:none;"></i>
+    </button>
+    <button class="icon-btn" id="drive-upload-btn" onclick="document.getElementById('drive-file-input').click()" title="Datei hochladen">
       <i data-lucide="upload" style="width:20px;height:20px;"></i>
     </button>`
 });
@@ -95,18 +101,7 @@ async function init_drive() {
     API.driveFiles().catch(() => []),
     API.subjects().catch(() => []),
   ]);
-  setupDriveDragDrop();
   renderDrive();
-}
-
-function setupDriveDragDrop() {
-  const zone = document.getElementById('drive-drop-zone');
-  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
-  zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
-  zone.addEventListener('drop', e => {
-    e.preventDefault(); zone.classList.remove('drag-over');
-    handleDriveFileSelect(e.dataTransfer.files[0]);
-  });
 }
 
 function setDriveMode(mode, btn) {
@@ -115,6 +110,27 @@ function setDriveMode(mode, btn) {
   document.querySelectorAll('#drive-view-chips .chip').forEach(c => c.classList.remove('active'));
   if (btn) btn.classList.add('active');
   renderDrive();
+}
+
+let driveHeaderSearchOpen = false;
+
+function toggleDriveHeaderSearch() {
+  driveHeaderSearchOpen = !driveHeaderSearchOpen;
+  const title = document.getElementById('drive-title-text');
+  const wrap = document.getElementById('drive-header-search-wrap');
+  document.getElementById('drive-upload-btn').style.display = driveHeaderSearchOpen ? 'none' : '';
+  document.getElementById('drive-search-btn-icon').style.display = driveHeaderSearchOpen ? 'none' : '';
+  document.getElementById('drive-search-btn-icon-close').style.display = driveHeaderSearchOpen ? '' : 'none';
+
+  if (driveHeaderSearchOpen) {
+    title.style.opacity = '0';
+    wrap.classList.add('open');
+    setTimeout(() => document.getElementById('drive-search-input').focus(), 150);
+  } else {
+    wrap.classList.remove('open');
+    title.style.opacity = '';
+    if (driveSearchQuery) clearDriveSearch();
+  }
 }
 
 function onDriveSearchInput(value) {
