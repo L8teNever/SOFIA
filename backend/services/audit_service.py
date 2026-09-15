@@ -63,7 +63,16 @@ async def log_audit(
             user_agent=ua,
         )
         db.add(log_entry)
-        await db.flush()
+        # commit (not just flush) — this is very often the LAST thing a
+        # route does, so a mere flush only survives if some unrelated later
+        # commit in the same request happens to follow it. Confirmed in
+        # production: only calendar.event_create (and one homework.create)
+        # ever showed up, both purely because a notification call right
+        # after them commits its own row and incidentally flushed this one
+        # along with it — every other action (updates, deletes, admin
+        # actions, ...) was silently dropped when the session closed at
+        # request end with this row still uncommitted.
+        await db.commit()
         logger.info("AUDIT: [%s] User=%s Action=%s Entity=%s:%s", ip or "local", username or "anon", action, entity_type, entity_id)
     except Exception as e:
         logger.error("Fehler beim Erstellen des Audit-Logs: %s", e)
