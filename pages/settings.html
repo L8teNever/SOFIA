@@ -175,7 +175,12 @@ function openEditNameSheet() {
 async function saveName() {
   const name = document.getElementById('settings-name-input').value.trim();
   if (!name) return;
-  await API.updateMe({ display_name: name }).catch(()=>{ showToast('Fehler'); return; });
+  try {
+    await API.updateMe({ display_name: name });
+  } catch {
+    showToast('Fehler beim Speichern');
+    return;
+  }
   settingsUser.display_name = name;
   document.getElementById('settings-name').textContent = name;
   applyAvatarEl(document.getElementById('settings-avatar'), settingsUser, name.slice(0,2).toUpperCase());

@@ -613,7 +613,12 @@ async function saveUser(uid) {
     role: document.getElementById('eu-role').value,
     class_id: parseInt(document.getElementById('eu-class').value) || null,
   };
-  await API.updateUser(uid, data).catch(()=>{ showToast('Fehler'); return; });
+  try {
+    await API.updateUser(uid, data);
+  } catch {
+    showToast('Fehler beim Speichern');
+    return;
+  }
   const idx = adminUsers.findIndex(u=>u.id===uid);
   if (idx>=0) Object.assign(adminUsers[idx], data);
   closeSheet();
@@ -650,7 +655,12 @@ function deleteClass(id) {
 
 async function executeDeleteClass(id) {
   closeModal();
-  await API.deleteClass(id).catch(()=>{ showToast('Fehler'); return; });
+  try {
+    await API.deleteClass(id);
+  } catch {
+    showToast('Fehler beim Löschen');
+    return;
+  }
   adminClasses = adminClasses.filter(c=>c.id!==id);
   renderAdminClasses();
   showToast('Gelöscht');
@@ -748,7 +758,17 @@ async function saveUntis(classId) {
     username: document.getElementById('ut-user').value.trim(),
     password: document.getElementById('ut-pass').value,
   };
-  await API.saveUntis(classId, data).catch(()=>{ showToast('Fehler'); return; });
+  // A `return` inside .catch()'s callback only exits that callback, not
+  // saveUntis() itself — a failed save used to fall straight through to
+  // closeSheet() + the "gespeichert" toast below, so a real server error
+  // (e.g. a 500) looked exactly like success. try/catch with a real
+  // early return instead.
+  try {
+    await API.saveUntis(classId, data);
+  } catch (e) {
+    showToast('Fehler beim Speichern' + (e && e.detail ? ': ' + e.detail : ''));
+    return;
+  }
   closeSheet();
   await renderUntisTab();
   showToast('Untis-Daten gespeichert');
@@ -800,7 +820,12 @@ function deleteSubject(id) {
 
 async function executeDeleteSubject(id) {
   closeModal();
-  await API.deleteSubject(id).catch(()=>{ showToast('Fehler'); return; });
+  try {
+    await API.deleteSubject(id);
+  } catch {
+    showToast('Fehler beim Löschen');
+    return;
+  }
   adminSubjects = adminSubjects.filter(s=>s.id!==id);
   renderAdminSubjects();
   showToast('Gelöscht');

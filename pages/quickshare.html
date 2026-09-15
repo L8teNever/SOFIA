@@ -147,7 +147,12 @@ function renderQsFiles() {
 }
 
 async function deleteQsFile(id) {
-  await API.deleteFile(id).catch(()=>{ showToast('Fehler'); return; });
+  try {
+    await API.deleteFile(id);
+  } catch {
+    showToast('Fehler beim Löschen');
+    return;
+  }
   qsFiles = qsFiles.filter(f => f.id !== id);
   renderQsFiles();
   showToast('Gelöscht');
