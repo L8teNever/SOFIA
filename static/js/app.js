@@ -404,6 +404,7 @@ async function openPage(name, triggerEl, preserveUrl = false) {
   if (window.lucide) lucide.createIcons();
   enhanceDropdowns(page);
   enhanceDateTimeInputs(page);
+  enhanceInputAutofill(page);
   const initFn = window['init_' + name];
   if (initFn) initFn();
 }
@@ -955,6 +956,21 @@ function openTimePicker(options = {}) {
   scrim.classList.add('active');
 }
 
+// Every .m3-input suppresses the browser's own autofill suggestions —
+// without an explicit autocomplete value, Chrome/Gboard sometimes shows
+// its password/payment/address icon strip above the keyboard for a
+// plain "Note" or "Titel" field that has nothing to do with saved
+// browser data (this app has no login/payment/address forms these
+// fields could plausibly match anyway). Applied here, alongside the
+// other input enhancers, instead of by hand on every single <input> —
+// a newly added field gets this by construction too.
+function enhanceInputAutofill(root = document) {
+  if (!root || !root.querySelectorAll) return;
+  root.querySelectorAll('.m3-input:not([autocomplete])').forEach(input => {
+    input.setAttribute('autocomplete', 'off');
+  });
+}
+
 function enhanceDateTimeInputs(root = document) {
   if (!root || !root.querySelectorAll) return;
   const inputs = root.querySelectorAll('input[type="date"], input[type="time"]');
@@ -1065,6 +1081,7 @@ function openSheet(html) {
   sheet.innerHTML = '<div class="sheet-handle"></div>' + html;
   enhanceDropdowns(sheet);
   enhanceDateTimeInputs(sheet);
+  enhanceInputAutofill(sheet);
   if (window.lucide) lucide.createIcons();
   document.getElementById('bottom-sheet-scrim').classList.add('active');
   requestAnimationFrame(() => sheet.classList.add('active'));
@@ -1088,6 +1105,7 @@ function openModal(html) {
   document.getElementById('modal-scrim').classList.add('active');
   enhanceDropdowns(document.getElementById('modal-content'));
   enhanceDateTimeInputs(document.getElementById('modal-content'));
+  enhanceInputAutofill(document.getElementById('modal-content'));
   if (window.lucide) lucide.createIcons();
   
   history.pushState({ page: currentPage, modal: true }, '', window.location.pathname);
