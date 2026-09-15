@@ -326,6 +326,12 @@ var calSubjects = [];
 var selectedCalDate = null;
 var activeCategoryFilter = 'all';
 var calCurrentUser = null;
+// 'month' (default: only the selected month, day-grid shown) or 'all'
+// (every upcoming event across every month, no day-grid — a single
+// month's grid doesn't mean anything once the list spans all of them).
+// Persisted the same way the timetable's Tag/Woche choice is.
+var calViewScope = 'month';
+try { calViewScope = localStorage.getItem('cal_view_scope') === 'all' ? 'all' : 'month'; } catch {}
 
 async function init_calendar() {
   const [, , me] = await Promise.all([
@@ -334,6 +340,8 @@ async function init_calendar() {
     API.me().catch(() => null),
   ]);
   calCurrentUser = me;
+  const dot = document.getElementById('cal-filter-dot');
+  if (dot) dot.style.display = calViewScope === 'all' ? 'block' : 'none';
   renderCal();
   initCalSwipe();
   startCalPolling();
@@ -353,12 +361,13 @@ function startCalPolling() {
   calPollInterval = setInterval(async () => {
     if (!document.getElementById('cal-grid')) { clearInterval(calPollInterval); calPollInterval = null; return; }
     if (document.hidden) return;
-    const m = String(calMonth + 1).padStart(2, '0');
-    const fresh = await API.events(calYear + '-' + m).catch(() => null);
+    const fresh = calViewScope === 'all'
+      ? await API.events().catch(() => null)
+      : await API.events(calYear + '-' + String(calMonth + 1).padStart(2, '0')).catch(() => null);
     if (!fresh || !document.getElementById('cal-grid')) return;
     if (JSON.stringify(fresh) !== JSON.stringify(calEvents)) {
       calEvents = fresh;
-      renderCalGridOnly(false); // no month-change entrance animation for a quiet background sync
+      if (calViewScope !== 'all') renderCalGridOnly(false); // no month-change entrance animation for a quiet background sync
       renderEventList();
     }
   }, 15000);
@@ -407,9 +416,13 @@ async function loadCalSubjects() {
 }
 
 async function loadCalEvents() {
-  const m = String(calMonth + 1).padStart(2, '0');
   try {
-    calEvents = await API.events(calYear + '-' + m);
+    if (calViewScope === 'all') {
+      calEvents = await API.events(); // no month param -> every event for the class
+    } else {
+      const m = String(calMonth + 1).padStart(2, '0');
+      calEvents = await API.events(calYear + '-' + m);
+    }
   } catch {
     calEvents = [];
   }
@@ -424,9 +437,20 @@ function eventCoversDate(ev, dateStr) {
 function setCalCategoryFilter(cat) {
   activeCategoryFilter = cat;
   const dot = document.getElementById('cal-filter-dot');
-  if (dot) dot.style.display = cat === 'all' ? 'none' : 'block';
-  renderCalGridOnly();
+  if (dot) dot.style.display = (cat === 'all' && calViewScope === 'month') ? 'none' : 'block';
+  if (calViewScope !== 'all') renderCalGridOnly();
   renderEventList();
+}
+
+async function setCalViewScope(scope) {
+  if (scope === calViewScope) return;
+  calViewScope = scope;
+  try { localStorage.setItem('cal_view_scope', scope); } catch {}
+  selectedCalDate = null;
+  const dot = document.getElementById('cal-filter-dot');
+  if (dot) dot.style.display = (scope === 'all' || activeCategoryFilter !== 'all') ? 'block' : 'none';
+  await loadCalEvents();
+  renderCal();
 }
 
 const CAL_FILTER_OPTIONS = [
@@ -448,11 +472,25 @@ function toggleCalFilterMenu(btn) {
 
   const panel = document.createElement('div');
   panel.className = 'm3-dropdown-panel dd-open';
-  panel.innerHTML = CAL_FILTER_OPTIONS.map(o =>
-    `<div class="m3-dropdown-opt${o.value === activeCategoryFilter ? ' dd-sel' : ''}" data-value="${o.value}">${o.label}</div>`
-  ).join('');
+  panel.innerHTML = `
+    <div style="display:flex;gap:4px;padding:4px;background:#f3edf7;border-radius:10px;margin:2px 6px 8px;">
+      <button type="button" data-scope="month" style="flex:1;border:none;border-radius:8px;padding:7px 4px;font-size:0.76rem;font-weight:700;font-family:inherit;cursor:pointer;${calViewScope==='month'?'background:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.15);':'background:none;opacity:0.6;'}">Monat</button>
+      <button type="button" data-scope="all" style="flex:1;border:none;border-radius:8px;padding:7px 4px;font-size:0.76rem;font-weight:700;font-family:inherit;cursor:pointer;${calViewScope==='all'?'background:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.15);':'background:none;opacity:0.6;'}">Alle</button>
+    </div>
+    ${CAL_FILTER_OPTIONS.map(o =>
+      `<div class="m3-dropdown-opt${o.value === activeCategoryFilter ? ' dd-sel' : ''}" data-value="${o.value}">${o.label}</div>`
+    ).join('')}
+  `;
   document.body.appendChild(panel);
   calFilterMenuEl = panel;
+
+  panel.querySelectorAll('[data-scope]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      setCalViewScope(btn.dataset.scope);
+      closeCalFilterMenu();
+    });
+  });
 
   const r = btn.getBoundingClientRect();
   panel.style.minWidth = '190px';
@@ -515,11 +553,25 @@ async function calNav(dir) {
 }
 
 function renderCal(dir) {
-  const months = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
-  document.getElementById('cal-month-title').textContent = months[calMonth];
-  document.getElementById('cal-year-label').textContent = String(calYear);
+  const leftPane = document.querySelector('.cal-left-pane');
+  const navRow = document.querySelector('.cal-nav-row');
 
-  renderCalGridOnly(true, dir);
+  if (calViewScope === 'all') {
+    // A single month's grid means nothing once the list spans every
+    // month, and stepping "forward/back a month" has no target to step
+    // to — so both go away, leaving just the filter button in the header.
+    if (leftPane) leftPane.style.display = 'none';
+    document.getElementById('cal-month-title').textContent = 'Alle Termine';
+    document.getElementById('cal-year-label').textContent = '';
+    if (navRow) [...navRow.children].forEach(c => { if (c.id !== 'cal-filter-btn') c.style.display = 'none'; });
+  } else {
+    if (leftPane) leftPane.style.display = '';
+    const months = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+    document.getElementById('cal-month-title').textContent = months[calMonth];
+    document.getElementById('cal-year-label').textContent = String(calYear);
+    if (navRow) [...navRow.children].forEach(c => { c.style.display = ''; });
+    renderCalGridOnly(true, dir);
+  }
   renderEventList();
 }
 
@@ -611,19 +663,27 @@ function renderEventList() {
   const emptyEl = document.getElementById('cal-no-events');
   if (!list) return;
 
-  const monthStart = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-01`;
-  const lastDay = new Date(calYear, calMonth + 1, 0).getDate();
-  const monthEnd = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
-
-  let pool = calEvents.filter(e => {
-    const s = (e.date || '').slice(0, 10);
-    const end = (e.end_date || s).slice(0, 10);
-    return s <= monthEnd && end >= monthStart;
-  });
-
-  // Filter by selected day if active
-  if (selectedCalDate) {
-    pool = pool.filter(e => eventCoversDate(e, selectedCalDate));
+  let pool;
+  if (calViewScope === 'all') {
+    // No month window at all — every event that hasn't fully passed yet
+    // (a multi-day one still counts if its last day is still ahead), across
+    // however many months it spans. There's no day-grid in this mode, so
+    // selectedCalDate never applies here.
+    const todayStr = localDateStr();
+    pool = calEvents.filter(e => (e.end_date || e.date || '').slice(0, 10) >= todayStr);
+  } else {
+    const monthStart = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-01`;
+    const lastDay = new Date(calYear, calMonth + 1, 0).getDate();
+    const monthEnd = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+    pool = calEvents.filter(e => {
+      const s = (e.date || '').slice(0, 10);
+      const end = (e.end_date || s).slice(0, 10);
+      return s <= monthEnd && end >= monthStart;
+    });
+    // Filter by selected day if active
+    if (selectedCalDate) {
+      pool = pool.filter(e => eventCoversDate(e, selectedCalDate));
+    }
   }
 
   // Filter by category if not 'all'
@@ -638,9 +698,11 @@ function renderEventList() {
   // The selected-day one skips repeating the date itself (the collapsed
   // week strip above already shows it as the filled circle) but keeps the
   // count, same as the whole-month view does.
-  const headerLabel = selectedCalDate
-    ? 'Termine an diesem Tag'
-    : (activeCategoryFilter === 'all' ? 'Alle Termine dieses Monats' : 'Gefilterte Termine');
+  const headerLabel = calViewScope === 'all'
+    ? (activeCategoryFilter === 'all' ? 'Alle kommenden Termine' : 'Gefilterte kommende Termine')
+    : (selectedCalDate
+        ? 'Termine an diesem Tag'
+        : (activeCategoryFilter === 'all' ? 'Alle Termine dieses Monats' : 'Gefilterte Termine'));
   headerEl.innerHTML = `
     <div style="margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;">
       <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#6750a4;">${headerLabel}</div>
@@ -653,7 +715,12 @@ function renderEventList() {
     emptyEl.style.display = 'block';
     const emptyTitle = document.getElementById('cal-empty-title');
     const emptySub = document.getElementById('cal-empty-sub');
-    if (selectedCalDate) {
+    if (calViewScope === 'all') {
+      emptyTitle.textContent = 'Keine kommenden Termine';
+      emptySub.textContent = activeCategoryFilter === 'all'
+        ? 'Es stehen aktuell keine Termine an.'
+        : 'Keine kommenden Termine in dieser Kategorie.';
+    } else if (selectedCalDate) {
       const d = new Date(selectedCalDate + 'T00:00');
       const f = d.toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'short' });
       emptyTitle.textContent = `Keine Termine am ${f}`;
