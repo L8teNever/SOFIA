@@ -206,6 +206,15 @@ function ttRenderDay() {
     }
     const color = isPast ? '#ebebeb' : (l.cancelled ? '#f9dedc' : (ttColorMap[l.subject_short]||'#eaddff'));
     const dblStyle = l._double ? 'min-height:'+(SINGLE_H*2+GAP)+'px;align-items:flex-start;padding-top:16px;' : '';
+    // A changed room/teacher gets its own amber chip showing old → new,
+    // instead of a plain chip that looks identical to a normal lesson's —
+    // otherwise a room swap is invisible unless you already knew to expect it.
+    const teacherChip = l.original_teacher
+      ? '<span style="font-size:0.68rem;font-weight:700;background:#ffdec1;color:#7d3c00;padding:2px 7px;border-radius:8px;">'+l.original_teacher+' → '+(l.teacher||'–')+'</span>'
+      : (l.teacher ? '<span style="font-size:0.68rem;font-weight:600;background:rgba(0,0,0,0.08);padding:2px 7px;border-radius:8px;">'+l.teacher+'</span>' : '');
+    const roomChip = l.original_room
+      ? '<span style="font-size:0.68rem;font-weight:700;background:#ffdec1;color:#7d3c00;padding:2px 7px;border-radius:8px;">'+l.original_room+' → '+(l.room||'–')+'</span>'
+      : (l.room ? '<span style="font-size:0.68rem;font-weight:600;background:rgba(0,0,0,0.08);padding:2px 7px;border-radius:8px;">'+l.room+'</span>' : '');
     html += '<div class="tt-block" style="background:'+color+';margin-bottom:'+GAP+'px;opacity:'+(isPast?.55:(l.cancelled?.7:1))+';'+dblStyle+'">'
       +'<div style="min-width:44px;text-align:center;">'
       +'<div style="font-size:0.72rem;font-weight:700;">'+_fmtTime(l.startTime)+'</div>'
@@ -215,9 +224,10 @@ function ttRenderDay() {
       +'<div style="flex:1;min-width:0;">'
       +'<div style="font-weight:700;font-size:0.95rem;'+(l.cancelled?'text-decoration:line-through;':'')+'">'+( l.subject||'–')+'</div>'
       +'<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:4px;">'
-      +(l.teacher?'<span style="font-size:0.68rem;font-weight:600;background:rgba(0,0,0,0.08);padding:2px 7px;border-radius:8px;">'+l.teacher+'</span>':'')
-      +(l.room   ?'<span style="font-size:0.68rem;font-weight:600;background:rgba(0,0,0,0.08);padding:2px 7px;border-radius:8px;">'+l.room   +'</span>':'')
-      +'</div></div>'
+      +teacherChip+roomChip
+      +'</div>'
+      +(l.subst_text?'<div style="font-size:0.7rem;opacity:0.65;font-style:italic;margin-top:4px;">'+l.subst_text+'</div>':'')
+      +'</div>'
       +(l._double    ?'<span style="background:rgba(0,0,0,0.08);color:inherit;padding:3px 8px;border-radius:8px;font-size:0.66rem;font-weight:700;flex-shrink:0;">2×</span>':'')
       +(l.cancelled  ?'<span style="background:#f9dedc;color:#b3261e;padding:3px 8px;border-radius:8px;font-size:0.66rem;font-weight:700;flex-shrink:0;">Ausfall</span>':'')
       +(l.substituted?'<span style="background:#ffdec1;color:#7d3c00;padding:3px 8px;border-radius:8px;font-size:0.66rem;font-weight:700;flex-shrink:0;">Vertr.</span>':'')
@@ -282,10 +292,19 @@ function ttRenderWeek() {
       const top = (_toMin(l.startTime) - minStart) * TT_WEEK_PX_PER_MIN;
       const height = Math.max((_toMin(l.endTime) - _toMin(l.startTime)) * TT_WEEK_PX_PER_MIN, TT_WEEK_MIN_BLOCK_H);
       const color = dayPast ? '#ebebeb' : (l.cancelled ? '#f9dedc' : (ttColorMap[l.subject_short]||'#eaddff'));
-      return '<div style="position:absolute;top:'+top+'px;left:1px;right:1px;height:'+height+'px;background:'+color+';border-radius:8px;padding:4px 5px;overflow:hidden;opacity:'+(dayPast?.5:(l.cancelled?.6:1))+';">'
+      // A changed period gets a left accent bar — enough to notice at a
+      // glance that something's different, without needing room for a
+      // "Vertr." badge like the day view has space for.
+      const changedBorder = l.substituted ? 'border-left:3px solid #b3720a;' : '';
+      const roomLine = l.room
+        ? (l.original_room
+            ? '<div style="font-size:0.54rem;font-weight:700;color:#7d3c00;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+l.original_room+'→'+l.room+'</div>'
+            : '<div style="font-size:0.54rem;opacity:0.45;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+l.room+'</div>')
+        : '';
+      return '<div style="position:absolute;top:'+top+'px;left:1px;right:1px;height:'+height+'px;background:'+color+';border-radius:8px;padding:4px 5px;overflow:hidden;opacity:'+(dayPast?.5:(l.cancelled?.6:1))+';'+changedBorder+'">'
         +'<div style="font-size:0.68rem;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;'+(l.cancelled?'text-decoration:line-through;':'')+'">'+(l.subject_short||l.subject||'–')+(l._double?' <span style="font-size:0.56rem;opacity:0.6;">2×</span>':'')+'</div>'
         +(height >= 44 ? '<div style="font-size:0.56rem;opacity:0.55;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+_fmtTime(l.startTime)+'–'+_fmtTime(l.endTime)+'</div>' : '')
-        +(height >= 60 && l.room ? '<div style="font-size:0.54rem;opacity:0.45;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+l.room+'</div>' : '')
+        +(height >= 60 ? roomLine : '')
         +'</div>';
     }).join('');
     return '<div style="position:relative;height:'+gridHeight+'px;">'+hourLines+blocks+'</div>';

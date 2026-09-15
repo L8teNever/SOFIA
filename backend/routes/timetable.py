@@ -48,16 +48,53 @@ def _period_to_dict(p) -> dict:
     teachers      = [t.name for t in p.teachers]  if p.teachers  else []
     rooms         = [r.name for r in p.rooms]      if p.rooms     else []
     code          = getattr(p, 'code', None)
+    room          = rooms[0]    if rooms    else ""
+    teacher       = teachers[0] if teachers else ""
+
+    # For an irregular (substituted) period, WebUntis can tell us what the
+    # room/teacher originally were before the change — a cancelled period
+    # has no "instead", so this only makes sense to look at for "irregular".
+    # original_rooms/original_teachers throw KeyError when the raw data has
+    # no 'orgid' (i.e. nothing actually changed on that field specifically),
+    # same defensive pattern the library's own properties use internally.
+    original_room = None
+    original_teacher = None
+    if code == "irregular":
+        try:
+            orig_rooms = [r.name for r in p.original_rooms]
+            if orig_rooms and orig_rooms[0] != room:
+                original_room = orig_rooms[0]
+        except Exception:
+            pass
+        try:
+            orig_teachers = [t.name for t in p.original_teachers]
+            if orig_teachers and orig_teachers[0] != teacher:
+                original_teacher = orig_teachers[0]
+        except Exception:
+            pass
+
+    # WebUntis's own human-readable substitution note (e.g. "Vertreten
+    # durch Hr. Müller", "Raumtausch mit 9b") — only populated when fetched
+    # via my_timetable()/timetable_extended() with showSubstText=True,
+    # which is what _fetch_two_weeks()/_fetch_range() actually call.
+    try:
+        subst_text = (getattr(p, "substText", "") or "").strip()
+    except Exception:
+        subst_text = ""
+
     return {
-        "date":          p.start.strftime("%Y%m%d"),
-        "startTime":     int(p.start.strftime("%H%M")),
-        "endTime":       int(p.end.strftime("%H%M")),
-        "subject":       long_subjects[0] if long_subjects else (subjects[0] if subjects else ""),
-        "subject_short": subjects[0] if subjects else "",
-        "teacher":       teachers[0] if teachers else "",
-        "room":          rooms[0]    if rooms    else "",
-        "cancelled":     code == "cancelled",
-        "substituted":   code == "irregular",
+        "date":              p.start.strftime("%Y%m%d"),
+        "startTime":         int(p.start.strftime("%H%M")),
+        "endTime":           int(p.end.strftime("%H%M")),
+        "subject":           long_subjects[0] if long_subjects else (subjects[0] if subjects else ""),
+        "subject_short":     subjects[0] if subjects else "",
+        "teacher":           teacher,
+        "room":              room,
+        "cancelled":         code == "cancelled",
+        "substituted":       code == "irregular",
+        "original_room":     original_room,
+        "original_teacher":  original_teacher,
+        "subst_text":        subst_text or None,
     }
 
 def _fetch_two_weeks(server: str, school: str, username: str, password: str,
@@ -85,7 +122,7 @@ def _fetch_two_weeks(server: str, school: str, username: str, password: str,
             matched = [k for k in klassen if k.name.lower() == class_name.lower()]
             if not matched:
                 matched = [klassen[0]]
-            periods = list(sess.timetable(klasse=matched[0], start=start, end=end))
+            periods = list(sess.timetable_extended(klasse=matched[0], start=start, end=end))
             return sorted([_period_to_dict(p) for p in periods],
                           key=lambda x: (x["date"], x["startTime"]))
 
