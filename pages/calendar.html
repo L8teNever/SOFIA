@@ -17,10 +17,11 @@
 
     <!-- Right Column: Events List -->
     <div class="cal-right-pane">
-      <!-- Search — always visible, standard "search bar above the list"
-           pattern rather than hiding it behind a header icon (the header
-           row is already tight on mobile with Heute/prev/next/filter). -->
-      <div style="display:flex;align-items:center;gap:8px;background:#fff;border-radius:14px;padding:2px 6px 2px 14px;box-shadow:0 1px 4px rgba(0,0,0,0.06);margin-bottom:14px;">
+      <!-- Search — a persistent bar above the list on mobile (the header
+           row is already tight there); tablet/desktop use the header's
+           search icon instead (see .cal-search-header-btn), which is
+           roomier and matches where "Filter" already lives. -->
+      <div class="cal-search-bar-mobile" style="align-items:center;gap:8px;background:#fff;border-radius:14px;padding:2px 6px 2px 14px;box-shadow:0 1px 4px rgba(0,0,0,0.06);margin-bottom:14px;">
         <i data-lucide="search" style="width:16px;height:16px;opacity:0.45;flex-shrink:0;"></i>
         <input type="text" id="cal-search-input" placeholder="Termine durchsuchen..." style="flex:1;min-width:0;border:none;outline:none;background:none;font-family:inherit;font-size:0.9rem;padding:11px 0;color:#1c1b1f;" oninput="onCalSearchInput(this.value)">
         <button type="button" id="cal-search-clear" onclick="clearCalSearch()" style="display:none;background:none;border:none;cursor:pointer;padding:6px;opacity:0.5;flex-shrink:0;"><i data-lucide="x" style="width:16px;height:16px;"></i></button>
@@ -90,6 +91,19 @@
   margin: 0 auto;
   width: 100%;
   box-sizing: border-box;
+  /* .page (the parent) is overflow:hidden — every page needs its own
+     scroll container, and this one never had one. Barely noticeable with
+     a short list, but with many events (a busy month, or "Alle Termine"
+     showing everything at once) the list just got clipped with no way to
+     reach the rest. min-height:0 is required alongside flex:1 here —
+     without it a flex child defaults to sizing itself to its content
+     instead of respecting the available space, so overflow-y never
+     actually triggers. */
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 @media (min-width: 768px) {
   .cal-main-container {
@@ -296,6 +310,17 @@
   white-space: nowrap;
 }
 
+/* Search: a persistent bar above the list on mobile (the header row is
+   already tight there — Heute/prev/next/filter barely fit), but a header
+   icon that expands into the title area on tablet/desktop, where there's
+   room to spare and a permanent bar would look like unused chrome. */
+.cal-search-header-btn { display: none; }
+.cal-search-bar-mobile { display: flex; }
+@media (min-width: 768px) {
+  .cal-search-header-btn { display: flex; }
+  .cal-search-bar-mobile { display: none; }
+}
+
 .cal-empty-card {
   background: #ffffff;
   border-radius: 24px;
@@ -311,14 +336,23 @@
 document.getElementById('ph-calendar').outerHTML = pageHeader({
   className: 'cal-header-row',
   backClassName: 'cal-back-btn',
-  titleHtml: `<div style="flex:1;min-width:0;">
-      <div style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.6;color:#6750a4;" id="cal-year-label"></div>
-      <span class="page-title cal-month-title" style="color:#1c1b1f;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;" id="cal-month-title">Kalender</span>
+  titleHtml: `<div style="flex:1;min-width:0;position:relative;">
+      <div id="cal-title-block">
+        <div style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.6;color:#6750a4;" id="cal-year-label"></div>
+        <span class="page-title cal-month-title" style="color:#1c1b1f;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;" id="cal-month-title">Kalender</span>
+      </div>
+      <div id="cal-header-search-wrap" style="display:none;align-items:center;height:100%;">
+        <i data-lucide="search" style="width:18px;height:18px;opacity:0.45;flex-shrink:0;margin-right:8px;"></i>
+        <input type="text" id="cal-header-search-input" placeholder="Termine durchsuchen..." style="flex:1;min-width:0;border:none;outline:none;background:none;font-family:inherit;font-size:1.05rem;font-weight:700;color:#1c1b1f;" oninput="onCalSearchInput(this.value)">
+      </div>
     </div>`,
   trailing: `<div class="cal-nav-row" style="display:flex;align-items:center;flex-shrink:0;">
       <button onclick="calNav(-1)" class="icon-btn cal-nav-btn" title="Vorheriger Monat"><i data-lucide="chevron-left"></i></button>
       <button onclick="calToday()" class="m3-btn-outline cal-today-btn" title="Zum heutigen Tag springen">Heute</button>
       <button onclick="calNav(1)" class="icon-btn cal-nav-btn" title="Nächster Monat"><i data-lucide="chevron-right"></i></button>
+      <button type="button" id="cal-header-search-btn" class="icon-btn cal-nav-btn cal-search-header-btn" onclick="toggleCalHeaderSearch()" title="Termine durchsuchen">
+        <i data-lucide="search"></i>
+      </button>
       <button type="button" id="cal-filter-btn" class="icon-btn cal-nav-btn" onclick="toggleCalFilterMenu(this)" title="Nach Kategorie filtern" style="position:relative;">
         <i data-lucide="filter"></i>
         <span id="cal-filter-dot" style="display:none;position:absolute;top:6px;right:6px;width:8px;height:8px;border-radius:50%;background:#6750a4;border:2px solid #f9f6fc;"></span>
@@ -357,6 +391,13 @@ async function onCalSearchInput(value) {
   const q = value.trim();
   const clearBtn = document.getElementById('cal-search-clear');
   if (clearBtn) clearBtn.style.display = q ? 'flex' : 'none';
+  // Keep both entry points (mobile bar, desktop header) in sync regardless
+  // of which one the user is actually typing in — matters if the window
+  // gets resized across the breakpoint mid-search.
+  const mobileInput = document.getElementById('cal-search-input');
+  const headerInput = document.getElementById('cal-header-search-input');
+  if (mobileInput && mobileInput.value !== value) mobileInput.value = value;
+  if (headerInput && headerInput.value !== value) headerInput.value = value;
 
   const startingSearch = q && !calSearchQuery;
   calSearchQuery = q;
@@ -371,10 +412,32 @@ async function onCalSearchInput(value) {
 function clearCalSearch() {
   calSearchQuery = '';
   const input = document.getElementById('cal-search-input');
+  const headerInput = document.getElementById('cal-header-search-input');
   const clearBtn = document.getElementById('cal-search-clear');
   if (input) input.value = '';
+  if (headerInput) headerInput.value = '';
   if (clearBtn) clearBtn.style.display = 'none';
   renderCal();
+}
+
+// Tablet/desktop only (see .cal-search-header-btn) — expands the title
+// area into a search input instead of a permanent bar, since there's
+// room to spare there and a permanent bar would look like unused chrome.
+let calHeaderSearchOpen = false;
+function toggleCalHeaderSearch() {
+  calHeaderSearchOpen = !calHeaderSearchOpen;
+  const titleBlock = document.getElementById('cal-title-block');
+  const searchWrap = document.getElementById('cal-header-search-wrap');
+  const input = document.getElementById('cal-header-search-input');
+  if (calHeaderSearchOpen) {
+    if (titleBlock) titleBlock.style.display = 'none';
+    if (searchWrap) searchWrap.style.display = 'flex';
+    if (input) { input.value = calSearchQuery; input.focus(); }
+  } else {
+    if (titleBlock) titleBlock.style.display = 'block';
+    if (searchWrap) searchWrap.style.display = 'none';
+    if (calSearchQuery) clearCalSearch();
+  }
 }
 
 async function init_calendar() {
@@ -441,14 +504,15 @@ function initCalSwipe() {
   }, { passive: true });
 }
 
-// Matches the backend's own rule for PUT/DELETE on an event exactly — the
-// creator, or an admin, can edit/delete; everyone else can't, so imported
-// class-wide entries (school holidays, another user's event) shouldn't
-// even offer the option and then fail on save.
+// Matches the backend's rule exactly: a "personal" event is private to its
+// creator (only they can even see it, per the class-wide visibility query),
+// so it stays creator-only to edit/delete too. Every other event is
+// already visible to the whole class, and any class member can now edit
+// or delete it — not just the creator or an admin.
 function calCanModifyEvent(ev) {
   if (!calCurrentUser) return false;
-  if (calCurrentUser.role === 'admin' || calCurrentUser.role === 'super_admin') return true;
-  return ev.created_by === calCurrentUser.id;
+  if (ev.event_type === 'personal') return ev.created_by === calCurrentUser.id;
+  return true;
 }
 
 async function loadCalSubjects() {

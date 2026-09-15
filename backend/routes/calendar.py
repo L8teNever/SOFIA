@@ -178,8 +178,10 @@ async def update_event(request: Request, event_id: int, data: CalendarEventCreat
         raise HTTPException(403)
     if event.event_type == "personal" and event.created_by != current_user.id:
         raise HTTPException(403, "Persönliche Termine können nur vom Ersteller bearbeitet werden")
-    if event.created_by != current_user.id and current_user.role not in ("admin", "super_admin"):
-        raise HTTPException(403)
+    # Any other event is class-wide (everyone in the class can already see
+    # it), so any class member can edit it too — not just the creator or
+    # an admin. Only "personal" events (private to their creator) keep the
+    # creator-only restriction above.
 
     event.title = data.title
     event.description = data.description
@@ -214,8 +216,6 @@ async def delete_event(request: Request, event_id: int, db: AsyncSession = Depen
         raise HTTPException(403)
     if event.event_type == "personal" and event.created_by != current_user.id:
         raise HTTPException(403, "Persönliche Termine können nur vom Ersteller gelöscht werden")
-    if event.created_by != current_user.id and current_user.role not in ("admin", "super_admin"):
-        raise HTTPException(403)
     title = event.title
     dt = event.date
     await db.delete(event)
