@@ -52,6 +52,7 @@ const TT_MONTHS  = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt'
 let ttLessons = [], ttColorMap = {}, ttMode = 'day';
 let ttDayOffset = 0, ttWeekOffset = 0;
 let ttHolidays = [];
+let ttNowLineInterval = null;
 
 // Returns the holiday covering date `dateStr` (YYYYMMDD), if any — start/end
 // from Untis are inclusive, so a plain string-range compare is enough.
@@ -153,6 +154,13 @@ async function init_timetable() {
     ttSetMode(savedMode, document.getElementById('tt-chip-' + savedMode));
     initTtSwipe();
     if (window.lucide) lucide.createIcons();
+
+    // Keep the "now" line (and which lessons count as already-past) moving
+    // in real time instead of freezing at whatever minute the page opened.
+    clearInterval(ttNowLineInterval);
+    ttNowLineInterval = setInterval(() => {
+      if (ttMode === 'day') ttRenderDay(); else ttRenderWeek();
+    }, 60000);
   } catch {
     document.getElementById('tt-loading').style.display = 'none';
     document.getElementById('tt-error').style.display = 'block';
@@ -205,10 +213,24 @@ function ttNav(dir) {
   }
 }
 
+// A horizontal "now" divider — same visual language as the existing "Pause"
+// divider between lesson cards, just in the accent color so it reads as
+// "current time" rather than "gap in the schedule".
+function ttNowLineHtml(now) {
+  const hh = String(now.getHours()).padStart(2,'0'), mm = String(now.getMinutes()).padStart(2,'0');
+  return '<div style="display:flex;align-items:center;gap:8px;padding:2px 4px 10px;">'
+    +'<div style="flex:1;height:2px;background:#b3261e;border-radius:1px;"></div>'
+    +'<span style="font-size:0.68rem;font-weight:800;color:#b3261e;">Jetzt · '+hh+':'+mm+'</span>'
+    +'<div style="flex:1;height:2px;background:#b3261e;border-radius:1px;"></div>'
+    +'</div>';
+}
+
 function ttRenderDay() {
   const d = _addDays(_today(), ttDayOffset);
   const isToday = ttDayOffset === 0;
   const isPast  = d < _today();
+  const now = new Date();
+  const nowMin = isToday ? now.getHours()*60 + now.getMinutes() : null;
   const sub = document.getElementById('tt-header-sub');
   // "Heute" already says it's today, so stating the weekday name too on top of
   // that (the old "Dienstag, ... · Heute") was redundant AND long enough to
@@ -234,6 +256,7 @@ function ttRenderDay() {
   // 1 card ≈ 68px content + 8px gap → double = 68*2+8 = 144px
   const SINGLE_H = 68, GAP = 8;
   let html = '';
+  let nowLineInserted = nowMin === null;
   for (let i = 0; i < lessons.length; i++) {
     const l = lessons[i];
     const prev = i > 0 ? lessons[i-1] : null;
@@ -248,13 +271,22 @@ function ttRenderDay() {
           +'</div>';
       }
     }
+
+    // Insert the "now" line right before the first lesson that hasn't
+    // ended yet — everything above it in the list has already happened.
+    if (!nowLineInserted && nowMin < _toMin(l.startTime)) {
+      html += ttNowLineHtml(now);
+      nowLineInserted = true;
+    }
+
+    const lessonPast = isPast || (nowMin !== null && _toMin(l.endTime) <= nowMin);
     // Same "neutral hatch instead of the subject's own color" treatment as
     // the week grid — a cancelled lesson should read as an empty slot at a
     // glance, not as a normal colored block that happens to have
     // struck-through text.
     const fillStyle = l.cancelled
       ? 'background-color:#f7f3ef;background-image:repeating-linear-gradient(135deg, rgba(179,26,26,0.09) 0, rgba(179,26,26,0.09) 4px, transparent 4px, transparent 12px);'
-      : 'background:'+(isPast ? '#ebebeb' : (ttColorMap[l.subject_short]||'#eaddff'))+';';
+      : 'background:'+(lessonPast ? '#ebebeb' : (ttColorMap[l.subject_short]||'#eaddff'))+';';
     const dblStyle = l._double ? 'min-height:'+(SINGLE_H*2+GAP)+'px;align-items:flex-start;padding-top:16px;' : '';
     // A changed room/teacher gets its own amber chip showing old → new,
     // instead of a plain chip that looks identical to a normal lesson's —
@@ -265,7 +297,7 @@ function ttRenderDay() {
     const roomChip = l.original_room
       ? '<span style="font-size:0.68rem;font-weight:700;background:#ffdec1;color:#7d3c00;padding:2px 7px;border-radius:8px;">'+l.original_room+' → '+(l.room||'–')+'</span>'
       : (l.room ? '<span style="font-size:0.68rem;font-weight:600;background:rgba(0,0,0,0.08);padding:2px 7px;border-radius:8px;">'+l.room+'</span>' : '');
-    html += '<div class="tt-block" style="'+fillStyle+'margin-bottom:'+GAP+'px;opacity:'+(isPast?.55:1)+';'+dblStyle+(l.cancelled?'border:1px dashed rgba(179,26,26,0.3);':'')+'">'
+    html += '<div class="tt-block" style="'+fillStyle+'margin-bottom:'+GAP+'px;opacity:'+(lessonPast?.55:1)+';'+dblStyle+(l.cancelled?'border:1px dashed rgba(179,26,26,0.3);':'')+'">'
       +'<div style="min-width:44px;text-align:center;">'
       +'<div style="font-size:0.72rem;font-weight:700;">'+_fmtTime(l.startTime)+'</div>'
       +'<div style="font-size:0.62rem;opacity:0.4;">–</div>'
@@ -284,6 +316,7 @@ function ttRenderDay() {
       +(l.substituted?'<span style="background:#ffdec1;color:#7d3c00;padding:3px 8px;border-radius:8px;font-size:0.66rem;font-weight:700;flex-shrink:0;">Vertr.</span>':'')
       +'</div>';
   }
+  if (!nowLineInserted) html += ttNowLineHtml(now);
   el.innerHTML = html;
   if (window.lucide) lucide.createIcons();
 }
@@ -300,6 +333,8 @@ function ttRenderWeek() {
   const monday = _addDays(_thisMonday(), ttWeekOffset * 7);
   const friday = _addDays(monday, 4);
   const todayStr = _dateStr(_today());
+  const now = new Date();
+  const nowMin = now.getHours()*60 + now.getMinutes();
 
   document.getElementById('tt-header-sub').textContent =
     monday.getDate() + '. – ' + friday.getDate() + '. ' + TT_MONTHS[friday.getMonth()] + ' ' + friday.getFullYear();
@@ -341,9 +376,11 @@ function ttRenderWeek() {
   const colsHtml = days.map((d, di) => {
     const lessons = dayLessons[di];
     const dayPast = d < _today();
+    const isToday = _dateStr(d) === todayStr;
     const blocks = lessons.map(l => {
       const top = (_toMin(l.startTime) - minStart) * TT_WEEK_PX_PER_MIN;
       const height = Math.max((_toMin(l.endTime) - _toMin(l.startTime)) * TT_WEEK_PX_PER_MIN, TT_WEEK_MIN_BLOCK_H);
+      const lessonPast = dayPast || (isToday && _toMin(l.endTime) <= nowMin);
 
       // Cancelled periods used to keep their subject's normal color, just
       // with struck-through text — at a glance that reads as "a real
@@ -360,7 +397,7 @@ function ttRenderWeek() {
         fillStyle = 'background-color:#f7f3ef;background-image:repeating-linear-gradient(135deg, rgba(179,26,26,0.09) 0, rgba(179,26,26,0.09) 3px, transparent 3px, transparent 10px);';
         borderStyle = 'border:1px dashed rgba(179,26,26,0.3);';
       } else {
-        fillStyle = 'background:'+(dayPast ? '#ebebeb' : (ttColorMap[l.subject_short]||'#eaddff'))+';';
+        fillStyle = 'background:'+(lessonPast ? '#ebebeb' : (ttColorMap[l.subject_short]||'#eaddff'))+';';
         borderStyle = l.substituted ? 'border-left:3px solid #b3720a;' : '';
       }
 
@@ -369,7 +406,7 @@ function ttRenderWeek() {
             ? '<div style="font-size:0.54rem;font-weight:700;color:#7d3c00;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+l.original_room+'→'+l.room+'</div>'
             : '<div style="font-size:0.54rem;opacity:0.45;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+l.room+'</div>')
         : '';
-      const opacity = dayPast ? 0.5 : 1;
+      const opacity = lessonPast ? 0.5 : 1;
 
       return '<div style="position:absolute;top:'+top+'px;left:1px;right:1px;height:'+height+'px;'+fillStyle+borderStyle+'border-radius:8px;padding:4px 5px;overflow:hidden;opacity:'+opacity+';">'
         +'<div style="font-size:0.68rem;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;'+(l.cancelled?'text-decoration:line-through;color:#8a3a3a;':'')+'">'
@@ -382,7 +419,17 @@ function ttRenderWeek() {
         +'</div>';
     }).join('');
     const holidayBg = ttHolidayFor(_dateStr(d)) ? 'background:repeating-linear-gradient(135deg, rgba(68,43,0,0.035) 0, rgba(68,43,0,0.035) 6px, transparent 6px, transparent 16px);' : '';
-    return '<div style="position:relative;height:'+gridHeight+'px;'+holidayBg+'">'+hourLines+blocks+'</div>';
+    // Live "now" line — only in today's column, and only while the current
+    // time actually falls within the hours shown (before school starts or
+    // after the last lesson of the day, there's nothing to point at).
+    let nowLine = '';
+    if (isToday && nowMin >= minStart && nowMin <= maxEnd) {
+      const nowTop = (nowMin - minStart) * TT_WEEK_PX_PER_MIN;
+      nowLine = '<div style="position:absolute;top:'+nowTop+'px;left:0;right:0;height:2px;background:#b3261e;z-index:5;">'
+        +'<div style="position:absolute;left:-3px;top:-3px;width:8px;height:8px;border-radius:50%;background:#b3261e;"></div>'
+        +'</div>';
+    }
+    return '<div style="position:relative;height:'+gridHeight+'px;'+holidayBg+'">'+hourLines+blocks+nowLine+'</div>';
   }).join('');
 
   grid.innerHTML = headerHtml + axisHtml + colsHtml;
