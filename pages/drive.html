@@ -389,10 +389,10 @@ function renderDriveFileList(files, showTag) {
       : '';
     return `
     <div class="file-row" data-id="${f.id}">
-      <div class="file-icon" style="background:${driveColorFor(f.subject_id||f.id)};cursor:pointer;" onclick="openDriveFilePreview(${f.id})">
+      <div class="file-icon" style="background:${driveColorFor(f.subject_id||f.id)};cursor:pointer;" onclick="openDriveFile(${f.id})">
         <i data-lucide="${driveIcon(f.original_name)}" style="width:20px;height:20px;"></i>
       </div>
-      <div style="flex:1;min-width:0;cursor:pointer;" onclick="openDriveFilePreview(${f.id})">
+      <div style="flex:1;min-width:0;cursor:pointer;" onclick="openDriveFile(${f.id})">
         <div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(f.original_name)}</div>
         <div style="font-size:0.75rem;opacity:0.6;">${formatBytes(f.file_size)} · ${escapeHtml(f.uploader_name||'?')} · ${driveRelTime(f.created_at)}</div>
         ${tag}
@@ -489,6 +489,21 @@ async function executeDeleteDriveFile(id) {
 }
 
 // --- Preview / inline text editing ---
+
+// Tapping a file always opens it in a new browser tab — using the browser's
+// own native viewer instead of an in-app one — EXCEPT for .md/.txt, which
+// still open the in-app lightbox since that's what makes inline editing
+// possible; there's no "edit" you can do with a file that just opened in a
+// new tab.
+function openDriveFile(id) {
+  const f = driveFiles.find(x => x.id === id);
+  if (!f) return;
+  if (DRIVE_TEXT_EXTS.includes(driveExt(f.original_name))) {
+    openDriveFilePreview(id);
+  } else {
+    window.open('/api/v1/drive/preview/' + id, '_blank', 'noopener');
+  }
+}
 
 let drivePreviewHome = null; // { parent, nextSibling } — where the lightbox lives when not portaled to <body>
 
