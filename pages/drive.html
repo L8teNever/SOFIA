@@ -516,12 +516,20 @@ async function openDriveFilePreview(id) {
   const isText = DRIVE_TEXT_EXTS.includes(ext);
 
   const body = document.getElementById('drive-preview-body');
-  body.style.padding = isPdf ? '0' : '16px';
+  body.style.padding = (isPdf || isImage) ? '0' : '16px';
+  body.style.overflow = isImage ? 'hidden' : 'auto';
   body.style.alignItems = (isImage || (!isText && !isPdf)) ? 'center' : '';
   body.style.justifyContent = (isImage || (!isText && !isPdf)) ? 'center' : '';
 
   if (isImage) {
-    body.innerHTML = `<img src="/api/v1/drive/preview/${id}" style="max-width:100%;max-height:100%;object-fit:contain;border-radius:12px;">`;
+    // A plain <img> has no zoom of its own, and the app's viewport meta
+    // sets user-scalable=no (so the browser's native pinch-zoom is off
+    // everywhere else too) — initDriveImageZoom() below adds pinch/wheel/
+    // double-tap zoom + pan by hand instead of relying on either.
+    body.innerHTML = `<div id="drive-preview-image-wrap" style="width:100%;height:100%;overflow:hidden;touch-action:none;display:flex;align-items:center;justify-content:center;">
+      <img id="drive-preview-image" src="/api/v1/drive/preview/${id}" style="max-width:100%;max-height:100%;object-fit:contain;will-change:transform;">
+    </div>`;
+    requestAnimationFrame(initDriveImageZoom);
   } else if (isPdf) {
     body.innerHTML = `<iframe src="/api/v1/drive/preview/${id}" style="width:100%;height:100%;border:none;background:#f3edf7;flex:1;"></iframe>`;
   } else if (isText) {
@@ -565,6 +573,96 @@ function closeDriveFilePreview(isPopState = false) {
     }
     drivePreviewHome = null;
   }, 220);
+}
+
+// --- Pinch/wheel/double-tap zoom for the image preview ---
+// Hand-rolled because the app's viewport meta has user-scalable=no (so the
+// browser's own pinch-zoom is off everywhere), and a plain <img> has no
+// zoom of its own otherwise.
+let driveZoom = { scale: 1, x: 0, y: 0, startDist: null, startScale: 1, dragging: false, dragStartX: 0, dragStartY: 0, panStartX: 0, panStartY: 0, lastTapTime: 0 };
+
+function applyDriveZoomTransform() {
+  const img = document.getElementById('drive-preview-image');
+  if (!img) return;
+  img.style.transform = `translate(${driveZoom.x}px, ${driveZoom.y}px) scale(${driveZoom.scale})`;
+  img.style.cursor = driveZoom.scale > 1 ? 'grab' : '';
+}
+
+function initDriveImageZoom() {
+  const wrap = document.getElementById('drive-preview-image-wrap');
+  const img = document.getElementById('drive-preview-image');
+  if (!wrap || !img) return;
+  driveZoom = { scale: 1, x: 0, y: 0, startDist: null, startScale: 1, dragging: false, dragStartX: 0, dragStartY: 0, panStartX: 0, panStartY: 0, lastTapTime: 0 };
+  applyDriveZoomTransform();
+
+  const pointers = new Map();
+  const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+
+  wrap.onpointerdown = (e) => {
+    // Can throw for a pointer the browser doesn't consider "active" (seen
+    // with synthetic/edge-case pointer events) — capture is just an upgrade
+    // (keeps drag events flowing outside the element's bounds), not a
+    // requirement, so a failure here must never abort the rest of the
+    // tap/zoom/drag handling below.
+    try { wrap.setPointerCapture(e.pointerId); } catch {}
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointers.size === 1) {
+      const now = Date.now();
+      if (now - driveZoom.lastTapTime < 300) {
+        img.style.transition = 'transform 0.2s ease';
+        driveZoom.scale = driveZoom.scale > 1 ? 1 : 2.5;
+        driveZoom.x = 0; driveZoom.y = 0;
+        applyDriveZoomTransform();
+        setTimeout(() => { img.style.transition = ''; }, 200);
+      }
+      driveZoom.lastTapTime = now;
+      if (driveZoom.scale > 1) {
+        driveZoom.dragging = true;
+        driveZoom.dragStartX = e.clientX;
+        driveZoom.dragStartY = e.clientY;
+        driveZoom.panStartX = driveZoom.x;
+        driveZoom.panStartY = driveZoom.y;
+      }
+    } else if (pointers.size === 2) {
+      driveZoom.dragging = false;
+      const pts = [...pointers.values()];
+      driveZoom.startDist = dist(pts[0], pts[1]);
+      driveZoom.startScale = driveZoom.scale;
+    }
+  };
+
+  wrap.onpointermove = (e) => {
+    if (!pointers.has(e.pointerId)) return;
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointers.size === 2 && driveZoom.startDist) {
+      const pts = [...pointers.values()];
+      const d = dist(pts[0], pts[1]);
+      driveZoom.scale = Math.min(5, Math.max(1, driveZoom.startScale * (d / driveZoom.startDist)));
+      applyDriveZoomTransform();
+    } else if (pointers.size === 1 && driveZoom.dragging) {
+      driveZoom.x = driveZoom.panStartX + (e.clientX - driveZoom.dragStartX);
+      driveZoom.y = driveZoom.panStartY + (e.clientY - driveZoom.dragStartY);
+      applyDriveZoomTransform();
+    }
+  };
+
+  const endPointer = (e) => {
+    pointers.delete(e.pointerId);
+    if (pointers.size < 2) driveZoom.startDist = null;
+    if (pointers.size === 0) {
+      driveZoom.dragging = false;
+      if (driveZoom.scale <= 1) { driveZoom.x = 0; driveZoom.y = 0; applyDriveZoomTransform(); }
+    }
+  };
+  wrap.onpointerup = endPointer;
+  wrap.onpointercancel = endPointer;
+
+  wrap.onwheel = (e) => {
+    e.preventDefault();
+    driveZoom.scale = Math.min(5, Math.max(1, driveZoom.scale - e.deltaY * 0.0015));
+    if (driveZoom.scale <= 1) { driveZoom.x = 0; driveZoom.y = 0; }
+    applyDriveZoomTransform();
+  };
 }
 
 function startDriveTextEdit(id) {
