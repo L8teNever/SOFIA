@@ -136,7 +136,7 @@ async def _poll_class_timetable(db: AsyncSession, cls: ClassGroup):
         today = date.today()
         this_monday = today - timedelta(days=today.weekday())
         loop = asyncio.get_event_loop()
-        this_lessons, next_lessons = await loop.run_in_executor(
+        this_lessons, next_lessons, holidays = await loop.run_in_executor(
             None, _fetch_two_weeks, server, cls.untis_school,
             cls.untis_user, password, cls.untis_class or "", this_monday,
         )
@@ -147,7 +147,7 @@ async def _poll_class_timetable(db: AsyncSession, cls: ClassGroup):
     old_lessons = peek_cached_lessons(cls.id)
     this_week = {"start": this_monday.isoformat(), "lessons": this_lessons}
     next_week = {"start": (this_monday + timedelta(days=7)).isoformat(), "lessons": next_lessons}
-    set_cached_timetable(cls.id, this_week, next_week)
+    set_cached_timetable(cls.id, this_week, next_week, holidays)
 
     if not old_lessons:
         # First poll establishes baseline
