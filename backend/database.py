@@ -106,3 +106,29 @@ async def _migrate_columns(conn):
     except Exception:
         pass
 
+    await _run_once(conn, "2026-09-15_disable_lesson_lead_reminders_default", _disable_lesson_lead_reminders)
+
+async def _run_once(conn, name: str, action):
+    """Runs `action(conn)` exactly once, ever, tracked in a tiny
+    app_migrations table — for one-off DATA fixes (as opposed to the
+    schema/column checks above) that must not re-apply on every restart,
+    since that would silently stomp on a user's own later changes to the
+    same fields."""
+    from sqlalchemy import text
+    await conn.execute(text(
+        "CREATE TABLE IF NOT EXISTS app_migrations (name TEXT PRIMARY KEY, applied_at TEXT DEFAULT CURRENT_TIMESTAMP)"
+    ))
+    already_applied = (await conn.execute(text("SELECT 1 FROM app_migrations WHERE name = :n"), {"n": name})).scalar_one_or_none()
+    if already_applied:
+        return
+    await action(conn)
+    await conn.execute(text("INSERT INTO app_migrations (name) VALUES (:n)"), {"n": name})
+
+async def _disable_lesson_lead_reminders(conn):
+    from sqlalchemy import text
+    await conn.execute(text(
+        "UPDATE user_notification_settings SET "
+        "timetable_before_first_lesson = 0, timetable_before_lesson_end = 0, "
+        "timetable_before_break = 0, timetable_before_break_end = 0"
+    ))
+

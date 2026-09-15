@@ -142,9 +142,9 @@
                 <div style="font-size:0.86rem;font-weight:600;">Vor der ersten Stunde</div>
                 <div style="font-size:0.76rem;opacity:0.6;">Erinnerung mit Fach und Raum</div>
               </div>
-              <div class="m3-switch on" id="ns-tt-first-lesson" onclick="toggleNotifProp('timetable_before_first_lesson', this)"></div>
+              <div class="m3-switch" id="ns-tt-first-lesson" onclick="toggleNotifProp('timetable_before_first_lesson', this)"></div>
             </div>
-            <div id="ns-tt-first-lead-wrap" style="margin-top:6px;display:flex;align-items:center;gap:8px;">
+            <div id="ns-tt-first-lead-wrap" style="margin-top:6px;display:none;align-items:center;gap:8px;">
               <span style="font-size:0.78rem;opacity:0.7;">Vorlaufzeit:</span>
               <select class="m3-select" id="ns-tt-first-lead" style="max-width:140px;" onchange="updateNotifProp('timetable_first_lesson_lead_minutes', parseInt(this.value))">
                 <option value="15">15 Minuten</option>
@@ -200,9 +200,9 @@
                 <div style="font-size:0.86rem;font-weight:600;">Vor Pausenende / nächster Stunde</div>
                 <div style="font-size:0.76rem;opacity:0.6;">Erinnert vor dem Gong zum Raumwechsel</div>
               </div>
-              <div class="m3-switch on" id="ns-tt-break-end" onclick="toggleNotifProp('timetable_before_break_end', this)"></div>
+              <div class="m3-switch" id="ns-tt-break-end" onclick="toggleNotifProp('timetable_before_break_end', this)"></div>
             </div>
-            <div id="ns-tt-break-end-lead-wrap" style="margin-top:6px;display:flex;align-items:center;gap:8px;">
+            <div id="ns-tt-break-end-lead-wrap" style="margin-top:6px;display:none;align-items:center;gap:8px;">
               <span style="font-size:0.78rem;opacity:0.7;">Vorlaufzeit:</span>
               <select class="m3-select" id="ns-tt-break-end-lead" style="max-width:140px;" onchange="updateNotifProp('timetable_break_end_lead_minutes', parseInt(this.value))">
                 <option value="2">2 Minuten</option>
