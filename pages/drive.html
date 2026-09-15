@@ -1,28 +1,540 @@
-﻿<div class="page" id="page-drive" style="background:#f8f5fc;">
+<div class="page" id="page-drive" style="background:#f8f5fc;">
   <div id="ph-drive"></div>
-  <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px;text-align:center;">
-    <div style="background:#e8def8;border-radius:32px;width:100px;height:100px;display:flex;align-items:center;justify-content:center;margin-bottom:24px;">
-      <i data-lucide="hard-drive" style="width:48px;height:48px;color:#1d192b;"></i>
+  <div class="page-scroll-1col">
+  <div class="page-inner">
+
+    <div class="drop-zone" id="drive-drop-zone" onclick="document.getElementById('drive-file-input').click()">
+      <i data-lucide="upload-cloud" style="width:40px;height:40px;opacity:0.4;margin-bottom:10px;"></i>
+      <div style="font-weight:600;margin-bottom:4px;">Datei hier ablegen</div>
+      <div style="font-size:0.85rem;opacity:0.5;">oder tippen zum Hochladen · wird per KI automatisch einsortiert</div>
+      <input type="file" id="drive-file-input" style="display:none;" onchange="handleDriveFileSelect(this.files[0])">
     </div>
-    <div style="font-size:1.5rem;font-weight:700;color:#1c1b1f;margin-bottom:8px;">Bald verfügbar</div>
-    <div style="color:#49454f;max-width:280px;line-height:1.6;">Drive – gemeinsame Dateiverwaltung für deine Klasse – kommt in einem der nächsten Updates.</div>
-    <div style="margin-top:32px;display:flex;flex-direction:column;gap:12px;width:100%;max-width:280px;opacity:0.4;">
-      <div style="background:#f3edf7;border-radius:16px;padding:16px;display:flex;align-items:center;gap:12px;">
-        <i data-lucide="folder" style="width:24px;height:24px;"></i>
-        <div style="font-weight:600;">Klassenordner</div>
-      </div>
-      <div style="background:#f3edf7;border-radius:16px;padding:16px;display:flex;align-items:center;gap:12px;">
-        <i data-lucide="file-text" style="width:24px;height:24px;"></i>
-        <div style="font-weight:600;">Dokumente</div>
-      </div>
-      <div style="background:#f3edf7;border-radius:16px;padding:16px;display:flex;align-items:center;gap:12px;">
-        <i data-lucide="image" style="width:24px;height:24px;"></i>
-        <div style="font-weight:600;">Bilder</div>
-      </div>
+
+    <div style="display:flex;align-items:center;gap:8px;margin-top:16px;background:#fff;border-radius:14px;padding:2px 6px 2px 14px;box-shadow:0 1px 4px rgba(0,0,0,0.06);">
+      <i data-lucide="search" style="width:18px;height:18px;opacity:0.4;flex-shrink:0;"></i>
+      <input type="text" id="drive-search-input" placeholder="Dateien durchsuchen..." style="flex:1;border:none;outline:none;background:transparent;padding:11px 0;font-size:0.95rem;" oninput="onDriveSearchInput(this.value)">
+      <button type="button" id="drive-search-clear" onclick="clearDriveSearch()" style="display:none;background:none;border:none;cursor:pointer;opacity:0.4;padding:8px;">
+        <i data-lucide="x" style="width:16px;height:16px;"></i>
+      </button>
     </div>
+
+    <div id="drive-view-chips" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;">
+      <button onclick="setDriveMode('folders',this)" class="chip active" id="drive-chip-folders">Fächer</button>
+      <button onclick="setDriveMode('recent',this)" class="chip" id="drive-chip-recent">Zuletzt hochgeladen</button>
+    </div>
+
+    <div id="drive-content" style="margin-top:16px;"></div>
+
   </div>
+  </div>
+  <style>
+  .drive-folder-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; }
+  @media (min-width:560px) { .drive-folder-grid { grid-template-columns:repeat(3,1fr); } }
+  .drive-folder-tile { background:#fff; border-radius:20px; padding:16px; display:flex; flex-direction:column; gap:10px; cursor:pointer; border:1px solid rgba(0,0,0,0.04); transition:transform 0.15s; }
+  .drive-folder-tile:active { transform:scale(0.97); }
+  .drive-topic-group { margin-bottom:18px; }
+  .drive-topic-label { font-size:0.78rem; font-weight:700; opacity:0.55; margin:0 0 8px 4px; display:flex; align-items:center; gap:6px; }
+  .drive-file-tag { font-size:0.66rem; font-weight:700; padding:2px 8px; border-radius:8px; background:#eaddff; color:#442b7a; white-space:nowrap; }
+  </style>
 </div>
+
 <script>
-document.getElementById('ph-drive').outerHTML = pageHeader({ title: 'Drive' });
-function init_drive(){}
+document.getElementById('ph-drive').outerHTML = pageHeader({
+  title: 'Drive',
+  trailing: `<button class="icon-btn" onclick="document.getElementById('drive-file-input').click()" title="Datei hochladen">
+      <i data-lucide="upload" style="width:20px;height:20px;"></i>
+    </button>`
+});
+
+let driveFiles = [], driveSubjects = [];
+let driveMode = 'folders';
+let driveSelectedSubjectId = null; // null = root folder grid, 'unsorted' = unsorted bucket, else a subject id
+let driveSearchQuery = '';
+let driveSelectedUploadFile = null;
+let driveUploadTargetSubjectId = null;
+let drivePreviewFileId = null;
+let driveTopicsCache = {}; // subjectId -> [{id, name, file_count}]
+
+const DRIVE_COLORS = ['#eaddff','#d3e3fd','#c4eed0','#ffdec1','#ffd8e4','#fff3c4'];
+const DRIVE_ICON_MAP = {
+  pdf:'file-text', doc:'file-text', docx:'file-text', md:'file-text', markdown:'file-text', txt:'file-text',
+  jpg:'image', jpeg:'image', png:'image', gif:'image', webp:'image', svg:'image', bmp:'image',
+  mp3:'music', wav:'music', mp4:'video', mov:'video', avi:'video',
+  zip:'archive', rar:'archive', '7z':'archive',
+  xls:'table', xlsx:'table', csv:'table',
+  ppt:'presentation', pptx:'presentation',
+};
+const DRIVE_TEXT_EXTS = ['md', 'markdown', 'txt'];
+const DRIVE_IMAGE_EXTS = ['jpg','jpeg','png','gif','webp','bmp'];
+
+function driveExt(name) { return (name.split('.').pop() || '').toLowerCase(); }
+function driveIcon(name) { return DRIVE_ICON_MAP[driveExt(name)] || 'file'; }
+function driveColorFor(id) { return DRIVE_COLORS[Math.abs(id||0) % DRIVE_COLORS.length]; }
+
+function formatBytes(b) {
+  if (b < 1024) return b + ' B';
+  if (b < 1048576) return (b/1024).toFixed(1) + ' KB';
+  return (b/1048576).toFixed(1) + ' MB';
+}
+
+function driveRelTime(iso) {
+  const then = new Date(iso).getTime();
+  const diffMin = Math.floor((Date.now() - then) / 60000);
+  if (diffMin < 1) return 'gerade eben';
+  if (diffMin < 60) return 'vor ' + diffMin + ' Min.';
+  const diffH = Math.floor(diffMin / 60);
+  if (diffH < 24) return 'vor ' + diffH + ' Std.';
+  const diffD = Math.floor(diffH / 24);
+  if (diffD < 7) return 'vor ' + diffD + ' Tag' + (diffD === 1 ? '' : 'en');
+  const d = new Date(iso);
+  return d.getDate() + '.' + (d.getMonth()+1) + '.' + d.getFullYear();
+}
+
+async function init_drive() {
+  [driveFiles, driveSubjects] = await Promise.all([
+    API.driveFiles().catch(() => []),
+    API.subjects().catch(() => []),
+  ]);
+  setupDriveDragDrop();
+  renderDrive();
+}
+
+function setupDriveDragDrop() {
+  const zone = document.getElementById('drive-drop-zone');
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault(); zone.classList.remove('drag-over');
+    handleDriveFileSelect(e.dataTransfer.files[0]);
+  });
+}
+
+function setDriveMode(mode, btn) {
+  driveMode = mode;
+  driveSelectedSubjectId = null;
+  document.querySelectorAll('#drive-view-chips .chip').forEach(c => c.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  renderDrive();
+}
+
+function onDriveSearchInput(value) {
+  driveSearchQuery = value.trim();
+  document.getElementById('drive-search-clear').style.display = driveSearchQuery ? 'flex' : 'none';
+  renderDrive();
+}
+
+function clearDriveSearch() {
+  driveSearchQuery = '';
+  document.getElementById('drive-search-input').value = '';
+  document.getElementById('drive-search-clear').style.display = 'none';
+  renderDrive();
+}
+
+function driveMatchesSearch(f, q) {
+  const hay = [f.original_name, f.topic, f.subject_name, f.uploader_name].filter(Boolean).join(' ').toLowerCase();
+  return hay.includes(q);
+}
+
+function renderDrive() {
+  const el = document.getElementById('drive-content');
+  document.getElementById('drive-view-chips').style.display = driveSearchQuery ? 'none' : 'flex';
+
+  if (driveSearchQuery) {
+    const q = driveSearchQuery.toLowerCase();
+    const matches = driveFiles.filter(f => driveMatchesSearch(f, q));
+    el.innerHTML = renderDriveSectionLabel('Suchergebnisse') + renderDriveFileList(matches, true);
+  } else if (driveMode === 'recent') {
+    const recent = [...driveFiles].sort((a,b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 40);
+    el.innerHTML = renderDriveSectionLabel('Zuletzt hochgeladen') + renderDriveFileList(recent, true);
+  } else if (driveSelectedSubjectId !== null) {
+    el.innerHTML = renderDriveSubjectFolder(driveSelectedSubjectId);
+  } else {
+    el.innerHTML = renderDriveFolderGrid();
+  }
+  if (window.lucide) lucide.createIcons();
+}
+
+function renderDriveSectionLabel(text) {
+  return `<div class="section-label" style="margin-top:0;">${text}</div>`;
+}
+
+function renderDriveFolderGrid() {
+  const hasUnsorted = driveFiles.some(f => !f.subject_id);
+  const tiles = driveSubjects.map(s => {
+    const count = driveFiles.filter(f => f.subject_id === s.id).length;
+    return `<div class="drive-folder-tile" onclick="openDriveSubjectFolder(${s.id})">
+      <div class="icon-box" style="width:40px;height:40px;border-radius:12px;background:${s.color || '#eaddff'}22;color:${s.color || '#6750a4'};">
+        <i data-lucide="folder" style="width:20px;height:20px;"></i>
+      </div>
+      <div style="font-weight:700;font-size:0.92rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(s.name)}</div>
+      <div style="font-size:0.75rem;opacity:0.5;">${count} Datei${count===1?'':'en'}</div>
+    </div>`;
+  }).join('');
+  const unsortedTile = hasUnsorted ? `<div class="drive-folder-tile" onclick="openDriveSubjectFolder('unsorted')">
+      <div class="icon-box" style="width:40px;height:40px;border-radius:12px;background:rgba(0,0,0,0.06);color:#49454f;">
+        <i data-lucide="folder-open" style="width:20px;height:20px;"></i>
+      </div>
+      <div style="font-weight:700;font-size:0.92rem;">Unsortiert</div>
+      <div style="font-size:0.75rem;opacity:0.5;">${driveFiles.filter(f=>!f.subject_id).length} Datei(en)</div>
+    </div>` : '';
+
+  if (!driveSubjects.length && !hasUnsorted) {
+    return emptyState({ icon:'hard-drive', title:'Noch keine Dateien', subtitle:'Lade die erste Datei hoch — sie wird automatisch einsortiert.', hidden:false });
+  }
+  return `<div class="drive-folder-grid">${tiles}${unsortedTile}</div>`;
+}
+
+async function openDriveSubjectFolder(id) {
+  driveSelectedSubjectId = id;
+  if (id !== 'unsorted' && !driveTopicsCache[id]) {
+    driveTopicsCache[id] = await API.driveTopics(id).catch(() => []);
+  }
+  renderDrive();
+}
+
+function backToDriveFolders() {
+  driveSelectedSubjectId = null;
+  renderDrive();
+}
+
+function renderDriveSubjectFolder(id) {
+  const isUnsorted = id === 'unsorted';
+  const subject = isUnsorted ? null : driveSubjects.find(s => s.id === id);
+  const files = isUnsorted
+    ? driveFiles.filter(f => !f.subject_id)
+    : driveFiles.filter(f => f.subject_id === id);
+
+  const header = `<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+    <button class="icon-btn" onclick="backToDriveFolders()" style="width:36px;height:36px;">
+      <i data-lucide="arrow-left" style="width:18px;height:18px;"></i>
+    </button>
+    <div style="font-weight:800;font-size:1.15rem;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${isUnsorted ? 'Unsortiert' : escapeHtml(subject ? subject.name : '')}</div>
+    ${!isUnsorted ? `<button class="icon-btn" onclick="openCreateTopicSheet(${id})" style="width:36px;height:36px;flex-shrink:0;" title="Neuer Ordner">
+      <i data-lucide="folder-plus" style="width:18px;height:18px;"></i>
+    </button>` : ''}
+  </div>`;
+
+  if (isUnsorted) {
+    if (!files.length) return header + emptyState({ icon:'folder-open', title:'Noch keine Dateien in diesem Ordner', hidden:false });
+    return header + renderDriveFileList(files, false);
+  }
+
+  const knownTopics = driveTopicsCache[id] || [];
+  const topicMap = {};
+  knownTopics.forEach(t => { topicMap[t.name] = { files: [], topicId: t.id }; });
+  const untagged = [];
+  files.forEach(f => {
+    if (f.topic) {
+      if (!topicMap[f.topic]) topicMap[f.topic] = { files: [], topicId: null };
+      topicMap[f.topic].files.push(f);
+    } else {
+      untagged.push(f);
+    }
+  });
+
+  const topicNames = Object.keys(topicMap).sort((a,b) => a.localeCompare(b));
+  if (!topicNames.length && !untagged.length) {
+    return header + emptyState({ icon:'folder-open', title:'Noch keine Dateien in diesem Ordner', subtitle:'Lade eine Datei hoch oder lege oben rechts einen neuen Ordner an.', hidden:false });
+  }
+
+  const groups = topicNames.map(name => {
+    const g = topicMap[name];
+    const list = g.files.sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+    return `<div class="drive-topic-group">
+      <div class="drive-topic-label">
+        <i data-lucide="tag" style="width:12px;height:12px;"></i>${escapeHtml(name)}
+        ${g.topicId ? `<button onclick="openRenameTopicSheet(${g.topicId},${id})" style="background:none;border:none;cursor:pointer;opacity:0.5;padding:2px;display:flex;" title="Umbenennen">
+          <i data-lucide="pencil" style="width:12px;height:12px;"></i>
+        </button>` : ''}
+      </div>
+      ${list.length ? renderDriveFileList(list, false) : `<div style="opacity:0.4;font-size:0.82rem;padding:6px 4px 14px;">Leerer Ordner — verschiebe eine Datei hierher.</div>`}
+    </div>`;
+  }).join('');
+
+  const untaggedGroup = untagged.length ? `<div class="drive-topic-group">
+    <div class="drive-topic-label"><i data-lucide="tag" style="width:12px;height:12px;"></i>Ohne Thema</div>
+    ${renderDriveFileList(untagged.sort((a,b) => new Date(b.created_at) - new Date(a.created_at)), false)}
+  </div>` : '';
+
+  return header + groups + untaggedGroup;
+}
+
+function openCreateTopicSheet(subjectId) {
+  openSheet(`
+    <div style="padding:4px;">
+      <div style="font-weight:700;font-size:1.05rem;margin-bottom:14px;">Neuer Ordner</div>
+      <input type="text" class="m3-input" id="drive-newtopic-input" placeholder="Name des Ordners" style="margin-bottom:14px;">
+      <button class="m3-btn-full" onclick="submitCreateTopic(${subjectId})">Erstellen</button>
+    </div>
+  `);
+  setTimeout(() => document.getElementById('drive-newtopic-input')?.focus(), 100);
+}
+
+async function submitCreateTopic(subjectId) {
+  const name = document.getElementById('drive-newtopic-input').value.trim();
+  if (!name) return;
+  try {
+    await API.createDriveTopic({ subject_id: subjectId, name });
+    driveTopicsCache[subjectId] = await API.driveTopics(subjectId).catch(() => []);
+    closeSheet();
+    renderDrive();
+    showToast('Ordner erstellt');
+  } catch { showToast('Fehler beim Erstellen'); }
+}
+
+function openRenameTopicSheet(topicId, subjectId) {
+  const t = (driveTopicsCache[subjectId] || []).find(x => x.id === topicId);
+  openSheet(`
+    <div style="padding:4px;">
+      <div style="font-weight:700;font-size:1.05rem;margin-bottom:14px;">Ordner umbenennen</div>
+      <input type="text" class="m3-input" id="drive-rename-input" value="${escapeHtml(t ? t.name : '')}" style="margin-bottom:14px;">
+      <button class="m3-btn-full" onclick="submitRenameTopic(${topicId},${subjectId})">Speichern</button>
+    </div>
+  `);
+  setTimeout(() => document.getElementById('drive-rename-input')?.focus(), 100);
+}
+
+async function submitRenameTopic(topicId, subjectId) {
+  const name = document.getElementById('drive-rename-input').value.trim();
+  if (!name) return;
+  try {
+    await API.renameDriveTopic(topicId, { name });
+    driveFiles = await API.driveFiles().catch(() => driveFiles);
+    driveTopicsCache[subjectId] = await API.driveTopics(subjectId).catch(() => []);
+    closeSheet();
+    renderDrive();
+    showToast('Ordner umbenannt');
+  } catch { showToast('Fehler beim Umbenennen'); }
+}
+
+function openMoveFileSheet(fileId) {
+  const f = driveFiles.find(x => x.id === fileId);
+  if (!f) return;
+  const subjectOptions = driveSubjects.map(s => `<option value="${s.id}"${s.id===f.subject_id?' selected':''}>${escapeHtml(s.name)}</option>`).join('');
+  openSheet(`
+    <div style="padding:4px;">
+      <div style="font-weight:700;font-size:1.05rem;margin-bottom:4px;">Datei verschieben</div>
+      <div style="opacity:0.6;font-size:0.85rem;margin-bottom:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(f.original_name)}</div>
+
+      <div style="font-size:0.8rem;font-weight:700;opacity:0.5;margin-bottom:6px;">FACH</div>
+      <select class="m3-select" id="drive-move-subject" style="margin-bottom:14px;">
+        <option value="">Unsortiert</option>
+        ${subjectOptions}
+      </select>
+
+      <div style="font-size:0.8rem;font-weight:700;opacity:0.5;margin-bottom:6px;">THEMA (optional)</div>
+      <input type="text" class="m3-input" id="drive-move-topic" value="${escapeHtml(f.topic||'')}" placeholder="z. B. Photosynthese" style="margin-bottom:14px;">
+
+      <button class="m3-btn-full" onclick="submitMoveFile(${fileId})">Verschieben</button>
+    </div>
+  `);
+}
+
+async function submitMoveFile(fileId) {
+  const subjVal = document.getElementById('drive-move-subject').value;
+  const topicVal = document.getElementById('drive-move-topic').value;
+  try {
+    const updated = await API.updateDriveFile(fileId, {
+      subject_id: subjVal ? parseInt(subjVal) : null,
+      topic: topicVal,
+    });
+    const idx = driveFiles.findIndex(f => f.id === fileId);
+    if (idx !== -1) driveFiles[idx] = updated;
+    driveTopicsCache = {};
+    closeSheet();
+    renderDrive();
+    showToast('Datei verschoben');
+  } catch { showToast('Fehler beim Verschieben'); }
+}
+
+function renderDriveFileList(files, showTag) {
+  if (!files.length) {
+    return `<div style="text-align:center;padding:30px;opacity:0.4;font-size:0.9rem;">Keine Dateien gefunden</div>`;
+  }
+  return files.map(f => {
+    const canDelete = currentUser && (f.uploader_id === currentUser.id || currentUser.role === 'admin' || currentUser.role === 'super_admin');
+    const tag = showTag && (f.subject_name || f.topic)
+      ? `<div style="margin-top:4px;"><span class="drive-file-tag">${escapeHtml([f.subject_name, f.topic].filter(Boolean).join(' · '))}</span></div>`
+      : '';
+    return `
+    <div class="file-row" data-id="${f.id}">
+      <div class="file-icon" style="background:${driveColorFor(f.subject_id||f.id)};cursor:pointer;" onclick="openDriveFilePreview(${f.id})">
+        <i data-lucide="${driveIcon(f.original_name)}" style="width:20px;height:20px;"></i>
+      </div>
+      <div style="flex:1;min-width:0;cursor:pointer;" onclick="openDriveFilePreview(${f.id})">
+        <div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(f.original_name)}</div>
+        <div style="font-size:0.75rem;opacity:0.6;">${formatBytes(f.file_size)} · ${escapeHtml(f.uploader_name||'?')} · ${driveRelTime(f.created_at)}</div>
+        ${tag}
+      </div>
+      <button onclick="openMoveFileSheet(${f.id})" style="background:#f3edf7;border:none;border-radius:12px;padding:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;cursor:pointer;" title="Verschieben">
+        <i data-lucide="move" style="width:18px;height:18px;"></i>
+      </button>
+      <a href="/api/v1/drive/download/${f.id}" download style="background:#f3edf7;border-radius:12px;padding:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;" title="Herunterladen">
+        <i data-lucide="download" style="width:18px;height:18px;"></i>
+      </a>
+      ${canDelete ? `<button onclick="deleteDriveFileConfirm(${f.id})" style="background:none;border:none;cursor:pointer;opacity:0.4;padding:4px;flex-shrink:0;" title="Löschen">
+        <i data-lucide="trash-2" style="width:16px;height:16px;"></i>
+      </button>` : ''}
+    </div>`;
+  }).join('');
+}
+
+// --- Upload ---
+
+function handleDriveFileSelect(file) {
+  if (!file) return;
+  driveSelectedUploadFile = file;
+  const preselect = (driveSelectedSubjectId && driveSelectedSubjectId !== 'unsorted') ? driveSelectedSubjectId : '';
+  const subjectOptions = driveSubjects.map(s => `<option value="${s.id}"${String(s.id)===String(preselect)?' selected':''}>${escapeHtml(s.name)}</option>`).join('');
+
+  openSheet(`
+    <div style="padding:4px 4px 0;">
+      <div style="font-weight:700;font-size:1.05rem;margin-bottom:4px;">Datei hochladen</div>
+      <div style="opacity:0.6;font-size:0.85rem;margin-bottom:16px;">${escapeHtml(file.name)} (${formatBytes(file.size)})</div>
+
+      <div style="font-size:0.8rem;font-weight:700;opacity:0.5;margin-bottom:6px;">FACH</div>
+      <select class="m3-select" id="drive-up-subject" style="margin-bottom:14px;">
+        <option value="">🤖 Automatisch sortieren (KI)</option>
+        ${subjectOptions}
+      </select>
+
+      <div style="font-size:0.8rem;font-weight:700;opacity:0.5;margin-bottom:6px;">THEMA (optional)</div>
+      <input type="text" class="m3-input" id="drive-up-topic" placeholder="z. B. Photosynthese — leer lassen für KI-Vorschlag" style="margin-bottom:14px;">
+
+      <button class="m3-btn-full" style="margin-top:8px;" onclick="uploadDriveFile()" id="drive-up-btn">Hochladen</button>
+    </div>
+  `);
+}
+
+async function uploadDriveFile() {
+  if (!driveSelectedUploadFile) return;
+  const form = new FormData();
+  form.append('file', driveSelectedUploadFile);
+  form.append('subject_id', document.getElementById('drive-up-subject').value);
+  form.append('topic', document.getElementById('drive-up-topic').value);
+
+  const btn = document.getElementById('drive-up-btn');
+  btn.textContent = 'Hochladen…';
+  btn.disabled = true;
+  try {
+    const f = await API.uploadDriveFile(form);
+    driveFiles.unshift(f);
+    driveSelectedUploadFile = null;
+    driveTopicsCache = {};
+    closeSheet();
+    renderDrive();
+    showToast(f.auto_sorted ? '🤖 Datei automatisch einsortiert!' : 'Datei hochgeladen!');
+  } catch {
+    showToast('Upload fehlgeschlagen');
+    btn.textContent = 'Hochladen';
+    btn.disabled = false;
+  }
+}
+
+// --- Delete ---
+
+function deleteDriveFileConfirm(id) {
+  const f = driveFiles.find(x => x.id === id);
+  if (!f) return;
+  openModal(confirmDelete({
+    title: 'Datei löschen?',
+    message: `<b>${escapeHtml(f.original_name)}</b> wird unwiderruflich gelöscht.`,
+    onConfirm: `executeDeleteDriveFile(${id})`,
+  }));
+}
+
+async function executeDeleteDriveFile(id) {
+  try {
+    await API.deleteDriveFile(id);
+  } catch {
+    showToast('Fehler beim Löschen');
+    return;
+  }
+  driveFiles = driveFiles.filter(f => f.id !== id);
+  driveTopicsCache = {};
+  closeModal();
+  renderDrive();
+  showToast('Gelöscht');
+}
+
+// --- Preview / inline text editing ---
+
+async function openDriveFilePreview(id) {
+  const f = driveFiles.find(x => x.id === id);
+  if (!f) return;
+  drivePreviewFileId = id;
+  const ext = driveExt(f.original_name);
+  const isImage = DRIVE_IMAGE_EXTS.includes(ext);
+  const isPdf = ext === 'pdf';
+  const isText = DRIVE_TEXT_EXTS.includes(ext);
+
+  let bodyHtml;
+  if (isImage) {
+    bodyHtml = `<img src="/api/v1/drive/preview/${id}" style="max-width:100%;border-radius:14px;display:block;margin:0 auto;">`;
+  } else if (isPdf) {
+    bodyHtml = `<iframe src="/api/v1/drive/preview/${id}" style="width:100%;height:60vh;border:none;border-radius:14px;background:#f3edf7;"></iframe>`;
+  } else if (isText) {
+    bodyHtml = `<div style="text-align:center;padding:20px;opacity:0.5;">Lädt…</div>`;
+  } else {
+    bodyHtml = `<div style="text-align:center;padding:30px 10px;opacity:0.5;">
+      <i data-lucide="${driveIcon(f.original_name)}" style="width:40px;height:40px;margin-bottom:10px;"></i>
+      <div>Keine Vorschau für diesen Dateityp verfügbar.</div>
+    </div>`;
+  }
+
+  openModal(`
+    <div style="text-align:left;">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:14px;">
+        <div style="min-width:0;">
+          <div style="font-weight:700;font-size:1rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(f.original_name)}</div>
+          <div style="font-size:0.75rem;opacity:0.55;">${formatBytes(f.file_size)} · ${escapeHtml(f.uploader_name||'?')} · ${driveRelTime(f.created_at)}</div>
+        </div>
+        <button class="icon-btn" onclick="closeModal()" style="flex-shrink:0;"><i data-lucide="x" style="width:18px;height:18px;"></i></button>
+      </div>
+      <div id="drive-preview-body">${bodyHtml}</div>
+      <div style="display:flex;gap:10px;margin-top:16px;" id="drive-preview-actions">
+        <a href="/api/v1/drive/download/${id}" download class="m3-btn-outline" style="flex:1;text-align:center;text-decoration:none;">Herunterladen</a>
+        ${isText ? `<button class="m3-btn-primary" style="flex:1;" onclick="startDriveTextEdit(${id})" id="drive-edit-toggle-btn">Bearbeiten</button>` : ''}
+      </div>
+    </div>
+  `);
+
+  if (isText) {
+    try {
+      const res = await API.driveFileText(id);
+      const el = document.getElementById('drive-preview-body');
+      if (el) el.innerHTML = `<textarea id="drive-preview-textarea" readonly style="width:100%;min-height:40vh;border:1px solid rgba(0,0,0,0.1);border-radius:12px;padding:12px;font-family:monospace;font-size:0.85rem;resize:vertical;background:#faf9fc;">${escapeHtml(res.content)}</textarea>`;
+    } catch {
+      const el = document.getElementById('drive-preview-body');
+      if (el) el.innerHTML = `<div style="text-align:center;padding:20px;opacity:0.5;">Inhalt konnte nicht geladen werden.</div>`;
+    }
+  }
+}
+
+function startDriveTextEdit(id) {
+  const ta = document.getElementById('drive-preview-textarea');
+  if (!ta) return;
+  ta.readOnly = false;
+  ta.style.background = '#fff';
+  ta.focus();
+  const actions = document.getElementById('drive-preview-actions');
+  actions.innerHTML = `
+    <button class="m3-btn-outline" style="flex:1;" onclick="openDriveFilePreview(${id})">Abbrechen</button>
+    <button class="m3-btn-primary" style="flex:1;" onclick="saveDriveTextEdit(${id})">Speichern</button>
+  `;
+}
+
+async function saveDriveTextEdit(id) {
+  const ta = document.getElementById('drive-preview-textarea');
+  if (!ta) return;
+  try {
+    const updated = await API.updateDriveFileText(id, { content: ta.value });
+    const idx = driveFiles.findIndex(f => f.id === id);
+    if (idx !== -1) driveFiles[idx] = updated;
+    showToast('Gespeichert');
+    openDriveFilePreview(id);
+  } catch {
+    showToast('Speichern fehlgeschlagen');
+  }
+}
 </script>

@@ -109,25 +109,24 @@ def _optimize_image(image_bytes: bytes) -> tuple[bytes, str]:
         logger.warning("Konnte Bild nicht via Pillow vorverarbeiten: %s", e)
         return image_bytes, "image/jpeg"
 
-async def _call_gemini_json(prompt: str, image_bytes: bytes, mime_type: str):
-    """Shared Gemini vision call used by every photo-recognition feature: sends
-    a prompt + image, returns the parsed JSON response body. Raises GeminiError
-    on any failure (missing key, blocked prompt, bad response shape, unparsable
-    JSON) so callers only need to handle their own field-level validation."""
+async def _call_gemini_json(prompt: str, image_bytes: bytes = None, mime_type: str = None):
+    """Shared Gemini call used by every AI feature: sends a prompt (plus an
+    optional image for the vision-based features) and returns the parsed JSON
+    response body. Raises GeminiError on any failure (missing key, blocked
+    prompt, bad response shape, unparsable JSON) so callers only need to
+    handle their own field-level validation."""
     if not settings.gemini_api_key:
         logger.error("Gemini API key is missing. Set GEMINI_API_KEY in your .env and recreate container.")
         raise GeminiError("Gemini ist nicht konfiguriert (GEMINI_API_KEY fehlt in Umgebungsvariablen)")
 
-    # Optimize and normalize image (JPEG format, proper rotation, reasonable size)
-    optimized_bytes, target_mime = _optimize_image(image_bytes)
+    parts = [{"text": prompt}]
+    if image_bytes is not None:
+        # Optimize and normalize image (JPEG format, proper rotation, reasonable size)
+        optimized_bytes, target_mime = _optimize_image(image_bytes)
+        parts.append({"inline_data": {"mime_type": target_mime, "data": base64.b64encode(optimized_bytes).decode()}})
 
     body = {
-        "contents": [{
-            "parts": [
-                {"text": prompt},
-                {"inline_data": {"mime_type": target_mime, "data": base64.b64encode(optimized_bytes).decode()}},
-            ]
-        }],
+        "contents": [{"parts": parts}],
         "generationConfig": {"temperature": 0.1, "responseMimeType": "application/json"},
     }
     model = settings.gemini_model
@@ -275,3 +274,57 @@ async def extract_timetable(image_bytes: bytes, mime_type: str) -> list[dict]:
         raise GeminiError("Es konnten keine Unterrichtsstunden aus dem Bild erkannt werden")
     entries.sort(key=lambda e: (e["weekday"], e["start_time"]))
     return entries
+
+
+DRIVE_SORT_PROMPT_TMPL = """Eine Datei wurde in das gemeinsame Klassen-Drive einer deutschen Schule hochgeladen. Ordne sie dem passendsten Schulfach und, falls sinnvoll, einem Themenordner zu.
+
+Dateiname: "{filename}"
+Dateityp: {mime_type}{excerpt_block}
+
+Verfügbare Fächer und ihre bereits vorhandenen Themenordner:
+{subjects_block}
+
+Regeln:
+- Wähle für "subject" GENAU einen der oben aufgeführten Fachnamen, exakt wie geschrieben — oder null, wenn wirklich kein Fach passt (z.B. bei einem allgemeinen Formular oder einer Klassenliste).
+- Wähle für "topic" einen passenden, KURZEN Themennamen (2-4 Wörter, Deutsch) für die Datei. Bevorzuge einen der bereits vorhandenen Themenordner dieses Fachs, falls einer inhaltlich passt. Nur wenn keiner passt, schlage einen neuen, treffenden Themennamen vor. Wenn kein sinnvolles Thema bestimmbar ist, benutze null.
+
+Antworte NUR mit einem JSON-Objekt, ohne Markdown-Formatierung, z.B.:
+{{"subject": "Mathematik", "topic": "Geometrie"}}
+"""
+
+async def classify_drive_file(filename: str, mime_type: str | None, subjects: list[str],
+                               topics_by_subject: dict[str, list[str]], text_excerpt: str | None = None) -> dict:
+    """Asks Gemini which subject/topic folder a newly-uploaded Drive file
+    belongs in, based on its filename (and, for text files, a short content
+    excerpt). Never raises — any failure (no API key, blocked, bad JSON,
+    Gemini suggesting a subject that doesn't actually exist) just falls back
+    to {"subject": None, "topic": None}, meaning "leave it unsorted" rather
+    than failing the whole upload."""
+    if not subjects:
+        return {"subject": None, "topic": None}
+    subjects_block = "\n".join(
+        f'- {s}: ' + (", ".join(topics_by_subject.get(s) or []) or "(noch keine Themenordner)")
+        for s in subjects
+    )
+    excerpt_block = f'\nInhaltsauszug:\n"""{text_excerpt[:1500]}"""' if text_excerpt else ""
+    prompt = DRIVE_SORT_PROMPT_TMPL.format(
+        filename=filename, mime_type=mime_type or "unbekannt",
+        subjects_block=subjects_block, excerpt_block=excerpt_block,
+    )
+    try:
+        parsed = await _call_gemini_json(prompt)
+    except GeminiError as e:
+        logger.info("Drive auto-sort skipped: %s", e)
+        return {"subject": None, "topic": None}
+
+    if not isinstance(parsed, dict):
+        return {"subject": None, "topic": None}
+    subj = parsed.get("subject")
+    subj = subj if isinstance(subj, str) and subj in subjects else None
+    if subj is None:
+        # A topic only makes sense inside a resolved subject folder — never
+        # hand back a topic paired with a rejected/missing subject.
+        return {"subject": None, "topic": None}
+    topic = parsed.get("topic")
+    topic = topic.strip() if isinstance(topic, str) and topic.strip() else None
+    return {"subject": subj, "topic": topic}

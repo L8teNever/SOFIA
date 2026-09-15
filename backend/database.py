@@ -39,7 +39,7 @@ async def init_db():
         user, class_group, subject, calendar_event, homework, homework_solution,
         grade, shared_file, notification, meal_plan,
         push_subscription, notification_setting, sent_notification_log,
-        subject_weighting, audit_log, manual_timetable_entry
+        subject_weighting, audit_log, manual_timetable_entry, drive_file, drive_topic
     )
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

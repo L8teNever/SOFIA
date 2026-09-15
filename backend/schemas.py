@@ -171,6 +171,43 @@ class SharedFileOut(BaseModel):
     created_at: datetime
     class Config: from_attributes = True
 
+# Drive
+class DriveFileOut(BaseModel):
+    id: int
+    class_id: int
+    subject_id: Optional[int]
+    subject_name: Optional[str] = None
+    topic: Optional[str]
+    uploader_id: int
+    uploader_name: Optional[str] = None
+    original_name: str
+    file_size: int
+    mime_type: Optional[str]
+    created_at: datetime
+    class Config: from_attributes = True
+
+class DriveFileUpdate(BaseModel):
+    subject_id: Optional[int] = None
+    topic: Optional[str] = None
+
+class DriveTextUpdate(BaseModel):
+    content: str
+
+class DriveTopicOut(BaseModel):
+    id: int
+    class_id: int
+    subject_id: int
+    name: str
+    file_count: int = 0
+    class Config: from_attributes = True
+
+class DriveTopicCreate(BaseModel):
+    subject_id: int
+    name: str
+
+class DriveTopicRename(BaseModel):
+    name: str
+
 # Meal plan
 class MealPlanDayOut(BaseModel):
     id: int
