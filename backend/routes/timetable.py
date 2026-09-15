@@ -98,6 +98,41 @@ def _fetch_two_weeks(server: str, school: str, username: str, password: str,
         except Exception:
             pass
 
+def _fetch_range(server: str, school: str, username: str, password: str,
+                  class_name: str, start: date, end: date) -> list:
+    """Single-session fetch of every lesson across an arbitrary [start, end]
+    range, as one flat list rather than a this-week/next-week split — used
+    where a caller just wants "everything taught in this window" (e.g.
+    discovering which subjects exist over several weeks) rather than the
+    day/week-view breakdown _fetch_two_weeks() is shaped for."""
+    sess = webuntis.Session(
+        server=server, username=username, password=password,
+        school=school, useragent="SofiaApp/1.0",
+    )
+    sess.login()
+    try:
+        try:
+            periods = list(sess.my_timetable(start=start, end=end))
+            if periods:
+                return sorted([_period_to_dict(p) for p in periods],
+                               key=lambda x: (x["date"], x["startTime"]))
+        except Exception:
+            pass
+        klassen = list(sess.klassen())
+        if not klassen:
+            return []
+        matched = [k for k in klassen if k.name.lower() == class_name.lower()]
+        if not matched:
+            matched = [klassen[0]]
+        periods = list(sess.timetable(klasse=matched[0], start=start, end=end))
+        return sorted([_period_to_dict(p) for p in periods],
+                      key=lambda x: (x["date"], x["startTime"]))
+    finally:
+        try:
+            sess.logout()
+        except Exception:
+            pass
+
 from backend.services.timetable_cache import get_cached_timetable, set_cached_timetable
 
 async def _manual_week(db: AsyncSession, class_id: int, monday: date) -> dict:

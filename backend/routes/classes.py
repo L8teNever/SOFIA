@@ -170,7 +170,7 @@ async def import_untis_subjects(class_id: int, db: AsyncSession = Depends(get_db
     password = f.decrypt(cls.untis_password_enc.encode()).decode() if (f and cls.untis_password_enc) else (cls.untis_password_enc or "")
 
     try:
-        from backend.routes.timetable import _fetch_timetable, _strip_server  # noqa
+        from backend.routes.timetable import _fetch_range, _strip_server
         today = date.today()
         monday = today - timedelta(days=today.weekday())
         end_date = monday + timedelta(weeks=8)
@@ -178,7 +178,7 @@ async def import_untis_subjects(class_id: int, db: AsyncSession = Depends(get_db
 
         loop = asyncio.get_event_loop()
         lessons = await loop.run_in_executor(
-            None, _fetch_timetable, server, cls.untis_school,
+            None, _fetch_range, server, cls.untis_school,
             cls.untis_user, password, cls.untis_class or "",
             monday, end_date,
         )
