@@ -231,6 +231,32 @@ async function init_homework() {
   ]);
   renderHwStats(); renderHw();
   API.timetable().then(tt => { hwTimetable = tt; }).catch(() => {});
+  startHwPolling();
+}
+
+let hwPollInterval = null;
+
+// Homework is shared with the whole class — a classmate adding a task
+// while this page is open otherwise only shows up the next time it's
+// reopened. Polls quietly in the background instead; there's no
+// websocket/push channel for this in the app, so a period this short is
+// the plain, low-risk way to make "someone else just added one" show up
+// reasonably soon. Self-stops once this page's own elements are gone
+// (there's no page-close lifecycle hook to unhook from otherwise), and
+// skips entirely while the tab/app isn't visible.
+function startHwPolling() {
+  if (hwPollInterval) clearInterval(hwPollInterval);
+  hwPollInterval = setInterval(async () => {
+    if (!document.getElementById('hw-list')) { clearInterval(hwPollInterval); hwPollInterval = null; return; }
+    if (document.hidden) return;
+    const fresh = await API.homework().catch(() => null);
+    if (!fresh || !document.getElementById('hw-list')) return;
+    if (JSON.stringify(fresh) !== JSON.stringify(hwItems)) {
+      hwItems = fresh;
+      renderHwStats();
+      renderHw(true); // no entrance flicker for a quiet background sync
+    }
+  }, 15000);
 }
 
 function hwCurrentSubjectId() {

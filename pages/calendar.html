@@ -336,6 +336,32 @@ async function init_calendar() {
   calCurrentUser = me;
   renderCal();
   initCalSwipe();
+  startCalPolling();
+}
+
+let calPollInterval = null;
+
+// Same rationale as homework's polling: the calendar is shared with the
+// whole class, and a classmate (or an admin importing school holidays)
+// adding an event while this page is already open otherwise only shows
+// up the next time it's reopened. There's no websocket/push channel for
+// this, so a quiet background poll is the low-risk way to make that show
+// up reasonably soon instead. Self-stops once this page's own elements
+// are gone, and skips while the tab/app isn't visible.
+function startCalPolling() {
+  if (calPollInterval) clearInterval(calPollInterval);
+  calPollInterval = setInterval(async () => {
+    if (!document.getElementById('cal-grid')) { clearInterval(calPollInterval); calPollInterval = null; return; }
+    if (document.hidden) return;
+    const m = String(calMonth + 1).padStart(2, '0');
+    const fresh = await API.events(calYear + '-' + m).catch(() => null);
+    if (!fresh || !document.getElementById('cal-grid')) return;
+    if (JSON.stringify(fresh) !== JSON.stringify(calEvents)) {
+      calEvents = fresh;
+      renderCalGridOnly(false); // no month-change entrance animation for a quiet background sync
+      renderEventList();
+    }
+  }, 15000);
 }
 
 // Swipe left/right on the month card to step months, same direction

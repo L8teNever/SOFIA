@@ -361,7 +361,17 @@ async function openPage(name, triggerEl, preserveUrl = false) {
       return;
     }
   }
-  const existing = document.getElementById('page-container').querySelector('.page');
+  // A page ends up living directly under <body> (appendChild below), not
+  // inside #page-container — that only ever holds one mid-parse, right
+  // before it's moved out. So on any *second* direct subpage-to-subpage
+  // navigation (e.g. Settings -> Benachrichtigungen, bypassing the
+  // dashboard), this used to find nothing here and never remove the page
+  // already showing, leaving two .page.active elements stacked at once.
+  // Depending on which one popstate/closePage happened to grab afterward,
+  // going back could remove the wrong one and leave neither behind —
+  // the blank screen this fixes. :not(.page-overlay) so a still-open
+  // detail overlay (its own separate stacking mechanism) is left alone.
+  const existing = document.querySelector('body > .page:not(.page-overlay)');
   if (existing) existing.remove();
   const container = document.getElementById('page-container');
   container.innerHTML = html;
@@ -398,6 +408,48 @@ async function openPage(name, triggerEl, preserveUrl = false) {
   if (initFn) initFn();
 }
 
+// Shared by closePage() (in-app back button) and the popstate handler
+// (browser/gesture back) — both need to pop pageHistory and then either
+// restore the dashboard or rebuild the *parent* subpage's DOM. That
+// parent page isn't just sitting there waiting to be revealed: when it
+// was opened directly from another subpage (not the dashboard — e.g.
+// Einstellungen -> Benachrichtigungen), its DOM was already torn down
+// the moment the page being closed opened on top of it (see openPage()'s
+// "remove the existing page" step). Skipping that rebuild is exactly
+// what left a blank screen behind — dashboard not restored (history
+// wasn't empty) and the parent page's own markup long gone.
+// fromPopstate: true when called from the popstate handler, where the
+// browser has already moved to the correct history entry on its own —
+// pushing another one there would just add a stray entry on top of it.
+function goBackOnePage(fromPopstate) {
+  pageHistory.pop();
+  const prev = pageHistory[pageHistory.length - 1] || null;
+  currentPage = null; // clear before reopening so openPage()'s "already on this page" guard doesn't skip it
+  if (!prev) {
+    document.body.classList.remove('has-active-page');
+    const appContainer = document.getElementById('app');
+    if (appContainer) {
+      appContainer.removeAttribute('inert');
+      appContainer.removeAttribute('aria-hidden');
+    }
+    // Refresh dashboard widgets, which otherwise kept showing whatever
+    // was true at boot (e.g. an "Aufgaben" count from before a task got
+    // checked off on the page just left). Throttled: rapidly bouncing
+    // between several pages would otherwise re-fire every one of
+    // loadDashboard's several API calls each time, easily enough to trip
+    // rate limiting for no real benefit — nothing changes twice in 3s.
+    const now = Date.now();
+    if (now - lastDashboardLoadAt > 3000) {
+      lastDashboardLoadAt = now;
+      loadDashboard();
+    }
+    if (!fromPopstate) history.pushState({ page: null }, '', '/');
+  } else {
+    pageHistory.pop(); // openPage() below re-pushes it — pop first so it isn't duplicated
+    openPage(prev, null, true); // preserveUrl: this *is* the back step, not a new forward navigation
+  }
+}
+
 function closePage() {
   closeSheet(true);
   closeModal(true);
@@ -407,32 +459,7 @@ function closePage() {
   page.classList.remove('active');
   page.classList.add('closing');
   setTimeout(() => page.remove(), 260);
-  pageHistory.pop();
-  currentPage = pageHistory[pageHistory.length - 1] || null;
-
-  // Restore dashboard if returning to the root/start page — and refresh
-  // its widgets, which otherwise kept showing whatever was true at boot
-  // (e.g. an "Aufgaben" count from before a task got checked off on the
-  // page you're now leaving). Throttled: rapidly bouncing in and out of
-  // several pages would otherwise re-fire every one of loadDashboard's
-  // several API calls each time, easily enough to trip rate limiting for
-  // no real benefit — nothing changes twice in three seconds anyway.
-  if (pageHistory.length === 0) {
-    document.body.classList.remove('has-active-page');
-    const appContainer = document.getElementById('app');
-    if (appContainer) {
-      appContainer.removeAttribute('inert');
-      appContainer.removeAttribute('aria-hidden');
-    }
-    const now = Date.now();
-    if (now - lastDashboardLoadAt > 3000) {
-      lastDashboardLoadAt = now;
-      loadDashboard();
-    }
-  }
-
-  const prev = pageHistory[pageHistory.length - 1];
-  history.pushState({ page: prev }, '', prev ? '/' + prev : '/');
+  goBackOnePage(false);
   if (wasNotifications) refreshNotifBadge();
 }
 
@@ -478,17 +505,11 @@ window.addEventListener('popstate', (e) => {
   }
 
   const page = document.querySelector('.page.active');
-  if (page) { 
-    page.classList.remove('active'); 
-    page.classList.add('closing'); 
-    setTimeout(() => page.remove(), 600); 
-    currentPage = null; 
-    document.body.classList.remove('has-active-page');
-    const appContainer = document.getElementById('app');
-    if (appContainer) {
-      appContainer.removeAttribute('inert');
-      appContainer.removeAttribute('aria-hidden');
-    }
+  if (page) {
+    page.classList.remove('active');
+    page.classList.add('closing');
+    setTimeout(() => page.remove(), 600);
+    goBackOnePage(true);
   }
 });
 
