@@ -17,6 +17,15 @@
 
     <!-- Right Column: Events List -->
     <div class="cal-right-pane">
+      <!-- Search — always visible, standard "search bar above the list"
+           pattern rather than hiding it behind a header icon (the header
+           row is already tight on mobile with Heute/prev/next/filter). -->
+      <div style="display:flex;align-items:center;gap:8px;background:#fff;border-radius:14px;padding:2px 6px 2px 14px;box-shadow:0 1px 4px rgba(0,0,0,0.06);margin-bottom:14px;">
+        <i data-lucide="search" style="width:16px;height:16px;opacity:0.45;flex-shrink:0;"></i>
+        <input type="text" id="cal-search-input" placeholder="Termine durchsuchen..." style="flex:1;min-width:0;border:none;outline:none;background:none;font-family:inherit;font-size:0.9rem;padding:11px 0;color:#1c1b1f;" oninput="onCalSearchInput(this.value)">
+        <button type="button" id="cal-search-clear" onclick="clearCalSearch()" style="display:none;background:none;border:none;cursor:pointer;padding:6px;opacity:0.5;flex-shrink:0;"><i data-lucide="x" style="width:16px;height:16px;"></i></button>
+      </div>
+
       <!-- Events List Header / Active Filter Info -->
       <div id="cal-events-header"></div>
 
@@ -333,6 +342,41 @@ var calCurrentUser = null;
 var calViewScope = 'month';
 try { calViewScope = localStorage.getItem('cal_view_scope') === 'all' ? 'all' : 'month'; } catch {}
 
+// Search matches title/description across every event regardless of
+// month, scope, or whether it's already past — a search is a "find it
+// no matter where/when" tool, not scoped to whatever's currently on
+// screen. calSearchPool is fetched fresh each time a search starts so
+// it can't go stale, independent of calEvents (which stays whatever the
+// month/all toggle last loaded, so clearing the search returns to
+// exactly that view without needing to reload it).
+var calSearchQuery = '';
+var calSearchPool = [];
+var calSearchDebounce = null;
+
+async function onCalSearchInput(value) {
+  const q = value.trim();
+  const clearBtn = document.getElementById('cal-search-clear');
+  if (clearBtn) clearBtn.style.display = q ? 'flex' : 'none';
+
+  const startingSearch = q && !calSearchQuery;
+  calSearchQuery = q;
+  clearTimeout(calSearchDebounce);
+
+  if (startingSearch) {
+    calSearchPool = await API.events().catch(() => []);
+  }
+  calSearchDebounce = setTimeout(renderCal, startingSearch ? 0 : 150);
+}
+
+function clearCalSearch() {
+  calSearchQuery = '';
+  const input = document.getElementById('cal-search-input');
+  const clearBtn = document.getElementById('cal-search-clear');
+  if (input) input.value = '';
+  if (clearBtn) clearBtn.style.display = 'none';
+  renderCal();
+}
+
 async function init_calendar() {
   const [, , me] = await Promise.all([
     loadCalEvents(),
@@ -437,8 +481,8 @@ function eventCoversDate(ev, dateStr) {
 function setCalCategoryFilter(cat) {
   activeCategoryFilter = cat;
   const dot = document.getElementById('cal-filter-dot');
-  if (dot) dot.style.display = (cat === 'all' && calViewScope === 'month') ? 'none' : 'block';
-  if (calViewScope !== 'all') renderCalGridOnly();
+  if (dot) dot.style.display = (cat === 'all' && calViewScope === 'month' && !calSearchQuery) ? 'none' : 'block';
+  if (calViewScope !== 'all' && !calSearchQuery) renderCalGridOnly();
   renderEventList();
 }
 
@@ -555,13 +599,14 @@ async function calNav(dir) {
 function renderCal(dir) {
   const leftPane = document.querySelector('.cal-left-pane');
   const navRow = document.querySelector('.cal-nav-row');
+  // A search result list spans however many months match, same as "Alle" —
+  // neither a single month's grid nor stepping months makes sense while
+  // either is active, so both hide, leaving just the filter button.
+  const showGrid = calViewScope === 'month' && !calSearchQuery;
 
-  if (calViewScope === 'all') {
-    // A single month's grid means nothing once the list spans every
-    // month, and stepping "forward/back a month" has no target to step
-    // to — so both go away, leaving just the filter button in the header.
+  if (!showGrid) {
     if (leftPane) leftPane.style.display = 'none';
-    document.getElementById('cal-month-title').textContent = 'Alle Termine';
+    document.getElementById('cal-month-title').textContent = calSearchQuery ? 'Suche' : 'Alle Termine';
     document.getElementById('cal-year-label').textContent = '';
     if (navRow) [...navRow.children].forEach(c => { if (c.id !== 'cal-filter-btn') c.style.display = 'none'; });
   } else {
@@ -664,7 +709,12 @@ function renderEventList() {
   if (!list) return;
 
   let pool;
-  if (calViewScope === 'all') {
+  if (calSearchQuery) {
+    const q = calSearchQuery.toLowerCase();
+    pool = calSearchPool.filter(e =>
+      (e.title || '').toLowerCase().includes(q) || (e.description || '').toLowerCase().includes(q)
+    );
+  } else if (calViewScope === 'all') {
     // No month window at all — every event that hasn't fully passed yet
     // (a multi-day one still counts if its last day is still ahead), across
     // however many months it spans. There's no day-grid in this mode, so
@@ -698,11 +748,13 @@ function renderEventList() {
   // The selected-day one skips repeating the date itself (the collapsed
   // week strip above already shows it as the filled circle) but keeps the
   // count, same as the whole-month view does.
-  const headerLabel = calViewScope === 'all'
-    ? (activeCategoryFilter === 'all' ? 'Alle kommenden Termine' : 'Gefilterte kommende Termine')
-    : (selectedCalDate
-        ? 'Termine an diesem Tag'
-        : (activeCategoryFilter === 'all' ? 'Alle Termine dieses Monats' : 'Gefilterte Termine'));
+  const headerLabel = calSearchQuery
+    ? 'Suchergebnisse'
+    : (calViewScope === 'all'
+        ? (activeCategoryFilter === 'all' ? 'Alle kommenden Termine' : 'Gefilterte kommende Termine')
+        : (selectedCalDate
+            ? 'Termine an diesem Tag'
+            : (activeCategoryFilter === 'all' ? 'Alle Termine dieses Monats' : 'Gefilterte Termine')));
   headerEl.innerHTML = `
     <div style="margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;">
       <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#6750a4;">${headerLabel}</div>
@@ -715,7 +767,10 @@ function renderEventList() {
     emptyEl.style.display = 'block';
     const emptyTitle = document.getElementById('cal-empty-title');
     const emptySub = document.getElementById('cal-empty-sub');
-    if (calViewScope === 'all') {
+    if (calSearchQuery) {
+      emptyTitle.textContent = 'Nichts gefunden';
+      emptySub.textContent = `Kein Termin passt zu „${calSearchQuery}".`;
+    } else if (calViewScope === 'all') {
       emptyTitle.textContent = 'Keine kommenden Termine';
       emptySub.textContent = activeCategoryFilter === 'all'
         ? 'Es stehen aktuell keine Termine an.'
