@@ -493,11 +493,31 @@ async function checkForUpdatesManual() {
   try {
     let updateFound = false;
 
-    // 1. Service Worker update check
+    // 1. Service Worker update check. reg.update() resolving only means the
+    // browser fetched sw.js and compared it against the current one — if
+    // it's different, actually INSTALLING the new worker (fetching and
+    // caching every precached asset) is a separate, still-running async
+    // step at that point. Checking reg.waiting immediately after .update()
+    // was a race that usually reported "up to date" even when a newer
+    // version genuinely was just found, because installation hadn't
+    // finished yet — wait for it (or time out) before checking.
     if ('serviceWorker' in navigator) {
       const reg = await navigator.serviceWorker.getRegistration();
       if (reg) {
+        const installed = new Promise((resolve) => {
+          let done = false;
+          const finish = () => { if (!done) { done = true; resolve(); } };
+          reg.addEventListener('updatefound', () => {
+            const nw = reg.installing;
+            if (!nw) { finish(); return; }
+            nw.addEventListener('statechange', () => {
+              if (nw.state === 'installed' || nw.state === 'redundant') finish();
+            });
+          });
+          setTimeout(finish, 4000); // don't hang forever if nothing happens
+        });
         await reg.update().catch(()=>{});
+        await installed;
         if (reg.waiting) {
           pendingUpdateSW = reg.waiting;
           updateFound = true;
@@ -538,14 +558,34 @@ async function checkForUpdatesManual() {
 
 async function applyAppUpdate() {
   showToast('Aktualisiere Sofia...');
-  if (pendingUpdateSW) {
-    pendingUpdateSW.postMessage({ type: 'SKIP_WAITING' });
-  } else if ('serviceWorker' in navigator) {
-    const reg = await navigator.serviceWorker.getRegistration();
-    if (reg && reg.waiting) {
-      reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+  try {
+    let sw = pendingUpdateSW;
+    if (!sw && 'serviceWorker' in navigator) {
+      const reg = await navigator.serviceWorker.getRegistration();
+      sw = reg && reg.waiting;
     }
-  }
+    if (sw) {
+      sw.postMessage({ type: 'SKIP_WAITING' });
+    } else {
+      // No waiting worker to hand off to (the version check above found a
+      // build mismatch, but the new service worker either hasn't finished
+      // installing yet or something about its lifecycle didn't line up) —
+      // rather than leave the user stuck on stale assets, guarantee a
+      // fresh load anyway: wipe every cache this origin's service worker
+      // wrote and drop the registration entirely, so the next load can't
+      // possibly serve anything old. This is what manually clearing the
+      // site's storage in browser settings would do, done for the user by
+      // this one button instead.
+      if ('serviceWorker' in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map(r => r.unregister()));
+      }
+      if ('caches' in window) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map(k => caches.delete(k)));
+      }
+    }
+  } catch (e) {}
   setTimeout(() => {
     window.location.reload(true);
   }, 400);
