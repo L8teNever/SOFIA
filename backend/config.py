@@ -56,13 +56,53 @@ def _load_or_generate_vapid():
 
 _vapid_priv, _vapid_pub = _load_or_generate_vapid()
 
+def _load_or_generate_encryption_key() -> str:
+    """Same pattern as _load_or_generate_vapid(): use ENCRYPTION_KEY from the
+    environment if it's actually usable, otherwise fall back to a key saved
+    on the persisted data volume (generating one on first run). A Fernet key
+    has to be exactly 32 url-safe base64-encoded bytes — an env var set to
+    anything else (wrong length, not base64, ...) used to only surface as a
+    crash the moment someone tried to save Untis credentials, since nothing
+    validated it up front. Validating here means a bad env var degrades to
+    "ignored, self-healed" instead of "silently broken until someone
+    notices the 500 in the logs"."""
+    from cryptography.fernet import Fernet
+
+    key = os.getenv("ENCRYPTION_KEY", "")
+    if key:
+        try:
+            Fernet(key.encode())
+            return key
+        except Exception:
+            import logging
+            logging.getLogger(__name__).warning(
+                "ENCRYPTION_KEY is set but isn't a valid Fernet key (must be "
+                "32 url-safe base64-encoded bytes) — ignoring it and using/"
+                "generating a local key on the data volume instead."
+            )
+
+    key_file = os.path.join(_data_dir(), "encryption_key.txt")
+    if os.path.exists(key_file):
+        with open(key_file) as f:
+            saved = f.read().strip()
+        if saved:
+            return saved
+
+    new_key = Fernet.generate_key().decode()
+    os.makedirs(_data_dir(), exist_ok=True)
+    with open(key_file, "w") as f:
+        f.write(new_key)
+    return new_key
+
+_encryption_key = _load_or_generate_encryption_key()
+
 class Settings:
     database_url:      str           = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./data/sofia.db")
     vapid_private_key: str           = _vapid_priv
     vapid_public_key:  str           = _vapid_pub
     vapid_claim_email: str           = os.getenv("VAPID_CLAIM_EMAIL", "mailto:admin@example.com")
     secret_key:        str           = os.getenv("SECRET_KEY", "dev-secret-key")
-    encryption_key:    str           = os.getenv("ENCRYPTION_KEY", "")
+    encryption_key:    str           = _encryption_key
     upload_dir:        str           = os.getenv("UPLOAD_DIR", "./uploads")
     max_file_size:     int           = int(os.getenv("MAX_FILE_SIZE", "1073741824"))  # 1 GB
     dev_email:         Optional[str] = os.getenv("DEV_EMAIL")
