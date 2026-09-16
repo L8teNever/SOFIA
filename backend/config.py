@@ -96,6 +96,36 @@ def _load_or_generate_encryption_key() -> str:
 
 _encryption_key = _load_or_generate_encryption_key()
 
+def _load_or_generate_internal_token() -> str:
+    """Same self-healing pattern as the VAPID/encryption keys above — used
+    to authenticate the MCP bridge container's server-to-server calls back
+    into this API (see backend/auth.py). That container has no
+    Cf-Access-Authenticated-User-Email header to present (it calls over the
+    private Docker network, never through the public Cloudflare hostname),
+    so it proves itself with this shared secret instead. Persisted on the
+    same ./data volume the MCP container mounts read-only, so both sides
+    always agree without needing the token copied into an env var by hand."""
+    import secrets
+
+    token = os.getenv("INTERNAL_SERVICE_TOKEN", "")
+    if token:
+        return token
+
+    token_file = os.path.join(_data_dir(), "internal_service_token.txt")
+    if os.path.exists(token_file):
+        with open(token_file) as f:
+            saved = f.read().strip()
+        if saved:
+            return saved
+
+    new_token = secrets.token_urlsafe(32)
+    os.makedirs(_data_dir(), exist_ok=True)
+    with open(token_file, "w") as f:
+        f.write(new_token)
+    return new_token
+
+_internal_service_token = _load_or_generate_internal_token()
+
 class Settings:
     database_url:      str           = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./data/sofia.db")
     vapid_private_key: str           = _vapid_priv
@@ -103,6 +133,8 @@ class Settings:
     vapid_claim_email: str           = os.getenv("VAPID_CLAIM_EMAIL", "mailto:admin@example.com")
     secret_key:        str           = os.getenv("SECRET_KEY", "dev-secret-key")
     encryption_key:    str           = _encryption_key
+    internal_service_token: str      = _internal_service_token
+    mcp_default_user_email: str      = os.getenv("MCP_DEFAULT_USER_EMAIL", "l8tenever@gmail.com")
     upload_dir:        str           = os.getenv("UPLOAD_DIR", "./uploads")
     max_file_size:     int           = int(os.getenv("MAX_FILE_SIZE", "1073741824"))  # 1 GB
     dev_email:         Optional[str] = os.getenv("DEV_EMAIL")

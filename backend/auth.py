@@ -4,9 +4,21 @@ from sqlalchemy import select, func
 from backend.database import get_db
 from backend.models.user import User, UserRole
 from backend.config import settings
+import secrets
 
 async def get_current_user(request: Request, db: AsyncSession = Depends(get_db)) -> User:
     email = settings.dev_email or request.headers.get("Cf-Access-Authenticated-User-Email")
+
+    # Server-to-server auth for the MCP bridge container: it calls this API
+    # over the private Docker network (never through the public Cloudflare
+    # hostname, so it never has a Cf-Access header) and proves itself with a
+    # shared secret instead, naming which SOFIA user to act as. Only trusted
+    # when the token matches exactly — compare_digest to avoid leaking the
+    # correct value one byte at a time through response-timing differences.
+    if not email:
+        internal_token = request.headers.get("X-Internal-Token")
+        if internal_token and settings.internal_service_token and secrets.compare_digest(internal_token, settings.internal_service_token):
+            email = request.headers.get("X-Act-As-Email") or settings.mcp_default_user_email
 
     if not email:
         raise HTTPException(status_code=401, detail="Not authenticated")
