@@ -22,6 +22,7 @@ import secrets
 import httpx
 from contextlib import asynccontextmanager
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 from starlette.applications import Starlette
 from starlette.middleware import Middleware
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -80,7 +81,17 @@ def _client() -> httpx.AsyncClient:
     return httpx.AsyncClient(base_url=SOFIA_API_BASE, headers=headers, timeout=30)
 
 
-mcp = FastMCP("Sofia", stateless_http=True)
+# FastMCP auto-enables Host/Origin allowlisting (DNS-rebinding protection)
+# whenever host="127.0.0.1" (its default), which rejects the Host header
+# Cloudflare Tunnel forwards for the public hostname. Our own
+# TokenAuthMiddleware already gates every request with the public token,
+# so that extra check is both redundant and breaks the public path — turn
+# it off explicitly rather than fighting it with an allowed_hosts list.
+mcp = FastMCP(
+    "Sofia",
+    stateless_http=True,
+    transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
+)
 
 # --- Hausaufgaben ---
 
