@@ -3,7 +3,7 @@
   <div class="page-scroll-1col">
   <div class="page-inner">
 
-    <input type="file" id="drive-file-input" style="display:none;" onchange="handleDriveFileSelect(this.files[0])">
+    <input type="file" id="drive-file-input" multiple style="display:none;" onchange="handleDriveFileSelect(this.files)">
 
     <div id="drive-view-chips" style="display:flex;gap:8px;flex-wrap:wrap;">
       <button onclick="setDriveMode('folders',this)" class="chip active" id="drive-chip-folders">Fächer</button>
@@ -49,6 +49,7 @@
 
 <script>
 document.getElementById('ph-drive').outerHTML = pageHeader({
+  backAction: 'driveHeaderBack()',
   titleHtml: `<div style="flex:1;min-width:0;position:relative;height:100%;display:flex;align-items:center;">
       <span class="page-title" id="drive-title-text" style="transition:opacity 0.15s;">Drive</span>
       <div id="drive-header-search-wrap" class="drive-header-search-wrap">
@@ -71,10 +72,13 @@ let driveFiles = [], driveSubjects = [];
 let driveMode = 'folders';
 let driveSelectedSubjectId = null; // null = root folder grid, 'unsorted' = unsorted bucket, else a subject id
 let driveSearchQuery = '';
-let driveSelectedUploadFile = null;
+let driveSelectedUploadFiles = [];
 let driveUploadTargetSubjectId = null;
 let drivePreviewFileId = null;
 let driveTopicsCache = {}; // subjectId -> [{id, name, file_count}]
+let driveInLessonsView = false; // inside the "Unterrichtsstunden" sub-folder of the current subject
+let driveLabelFilter = null; // null | 'lecture_notes' — active within the current subject folder
+const DRIVE_DATE_TOPIC_RE = /^\d{2}\.\d{2}\.\d{4}$/; // matches the DD.MM.YYYY topics the upload sheet auto-creates
 
 const DRIVE_COLORS = ['#eaddff','#d3e3fd','#c4eed0','#ffdec1','#ffd8e4','#fff3c4'];
 const DRIVE_ICON_MAP = {
@@ -222,6 +226,8 @@ function renderDriveFolderGrid() {
 
 async function openDriveSubjectFolder(id) {
   driveSelectedSubjectId = id;
+  driveInLessonsView = false;
+  driveLabelFilter = null;
   if (id !== 'unsorted' && !driveTopicsCache[id]) {
     driveTopicsCache[id] = await API.driveTopics(id).catch(() => []);
   }
@@ -230,22 +236,90 @@ async function openDriveSubjectFolder(id) {
 
 function backToDriveFolders() {
   driveSelectedSubjectId = null;
+  driveInLessonsView = false;
+  driveLabelFilter = null;
   renderDrive();
+}
+
+// Back button inside a subject folder: one level up from "Unterrichtsstunden"
+// goes to the subject root, one level up from the subject root goes to the
+// folder grid — same behavior as any file browser's back button.
+function driveGoBack() {
+  if (driveInLessonsView) {
+    driveInLessonsView = false;
+    renderDrive();
+  } else {
+    backToDriveFolders();
+  }
+}
+
+// The page header's own back arrow (top-left, guaranteed by pageHeader())
+// normally just leaves the page entirely via closePage() — inside Drive
+// that meant one tap out of a folder took you all the way back to the
+// dashboard instead of one level up. This makes that same button context-
+// aware: one level back through the folder hierarchy while browsing,
+// falling through to the normal "leave Drive" behavior only once you're
+// already at the folder grid root.
+function driveHeaderBack() {
+  if (driveSelectedSubjectId === null) {
+    closePage();
+    return;
+  }
+  driveGoBack();
+}
+
+function openDriveLessonsView() {
+  driveInLessonsView = true;
+  renderDrive();
+}
+
+function setDriveLabelFilter(val) {
+  driveLabelFilter = driveLabelFilter === val ? null : val;
+  renderDrive();
+}
+
+function driveLabelFilterChips() {
+  return `<div style="display:flex;gap:8px;margin-bottom:14px;">
+    <button onclick="setDriveLabelFilter(null)" class="chip${driveLabelFilter===null?' active':''}">Alle</button>
+    <button onclick="setDriveLabelFilter('lecture_notes')" class="chip${driveLabelFilter==='lecture_notes'?' active':''}">📝 Aufschriebe</button>
+  </div>`;
+}
+
+// Groups a file list into named topic groups (shared by the subject root
+// view and the nested "Unterrichtsstunden" view) — extracted so both can
+// render the same folder-group markup for their own subset of topic names.
+function renderDriveTopicGroups(topicNames, topicMap, subjectId) {
+  return topicNames.map(name => {
+    const g = topicMap[name];
+    const list = g.files.sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+    return `<div class="drive-topic-group">
+      <div class="drive-topic-label">
+        <i data-lucide="tag" style="width:12px;height:12px;"></i>${escapeHtml(name)}
+        ${g.topicId ? `<button onclick="openRenameTopicSheet(${g.topicId},${subjectId})" style="background:none;border:none;cursor:pointer;opacity:0.5;padding:2px;display:flex;" title="Umbenennen">
+          <i data-lucide="pencil" style="width:12px;height:12px;"></i>
+        </button>` : ''}
+      </div>
+      ${list.length ? renderDriveFileList(list, false) : `<div style="opacity:0.4;font-size:0.82rem;padding:6px 4px 14px;">Leerer Ordner — verschiebe eine Datei hierher.</div>`}
+    </div>`;
+  }).join('');
 }
 
 function renderDriveSubjectFolder(id) {
   const isUnsorted = id === 'unsorted';
   const subject = isUnsorted ? null : driveSubjects.find(s => s.id === id);
-  const files = isUnsorted
+  let files = isUnsorted
     ? driveFiles.filter(f => !f.subject_id)
     : driveFiles.filter(f => f.subject_id === id);
+  if (!isUnsorted && driveLabelFilter === 'lecture_notes') files = files.filter(f => f.is_lecture_notes);
 
+  // No in-content back arrow here — the page header's own back button
+  // (top-left) is context-aware (see driveHeaderBack()) and already covers
+  // exactly this, so a second one right below it would just be a duplicate
+  // doing the same thing.
+  const title = isUnsorted ? 'Unsortiert' : (driveInLessonsView ? 'Unterrichtsstunden' : (subject ? subject.name : ''));
   const header = `<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
-    <button class="icon-btn" onclick="backToDriveFolders()" style="width:36px;height:36px;">
-      <i data-lucide="arrow-left" style="width:18px;height:18px;"></i>
-    </button>
-    <div style="font-weight:800;font-size:1.15rem;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${isUnsorted ? 'Unsortiert' : escapeHtml(subject ? subject.name : '')}</div>
-    ${!isUnsorted ? `<button class="icon-btn" onclick="openCreateTopicSheet(${id})" style="width:36px;height:36px;flex-shrink:0;" title="Neuer Ordner">
+    <div style="font-weight:800;font-size:1.15rem;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(title)}</div>
+    ${!isUnsorted && !driveInLessonsView ? `<button class="icon-btn" onclick="openCreateTopicSheet(${id})" style="width:36px;height:36px;flex-shrink:0;" title="Neuer Ordner">
       <i data-lucide="folder-plus" style="width:18px;height:18px;"></i>
     </button>` : ''}
   </div>`;
@@ -257,7 +331,10 @@ function renderDriveSubjectFolder(id) {
 
   const knownTopics = driveTopicsCache[id] || [];
   const topicMap = {};
-  knownTopics.forEach(t => { topicMap[t.name] = { files: [], topicId: t.id }; });
+  // Empty known folders are only worth showing when browsing normally —
+  // under a label filter they'd all appear as clutter ("Leerer Ordner")
+  // even though every file in them is just filtered out, not actually gone.
+  if (!driveLabelFilter) knownTopics.forEach(t => { topicMap[t.name] = { files: [], topicId: t.id }; });
   const untagged = [];
   files.forEach(f => {
     if (f.topic) {
@@ -268,42 +345,41 @@ function renderDriveSubjectFolder(id) {
     }
   });
 
-  const topicNames = Object.keys(topicMap).sort((a,b) => a.localeCompare(b));
-  if (!topicNames.length && !untagged.length) {
+  const allTopicNames = Object.keys(topicMap);
+  const dateTopicNames = allTopicNames.filter(n => DRIVE_DATE_TOPIC_RE.test(n)).sort((a,b) => {
+    // DD.MM.YYYY — sort chronologically (most recent first), not alphabetically
+    const [da,ma,ya] = a.split('.'); const [db,mb,yb] = b.split('.');
+    return `${yb}${mb}${db}`.localeCompare(`${ya}${ma}${da}`);
+  });
+  const otherTopicNames = allTopicNames.filter(n => !DRIVE_DATE_TOPIC_RE.test(n)).sort((a,b) => a.localeCompare(b));
+
+  if (driveInLessonsView) {
+    if (!dateTopicNames.length) return header + driveLabelFilterChips() + emptyState({ icon:'folder-open', title:'Noch keine Unterrichtsstunden-Ordner', hidden:false });
+    return header + driveLabelFilterChips() + renderDriveTopicGroups(dateTopicNames, topicMap, id);
+  }
+
+  if (!allTopicNames.length && !untagged.length) {
     return header + emptyState({ icon:'folder-open', title:'Noch keine Dateien in diesem Ordner', subtitle:'Lade eine Datei hoch oder lege oben rechts einen neuen Ordner an.', hidden:false });
   }
 
-  const groups = topicNames.map(name => {
-    const g = topicMap[name];
-    const list = g.files.sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
-    return `<div class="drive-topic-group">
-      <div class="drive-topic-label">
-        <i data-lucide="tag" style="width:12px;height:12px;"></i>${escapeHtml(name)}
-        ${g.topicId ? `<button onclick="openRenameTopicSheet(${g.topicId},${id})" style="background:none;border:none;cursor:pointer;opacity:0.5;padding:2px;display:flex;" title="Umbenennen">
-          <i data-lucide="pencil" style="width:12px;height:12px;"></i>
-        </button>` : ''}
+  const lessonsFileCount = dateTopicNames.reduce((sum,n) => sum + topicMap[n].files.length, 0);
+  const lessonsTile = dateTopicNames.length ? `<div class="drive-folder-grid" style="margin-bottom:18px;">
+    <div class="drive-folder-tile" onclick="openDriveLessonsView()">
+      <div class="icon-box" style="width:44px;height:44px;border-radius:14px;background:#ffdec1;">
+        <i data-lucide="calendar-days" style="width:22px;height:22px;color:#442b7a;"></i>
       </div>
-      ${list.length ? renderDriveFileList(list, false) : `<div style="opacity:0.4;font-size:0.82rem;padding:6px 4px 14px;">Leerer Ordner — verschiebe eine Datei hierher.</div>`}
-    </div>`;
-  }).join('');
+      <div style="font-weight:700;font-size:0.92rem;">Unterrichtsstunden</div>
+      <div style="font-size:0.75rem;opacity:0.5;">${lessonsFileCount} Datei${lessonsFileCount===1?'':'en'}</div>
+    </div>
+  </div>` : '';
 
+  const otherGroups = renderDriveTopicGroups(otherTopicNames, topicMap, id);
   const untaggedGroup = untagged.length ? `<div class="drive-topic-group">
     <div class="drive-topic-label"><i data-lucide="tag" style="width:12px;height:12px;"></i>Ohne Thema</div>
     ${renderDriveFileList(untagged.sort((a,b) => new Date(b.created_at) - new Date(a.created_at)), false)}
   </div>` : '';
 
-  // Cross-cutting group: a file the AI recognized as lecture/class notes
-  // shows up here IN ADDITION to its normal date-topic group above — a
-  // deliberate duplication, not a bug, so "all the Aufschriebe for this
-  // subject" is browsable as its own view without moving files out of
-  // their day folders.
-  const lectureNotes = files.filter(f => f.is_lecture_notes).sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
-  const lectureNotesGroup = lectureNotes.length ? `<div class="drive-topic-group">
-    <div class="drive-topic-label">📝 Aufschriebe</div>
-    ${renderDriveFileList(lectureNotes, false)}
-  </div>` : '';
-
-  return header + lectureNotesGroup + groups + untaggedGroup;
+  return header + driveLabelFilterChips() + lessonsTile + otherGroups + untaggedGroup;
 }
 
 function openCreateTopicSheet(subjectId) {
@@ -409,7 +485,7 @@ function renderDriveFileList(files, showTag) {
         <i data-lucide="${driveIcon(f.original_name)}" style="width:20px;height:20px;"></i>
       </div>
       <div style="flex:1;min-width:0;cursor:pointer;" onclick="openDriveFile(${f.id})">
-        <div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(f.original_name)}</div>
+        <div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(f.original_name)}${f.is_lecture_notes ? ' <span title="Aufschrieb" style="font-size:0.85em;">📝</span>' : ''}</div>
         <div style="font-size:0.75rem;opacity:0.6;">${formatBytes(f.file_size)} · ${escapeHtml(f.uploader_name||'?')} · ${driveRelTime(f.created_at)}</div>
         ${tag}
       </div>
@@ -428,17 +504,21 @@ function renderDriveFileList(files, showTag) {
 
 // --- Upload ---
 
-function handleDriveFileSelect(file) {
-  if (!file) return;
-  driveSelectedUploadFile = file;
+function handleDriveFileSelect(fileList) {
+  if (!fileList || !fileList.length) return;
+  driveSelectedUploadFiles = Array.from(fileList);
   const preselect = (driveSelectedSubjectId && driveSelectedSubjectId !== 'unsorted') ? driveSelectedSubjectId : '';
   const subjectOptions = driveSubjects.map(s => `<option value="${s.id}"${String(s.id)===String(preselect)?' selected':''}>${escapeHtml(s.name)}</option>`).join('');
   const todayIso = new Date().toISOString().slice(0, 10);
 
+  const filesLabel = driveSelectedUploadFiles.length === 1
+    ? `${escapeHtml(driveSelectedUploadFiles[0].name)} (${formatBytes(driveSelectedUploadFiles[0].size)})`
+    : `${driveSelectedUploadFiles.length} Dateien ausgewählt (${formatBytes(driveSelectedUploadFiles.reduce((s,f)=>s+f.size,0))})`;
+
   openSheet(`
     <div style="padding:4px 4px 0;">
-      <div style="font-weight:700;font-size:1.05rem;margin-bottom:4px;">Datei hochladen</div>
-      <div style="opacity:0.6;font-size:0.85rem;margin-bottom:16px;">${escapeHtml(file.name)} (${formatBytes(file.size)})</div>
+      <div style="font-weight:700;font-size:1.05rem;margin-bottom:4px;">${driveSelectedUploadFiles.length === 1 ? 'Datei hochladen' : 'Dateien hochladen'}</div>
+      <div style="opacity:0.6;font-size:0.85rem;margin-bottom:16px;">${filesLabel}</div>
 
       <div style="font-size:0.8rem;font-weight:700;opacity:0.5;margin-bottom:6px;">FACH</div>
       <select class="m3-select" id="drive-up-subject" style="margin-bottom:14px;" onchange="onDriveUploadSubjectChange()">
@@ -452,7 +532,7 @@ function handleDriveFileSelect(file) {
       <div style="font-size:0.8rem;font-weight:700;opacity:0.5;margin-bottom:6px;">THEMA (optional, wird aus dem Tag befüllt)</div>
       <input type="text" class="m3-input" id="drive-up-topic" placeholder="z. B. Photosynthese — leer lassen für KI-Vorschlag" style="margin-bottom:14px;">
 
-      <button class="m3-btn-full" style="margin-top:8px;" onclick="uploadDriveFile()" id="drive-up-btn">Hochladen</button>
+      <button class="m3-btn-full" style="margin-top:8px;" onclick="uploadDriveFiles()" id="drive-up-btn">Hochladen</button>
     </div>
   `);
 
@@ -492,10 +572,20 @@ async function onDriveUploadSubjectChange() {
   const dateInput = document.getElementById('drive-up-date');
   if (!subjSelect || !dateInput) return;
   const subject = driveSubjects.find(s => String(s.id) === subjSelect.value);
+  // No subject picked (back to full-AI mode) or nothing to suggest from —
+  // leave the topic field exactly as it is rather than forcing a date on
+  // it, so the AI's own topic suggestion (which might not be a date at
+  // all) isn't silently overridden by a "resolved_topic already set" check
+  // in the backend.
   if (!subject) return;
 
+  // Even with no Untis lesson to suggest a specific day, a subject was
+  // still picked by hand here (manual mode) — the date field already
+  // defaults to today, so the topic should reflect that immediately
+  // instead of staying blank until someone happens to touch the date
+  // input themselves.
   const lessons = await ensureDriveTimetable();
-  if (!lessons.length) return;
+  if (!lessons.length) { onDriveUploadDateChange(); return; }
 
   const shortName = (subject.short_name || '').toLowerCase();
   const fullName = (subject.name || '').toLowerCase();
@@ -509,7 +599,7 @@ async function onDriveUploadSubjectChange() {
       matchingDates.push(new Date(y, m, d));
     }
   });
-  if (!matchingDates.length) return;
+  if (!matchingDates.length) { onDriveUploadDateChange(); return; }
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -533,29 +623,43 @@ function onDriveUploadDateChange() {
   topicInput.value = `${d}.${m}.${y}`;
 }
 
-async function uploadDriveFile() {
-  if (!driveSelectedUploadFile) return;
-  const form = new FormData();
-  form.append('file', driveSelectedUploadFile);
-  form.append('subject_id', document.getElementById('drive-up-subject').value);
-  form.append('topic', document.getElementById('drive-up-topic').value);
-
+async function uploadDriveFiles() {
+  if (!driveSelectedUploadFiles.length) return;
+  const subjectId = document.getElementById('drive-up-subject').value;
+  const topic = document.getElementById('drive-up-topic').value;
+  const total = driveSelectedUploadFiles.length;
   const btn = document.getElementById('drive-up-btn');
-  btn.textContent = 'Hochladen…';
   btn.disabled = true;
-  try {
-    const f = await API.uploadDriveFile(form);
-    driveFiles.unshift(f);
-    driveSelectedUploadFile = null;
-    driveTopicsCache = {};
-    closeSheet();
-    renderDrive();
-    showToast(f.auto_sorted ? '🤖 Datei automatisch einsortiert!' : 'Datei hochgeladen!');
-  } catch {
-    showToast('Upload fehlgeschlagen');
-    btn.textContent = 'Hochladen';
-    btn.disabled = false;
+
+  // Uploaded one at a time (not in parallel) so the progress count is
+  // meaningful and a slow AI-analysis call on one file doesn't hold up an
+  // unrelated batch of concurrent requests to the same endpoint.
+  let uploaded = 0, failed = 0, anyAutoSorted = false;
+  for (const file of driveSelectedUploadFiles) {
+    btn.textContent = total > 1 ? `Hochladen… (${uploaded + failed + 1}/${total})` : 'Hochladen…';
+    const form = new FormData();
+    form.append('file', file);
+    form.append('subject_id', subjectId);
+    form.append('topic', topic);
+    try {
+      const f = await API.uploadDriveFile(form);
+      driveFiles.unshift(f);
+      if (f.auto_sorted) anyAutoSorted = true;
+      uploaded++;
+    } catch {
+      failed++;
+    }
   }
+
+  driveSelectedUploadFiles = [];
+  driveTopicsCache = {};
+  closeSheet();
+  renderDrive();
+
+  if (failed && uploaded) showToast(`${uploaded} hochgeladen, ${failed} fehlgeschlagen`);
+  else if (failed) showToast('Upload fehlgeschlagen');
+  else if (total > 1) showToast(`${uploaded} Dateien hochgeladen!`);
+  else showToast(anyAutoSorted ? '🤖 Datei automatisch einsortiert!' : 'Datei hochgeladen!');
 }
 
 // --- Delete ---
