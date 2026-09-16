@@ -328,3 +328,55 @@ async def classify_drive_file(filename: str, mime_type: str | None, subjects: li
     topic = parsed.get("topic")
     topic = topic.strip() if isinstance(topic, str) and topic.strip() else None
     return {"subject": subj, "topic": topic}
+
+
+FILENAME_SUGGEST_PROMPT_TEXT = """Eine Datei mit dem aktuellen Namen "{filename}" wurde in das Drive einer deutschen Schulklasse hochgeladen. Schlage einen kurzen, aussagekräftigen neuen Dateinamen (OHNE Dateiendung) auf Deutsch vor, der den Inhalt treffend beschreibt.
+
+Inhaltsauszug:
+\"\"\"{excerpt}\"\"\"
+
+Regeln:
+- Kurz (maximal 5 Wörter), klar, ohne Sonderzeichen außer Leerzeichen, Bindestrich und Unterstrich.
+- Keine Dateiendung anhängen.
+- Wenn der Inhaltsauszug nicht aussagekräftig genug für einen guten Namen ist, antworte mit null statt zu raten.
+
+Antworte NUR mit einem JSON-Objekt, ohne Markdown, z.B.: {{"filename": "Hausaufgabe Bruchrechnung"}}
+"""
+
+FILENAME_SUGGEST_PROMPT_IMAGE = """Diese Datei wurde in das Drive einer deutschen Schulklasse hochgeladen (aktueller Name: "{filename}"). Schau dir das Bild an und schlage einen kurzen, aussagekräftigen neuen Dateinamen (OHNE Dateiendung) auf Deutsch vor, der den Inhalt treffend beschreibt.
+
+Regeln:
+- Kurz (maximal 5 Wörter), klar, ohne Sonderzeichen außer Leerzeichen, Bindestrich und Unterstrich.
+- Keine Dateiendung anhängen.
+- Wenn sich aus dem Bild kein aussagekräftiger Name ableiten lässt, antworte mit null statt zu raten.
+
+Antworte NUR mit einem JSON-Objekt, ohne Markdown, z.B.: {{"filename": "Tafelbild Photosynthese"}}
+"""
+
+async def suggest_drive_filename(filename: str, mime_type: str | None = None, text_excerpt: str | None = None, image_bytes: bytes | None = None) -> str | None:
+    """Asks Gemini for a more descriptive filename based on the file's own
+    content (a text excerpt, or the image itself) — separate from
+    classify_drive_file() because renaming should happen regardless of
+    whether the subject/topic were picked by hand or by the AI. Never
+    raises; any failure (no key, blocked, bad JSON, Gemini declining because
+    the content wasn't informative enough) just means "keep the original
+    name" rather than failing the upload."""
+    try:
+        if image_bytes is not None:
+            parsed = await _call_gemini_json(FILENAME_SUGGEST_PROMPT_IMAGE.format(filename=filename), image_bytes, mime_type)
+        elif text_excerpt:
+            parsed = await _call_gemini_json(FILENAME_SUGGEST_PROMPT_TEXT.format(filename=filename, excerpt=text_excerpt[:1500]))
+        else:
+            return None
+    except GeminiError as e:
+        logger.info("Drive filename suggestion skipped: %s", e)
+        return None
+
+    if not isinstance(parsed, dict):
+        return None
+    name = parsed.get("filename")
+    if not isinstance(name, str) or not name.strip():
+        return None
+    # Defensive cleanup: strip characters that would be awkward/unsafe as a filename.
+    cleaned = re.sub(r'[\\/:*?"<>|]', '', name.strip())[:80].strip()
+    return cleaned or None

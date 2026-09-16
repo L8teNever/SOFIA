@@ -422,6 +422,7 @@ function handleDriveFileSelect(file) {
   driveSelectedUploadFile = file;
   const preselect = (driveSelectedSubjectId && driveSelectedSubjectId !== 'unsorted') ? driveSelectedSubjectId : '';
   const subjectOptions = driveSubjects.map(s => `<option value="${s.id}"${String(s.id)===String(preselect)?' selected':''}>${escapeHtml(s.name)}</option>`).join('');
+  const todayIso = new Date().toISOString().slice(0, 10);
 
   openSheet(`
     <div style="padding:4px 4px 0;">
@@ -429,17 +430,89 @@ function handleDriveFileSelect(file) {
       <div style="opacity:0.6;font-size:0.85rem;margin-bottom:16px;">${escapeHtml(file.name)} (${formatBytes(file.size)})</div>
 
       <div style="font-size:0.8rem;font-weight:700;opacity:0.5;margin-bottom:6px;">FACH</div>
-      <select class="m3-select" id="drive-up-subject" style="margin-bottom:14px;">
+      <select class="m3-select" id="drive-up-subject" style="margin-bottom:14px;" onchange="onDriveUploadSubjectChange()">
         <option value="">🤖 Automatisch sortieren (KI)</option>
         ${subjectOptions}
       </select>
 
-      <div style="font-size:0.8rem;font-weight:700;opacity:0.5;margin-bottom:6px;">THEMA (optional)</div>
+      <div style="font-size:0.8rem;font-weight:700;opacity:0.5;margin-bottom:6px;">TAG (aus dem Stundenplan vorgeschlagen)</div>
+      <input type="date" class="m3-input" id="drive-up-date" value="${todayIso}" onchange="onDriveUploadDateChange()" style="margin-bottom:14px;">
+
+      <div style="font-size:0.8rem;font-weight:700;opacity:0.5;margin-bottom:6px;">THEMA (optional, wird aus dem Tag befüllt)</div>
       <input type="text" class="m3-input" id="drive-up-topic" placeholder="z. B. Photosynthese — leer lassen für KI-Vorschlag" style="margin-bottom:14px;">
 
       <button class="m3-btn-full" style="margin-top:8px;" onclick="uploadDriveFile()" id="drive-up-btn">Hochladen</button>
     </div>
   `);
+
+  if (preselect) onDriveUploadSubjectChange();
+}
+
+// Caches the class's Untis timetable so the upload sheet can suggest which
+// day a file belongs to (based on when the chosen subject is actually
+// taught) without a fresh fetch on every subject change. null = not
+// fetched yet, [] = fetched but empty/no Untis configured.
+let driveTimetableCache = null;
+async function ensureDriveTimetable() {
+  if (driveTimetableCache !== null) return driveTimetableCache;
+  try {
+    const data = await API.timetable();
+    driveTimetableCache = (data.configured && !data.error)
+      ? [...(data.this_week?.lessons || []), ...(data.next_week?.lessons || [])]
+      : [];
+  } catch { driveTimetableCache = []; }
+  return driveTimetableCache;
+}
+
+// When the subject changes, find which weekdays the timetable actually has
+// that subject on, then jump the date field to the nearest such day (today
+// if it already matches, otherwise the next one within two weeks) — a
+// starting suggestion, not a lock, the date stays a normal editable field.
+async function onDriveUploadSubjectChange() {
+  const subjSelect = document.getElementById('drive-up-subject');
+  const dateInput = document.getElementById('drive-up-date');
+  if (!subjSelect || !dateInput) return;
+  const subject = driveSubjects.find(s => String(s.id) === subjSelect.value);
+  if (!subject) return;
+
+  const lessons = await ensureDriveTimetable();
+  if (!lessons.length) return;
+
+  const shortName = (subject.short_name || '').toLowerCase();
+  const fullName = (subject.name || '').toLowerCase();
+  const matchingWeekdays = new Set();
+  lessons.forEach(l => {
+    const lShort = (l.subject_short || '').toLowerCase();
+    const lFull = (l.subject || '').toLowerCase();
+    if ((shortName && lShort === shortName) || (fullName && lFull === fullName)) {
+      const y = l.date.slice(0, 4), m = parseInt(l.date.slice(4, 6), 10) - 1, d = l.date.slice(6, 8);
+      matchingWeekdays.add(new Date(y, m, d).getDay());
+    }
+  });
+  if (!matchingWeekdays.size) return;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  for (let i = 0; i < 14; i++) {
+    const cand = new Date(today);
+    cand.setDate(today.getDate() + i);
+    if (matchingWeekdays.has(cand.getDay())) {
+      dateInput.value = cand.toISOString().slice(0, 10);
+      onDriveUploadDateChange();
+      return;
+    }
+  }
+}
+
+// The topic folder for an upload picked via subject+day is just that day,
+// formatted — automatic, per the whole point of this flow, but the field
+// stays a plain text input so it can still be overridden by hand.
+function onDriveUploadDateChange() {
+  const dateInput = document.getElementById('drive-up-date');
+  const topicInput = document.getElementById('drive-up-topic');
+  if (!dateInput?.value || !topicInput) return;
+  const [y, m, d] = dateInput.value.split('-');
+  topicInput.value = `${d}.${m}.${y}`;
 }
 
 async function uploadDriveFile() {

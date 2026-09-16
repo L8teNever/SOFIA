@@ -13,7 +13,7 @@ from backend.config import settings
 from backend.services.virus_scanner import scan_file
 from backend.services.compression import compress_lossless
 from backend.services.audit_service import log_audit
-from backend.gemini_client import classify_drive_file, GeminiError
+from backend.gemini_client import classify_drive_file, suggest_drive_filename, GeminiError
 from datetime import datetime, timezone
 from typing import List, Optional
 import aiofiles, uuid, os, logging, html
@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/drive", tags=["drive"])
 
 TEXT_EDITABLE_EXTS = {".md", ".markdown", ".txt"}
+IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"}
 
 def _ext(name: str) -> str:
     return os.path.splitext(name or "")[1].lower()
@@ -109,6 +110,16 @@ async def upload_drive_file(
     resolved_topic = topic.strip() or None
     auto_sorted = False
 
+    # Computed once, up front, since both the (subject-blank-only) auto-sort
+    # below and the (always-runs) filename suggestion further down need the
+    # same text excerpt.
+    text_excerpt = None
+    if ext in TEXT_EDITABLE_EXTS:
+        try:
+            text_excerpt = content.decode("utf-8", errors="ignore")[:1500]
+        except Exception:
+            text_excerpt = None
+
     if resolved_subject_id is None:
         try:
             result = await db.execute(select(Subject).where(
@@ -135,13 +146,6 @@ async def upload_drive_file(
                         if f.topic not in topics_by_subject[name]:
                             topics_by_subject[name].append(f.topic)
 
-            text_excerpt = None
-            if ext in TEXT_EDITABLE_EXTS:
-                try:
-                    text_excerpt = content.decode("utf-8", errors="ignore")[:1500]
-                except Exception:
-                    text_excerpt = None
-
             try:
                 suggestion = await classify_drive_file(
                     file.filename or "Datei", mime or file.content_type,
@@ -159,6 +163,23 @@ async def upload_drive_file(
     if resolved_subject_id and resolved_topic:
         await _get_or_create_topic(db, current_user.class_id, resolved_subject_id, resolved_topic)
 
+    # Renaming runs regardless of how the subject/topic were resolved (by
+    # hand or by classify_drive_file above) — picking the subject/day
+    # manually doesn't mean the uploader also typed a meaningful filename.
+    # Only text and image content is actually readable here; other types
+    # (PDF, docx, ...) keep their original uploaded name.
+    original_name = file.filename or f"Datei{ext}"
+    try:
+        suggested = None
+        if ext in IMAGE_EXTS:
+            suggested = await suggest_drive_filename(original_name, mime or file.content_type, image_bytes=content)
+        elif text_excerpt:
+            suggested = await suggest_drive_filename(original_name, mime or file.content_type, text_excerpt=text_excerpt)
+        if suggested:
+            original_name = f"{suggested}{ext}"
+    except Exception as e:
+        logger.warning("Drive filename suggestion failed, keeping original name: %s", e)
+
     filename = f"{uuid.uuid4().hex}{ext}"
     dest = os.path.join(settings.upload_dir, filename)
     os.makedirs(settings.upload_dir, exist_ok=True)
@@ -171,7 +192,7 @@ async def upload_drive_file(
         topic=resolved_topic,
         uploader_id=current_user.id,
         filename=filename,
-        original_name=file.filename or filename,
+        original_name=original_name,
         file_size=len(content),
         mime_type=mime or file.content_type,
     )
