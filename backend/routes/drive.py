@@ -13,7 +13,7 @@ from backend.config import settings
 from backend.services.virus_scanner import scan_file
 from backend.services.compression import compress_lossless
 from backend.services.audit_service import log_audit
-from backend.gemini_client import classify_drive_file, suggest_drive_filename, GeminiError
+from backend.gemini_client import classify_drive_file, analyze_drive_upload, GeminiError
 from datetime import datetime, timezone
 from typing import List, Optional
 import aiofiles, uuid, os, logging, html
@@ -72,6 +72,7 @@ async def _serialize(db: AsyncSession, files: List[DriveFile]) -> List[dict]:
             "original_name": f.original_name,
             "file_size": f.file_size,
             "mime_type": f.mime_type,
+            "is_lecture_notes": f.is_lecture_notes,
             "created_at": f.created_at,
         })
     return out
@@ -163,22 +164,25 @@ async def upload_drive_file(
     if resolved_subject_id and resolved_topic:
         await _get_or_create_topic(db, current_user.class_id, resolved_subject_id, resolved_topic)
 
-    # Renaming runs regardless of how the subject/topic were resolved (by
-    # hand or by classify_drive_file above) — picking the subject/day
-    # manually doesn't mean the uploader also typed a meaningful filename.
-    # Only text and image content is actually readable here; other types
-    # (PDF, docx, ...) keep their original uploaded name.
+    # Renaming and lecture-notes detection run regardless of how the
+    # subject/topic were resolved (by hand or by classify_drive_file above)
+    # — picking the subject/day manually doesn't mean the uploader also
+    # typed a meaningful filename. Only text and image content is actually
+    # readable here; other types (PDF, docx, ...) keep their original name
+    # and are never flagged as lecture notes.
     original_name = file.filename or f"Datei{ext}"
+    is_lecture_notes = False
     try:
-        suggested = None
+        analysis = {"filename": None, "is_lecture_notes": False}
         if ext in IMAGE_EXTS:
-            suggested = await suggest_drive_filename(original_name, mime or file.content_type, image_bytes=content)
+            analysis = await analyze_drive_upload(original_name, mime or file.content_type, image_bytes=content)
         elif text_excerpt:
-            suggested = await suggest_drive_filename(original_name, mime or file.content_type, text_excerpt=text_excerpt)
-        if suggested:
-            original_name = f"{suggested}{ext}"
+            analysis = await analyze_drive_upload(original_name, mime or file.content_type, text_excerpt=text_excerpt)
+        if analysis.get("filename"):
+            original_name = f"{analysis['filename']}{ext}"
+        is_lecture_notes = bool(analysis.get("is_lecture_notes"))
     except Exception as e:
-        logger.warning("Drive filename suggestion failed, keeping original name: %s", e)
+        logger.warning("Drive upload analysis failed, keeping original name: %s", e)
 
     filename = f"{uuid.uuid4().hex}{ext}"
     dest = os.path.join(settings.upload_dir, filename)
@@ -190,6 +194,7 @@ async def upload_drive_file(
         class_id=current_user.class_id,
         subject_id=resolved_subject_id,
         topic=resolved_topic,
+        is_lecture_notes=is_lecture_notes,
         uploader_id=current_user.id,
         filename=filename,
         original_name=original_name,

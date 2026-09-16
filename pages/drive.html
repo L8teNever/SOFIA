@@ -292,7 +292,18 @@ function renderDriveSubjectFolder(id) {
     ${renderDriveFileList(untagged.sort((a,b) => new Date(b.created_at) - new Date(a.created_at)), false)}
   </div>` : '';
 
-  return header + groups + untaggedGroup;
+  // Cross-cutting group: a file the AI recognized as lecture/class notes
+  // shows up here IN ADDITION to its normal date-topic group above — a
+  // deliberate duplication, not a bug, so "all the Aufschriebe for this
+  // subject" is browsable as its own view without moving files out of
+  // their day folders.
+  const lectureNotes = files.filter(f => f.is_lecture_notes).sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+  const lectureNotesGroup = lectureNotes.length ? `<div class="drive-topic-group">
+    <div class="drive-topic-label">📝 Aufschriebe</div>
+    ${renderDriveFileList(lectureNotes, false)}
+  </div>` : '';
+
+  return header + lectureNotesGroup + groups + untaggedGroup;
 }
 
 function openCreateTopicSheet(subjectId) {
@@ -468,6 +479,14 @@ async function ensureDriveTimetable() {
 // that subject on, then jump the date field to the nearest such day (today
 // if it already matches, otherwise the next one within two weeks) — a
 // starting suggestion, not a lock, the date stays a normal editable field.
+// Suggests the actual lesson date closest to today — not just the closest
+// matching weekday — so someone uploading notes from a lesson that already
+// happened this week (e.g. "gestern hatten wir das") lands on that real
+// date instead of always being pushed to the next future occurrence.
+// Ties (equally close past vs. future) favor the past, since "upload what
+// we just did" is the more common case than pre-uploading for a lesson
+// that hasn't happened yet. Only covers the ~2-week window the timetable
+// API actually returns — older dates still work, just via manual picking.
 async function onDriveUploadSubjectChange() {
   const subjSelect = document.getElementById('drive-up-subject');
   const dateInput = document.getElementById('drive-up-date');
@@ -480,28 +499,27 @@ async function onDriveUploadSubjectChange() {
 
   const shortName = (subject.short_name || '').toLowerCase();
   const fullName = (subject.name || '').toLowerCase();
-  const matchingWeekdays = new Set();
+  const matchingDates = [];
   lessons.forEach(l => {
+    if (l.cancelled) return; // nothing happened that day — nothing to upload notes about
     const lShort = (l.subject_short || '').toLowerCase();
     const lFull = (l.subject || '').toLowerCase();
     if ((shortName && lShort === shortName) || (fullName && lFull === fullName)) {
       const y = l.date.slice(0, 4), m = parseInt(l.date.slice(4, 6), 10) - 1, d = l.date.slice(6, 8);
-      matchingWeekdays.add(new Date(y, m, d).getDay());
+      matchingDates.push(new Date(y, m, d));
     }
   });
-  if (!matchingWeekdays.size) return;
+  if (!matchingDates.length) return;
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  for (let i = 0; i < 14; i++) {
-    const cand = new Date(today);
-    cand.setDate(today.getDate() + i);
-    if (matchingWeekdays.has(cand.getDay())) {
-      dateInput.value = cand.toISOString().slice(0, 10);
-      onDriveUploadDateChange();
-      return;
-    }
-  }
+  matchingDates.sort((a, b) => {
+    const diffA = Math.abs(a - today), diffB = Math.abs(b - today);
+    if (diffA !== diffB) return diffA - diffB;
+    return a - b; // tie: prefer the earlier (past) date
+  });
+  dateInput.value = matchingDates[0].toISOString().slice(0, 10);
+  onDriveUploadDateChange();
 }
 
 // The topic folder for an upload picked via subject+day is just that day,

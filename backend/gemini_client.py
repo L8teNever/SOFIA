@@ -330,53 +330,53 @@ async def classify_drive_file(filename: str, mime_type: str | None, subjects: li
     return {"subject": subj, "topic": topic}
 
 
-FILENAME_SUGGEST_PROMPT_TEXT = """Eine Datei mit dem aktuellen Namen "{filename}" wurde in das Drive einer deutschen Schulklasse hochgeladen. Schlage einen kurzen, aussagekräftigen neuen Dateinamen (OHNE Dateiendung) auf Deutsch vor, der den Inhalt treffend beschreibt.
+DRIVE_ANALYZE_PROMPT_TEXT = """Eine Datei mit dem aktuellen Namen "{filename}" wurde in das Drive einer deutschen Schulklasse hochgeladen.
 
 Inhaltsauszug:
 \"\"\"{excerpt}\"\"\"
 
-Regeln:
-- Kurz (maximal 5 Wörter), klar, ohne Sonderzeichen außer Leerzeichen, Bindestrich und Unterstrich.
-- Keine Dateiendung anhängen.
-- Wenn der Inhaltsauszug nicht aussagekräftig genug für einen guten Namen ist, antworte mit null statt zu raten.
+Beantworte anhand des Inhaltsauszugs zwei Dinge:
+1. "filename": ein kurzer, aussagekräftiger neuer Dateiname (OHNE Dateiendung) auf Deutsch, der den Inhalt treffend beschreibt — maximal 5 Wörter, klar, ohne Sonderzeichen außer Leerzeichen, Bindestrich und Unterstrich. Wenn der Auszug nicht aussagekräftig genug für einen guten Namen ist, benutze null statt zu raten.
+2. "is_lecture_notes": true, wenn der Inhalt ein Tafel-/Unterrichtsaufschrieb ist (Mitschrift von dem, was im Unterricht behandelt/erklärt wurde) — false, wenn es stattdessen eine Hausaufgabe, ein Arbeitsblatt, eine Aufgabenstellung oder etwas anderes ist.
 
-Antworte NUR mit einem JSON-Objekt, ohne Markdown, z.B.: {{"filename": "Hausaufgabe Bruchrechnung"}}
+Antworte NUR mit einem JSON-Objekt, ohne Markdown, z.B.: {{"filename": "Hausaufgabe Bruchrechnung", "is_lecture_notes": false}}
 """
 
-FILENAME_SUGGEST_PROMPT_IMAGE = """Diese Datei wurde in das Drive einer deutschen Schulklasse hochgeladen (aktueller Name: "{filename}"). Schau dir das Bild an und schlage einen kurzen, aussagekräftigen neuen Dateinamen (OHNE Dateiendung) auf Deutsch vor, der den Inhalt treffend beschreibt.
+DRIVE_ANALYZE_PROMPT_IMAGE = """Diese Datei wurde in das Drive einer deutschen Schulklasse hochgeladen (aktueller Name: "{filename}"). Schau dir das Bild an und beantworte zwei Dinge:
 
-Regeln:
-- Kurz (maximal 5 Wörter), klar, ohne Sonderzeichen außer Leerzeichen, Bindestrich und Unterstrich.
-- Keine Dateiendung anhängen.
-- Wenn sich aus dem Bild kein aussagekräftiger Name ableiten lässt, antworte mit null statt zu raten.
+1. "filename": ein kurzer, aussagekräftiger neuer Dateiname (OHNE Dateiendung) auf Deutsch, der den Inhalt treffend beschreibt — maximal 5 Wörter, klar, ohne Sonderzeichen außer Leerzeichen, Bindestrich und Unterstrich. Wenn sich kein aussagekräftiger Name ableiten lässt, benutze null statt zu raten.
+2. "is_lecture_notes": true, wenn das Bild ein Tafel-/Unterrichtsaufschrieb ist (z.B. ein abfotografiertes Tafelbild oder eine handschriftliche Mitschrift von dem, was im Unterricht behandelt wurde) — false, wenn es stattdessen eine Hausaufgabe, ein Arbeitsblatt, eine Aufgabenstellung oder etwas anderes ist.
 
-Antworte NUR mit einem JSON-Objekt, ohne Markdown, z.B.: {{"filename": "Tafelbild Photosynthese"}}
+Antworte NUR mit einem JSON-Objekt, ohne Markdown, z.B.: {{"filename": "Tafelbild Photosynthese", "is_lecture_notes": true}}
 """
 
-async def suggest_drive_filename(filename: str, mime_type: str | None = None, text_excerpt: str | None = None, image_bytes: bytes | None = None) -> str | None:
-    """Asks Gemini for a more descriptive filename based on the file's own
-    content (a text excerpt, or the image itself) — separate from
-    classify_drive_file() because renaming should happen regardless of
+async def analyze_drive_upload(filename: str, mime_type: str | None = None, text_excerpt: str | None = None, image_bytes: bytes | None = None) -> dict:
+    """Asks Gemini, in one call, for (a) a more descriptive filename based on
+    the file's own content and (b) whether the content reads as lecture/
+    class notes rather than a homework task — separate from
+    classify_drive_file() because both of these should run regardless of
     whether the subject/topic were picked by hand or by the AI. Never
-    raises; any failure (no key, blocked, bad JSON, Gemini declining because
-    the content wasn't informative enough) just means "keep the original
-    name" rather than failing the upload."""
+    raises; any failure (no key, blocked, bad JSON, content not
+    informative enough) just returns {"filename": None, "is_lecture_notes":
+    False} rather than failing the upload."""
+    empty = {"filename": None, "is_lecture_notes": False}
     try:
         if image_bytes is not None:
-            parsed = await _call_gemini_json(FILENAME_SUGGEST_PROMPT_IMAGE.format(filename=filename), image_bytes, mime_type)
+            parsed = await _call_gemini_json(DRIVE_ANALYZE_PROMPT_IMAGE.format(filename=filename), image_bytes, mime_type)
         elif text_excerpt:
-            parsed = await _call_gemini_json(FILENAME_SUGGEST_PROMPT_TEXT.format(filename=filename, excerpt=text_excerpt[:1500]))
+            parsed = await _call_gemini_json(DRIVE_ANALYZE_PROMPT_TEXT.format(filename=filename, excerpt=text_excerpt[:1500]))
         else:
-            return None
+            return empty
     except GeminiError as e:
-        logger.info("Drive filename suggestion skipped: %s", e)
-        return None
+        logger.info("Drive upload analysis skipped: %s", e)
+        return empty
 
     if not isinstance(parsed, dict):
-        return None
+        return empty
     name = parsed.get("filename")
-    if not isinstance(name, str) or not name.strip():
-        return None
-    # Defensive cleanup: strip characters that would be awkward/unsafe as a filename.
-    cleaned = re.sub(r'[\\/:*?"<>|]', '', name.strip())[:80].strip()
-    return cleaned or None
+    if isinstance(name, str) and name.strip():
+        # Defensive cleanup: strip characters that would be awkward/unsafe as a filename.
+        name = re.sub(r'[\\/:*?"<>|]', '', name.strip())[:80].strip() or None
+    else:
+        name = None
+    return {"filename": name, "is_lecture_notes": bool(parsed.get("is_lecture_notes"))}

@@ -183,6 +183,7 @@ class DriveFileOut(BaseModel):
     original_name: str
     file_size: int
     mime_type: Optional[str]
+    is_lecture_notes: bool = False
     created_at: datetime
     class Config: from_attributes = True
 

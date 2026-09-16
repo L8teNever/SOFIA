@@ -82,6 +82,11 @@ async def _migrate_columns(conn):
     if "timetable_source" not in existing_cls:
         await conn.execute(text("ALTER TABLE class_groups ADD COLUMN timetable_source TEXT DEFAULT 'untis'"))
 
+    result_df = await conn.execute(text("PRAGMA table_info(drive_files)"))
+    existing_df = {row[1] for row in result_df.fetchall()}
+    if "is_lecture_notes" not in existing_df:
+        await conn.execute(text("ALTER TABLE drive_files ADD COLUMN is_lecture_notes BOOLEAN DEFAULT 0"))
+
     # Migrate legacy users.push_subscription into push_subscriptions table
     try:
         legacy_users = await conn.execute(text("SELECT id, push_subscription FROM users WHERE push_subscription IS NOT NULL"))
