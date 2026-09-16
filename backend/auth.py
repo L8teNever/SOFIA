@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from backend.database import get_db
 from backend.models.user import User, UserRole
+from backend.models.user_email_alias import UserEmailAlias
 from backend.config import settings
 import secrets
 
@@ -25,6 +26,17 @@ async def get_current_user(request: Request, db: AsyncSession = Depends(get_db))
 
     result = await db.execute(select(User).where(User.email == email))
     user = result.scalar_one_or_none()
+
+    if user is None:
+        # Secondary email addresses a super-admin registered for this
+        # account (e.g. a second Cloudflare Access login) — resolve to the
+        # same underlying user instead of falling through to "not
+        # activated" below.
+        alias_result = await db.execute(select(UserEmailAlias).where(UserEmailAlias.email == email))
+        alias = alias_result.scalar_one_or_none()
+        if alias:
+            owner_result = await db.execute(select(User).where(User.id == alias.user_id))
+            user = owner_result.scalar_one_or_none()
 
     if user is None:
         count = (await db.execute(select(func.count()).select_from(User))).scalar()

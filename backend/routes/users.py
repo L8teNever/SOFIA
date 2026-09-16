@@ -4,7 +4,8 @@ from sqlalchemy import select
 from backend.database import get_db
 from backend.auth import get_current_user, require_super_admin
 from backend.models.user import User, UserRole
-from backend.schemas import UserOut, UserUpdate, UserAdminUpdate, UserCreate
+from backend.models.user_email_alias import UserEmailAlias
+from backend.schemas import UserOut, UserUpdate, UserAdminUpdate, UserCreate, EmailAliasOut, EmailAliasCreate
 from backend.config import settings
 from backend.services.virus_scanner import scan_file
 from backend.services.audit_service import log_audit
@@ -85,6 +86,57 @@ async def update_user(user_id: int, data: UserAdminUpdate, db: AsyncSession = De
     await db.commit()
     await db.refresh(user)
     return user
+
+@router.get("/{user_id}/emails", response_model=List[EmailAliasOut])
+async def list_user_emails(user_id: int, db: AsyncSession = Depends(get_db), _: User = Depends(require_super_admin)):
+    result = await db.execute(select(UserEmailAlias).where(UserEmailAlias.user_id == user_id))
+    return result.scalars().all()
+
+@router.post("/{user_id}/emails", response_model=EmailAliasOut)
+async def add_user_email(user_id: int, data: EmailAliasCreate, request: Request, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_super_admin)):
+    email = data.email.strip().lower()
+    if not email or "@" not in email:
+        raise HTTPException(400, "Ungültige E-Mail-Adresse")
+
+    target = await db.execute(select(User).where(User.id == user_id))
+    if not target.scalar_one_or_none():
+        raise HTTPException(404, "User not found")
+
+    # Must not collide with anyone's primary email or an existing alias —
+    # otherwise two accounts could end up resolving to the same address.
+    existing_user = await db.execute(select(User).where(User.email == email))
+    if existing_user.scalar_one_or_none():
+        raise HTTPException(400, "E-Mail gehört bereits zu einem Hauptaccount")
+    existing_alias = await db.execute(select(UserEmailAlias).where(UserEmailAlias.email == email))
+    if existing_alias.scalar_one_or_none():
+        raise HTTPException(400, "E-Mail ist bereits einem Nutzer zugeordnet")
+
+    alias = UserEmailAlias(user_id=user_id, email=email)
+    db.add(alias)
+    await db.commit()
+    await db.refresh(alias)
+
+    await log_audit(
+        db, action="user.email_alias_add", user=current_user,
+        entity_type="user", entity_id=user_id, details={"email": email}, request=request,
+    )
+    return alias
+
+@router.delete("/{user_id}/emails/{alias_id}")
+async def delete_user_email(user_id: int, alias_id: int, request: Request, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_super_admin)):
+    result = await db.execute(select(UserEmailAlias).where(UserEmailAlias.id == alias_id, UserEmailAlias.user_id == user_id))
+    alias = result.scalar_one_or_none()
+    if not alias:
+        raise HTTPException(404, "Alias not found")
+
+    await db.delete(alias)
+    await db.commit()
+
+    await log_audit(
+        db, action="user.email_alias_delete", user=current_user,
+        entity_type="user", entity_id=user_id, details={"email": alias.email}, request=request,
+    )
+    return {"ok": True}
 
 @router.post("/register")
 async def register_self(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):

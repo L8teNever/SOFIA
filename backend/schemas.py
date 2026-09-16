@@ -26,6 +26,14 @@ class UserCreate(BaseModel):
     role: str = "student"
     class_id: Optional[int] = None
 
+class EmailAliasOut(BaseModel):
+    id: int
+    email: str
+    class Config: from_attributes = True
+
+class EmailAliasCreate(BaseModel):
+    email: str
+
 # ClassGroup
 class ClassGroupOut(BaseModel):
     id: int

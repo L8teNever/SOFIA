@@ -588,9 +588,11 @@ async function submitNewUser() {
   }
 }
 
-function openEditUserSheet(uid) {
+async function openEditUserSheet(uid) {
   const u = adminUsers.find(x=>x.id===uid);
   if (!u) return;
+  let aliases = [];
+  try { aliases = await API.listUserEmails(uid); } catch {}
   openSheet(`
     <div class="sheet-title">Nutzer bearbeiten</div>
     <div style="font-size:0.82rem;color:#79747e;margin-bottom:14px;padding:10px 14px;background:#f3edf7;border-radius:12px;">${u.email}</div>
@@ -604,8 +606,42 @@ function openEditUserSheet(uid) {
       <option value="">Keine Klasse</option>
       ${adminClasses.map(c=>`<option value="${c.id}"${u.class_id===c.id?' selected':''}>${c.name}</option>`).join('')}
     </select>
-    <button class="m3-btn-full" onclick="saveUser(${uid})">Speichern</button>
+    <div style="margin:18px 0 4px;font-weight:600;font-size:0.85rem;">Weitere E-Mail-Adressen</div>
+    <div style="font-size:0.75rem;opacity:0.6;margin-bottom:10px;">Diese Adressen führen zum selben Account — z.B. für einen zweiten Zugang mit anderer Mail.</div>
+    <div id="eu-aliases">${renderAliasChips(aliases, uid)}</div>
+    <div style="display:flex;gap:8px;margin-top:4px;">
+      <input class="m3-input" id="eu-new-alias" type="email" placeholder="weitere@email.de" style="flex:1;margin-bottom:0;" onkeydown="if(event.key==='Enter'){event.preventDefault();addAliasToUser(${uid});}">
+      <button class="m3-btn-tonal" style="flex-shrink:0;" onclick="addAliasToUser(${uid})">+</button>
+    </div>
+    <button class="m3-btn-full" style="margin-top:18px;" onclick="saveUser(${uid})">Speichern</button>
   `);
+}
+
+function renderAliasChips(aliases, uid) {
+  if (!aliases.length) return '<div style="font-size:0.78rem;opacity:0.5;margin-bottom:6px;">Keine weiteren E-Mails</div>';
+  return aliases.map(a => `
+    <div style="display:flex;align-items:center;gap:8px;background:#f3edf7;border-radius:10px;padding:7px 10px;margin-bottom:6px;">
+      <span style="flex:1;font-size:0.82rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${a.email}</span>
+      <button onclick="removeAliasFromUser(${uid},${a.id})" style="background:none;border:none;cursor:pointer;opacity:0.5;padding:2px;flex-shrink:0;"><i data-lucide="x" style="width:14px;height:14px;"></i></button>
+    </div>`).join('');
+}
+
+async function addAliasToUser(uid) {
+  const input = document.getElementById('eu-new-alias');
+  const email = input.value.trim().toLowerCase();
+  if (!email || !email.includes('@')) { showToast('Gültige E-Mail eingeben'); return; }
+  try {
+    await API.addUserEmail(uid, email);
+  } catch(e) {
+    showToast(e.detail || 'Fehler beim Hinzufügen');
+    return;
+  }
+  openEditUserSheet(uid);
+}
+
+async function removeAliasFromUser(uid, aliasId) {
+  try { await API.deleteUserEmail(uid, aliasId); } catch { showToast('Fehler beim Entfernen'); return; }
+  openEditUserSheet(uid);
 }
 
 async function saveUser(uid) {

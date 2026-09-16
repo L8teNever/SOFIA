@@ -40,7 +40,7 @@ async def init_db():
         grade, shared_file, notification, meal_plan,
         push_subscription, notification_setting, sent_notification_log,
         subject_weighting, audit_log, manual_timetable_entry, drive_file, drive_topic,
-        google_account, google_sync_map
+        google_account, google_sync_map, user_email_alias
     )
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
