@@ -545,6 +545,7 @@ function renderAdminSubjects() {
       <div style="width:16px;height:16px;border-radius:50%;background:${s.color||'#6750a4'};flex-shrink:0;"></div>
       <div style="flex:1;font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${s.name}${s.short_name?` <span style="opacity:0.5;font-size:0.8rem;">(${s.short_name})</span>`:''}</div>
       ${s.is_global?'<span style="background:#c4eed0;color:#072711;padding:3px 8px;border-radius:8px;font-size:0.72rem;font-weight:600;flex-shrink:0;">Global</span>':''}
+      <button onclick="openEditSubjectSheet(${s.id})" style="background:none;border:none;cursor:pointer;opacity:0.4;padding:4px;flex-shrink:0;" title="Bearbeiten"><i data-lucide="pencil" style="width:16px;height:16px;"></i></button>
       <button onclick="deleteSubject(${s.id})" style="background:none;border:none;cursor:pointer;opacity:0.4;padding:4px;flex-shrink:0;"><i data-lucide="trash-2" style="width:16px;height:16px;"></i></button>
     </div>`).join('');
   lucide.createIcons();
@@ -808,6 +809,39 @@ async function createSubject() {
   closeSheet();
   renderAdminSubjects();
   showToast('Fach erstellt');
+}
+
+function openEditSubjectSheet(id) {
+  const s = adminSubjects.find(x => x.id === id);
+  if (!s) return;
+  openSheet(`
+    <div class="sheet-title">Fach bearbeiten</div>
+    <div style="font-size:0.78rem;color:#79747e;margin-bottom:14px;padding:10px 14px;background:#f3edf7;border-radius:12px;line-height:1.5;">Der Anzeigename gilt überall in der App (Stundenplan, Dropdowns, ...). Untis nutzt intern weiterhin das Kürzel, um Fächer eindeutig zuzuordnen — das bleibt beim Ändern des Namens unverändert.</div>
+    <input class="m3-input" id="es-name" placeholder="Anzeigename (z.B. Deutsch)" value="${escapeHtml(s.name)}">
+    <input class="m3-input" id="es-short" placeholder="Kürzel (z.B. DE) — von Untis genutzt" value="${escapeHtml(s.short_name || '')}">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px;">
+      <label style="font-size:0.9rem;color:#49454f;flex:1;">Farbe</label>
+      <input type="color" id="es-color" value="${s.color || '#6750a4'}" style="width:48px;height:40px;border:none;border-radius:10px;cursor:pointer;padding:2px;background:#f3edf7;">
+    </div>
+    <button class="m3-btn-full" onclick="submitEditSubject(${id})">Speichern</button>
+  `);
+}
+
+async function submitEditSubject(id) {
+  const name = document.getElementById('es-name').value.trim();
+  if (!name) return;
+  const data = {
+    name,
+    short_name: document.getElementById('es-short').value.trim() || null,
+    color: document.getElementById('es-color').value,
+  };
+  const updated = await API.updateSubject(id, data).catch(() => null);
+  if (!updated) { showToast('Fehler beim Speichern'); return; }
+  const idx = adminSubjects.findIndex(s => s.id === id);
+  if (idx !== -1) adminSubjects[idx] = updated;
+  closeSheet();
+  renderAdminSubjects();
+  showToast('Fach aktualisiert');
 }
 
 function deleteSubject(id) {

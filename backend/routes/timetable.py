@@ -228,6 +228,27 @@ async def _get_manual_timetable(db: AsyncSession, class_id: int) -> dict:
         return {"configured": False}
     return {"configured": True, "this_week": this_week, "next_week": next_week}
 
+async def _apply_subject_name_overrides(db: AsyncSession, class_id: int, lessons: list) -> list:
+    """Untis's own subject long-name is often just the short code duplicated
+    (a lot of schools never actually fill in a real long name in Untis) —
+    if the class's Subject table has a distinct display name for that short
+    code (editable by an admin under Admin -> Fächer), use that instead.
+    subject_short is left untouched either way, since that's the raw Untis
+    code everything else (color mapping, homework subject matching, ...)
+    keys off internally — this only ever changes what gets displayed."""
+    result = await db.execute(select(Subject).where(Subject.class_id == class_id))
+    override_map = {
+        s.short_name: s.name for s in result.scalars().all()
+        if s.short_name and s.name and s.name != s.short_name
+    }
+    if not override_map:
+        return lessons
+    for l in lessons:
+        short = l.get("subject_short")
+        if short and short in override_map:
+            l["subject"] = override_map[short]
+    return lessons
+
 @router.get("/")
 async def get_timetable(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     if not current_user.class_id:
@@ -246,6 +267,8 @@ async def get_timetable(db: AsyncSession = Depends(get_db), current_user: User =
     # 1. Return from 5-minute cache if available
     cached = get_cached_timetable(cls.id)
     if cached and not cached.get("error"):
+        await _apply_subject_name_overrides(db, cls.id, cached["this_week"]["lessons"])
+        await _apply_subject_name_overrides(db, cls.id, cached["next_week"]["lessons"])
         return {
             "configured": True,
             "this_week": cached["this_week"],
@@ -269,6 +292,8 @@ async def get_timetable(db: AsyncSession = Depends(get_db), current_user: User =
         this_week = {"start": this_monday.isoformat(), "lessons": this_lessons}
         next_week = {"start": next_monday.isoformat(), "lessons": next_lessons}
         set_cached_timetable(cls.id, this_week, next_week, holidays)
+        await _apply_subject_name_overrides(db, cls.id, this_week["lessons"])
+        await _apply_subject_name_overrides(db, cls.id, next_week["lessons"])
 
         return {
             "configured": True,

@@ -51,6 +51,7 @@ const API = {
   deleteManualTimetableEntry: (id, eId)    => API.delete(`/classes/${id}/timetable-manual/${eId}`),
   subjects:      ()       => API.get('/subjects/'),
   createSubject: (d)      => API.post('/subjects/', d),
+  updateSubject: (id, d)  => API.put(`/subjects/${id}`, d),
   deleteSubject: (id)     => API.delete(`/subjects/${id}`),
   events:        (month)  => API.get('/calendar/' + (month ? `?month=${month}` : '')),
   createEvent:   (d)      => API.post('/calendar/', d),

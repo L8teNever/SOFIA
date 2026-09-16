@@ -5,7 +5,7 @@ from backend.database import get_db
 from backend.auth import get_current_user, require_admin
 from backend.models.subject import Subject
 from backend.models.user import User
-from backend.schemas import SubjectOut, SubjectCreate
+from backend.schemas import SubjectOut, SubjectCreate, SubjectUpdate
 from typing import List
 
 router = APIRouter(prefix="/api/v1/subjects", tags=["subjects"])
@@ -38,6 +38,24 @@ async def create_subject(data: SubjectCreate, db: AsyncSession = Depends(get_db)
         is_global=is_global,
     )
     db.add(subject)
+    await db.commit()
+    await db.refresh(subject)
+    return subject
+
+@router.put("/{subject_id}", response_model=SubjectOut)
+async def update_subject(subject_id: int, data: SubjectUpdate, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_admin)):
+    result = await db.execute(select(Subject).where(Subject.id == subject_id))
+    subject = result.scalar_one_or_none()
+    if not subject:
+        raise HTTPException(404)
+    if not subject.is_global and subject.class_id != current_user.class_id:
+        raise HTTPException(403)
+    if data.name is not None and data.name.strip():
+        subject.name = data.name.strip()
+    if data.short_name is not None:
+        subject.short_name = data.short_name.strip() or None
+    if data.color is not None:
+        subject.color = data.color
     await db.commit()
     await db.refresh(subject)
     return subject

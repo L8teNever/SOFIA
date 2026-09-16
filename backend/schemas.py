@@ -51,6 +51,11 @@ class SubjectCreate(BaseModel):
     color: Optional[str] = "#6750a4"
     is_global: bool = False
 
+class SubjectUpdate(BaseModel):
+    name: Optional[str] = None
+    short_name: Optional[str] = None
+    color: Optional[str] = None
+
 # Calendar
 class CalendarEventOut(BaseModel):
     id: int
