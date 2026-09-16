@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_
 from backend.database import get_db
@@ -16,7 +16,7 @@ from backend.services.audit_service import log_audit
 from backend.gemini_client import classify_drive_file, GeminiError
 from datetime import datetime, timezone
 from typing import List, Optional
-import aiofiles, uuid, os, logging
+import aiofiles, uuid, os, logging, html
 
 logger = logging.getLogger(__name__)
 
@@ -204,6 +204,57 @@ async def preview_drive_file(file_id: int, db: AsyncSession = Depends(get_db), c
     if not os.path.exists(path):
         raise HTTPException(404)
     return FileResponse(path, media_type=df.mime_type or "application/octet-stream", content_disposition_type="inline")
+
+VIEW_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg"}
+
+@router.get("/view/{file_id}", response_class=HTMLResponse)
+async def view_drive_file(file_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """A tiny standalone page around /preview/{id} — opened in a new tab for
+    the file instead of linking straight to the raw file, so there's still a
+    way back into the app (linking straight to the raw file leaves the
+    browser's native viewer with no app chrome at all, so closing the tab
+    was the only way back). Uses a normal viewport (no user-scalable=no)
+    so the browser's own native pinch-zoom works here even for images."""
+    df = await _get_visible(db, file_id, current_user)
+    ext = _ext(df.original_name)
+    name_esc = html.escape(df.original_name)
+
+    if ext in VIEW_IMAGE_EXTS:
+        body = f'<img src="/api/v1/drive/preview/{file_id}" alt="{name_esc}">'
+    elif ext == ".pdf":
+        body = f'<iframe src="/api/v1/drive/preview/{file_id}"></iframe>'
+    else:
+        body = (
+            f'<div class="dv-empty">Für diesen Dateityp gibt es keine Vorschau im Browser.'
+            f'<br><a href="/api/v1/drive/download/{file_id}">Datei herunterladen</a></div>'
+        )
+
+    return HTMLResponse(f"""<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{name_esc}</title>
+<style>
+  html, body {{ margin:0; height:100%; background:#f3edf7; font-family:system-ui,-apple-system,sans-serif; }}
+  .dv-header {{ display:flex; align-items:center; gap:10px; padding:10px 14px; background:#fff; box-shadow:0 1px 4px rgba(0,0,0,0.08); position:sticky; top:0; }}
+  .dv-btn {{ display:flex; align-items:center; justify-content:center; width:36px; height:36px; border-radius:50%; background:rgba(103,80,164,0.1); color:#442b7a; text-decoration:none; flex-shrink:0; font-size:1.1rem; }}
+  .dv-title {{ font-weight:700; font-size:0.92rem; color:#1c1b1f; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; min-width:0; }}
+  .dv-body {{ height:calc(100vh - 57px); display:flex; align-items:center; justify-content:center; overflow:auto; box-sizing:border-box; }}
+  .dv-body img {{ max-width:100%; display:block; }}
+  .dv-body iframe {{ width:100%; height:100%; border:none; }}
+  .dv-empty {{ text-align:center; padding:40px 24px; opacity:0.6; line-height:1.6; }}
+</style>
+</head>
+<body>
+  <div class="dv-header">
+    <a class="dv-btn" href="/drive" title="Zurück zu Drive">&#8592;</a>
+    <div class="dv-title">{name_esc}</div>
+    <a class="dv-btn" href="/api/v1/drive/download/{file_id}" download title="Herunterladen">&#8595;</a>
+  </div>
+  <div class="dv-body">{body}</div>
+</body>
+</html>""")
 
 @router.get("/{file_id}/text")
 async def get_drive_file_text(file_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):

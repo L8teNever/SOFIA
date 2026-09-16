@@ -506,7 +506,7 @@ function openDriveFile(id) {
   if (DRIVE_TEXT_EXTS.includes(driveExt(f.original_name))) {
     openDriveFilePreview(id);
   } else {
-    window.open('/api/v1/drive/preview/' + id, '_blank', 'noopener');
+    window.open('/api/v1/drive/view/' + id, '_blank', 'noopener');
   }
 }
 
@@ -573,7 +573,7 @@ async function openDriveFilePreview(id) {
 
   document.getElementById('drive-preview-actions').innerHTML = `
     <a href="/api/v1/drive/download/${id}" download class="m3-btn-outline" style="flex:1;text-align:center;text-decoration:none;">Herunterladen</a>
-    ${!isText ? `<a href="/api/v1/drive/preview/${id}" target="_blank" rel="noopener" class="m3-btn-outline" style="flex:1;text-align:center;text-decoration:none;">In neuem Tab öffnen</a>` : ''}
+    ${!isText ? `<a href="/api/v1/drive/view/${id}" target="_blank" rel="noopener" class="m3-btn-outline" style="flex:1;text-align:center;text-decoration:none;">In neuem Tab öffnen</a>` : ''}
     ${isText ? `<button class="m3-btn-primary" style="flex:1;" onclick="startDriveTextEdit(${id})" id="drive-edit-toggle-btn">Bearbeiten</button>` : ''}
   `;
 
