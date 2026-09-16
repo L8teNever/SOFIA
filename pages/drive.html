@@ -170,9 +170,24 @@ function driveMatchesSearch(f, q) {
   return hay.includes(q);
 }
 
+// The header title (top of the page, not the in-content folder header)
+// otherwise just always said "Drive" no matter how deep you'd navigated —
+// this keeps it in sync with wherever driveSelectedSubjectId/driveInLessonsView
+// currently point, same as a normal file browser's window title would.
+function driveHeaderTitle() {
+  if (driveSearchQuery || driveMode === 'recent') return 'Drive';
+  if (driveSelectedSubjectId === null) return 'Drive';
+  if (driveSelectedSubjectId === 'unsorted') return 'Unsortiert';
+  if (driveInLessonsView) return 'Unterrichtsstunden';
+  const subject = driveSubjects.find(s => s.id === driveSelectedSubjectId);
+  return subject ? subject.name : 'Drive';
+}
+
 function renderDrive() {
   const el = document.getElementById('drive-content');
   document.getElementById('drive-view-chips').style.display = driveSearchQuery ? 'none' : 'flex';
+  const titleEl = document.getElementById('drive-title-text');
+  if (titleEl) titleEl.textContent = driveHeaderTitle();
 
   if (driveSearchQuery) {
     const q = driveSearchQuery.toLowerCase();
@@ -281,7 +296,7 @@ function setDriveLabelFilter(val) {
 function driveLabelFilterChips() {
   return `<div style="display:flex;gap:8px;margin-bottom:14px;">
     <button onclick="setDriveLabelFilter(null)" class="chip${driveLabelFilter===null?' active':''}">Alle</button>
-    <button onclick="setDriveLabelFilter('lecture_notes')" class="chip${driveLabelFilter==='lecture_notes'?' active':''}">📝 Aufschriebe</button>
+    <button onclick="setDriveLabelFilter('lecture_notes')" class="chip${driveLabelFilter==='lecture_notes'?' active':''}"><i data-lucide="notebook-pen" style="width:14px;height:14px;margin-right:4px;vertical-align:-2px;"></i>Aufschriebe</button>
   </div>`;
 }
 
@@ -312,17 +327,15 @@ function renderDriveSubjectFolder(id) {
     : driveFiles.filter(f => f.subject_id === id);
   if (!isUnsorted && driveLabelFilter === 'lecture_notes') files = files.filter(f => f.is_lecture_notes);
 
-  // No in-content back arrow here — the page header's own back button
-  // (top-left) is context-aware (see driveHeaderBack()) and already covers
-  // exactly this, so a second one right below it would just be a duplicate
-  // doing the same thing.
-  const title = isUnsorted ? 'Unsortiert' : (driveInLessonsView ? 'Unterrichtsstunden' : (subject ? subject.name : ''));
-  const header = `<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
-    <div style="font-weight:800;font-size:1.15rem;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(title)}</div>
-    ${!isUnsorted && !driveInLessonsView ? `<button class="icon-btn" onclick="openCreateTopicSheet(${id})" style="width:36px;height:36px;flex-shrink:0;" title="Neuer Ordner">
+  // No in-content back arrow or title here — the page header (top-left
+  // back button + title, see driveHeaderBack()/driveHeaderTitle()) already
+  // covers both, so repeating them right below would just be clutter
+  // saying the same thing twice.
+  const header = (!isUnsorted && !driveInLessonsView) ? `<div style="display:flex;justify-content:flex-end;margin-bottom:14px;">
+    <button class="icon-btn" onclick="openCreateTopicSheet(${id})" style="width:36px;height:36px;flex-shrink:0;" title="Neuer Ordner">
       <i data-lucide="folder-plus" style="width:18px;height:18px;"></i>
-    </button>` : ''}
-  </div>`;
+    </button>
+  </div>` : '';
 
   if (isUnsorted) {
     if (!files.length) return header + emptyState({ icon:'folder-open', title:'Noch keine Dateien in diesem Ordner', hidden:false });
@@ -485,7 +498,7 @@ function renderDriveFileList(files, showTag) {
         <i data-lucide="${driveIcon(f.original_name)}" style="width:20px;height:20px;"></i>
       </div>
       <div style="flex:1;min-width:0;cursor:pointer;" onclick="openDriveFile(${f.id})">
-        <div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(f.original_name)}${f.is_lecture_notes ? ' <span title="Aufschrieb" style="font-size:0.85em;">📝</span>' : ''}</div>
+        <div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(f.original_name)}${f.is_lecture_notes ? ' <i data-lucide="notebook-pen" title="Aufschrieb" style="width:13px;height:13px;vertical-align:-2px;opacity:0.6;"></i>' : ''}</div>
         <div style="font-size:0.75rem;opacity:0.6;">${formatBytes(f.file_size)} · ${escapeHtml(f.uploader_name||'?')} · ${driveRelTime(f.created_at)}</div>
         ${tag}
       </div>
@@ -522,7 +535,7 @@ function handleDriveFileSelect(fileList) {
 
       <div style="font-size:0.8rem;font-weight:700;opacity:0.5;margin-bottom:6px;">FACH</div>
       <select class="m3-select" id="drive-up-subject" style="margin-bottom:14px;" onchange="onDriveUploadSubjectChange()">
-        <option value="">🤖 Automatisch sortieren (KI)</option>
+        <option value="">Automatisch sortieren (KI)</option>
         ${subjectOptions}
       </select>
 
@@ -659,7 +672,7 @@ async function uploadDriveFiles() {
   if (failed && uploaded) showToast(`${uploaded} hochgeladen, ${failed} fehlgeschlagen`);
   else if (failed) showToast('Upload fehlgeschlagen');
   else if (total > 1) showToast(`${uploaded} Dateien hochgeladen!`);
-  else showToast(anyAutoSorted ? '🤖 Datei automatisch einsortiert!' : 'Datei hochgeladen!');
+  else showToast(anyAutoSorted ? 'Datei automatisch einsortiert!' : 'Datei hochgeladen!');
 }
 
 // --- Delete ---
