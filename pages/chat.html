@@ -118,22 +118,42 @@ let chatPlayingVoiceId = null; // message id of the voice note currently playing
 let chatOpenedFromDirectUrl = false;
 
 async function init_chat() {
+  const pathParts = window.location.pathname.replace(/^\/chat\/?/, '').split('/');
+  const subTarget = pathParts[0] ? decodeURIComponent(pathParts[0]).trim() : '';
+
+  if (subTarget) {
+    document.getElementById('chat-list-view').style.display = 'none';
+    document.getElementById('chat-detail-view').style.display = 'flex';
+    document.querySelector('#page-chat .fab')?.style.setProperty('display', 'none');
+    document.getElementById('chat-title').textContent = 'Chat';
+    document.getElementById('chat-mute-btn').style.display = 'none';
+    document.getElementById('chat-search-btn').style.display = 'none';
+    const msgsEl = document.getElementById('chat-messages-scroll');
+    if (msgsEl) {
+      msgsEl.innerHTML = `
+        <div id="chat-loading-spinner" style="display:flex;align-items:center;justify-content:center;height:100%;opacity:0.5;gap:8px;font-size:0.9rem;">
+          <span style="width:8px;height:8px;border-radius:50%;background:#6750a4;animation:chat-rec-pulse 1s infinite;"></span>
+          <span>Chat wird geladen…</span>
+        </div>`;
+    }
+  }
+
   [chatConversations, chatClassUsers] = await Promise.all([
     API.chatConversations().catch(() => []),
     API.classUsers().catch(() => []),
   ]);
-  renderChatList();
   startChatListPolling();
 
-  const pathParts = window.location.pathname.replace(/^\/chat\/?/, '').split('/');
-  const subTarget = pathParts[0] ? decodeURIComponent(pathParts[0]).trim() : '';
   if (subTarget) {
     const targetConv = findConversationBySlugOrId(subTarget, chatConversations);
     if (targetConv) {
       openChatConversation(targetConv.id, true);
     } else {
+      closeChatConversation(true);
       history.replaceState({ page: 'chat' }, '', '/chat');
     }
+  } else {
+    renderChatList();
   }
 }
 
@@ -380,28 +400,9 @@ function findConversationBySlugOrId(slugOrId, list) {
 
 async function openChatConversation(id, fromDeepLink = false, isPopState = false) {
   chatCurrentConversationId = id;
-  document.getElementById('chat-list-view').style.display = 'none';
-  document.getElementById('chat-detail-view').style.display = 'flex';
-  document.querySelector('#page-chat .fab')?.style.setProperty('display', 'none');
   const conv = chatConversations.find(c => c.id === id);
-  document.getElementById('chat-title').textContent = conv ? chatConversationTitle(conv) : 'Chat';
-  document.getElementById('chat-mute-btn').style.display = 'flex';
-  document.getElementById('chat-search-btn').style.display = 'none';
-  updateChatMuteIcon(conv?.is_muted);
-  updateChatHeaderAvatar(conv);
 
-  chatReplyTo = null;
-  document.getElementById('chat-reply-bar').style.display = 'none';
-  chatMessages = await API.chatMessages(id).catch(() => []);
-  renderChatMessages();
-  await API.markChatRead(id).catch(() => {});
-  const localConv = chatConversations.find(c => c.id === id);
-  if (localConv) localConv.unread_count = 0;
-
-  initChatGestureHandlers();
-  startChatMsgPolling();
-  initChatKeyboardLock();
-
+  // 1. Immediately sync browser URL on click (no async network delay)
   const targetUrl = conv ? chatUrlPath(conv) : `/chat/${id}`;
   if (fromDeepLink) {
     chatOpenedFromDirectUrl = true;
@@ -410,6 +411,46 @@ async function openChatConversation(id, fromDeepLink = false, isPopState = false
     chatOpenedFromDirectUrl = false;
     history.pushState({ page: 'chat', chatConv: true, conversationId: id }, '', targetUrl);
   }
+
+  // 2. Immediately switch views & show correct header title/avatar
+  document.getElementById('chat-list-view').style.display = 'none';
+  document.getElementById('chat-detail-view').style.display = 'flex';
+  document.querySelector('#page-chat .fab')?.style.setProperty('display', 'none');
+  document.getElementById('chat-title').textContent = conv ? chatConversationTitle(conv) : 'Chat';
+  document.getElementById('chat-mute-btn').style.display = 'flex';
+  document.getElementById('chat-search-btn').style.display = 'none';
+  updateChatMuteIcon(conv?.is_muted);
+  updateChatHeaderAvatar(conv);
+
+  chatReplyTo = null;
+  document.getElementById('chat-reply-bar').style.display = 'none';
+
+  // 3. Immediately clear previous messages to prevent previous chat from flashing
+  chatMessages = [];
+  const scrollEl = document.getElementById('chat-messages-scroll');
+  if (scrollEl) {
+    scrollEl.dataset.scrolledOnce = '';
+    scrollEl.innerHTML = `
+      <div id="chat-loading-spinner" style="display:flex;align-items:center;justify-content:center;height:100%;opacity:0.5;gap:8px;font-size:0.9rem;">
+        <span style="width:8px;height:8px;border-radius:50%;background:#6750a4;animation:chat-rec-pulse 1s infinite;"></span>
+        <span>Chat wird geladen…</span>
+      </div>`;
+  }
+
+  // 4. Fetch messages with active conversation guard
+  const fetchConvId = id;
+  const msgs = await API.chatMessages(id).catch(() => []);
+  if (chatCurrentConversationId !== fetchConvId) return;
+
+  chatMessages = msgs;
+  renderChatMessages(true);
+  await API.markChatRead(id).catch(() => {});
+  const localConv = chatConversations.find(c => c.id === id);
+  if (localConv) localConv.unread_count = 0;
+
+  initChatGestureHandlers();
+  startChatMsgPolling();
+  initChatKeyboardLock();
 }
 
 function closeChatConversation(isPopState) {
@@ -418,6 +459,12 @@ function closeChatConversation(isPopState) {
   if (chatPlayingVoiceId !== null) {
     document.getElementById(`chat-voice-audio-${chatPlayingVoiceId}`)?.pause();
     chatPlayingVoiceId = null;
+  }
+  chatMessages = [];
+  const scrollEl = document.getElementById('chat-messages-scroll');
+  if (scrollEl) {
+    scrollEl.dataset.scrolledOnce = '';
+    scrollEl.innerHTML = '';
   }
   document.getElementById('chat-detail-view').style.display = 'none';
   document.getElementById('chat-list-view').style.display = '';
@@ -551,6 +598,23 @@ function chatFileUrl(m) {
   return `/api/v1/chat/conversations/${m.conversation_id}/messages/${m.id}/file`;
 }
 
+function onChatImageLoaded() {
+  const el = document.getElementById('chat-messages-scroll');
+  if (!el) return;
+  const wasNearBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 160;
+  if (wasNearBottom) el.scrollTop = el.scrollHeight;
+}
+
+function scrollChatToBottom(smooth = false) {
+  const el = document.getElementById('chat-messages-scroll');
+  if (!el) return;
+  if (smooth) {
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+  } else {
+    el.scrollTop = el.scrollHeight;
+  }
+}
+
 function renderChatMessageBody(m) {
   if (m.msg_type === 'poll') return renderChatPollBubble(m);
   if (m.msg_type === 'image') {
@@ -558,7 +622,7 @@ function renderChatMessageBody(m) {
     // (external_url) instead of our own file-serving endpoint — nothing to
     // download/re-host for something already meant to be publicly embedded.
     const src = m.external_url || chatFileUrl(m);
-    return `<img src="${src}" loading="lazy" style="max-width:220px;max-height:280px;border-radius:10px;display:block;cursor:pointer;" onclick="window.open('${src}','_blank')">`;
+    return `<img src="${src}" loading="lazy" onload="onChatImageLoaded()" style="max-width:220px;max-height:280px;border-radius:10px;display:block;cursor:pointer;" onclick="window.open('${src}','_blank')">`;
   }
   if (m.msg_type === 'file') {
     return `<a href="${chatFileUrl(m)}" download="${escapeHtml(m.file_name || '')}" style="display:flex;align-items:center;gap:8px;text-decoration:none;color:inherit;min-width:140px;">
@@ -597,8 +661,9 @@ function renderChatReactionPills(m) {
   </div>`;
 }
 
-function renderChatMessages() {
+function renderChatMessages(forceScrollBottom = false) {
   const el = document.getElementById('chat-messages-scroll');
+  if (!el) return;
   const wasNearBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 80;
   el.innerHTML = chatMessages.map(m => {
     const mine = currentUser && m.sender_id === currentUser.id;
@@ -619,9 +684,12 @@ function renderChatMessages() {
       </div>
     </div>`;
   }).join('');
-  if (wasNearBottom || !el.dataset.scrolledOnce) {
+  if (forceScrollBottom || wasNearBottom || !el.dataset.scrolledOnce) {
     el.scrollTop = el.scrollHeight;
     el.dataset.scrolledOnce = '1';
+    requestAnimationFrame(() => {
+      if (el) el.scrollTop = el.scrollHeight;
+    });
   }
   if (window.lucide) lucide.createIcons();
 }
@@ -673,13 +741,15 @@ async function sendChatMessage() {
   if (!text || !chatCurrentConversationId) return;
   input.value = '';
   chatAutoGrow(input);
+  scrollChatToBottom(true);
   const btn = document.getElementById('chat-send-btn');
   btn.disabled = true;
   const replyToId = chatReplyTo?.id || null;
   try {
     const msg = await API.sendChatMessage(chatCurrentConversationId, { msg_type: 'text', text, reply_to_id: replyToId });
     chatMessages.push(msg);
-    renderChatMessages();
+    renderChatMessages(true);
+    scrollChatToBottom(false);
     cancelChatReply();
     const conv = chatConversations.find(c => c.id === chatCurrentConversationId);
     if (conv) { conv.last_message = text; conv.last_message_at = msg.created_at; }
@@ -906,12 +976,14 @@ async function loadChatGifs(q) {
 async function sendChatGif(url) {
   closeSheet();
   if (!chatCurrentConversationId) return;
+  scrollChatToBottom(true);
   try {
     const msg = await API.sendChatMessage(chatCurrentConversationId, {
       msg_type: 'image', external_url: url, reply_to_id: chatReplyTo?.id || null,
     });
     chatMessages.push(msg);
-    renderChatMessages();
+    renderChatMessages(true);
+    scrollChatToBottom(false);
     cancelChatReply();
     const conv = chatConversations.find(c => c.id === chatCurrentConversationId);
     if (conv) { conv.last_message = chatMessagePreviewText(msg); conv.last_message_at = msg.created_at; }
@@ -955,6 +1027,7 @@ async function handleChatFileSelect(file) {
 async function uploadAndSendChatFile(file, overrideType) {
   if (!file || !chatCurrentConversationId) return;
   showToast('Wird hochgeladen…');
+  scrollChatToBottom(true);
   try {
     const form = new FormData();
     form.append('file', file);
@@ -965,7 +1038,8 @@ async function uploadAndSendChatFile(file, overrideType) {
       reply_to_id: chatReplyTo?.id || null,
     });
     chatMessages.push(msg);
-    renderChatMessages();
+    renderChatMessages(true);
+    scrollChatToBottom(false);
     cancelChatReply();
     const conv = chatConversations.find(c => c.id === chatCurrentConversationId);
     if (conv) { conv.last_message = chatMessagePreviewText(msg); conv.last_message_at = msg.created_at; }
@@ -1138,10 +1212,12 @@ async function submitNewPoll() {
   if (!question) { err.textContent = 'Frage eingeben'; return; }
   if (options.length < 2) { err.textContent = 'Mindestens 2 Antwortmöglichkeiten eingeben'; return; }
   const pollMulti = document.getElementById('chat-poll-multi').checked;
+  scrollChatToBottom(true);
   try {
     const msg = await API.sendChatMessage(chatCurrentConversationId, { msg_type: 'poll', text: question, poll_options: options, poll_multi: pollMulti });
     chatMessages.push(msg);
-    renderChatMessages();
+    renderChatMessages(true);
+    scrollChatToBottom(false);
     cancelChatReply();
     const conv = chatConversations.find(c => c.id === chatCurrentConversationId);
     if (conv) { conv.last_message = '📊 Umfrage: ' + question; conv.last_message_at = msg.created_at; }
