@@ -77,6 +77,7 @@ let driveUploadTargetSubjectId = null;
 let drivePreviewFileId = null;
 let driveTopicsCache = {}; // subjectId -> [{id, name, file_count}]
 let driveInLessonsView = false; // inside the "Unterrichtsstunden" sub-folder of the current subject
+let driveSelectedLessonTopic = null; // inside one specific date folder within Unterrichtsstunden
 let driveLabelFilter = null; // null | 'lecture_notes' — active within the current subject folder
 const DRIVE_DATE_TOPIC_RE = /^\d{2}\.\d{2}\.\d{4}$/; // matches the DD.MM.YYYY topics the upload sheet auto-creates
 
@@ -178,6 +179,7 @@ function driveHeaderTitle() {
   if (driveSearchQuery || driveMode === 'recent') return 'Drive';
   if (driveSelectedSubjectId === null) return 'Drive';
   if (driveSelectedSubjectId === 'unsorted') return 'Unsortiert';
+  if (driveSelectedLessonTopic) return driveSelectedLessonTopic;
   if (driveInLessonsView) return 'Unterrichtsstunden';
   const subject = driveSubjects.find(s => s.id === driveSelectedSubjectId);
   return subject ? subject.name : 'Drive';
@@ -242,6 +244,7 @@ function renderDriveFolderGrid() {
 async function openDriveSubjectFolder(id) {
   driveSelectedSubjectId = id;
   driveInLessonsView = false;
+  driveSelectedLessonTopic = null;
   driveLabelFilter = null;
   if (id !== 'unsorted' && !driveTopicsCache[id]) {
     driveTopicsCache[id] = await API.driveTopics(id).catch(() => []);
@@ -252,15 +255,20 @@ async function openDriveSubjectFolder(id) {
 function backToDriveFolders() {
   driveSelectedSubjectId = null;
   driveInLessonsView = false;
+  driveSelectedLessonTopic = null;
   driveLabelFilter = null;
   renderDrive();
 }
 
-// Back button inside a subject folder: one level up from "Unterrichtsstunden"
+// Back button inside a subject folder: one level up from a specific date
+// folder goes to the Unterrichtsstunden tile grid, one level up from there
 // goes to the subject root, one level up from the subject root goes to the
 // folder grid — same behavior as any file browser's back button.
 function driveGoBack() {
-  if (driveInLessonsView) {
+  if (driveSelectedLessonTopic) {
+    driveSelectedLessonTopic = null;
+    renderDrive();
+  } else if (driveInLessonsView) {
     driveInLessonsView = false;
     renderDrive();
   } else {
@@ -285,6 +293,12 @@ function driveHeaderBack() {
 
 function openDriveLessonsView() {
   driveInLessonsView = true;
+  driveSelectedLessonTopic = null;
+  renderDrive();
+}
+
+function openDriveLessonTopic(name) {
+  driveSelectedLessonTopic = name;
   renderDrive();
 }
 
@@ -367,8 +381,34 @@ function renderDriveSubjectFolder(id) {
   const otherTopicNames = allTopicNames.filter(n => !DRIVE_DATE_TOPIC_RE.test(n)).sort((a,b) => a.localeCompare(b));
 
   if (driveInLessonsView) {
+    // One specific date folder, opened from the tile grid below — a real
+    // folder now (its own navigation level you click into), not just a
+    // heading with files sitting inline underneath it.
+    if (driveSelectedLessonTopic) {
+      const g = topicMap[driveSelectedLessonTopic];
+      const list = g ? g.files.sort((a,b) => new Date(b.created_at) - new Date(a.created_at)) : [];
+      const topicHeader = g && g.topicId ? `<div style="display:flex;justify-content:flex-end;margin-bottom:14px;">
+        <button class="icon-btn" onclick="openRenameTopicSheet(${g.topicId},${id})" style="width:36px;height:36px;" title="Umbenennen">
+          <i data-lucide="pencil" style="width:16px;height:16px;"></i>
+        </button>
+      </div>` : '';
+      return topicHeader + (list.length
+        ? renderDriveFileList(list, false)
+        : emptyState({ icon:'folder-open', title:'Noch keine Dateien in diesem Ordner', hidden:false }));
+    }
+
     if (!dateTopicNames.length) return header + driveLabelFilterChips() + emptyState({ icon:'folder-open', title:'Noch keine Unterrichtsstunden-Ordner', hidden:false });
-    return header + driveLabelFilterChips() + renderDriveTopicGroups(dateTopicNames, topicMap, id);
+    const dateTiles = dateTopicNames.map(name => {
+      const count = topicMap[name].files.length;
+      return `<div class="drive-folder-tile" onclick="openDriveLessonTopic('${name}')">
+        <div class="icon-box" style="width:44px;height:44px;border-radius:14px;background:#ffdec1;">
+          <i data-lucide="calendar" style="width:22px;height:22px;color:#442b7a;"></i>
+        </div>
+        <div style="font-weight:700;font-size:0.92rem;">${escapeHtml(name)}</div>
+        <div style="font-size:0.75rem;opacity:0.5;">${count} Datei${count===1?'':'en'}</div>
+      </div>`;
+    }).join('');
+    return header + driveLabelFilterChips() + `<div class="drive-folder-grid">${dateTiles}</div>`;
   }
 
   if (!allTopicNames.length && !untagged.length) {
@@ -437,6 +477,10 @@ async function submitRenameTopic(topicId, subjectId) {
     await API.renameDriveTopic(topicId, { name });
     driveFiles = await API.driveFiles().catch(() => driveFiles);
     driveTopicsCache[subjectId] = await API.driveTopics(subjectId).catch(() => []);
+    // A renamed date folder may no longer look like one (or may have been
+    // the one currently open) — step back to the Unterrichtsstunden tile
+    // grid rather than keep pointing at a name that no longer exists.
+    if (driveSelectedLessonTopic) driveSelectedLessonTopic = null;
     closeSheet();
     renderDrive();
     showToast('Ordner umbenannt');
@@ -469,6 +513,7 @@ function openMoveFileSheet(fileId) {
 async function submitMoveFile(fileId) {
   const subjVal = document.getElementById('drive-move-subject').value;
   const topicVal = document.getElementById('drive-move-topic').value;
+  const before = driveFiles.find(f => f.id === fileId);
   try {
     const updated = await API.updateDriveFile(fileId, {
       subject_id: subjVal ? parseInt(subjVal) : null,
@@ -477,6 +522,15 @@ async function submitMoveFile(fileId) {
     const idx = driveFiles.findIndex(f => f.id === fileId);
     if (idx !== -1) driveFiles[idx] = updated;
     driveTopicsCache = {};
+
+    // Same auto-delete-emptied-date-folder handling as executeDeleteDriveFile
+    // — moving the last file out of the currently-open date folder empties
+    // it (and the backend removes it) just as surely as deleting it would.
+    if (before && driveSelectedLessonTopic && before.topic === driveSelectedLessonTopic && before.subject_id === driveSelectedSubjectId) {
+      const stillHasFiles = driveFiles.some(f => f.subject_id === driveSelectedSubjectId && f.topic === driveSelectedLessonTopic);
+      if (!stillHasFiles) driveSelectedLessonTopic = null;
+    }
+
     closeSheet();
     renderDrive();
     showToast('Datei verschoben');
@@ -688,6 +742,7 @@ function deleteDriveFileConfirm(id) {
 }
 
 async function executeDeleteDriveFile(id) {
+  const deleted = driveFiles.find(f => f.id === id);
   try {
     await API.deleteDriveFile(id);
   } catch {
@@ -696,6 +751,16 @@ async function executeDeleteDriveFile(id) {
   }
   driveFiles = driveFiles.filter(f => f.id !== id);
   driveTopicsCache = {};
+
+  // The backend auto-deletes an emptied date folder (see
+  // backend/routes/drive.py) — if that's the exact folder currently open,
+  // step back up to the tile grid rather than rendering a now-nonexistent
+  // folder's (empty) contents.
+  if (deleted && driveSelectedLessonTopic && deleted.topic === driveSelectedLessonTopic && deleted.subject_id === driveSelectedSubjectId) {
+    const stillHasFiles = driveFiles.some(f => f.subject_id === driveSelectedSubjectId && f.topic === driveSelectedLessonTopic);
+    if (!stillHasFiles) driveSelectedLessonTopic = null;
+  }
+
   closeModal();
   renderDrive();
   showToast('Gelöscht');

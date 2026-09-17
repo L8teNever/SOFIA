@@ -16,7 +16,7 @@ from backend.services.audit_service import log_audit
 from backend.gemini_client import classify_drive_file, analyze_drive_upload, GeminiError
 from datetime import datetime, timezone
 from typing import List, Optional
-import aiofiles, uuid, os, logging, html
+import aiofiles, uuid, os, logging, html, re
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +24,10 @@ router = APIRouter(prefix="/api/v1/drive", tags=["drive"])
 
 TEXT_EDITABLE_EXTS = {".md", ".markdown", ".txt"}
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"}
+# Matches the DD.MM.YYYY topics the upload sheet's subject+day picker
+# auto-creates (see onDriveUploadDateChange() in pages/drive.html) — kept in
+# sync with the frontend's own DRIVE_DATE_TOPIC_RE.
+DATE_TOPIC_RE = re.compile(r"^\d{2}\.\d{2}\.\d{4}$")
 
 def _ext(name: str) -> str:
     return os.path.splitext(name or "")[1].lower()
@@ -42,6 +46,30 @@ async def _get_or_create_topic(db: AsyncSession, class_id: int, subject_id: int,
     db.add(topic)
     await db.flush()
     return topic
+
+async def _maybe_delete_empty_date_topic(db: AsyncSession, class_id: int, subject_id: Optional[int], topic_name: Optional[str]):
+    """A per-lesson date folder (see DATE_TOPIC_RE above) is incidental —
+    nobody deliberately decided "16.09.2026" should exist as a folder, it's
+    just where that day's files happened to land via the upload sheet's
+    subject+day picker. Once the last file in one is gone (deleted, or
+    moved elsewhere), the empty date folder left behind has no purpose, so
+    it's removed automatically instead of lingering. A manually-named topic
+    (anything not matching the date pattern) is left alone even when
+    empty — a person deliberately created that one and might want to keep
+    it, e.g. to prepare it before any files exist yet."""
+    if not subject_id or not topic_name or not DATE_TOPIC_RE.match(topic_name):
+        return
+    remaining = await db.execute(select(DriveFile).where(
+        DriveFile.class_id == class_id, DriveFile.subject_id == subject_id, DriveFile.topic == topic_name,
+    ))
+    if remaining.scalar_one_or_none():
+        return
+    topic_result = await db.execute(select(DriveTopic).where(
+        DriveTopic.class_id == class_id, DriveTopic.subject_id == subject_id, DriveTopic.name == topic_name,
+    ))
+    topic = topic_result.scalar_one_or_none()
+    if topic:
+        await db.delete(topic)
 
 async def _serialize(db: AsyncSession, files: List[DriveFile]) -> List[dict]:
     if not files:
@@ -316,12 +344,18 @@ async def update_drive_file_text(file_id: int, data: DriveTextUpdate, request: R
 @router.put("/{file_id}", response_model=DriveFileOut)
 async def update_drive_file(file_id: int, data: DriveFileUpdate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     df = await _get_visible(db, file_id, current_user)
+    old_subject_id, old_topic = df.subject_id, df.topic
     df.subject_id = data.subject_id
     df.topic = (data.topic or "").strip() or None
     if df.subject_id and df.topic:
         await _get_or_create_topic(db, current_user.class_id, df.subject_id, df.topic)
     await db.commit()
     await db.refresh(df)
+
+    if (old_subject_id, old_topic) != (df.subject_id, df.topic):
+        await _maybe_delete_empty_date_topic(db, current_user.class_id, old_subject_id, old_topic)
+        await db.commit()
+
     return (await _serialize(db, [df]))[0]
 
 # --- Topic folders ---
@@ -410,7 +444,11 @@ async def delete_drive_file(request: Request, file_id: int, db: AsyncSession = D
         except OSError:
             pass
     original_name = df.original_name
+    class_id, subject_id, topic = df.class_id, df.subject_id, df.topic
     await db.delete(df)
+    await db.commit()
+
+    await _maybe_delete_empty_date_topic(db, class_id, subject_id, topic)
     await db.commit()
 
     await log_audit(
