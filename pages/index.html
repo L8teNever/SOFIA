@@ -84,7 +84,7 @@
       </div>
       <div style="overflow:hidden;min-width:0;width:100%;">
         <div style="font-size:0.8rem;opacity:0.65;margin-top:2px;">Nächster Termin</div>
-        <div style="font-size:1rem;font-weight:700;line-height:1.25;margin-top:2px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;" id="w-next-event">Keine Termine</div>
+        <div style="font-size:1rem;font-weight:700;line-height:1.25;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" id="w-next-event">Keine Termine</div>
         <div style="font-size:0.72rem;opacity:0.6;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" id="w-next-event-sub"></div>
       </div>
     </div>
@@ -132,12 +132,7 @@
       </div>
     </div>
 
-    <!-- Drive + Share: same plain 1x1 square from tablet up, but a short
-         half-height bar on mobile (each still its own grid cell, so they
-         sit side by side, not stacked) — their content is a single short
-         line each, not enough to justify a full square on the narrowest
-         screens (see the .w-mobile-half override in base.css). -->
-    <div class="widget w-square w-mobile-half" style="background:#e8def8;color:#1d192b;" onclick="openPage('drive',this)" data-page="drive">
+    <div class="widget w-square" style="background:#e8def8;color:#1d192b;" onclick="openPage('drive',this)" data-page="drive">
       <div class="icon-box" style="width:48px;height:48px;background:rgba(29,25,43,0.1);">
         <i data-lucide="hard-drive" style="width:24px;height:24px;"></i>
       </div>
@@ -147,7 +142,7 @@
       </div>
     </div>
 
-    <div class="widget w-square w-mobile-half" style="background:#f9dedc;color:#410e0b;" onclick="openPage('quickshare',this)" data-page="quickshare">
+    <div class="widget w-square" style="background:#f9dedc;color:#410e0b;" onclick="openPage('quickshare',this)" data-page="quickshare">
       <div class="icon-box" style="width:48px;height:48px;background:rgba(65,14,11,0.1);">
         <i data-lucide="share-2" style="width:24px;height:24px;"></i>
       </div>
@@ -165,7 +160,7 @@
       </div>
       <div style="overflow:hidden;min-width:0;width:100%;">
         <div style="font-size:0.8rem;opacity:0.65;margin-top:2px;">Chat</div>
-        <div style="font-size:1rem;font-weight:700;line-height:1.25;margin-top:2px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;" id="w-chat-preview">Keine Nachrichten</div>
+        <div style="font-size:1rem;font-weight:700;line-height:1.25;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" id="w-chat-preview">Keine Nachrichten</div>
         <div style="font-size:0.72rem;opacity:0.6;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" id="w-chat-preview-sub"></div>
       </div>
     </div>
