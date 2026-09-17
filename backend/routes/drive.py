@@ -71,6 +71,29 @@ async def _maybe_delete_empty_date_topic(db: AsyncSession, class_id: int, subjec
     if topic:
         await db.delete(topic)
 
+async def _dedupe_original_name(db: AsyncSession, class_id: int, subject_id: Optional[int], topic: Optional[str], name: str, exclude_id: Optional[int] = None) -> str:
+    """Two files with the exact same visible name in the exact same folder
+    used to be harmless (they were only ever addressed by numeric id) — now
+    that a file's URL is built from subject/topic/filename instead (see
+    public_router below), the name has to actually be unique within its
+    folder for that URL to resolve to the right file. Appends " (2)",
+    " (3)", ... until it finds a name nothing else in the folder is using."""
+    base, ext = os.path.splitext(name)
+    candidate = name
+    n = 2
+    while True:
+        query = select(DriveFile).where(
+            DriveFile.class_id == class_id, DriveFile.subject_id == subject_id,
+            DriveFile.topic == topic, DriveFile.original_name == candidate,
+        )
+        if exclude_id is not None:
+            query = query.where(DriveFile.id != exclude_id)
+        result = await db.execute(query)
+        if not result.scalar_one_or_none():
+            return candidate
+        candidate = f"{base} ({n}){ext}"
+        n += 1
+
 async def _serialize(db: AsyncSession, files: List[DriveFile]) -> List[dict]:
     if not files:
         return []
@@ -212,6 +235,8 @@ async def upload_drive_file(
     except Exception as e:
         logger.warning("Drive upload analysis failed, keeping original name: %s", e)
 
+    original_name = await _dedupe_original_name(db, current_user.class_id, resolved_subject_id, resolved_topic, original_name)
+
     filename = f"{uuid.uuid4().hex}{ext}"
     dest = os.path.join(settings.drive_storage_dir, filename)
     os.makedirs(settings.drive_storage_dir, exist_ok=True)
@@ -349,6 +374,12 @@ async def update_drive_file(file_id: int, data: DriveFileUpdate, db: AsyncSessio
     df.topic = (data.topic or "").strip() or None
     if df.subject_id and df.topic:
         await _get_or_create_topic(db, current_user.class_id, df.subject_id, df.topic)
+    # Moving into a folder that already has a same-named file would
+    # otherwise leave two files answering to the same subject/topic/
+    # filename URL (see public_router below) — same reasoning as the
+    # upload-time dedupe.
+    if (old_subject_id, old_topic) != (df.subject_id, df.topic):
+        df.original_name = await _dedupe_original_name(db, current_user.class_id, df.subject_id, df.topic, df.original_name, exclude_id=df.id)
     await db.commit()
     await db.refresh(df)
 
@@ -473,24 +504,53 @@ async def _get_visible(db: AsyncSession, file_id: int, current_user: User) -> Dr
 
 # --- Human-readable file URLs ---
 # A plain /api/v1/drive/preview/{id} tells a human nothing about what the
-# link actually is. These mirror the download/preview/view routes above at
-# a tidier path that also shows the subject/folder/filename — file_id is
-# still the ONLY thing actually looked up and authorization-checked (same
-# _get_visible() class-membership check as everywhere else in this file);
-# the surrounding segments are purely cosmetic and never trusted, so a
-# mismatched or fake subject/topic/filename in the URL has no effect on
-# what gets served — changing file_id to someone else's is exactly the
-# "what if I just edit the URL" case _get_visible() exists to catch.
+# link actually is. These serve the same download/preview/view content at
+# a real-looking path instead — /drive/{subject}/{topic}/{filename} — with
+# no id anywhere in it. The file is looked up BY that subject/topic/filename
+# combination, scoped to the requesting user's own class in the same query
+# that does the lookup (see _find_by_path) — same effective authorization
+# as _get_visible()'s class check everywhere else in this file, just
+# expressed as a WHERE clause instead of a separate check, since there's no
+# id here to look up first. Two files that would otherwise collide on the
+# same folder+filename get disambiguated at upload/move time instead (see
+# _dedupe_original_name) so this lookup is never actually ambiguous.
 public_router = APIRouter(prefix="/drive", tags=["drive-files"])
 
-@public_router.get("/{file_id}/{subject}/{topic}/{filename}/download")
-async def pretty_download_drive_file(file_id: int, subject: str, topic: str, filename: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
-    return await download_drive_file(file_id, db, current_user)
+async def _find_by_path(db: AsyncSession, current_user: User, subject: str, topic: str, filename: str) -> DriveFile:
+    subject_id = None
+    if subject != "Unsortiert":
+        subj_result = await db.execute(select(Subject).where(
+            Subject.name == subject,
+            or_(Subject.class_id == current_user.class_id, Subject.is_global == True, Subject.class_id.is_(None)),  # noqa: E712
+        ))
+        subj = subj_result.scalars().first()
+        if not subj:
+            raise HTTPException(404)
+        subject_id = subj.id
 
-@public_router.get("/{file_id}/{subject}/{topic}/{filename}/raw")
-async def pretty_preview_drive_file(file_id: int, subject: str, topic: str, filename: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
-    return await preview_drive_file(file_id, db, current_user)
+    topic_val = None if topic == "Ohne-Thema" else topic
+    result = await db.execute(select(DriveFile).where(
+        DriveFile.class_id == current_user.class_id,
+        DriveFile.subject_id == subject_id,
+        DriveFile.topic == topic_val,
+        DriveFile.original_name == filename,
+    ))
+    df = result.scalar_one_or_none()
+    if not df:
+        raise HTTPException(404)
+    return df
 
-@public_router.get("/{file_id}/{subject}/{topic}/{filename}", response_class=HTMLResponse)
-async def pretty_view_drive_file(file_id: int, subject: str, topic: str, filename: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
-    return await view_drive_file(file_id, db, current_user)
+@public_router.get("/{subject}/{topic}/{filename}/download")
+async def pretty_download_drive_file(subject: str, topic: str, filename: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    df = await _find_by_path(db, current_user, subject, topic, filename)
+    return await download_drive_file(df.id, db, current_user)
+
+@public_router.get("/{subject}/{topic}/{filename}/raw")
+async def pretty_preview_drive_file(subject: str, topic: str, filename: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    df = await _find_by_path(db, current_user, subject, topic, filename)
+    return await preview_drive_file(df.id, db, current_user)
+
+@public_router.get("/{subject}/{topic}/{filename}", response_class=HTMLResponse)
+async def pretty_view_drive_file(subject: str, topic: str, filename: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    df = await _find_by_path(db, current_user, subject, topic, filename)
+    return await view_drive_file(df.id, db, current_user)

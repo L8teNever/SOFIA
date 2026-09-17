@@ -103,18 +103,19 @@ function formatBytes(b) {
   return (b/1048576).toFixed(1) + ' MB';
 }
 
-// A tidier, human-readable URL for a file — /drive/{id}/{subject}/{topic}/
-// {filename}[/raw|/download] — instead of the bare /api/v1/drive/preview/{id}
-// kind of link. The id is still the only part that's actually looked up
-// server-side (backend/routes/drive.py's public_router just delegates to
-// the same _get_visible()-checked handlers as the /api/v1 routes) — the
-// other segments are purely cosmetic, so encoding them for readability
-// here is all that's needed, no need to keep them in sync with anything.
+// A real-looking URL for a file — /drive/{subject}/{topic}/{filename}
+// [/raw|/download] — with no id anywhere in it, instead of the bare
+// /api/v1/drive/preview/{id} kind of link. The backend (public_router in
+// backend/routes/drive.py) looks the file up BY this exact subject/topic/
+// filename combination, scoped to the requesting user's own class — so
+// these segments have to be exact, unlike a cosmetic label. Upload/move
+// auto-renames a file that would otherwise collide with an existing one in
+// the same folder (see _dedupe_original_name), so this is never ambiguous.
 function driveFileUrl(f, suffix) {
   const subject = encodeURIComponent(f.subject_name || 'Unsortiert');
   const topic = encodeURIComponent(f.topic || 'Ohne-Thema');
   const filename = encodeURIComponent(f.original_name || 'Datei');
-  return `/drive/${f.id}/${subject}/${topic}/${filename}${suffix ? '/' + suffix : ''}`;
+  return `/drive/${subject}/${topic}/${filename}${suffix ? '/' + suffix : ''}`;
 }
 
 function driveRelTime(iso) {
