@@ -701,8 +701,17 @@ async function loadChatGifs(q) {
       grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;opacity:0.5;padding:30px 10px;">Keine GIFs gefunden.</div>';
       return;
     }
+    // No loading="lazy" here (unlike message-bubble images): the grid sits
+    // inside the bottom sheet while it's still mid CSS-transform (sliding
+    // up from translateY(100%)), and populating it fires right after
+    // openSheet() returns — a browser's lazy-load intersection check can
+    // read the sheet as "not near viewport" at that instant and then never
+    // gets a scroll event to re-check once the transform finishes, leaving
+    // the image stuck on its placeholder background forever. The grid is
+    // small and bounded (max 24 tiles, ~100KB each) and the user just
+    // explicitly asked to browse it, so loading everything eagerly is fine.
     grid.innerHTML = data.results.map(g => `
-      <img src="${g.preview_url}" loading="lazy" style="width:100%;border-radius:10px;cursor:pointer;aspect-ratio:${g.width && g.height ? g.width + '/' + g.height : '1/1'};object-fit:cover;background:rgba(0,0,0,0.06);" onclick="sendChatGif('${g.gif_url.replace(/'/g, "\\'")}')">
+      <img src="${g.preview_url}" style="width:100%;border-radius:10px;cursor:pointer;aspect-ratio:${g.width && g.height ? g.width + '/' + g.height : '1/1'};object-fit:cover;background:rgba(0,0,0,0.06);" onclick="sendChatGif('${g.gif_url.replace(/'/g, "\\'")}')">
     `).join('');
   } catch (e) {
     if (!document.getElementById('chat-gif-results')) return;
