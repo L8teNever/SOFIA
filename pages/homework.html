@@ -259,15 +259,59 @@ function startHwPolling() {
   }, 15000);
 }
 
+function hwCombineSubstitutions(lessons) {
+  const used = new Set();
+  const out = [];
+  for (let i = 0; i < lessons.length; i++) {
+    if (used.has(i)) continue;
+    const l = lessons[i];
+    if (l.cancelled) {
+      const j = lessons.findIndex((o, oi) => oi !== i && !used.has(oi) &&
+        o.date === l.date && o.startTime === l.startTime && o.endTime === l.endTime && !o.cancelled);
+      if (j !== -1) {
+        used.add(i); used.add(j);
+        out.push({ ...lessons[j], substituted: true, cancelled_subject: l.subject, cancelled_subject_short: l.subject_short });
+        continue;
+      }
+    }
+    used.add(i);
+    out.push(l);
+  }
+  return out;
+}
+
 function hwCurrentSubjectId() {
   if (!hwTimetable || !hwTimetable.configured || hwTimetable.error) return null;
-  const lessons = hwTimetable.this_week?.lessons || [];
+  const rawLessons = hwTimetable.this_week?.lessons || [];
+  const lessons = hwCombineSubstitutions(rawLessons);
   const now = new Date();
   const todayStr = now.getFullYear() + String(now.getMonth() + 1).padStart(2, '0') + String(now.getDate()).padStart(2, '0');
   const nowHHMM = now.getHours() * 100 + now.getMinutes();
-  const active = lessons.find(l => l.date === todayStr && !l.cancelled && nowHHMM >= l.startTime && nowHHMM <= l.endTime);
-  if (!active) return null;
-  const name = (active.subject_short || active.subject || '').toLowerCase();
+  const todayLessons = lessons.filter(l => l.date === todayStr && !l.cancelled);
+
+  // 1. Currently active lesson
+  let target = todayLessons.find(l => nowHHMM >= l.startTime && nowHHMM <= l.endTime);
+
+  // 2. In break shortly after a lesson ended (within 45 min)
+  if (!target) {
+    const toMin = t => Math.floor(t / 100) * 60 + (t % 100);
+    const nowMin = toMin(nowHHMM);
+    target = todayLessons
+      .filter(l => nowHHMM > l.endTime && (nowMin - toMin(l.endTime)) <= 45)
+      .sort((a, b) => b.endTime - a.endTime)[0];
+  }
+
+  // 3. Just before a lesson starts (within 15 min)
+  if (!target) {
+    const toMin = t => Math.floor(t / 100) * 60 + (t % 100);
+    const nowMin = toMin(nowHHMM);
+    target = todayLessons
+      .filter(l => nowHHMM < l.startTime && (toMin(l.startTime) - nowMin) <= 15)
+      .sort((a, b) => a.startTime - b.startTime)[0];
+  }
+
+  if (!target) return null;
+  const name = (target.subject_short || target.subject || '').toLowerCase();
   const match = hwSubjects.find(s => (s.short_name || '').toLowerCase() === name || (s.name || '').toLowerCase() === name);
   return match ? match.id : null;
 }
@@ -279,10 +323,10 @@ function hwSubjectLessonDates(subjectId) {
   const subName = (sub.name || '').toLowerCase();
   const subShort = (sub.short_name || '').toLowerCase();
   if (!subName && !subShort) return [];
-  const lessons = [...(hwTimetable.this_week?.lessons || []), ...(hwTimetable.next_week?.lessons || [])];
+  const rawLessons = [...(hwTimetable.this_week?.lessons || []), ...(hwTimetable.next_week?.lessons || [])];
+  const lessons = hwCombineSubstitutions(rawLessons);
   const now = new Date();
   const todayNum = now.getFullYear() + String(now.getMonth() + 1).padStart(2, '0') + String(now.getDate()).padStart(2, '0');
-  const nowHHMM = now.getHours() * 100 + now.getMinutes();
 
   const matches = lessons.filter(l => {
     if (l.cancelled) return false;
@@ -290,8 +334,8 @@ function hwSubjectLessonDates(subjectId) {
     const lshort = (l.subject_short || '').toLowerCase();
     const isMatch = (subShort && lshort === subShort) || (subName && lname === subName);
     if (!isMatch) return false;
-    if (l.date < todayNum) return false;
-    if (l.date === todayNum && l.endTime < nowHHMM) return false;
+    // Homework is strictly for future lessons, never due today or in the past
+    if (l.date <= todayNum) return false;
     return true;
   }).sort((a, b) => a.date.localeCompare(b.date) || a.startTime - b.startTime);
 

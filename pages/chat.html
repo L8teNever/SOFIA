@@ -80,6 +80,8 @@
   .chat-bubble-row:not(.mine) .chat-bubble { background:#fff; color:#1c1b1f; border-bottom-left-radius:5px; box-shadow:0 1px 3px rgba(0,0,0,0.08); }
   .chat-bubble-new { animation: chat-bubble-in 0.2s cubic-bezier(0.2,0.8,0.3,1); }
   @keyframes chat-bubble-in { 0% { opacity:0; transform:translateY(8px) scale(0.96); } 100% { opacity:1; transform:translateY(0) scale(1); } }
+  .chat-bubble-row.chat-stagger-in { opacity:0; animation: chat-stagger-appear 0.24s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+  @keyframes chat-stagger-appear { 0% { opacity:0; transform:translateY(12px) scale(0.97); } 100% { opacity:1; transform:translateY(0) scale(1); } }
   .chat-bubble-sender { font-size:0.7rem; font-weight:700; opacity:0.6; margin-bottom:2px; }
   .chat-bubble-time { font-size:0.62rem; opacity:0.55; margin-top:3px; }
   .chat-poll-opt { display:block; width:100%; text-align:left; border:none; background:none; padding:0; margin:6px 0; cursor:pointer; font-family:inherit; }
@@ -946,7 +948,7 @@ async function openChatConversation(id, fromDeepLink = false, isPopState = false
     if (chatCurrentConversationId !== fetchConvId) return;
 
     chatMessages = msgs;
-    renderChatMessages(true);
+    renderChatMessages(true, true);
     scrollChatToBottom(false);
     await API.markChatRead(id).catch(() => {});
     const localConv = chatConversations.find(c => c.id === id);
@@ -1266,7 +1268,7 @@ function renderChatMessageTime(m) {
   return `${timeStr}${editedStr}${pendingStr}`;
 }
 
-function renderChatMessages(forceScrollBottom = false) {
+function renderChatMessages(forceScrollBottom = false, animateStagger = false) {
   const el = document.getElementById('chat-messages-scroll');
   if (!el) return;
   const wasNearBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 80;
@@ -1283,14 +1285,30 @@ function renderChatMessages(forceScrollBottom = false) {
     return;
   }
 
-  el.innerHTML = chatMessages.map(m => {
+  const totalMsgs = chatMessages.length;
+  const maxTotalDelay = 1400;
+  const stepMs = totalMsgs > 0 ? Math.min(38, Math.max(10, Math.round(maxTotalDelay / totalMsgs))) : 0;
+
+  el.innerHTML = chatMessages.map((m, idx) => {
     const mine = currentUser && m.sender_id === currentUser.id;
     const showSender = !mine && conv && conv.is_group;
     const avatarHtml = showSender
       ? `<div class="avatar" style="${avatarImgStyle({ avatar_url: m.sender_avatar })}width:26px;height:26px;border-radius:50%;background:#eaddff;color:#442b7a;display:flex;align-items:center;justify-content:center;font-size:0.62rem;font-weight:700;flex-shrink:0;align-self:flex-end;margin-bottom:2px;">${m.sender_avatar ? '' : escapeHtml((m.sender_name || '?').slice(0, 2).toUpperCase())}</div>`
       : '';
+
+    let rowClass = `chat-bubble-row ${mine ? 'mine' : ''}`;
+    let rowStyle = showSender ? 'gap:6px;align-items:flex-end;' : '';
+    if (animateStagger) {
+      // Bottom-most message is at index (totalMsgs - 1), so k = 0 (appears first)
+      // Earlier messages above it have k = 1, 2, ... (cascade from bottom to top)
+      const k = (totalMsgs - 1) - idx;
+      const delayMs = Math.min(k * stepMs, maxTotalDelay);
+      rowClass += ' chat-stagger-in';
+      rowStyle += `animation-delay:${delayMs}ms;`;
+    }
+
     return `
-    <div class="chat-bubble-row ${mine ? 'mine' : ''}" data-message-id="${m.id}" style="${showSender ? 'gap:6px;align-items:flex-end;' : ''}">
+    <div class="${rowClass}" data-message-id="${m.id}" style="${rowStyle}">
       ${avatarHtml}
       <div class="chat-bubble ${m._pending ? 'chat-bubble-new' : ''}" style="${m.msg_type === 'poll' ? 'min-width:220px;' : ''}${m.is_deleted ? 'background:#e0e0e0;color:#616161;' : ''}">
         ${showSender && !m.is_deleted ? `<div class="chat-bubble-sender">${escapeHtml(m.sender_name)}</div>` : ''}
