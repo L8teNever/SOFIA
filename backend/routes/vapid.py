@@ -14,10 +14,15 @@ import json, asyncio, logging
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/push", tags=["push"])
 
-async def push_to_users(db: AsyncSession, users: List[User], title: str, body: str) -> int:
+async def push_to_users(db: AsyncSession, users: List[User], title: str, body: str, tag: Optional[str] = None, url: Optional[str] = None) -> int:
     """Sends a web push to every subscribed device of `users`, persists a
     Notification row for each (even unsubscribed ones, so it shows up in
-    their in-app notification list), and cleans up expired subscriptions."""
+    their in-app notification list), and cleans up expired subscriptions.
+    tag groups related notifications on the OS side — e.g. chat passes the
+    conversation id so several messages from the same chat replace each
+    other in the notification tray instead of piling up (sw.js pairs this
+    with renotify:true). url is where tapping the notification navigates;
+    defaults to '/' in the service worker when omitted."""
     if not users:
         return 0
 
@@ -49,13 +54,19 @@ async def push_to_users(db: AsyncSession, users: List[User], title: str, body: s
                 except Exception:
                     pass
 
+        payload = {"title": title, "body": body}
+        if tag:
+            payload["tag"] = tag
+        if url:
+            payload["url"] = url
+
         async def _send_one(target):
             sub_dict, sub_id, uid = target
             try:
                 await asyncio.to_thread(
                     webpush,
                     subscription_info=sub_dict,
-                    data=json.dumps({"title": title, "body": body}),
+                    data=json.dumps(payload),
                     vapid_private_key=settings.vapid_private_key,
                     vapid_claims={"sub": settings.vapid_claim_email},
                 )

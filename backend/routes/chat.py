@@ -344,7 +344,10 @@ async def send_message(conversation_id: int, data: ChatMessageCreate, db: AsyncS
             "image": "📷 Bild", "file": "📎 Datei", "voice": "🎤 Sprachnachricht", "poll": "📊 Umfrage: " + (data.text or ""),
         }.get(data.msg_type, "Neue Nachricht")
         try:
-            await push_to_users(db, unmuted_others, title=current_user.name, body=preview or "Neue Nachricht")
+            await push_to_users(
+                db, unmuted_others, title=current_user.name, body=preview or "Neue Nachricht",
+                tag=f"chat-{conversation_id}", url="/chat",
+            )
         except Exception as e:
             logger.warning("Chat push notification failed: %s", e)
 

@@ -84,6 +84,10 @@ self.addEventListener('push', e => {
     icon: '/static/icons/icon-192.png',
     badge: '/static/icons/icon-192.png',
     vibrate: [100, 50, 100],
+    // tag groups related notifications (e.g. several messages from the
+    // same chat) so a new one replaces the last instead of piling up in
+    // the tray — renotify makes the replacement still alert the user.
+    ...(data.tag ? { tag: data.tag, renotify: true } : {}),
     data: { url: data.url || '/' },
   }));
 });
