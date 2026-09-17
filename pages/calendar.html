@@ -808,6 +808,21 @@ function renderEventList() {
   // Sort chronologically
   pool.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
 
+  // Month view (not search, not the "all upcoming" scope — that pool already
+  // excludes past events entirely): push anything already over to the
+  // bottom, keeping each group in its own chronological order, so the
+  // month's remaining/upcoming events aren't buried under old ones just
+  // because the month has more past days than future ones. Rendered greyed
+  // out below (isPast), same opacity:0.55 treatment the timetable's "now
+  // line" already uses for a lesson that's already happened.
+  const isMonthView = !calSearchQuery && calViewScope !== 'all';
+  if (isMonthView) {
+    const todayStr0 = localDateStr();
+    const upcoming = [], past = [];
+    pool.forEach(e => ((e.end_date || e.date || '').slice(0, 10) < todayStr0 ? past : upcoming).push(e));
+    pool = upcoming.concat(past);
+  }
+
   // Header above list — same styled row either way, just a different label.
   // The selected-day one skips repeating the date itself (the collapsed
   // week strip above already shows it as the filled circle) but keeps the
@@ -857,6 +872,7 @@ function renderEventList() {
 
     list.innerHTML = pool.map(e => {
       const isEvToday = eventCoversDate(e, todayStr);
+      const isPastEvent = isMonthView && (e.end_date || e.date || '').slice(0, 10) < todayStr;
       const isMulti = Boolean(e.end_date && e.end_date !== e.date);
 
       const sDate = new Date(e.date + 'T00:00');
@@ -904,7 +920,7 @@ function renderEventList() {
         : '';
 
       return `
-        <div class="m3-card list-card-enter" data-id="${e.id}" style="margin-bottom:10px;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;border-radius:20px;box-shadow:0 1px 4px rgba(0,0,0,0.05);transition:transform 0.1s ease;">
+        <div class="m3-card list-card-enter" data-id="${e.id}" style="margin-bottom:10px;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;border-radius:20px;box-shadow:0 1px 4px rgba(0,0,0,0.05);transition:transform 0.1s ease;${isPastEvent ? 'opacity:0.55!important;' : ''}">
           <div style="display:flex;align-items:center;flex:1;min-width:0;">
             <div class="ev-date-badge ${isEvToday ? 'is-today' : ''}">
               <span class="ev-date-num">${dayNum}</span>
