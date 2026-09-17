@@ -132,26 +132,6 @@
       </div>
     </div>
 
-    <div class="widget w-square" style="background:#e8def8;color:#1d192b;" onclick="openPage('drive',this)" data-page="drive">
-      <div class="icon-box" style="width:48px;height:48px;background:rgba(29,25,43,0.1);">
-        <i data-lucide="hard-drive" style="width:24px;height:24px;"></i>
-      </div>
-      <div>
-        <div style="font-size:1.1rem;font-weight:700;">Drive</div>
-        <div style="font-size:0.72rem;opacity:0.6;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;">Dateien</div>
-      </div>
-    </div>
-
-    <div class="widget w-square" style="background:#f9dedc;color:#410e0b;" onclick="openPage('quickshare',this)" data-page="quickshare">
-      <div class="icon-box" style="width:48px;height:48px;background:rgba(65,14,11,0.1);">
-        <i data-lucide="share-2" style="width:24px;height:24px;"></i>
-      </div>
-      <div style="overflow:hidden;min-width:0;">
-        <div style="font-size:1.1rem;font-weight:700;">Share</div>
-        <div style="font-size:0.72rem;opacity:0.6;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;"><span id="w-files-count">0</span> geteilt</div>
-      </div>
-    </div>
-
     <!-- Chat -->
     <div class="widget w-square" style="background:#c2e7ff;color:#001d31;" onclick="openPage('chat',this)" data-page="chat">
       <div class="icon-box" style="width:44px;height:44px;background:rgba(0,29,49,0.1);position:relative;">
@@ -162,6 +142,34 @@
         <div style="font-size:0.8rem;opacity:0.65;margin-top:2px;">Chat</div>
         <div style="font-size:1rem;font-weight:700;line-height:1.25;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" id="w-chat-preview">Keine Nachrichten</div>
         <div style="font-size:0.72rem;opacity:0.6;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" id="w-chat-preview-sub"></div>
+      </div>
+    </div>
+
+    <!-- Drive + Share: same plain 1x1 square from tablet up, but a short
+         half-height bar on mobile (each still its own grid cell, so they
+         sit side by side, not stacked) — their content is a single short
+         line each, not enough to justify a full square on the narrowest
+         screens. Placed last (after Chat) so on mobile's 2-column grid
+         they land in a row together as each other's row-mate, rather than
+         paired against a full-height square — see the .w-mobile-half
+         comment in base.css. -->
+    <div class="widget w-square w-mobile-half" style="background:#e8def8;color:#1d192b;" onclick="openPage('drive',this)" data-page="drive">
+      <div class="icon-box" style="width:48px;height:48px;background:rgba(29,25,43,0.1);">
+        <i data-lucide="hard-drive" style="width:24px;height:24px;"></i>
+      </div>
+      <div>
+        <div style="font-size:1.1rem;font-weight:700;">Drive</div>
+        <div style="font-size:0.72rem;opacity:0.6;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;">Dateien</div>
+      </div>
+    </div>
+
+    <div class="widget w-square w-mobile-half" style="background:#f9dedc;color:#410e0b;" onclick="openPage('quickshare',this)" data-page="quickshare">
+      <div class="icon-box" style="width:48px;height:48px;background:rgba(65,14,11,0.1);">
+        <i data-lucide="share-2" style="width:24px;height:24px;"></i>
+      </div>
+      <div style="overflow:hidden;min-width:0;">
+        <div style="font-size:1.1rem;font-weight:700;">Share</div>
+        <div style="font-size:0.72rem;opacity:0.6;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;"><span id="w-files-count">0</span> geteilt</div>
       </div>
     </div>
 

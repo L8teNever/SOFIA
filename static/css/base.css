@@ -229,12 +229,15 @@ body.has-update-banner { padding-top: 52px; transition: padding-top 0.3s ease; }
    exactly, since a square's aspect-ratio:1/1 sets the row's height. */
 @media (min-width: 600px) { .w-full-span { grid-column: span 2; aspect-ratio: auto; } }
 
-/* Not currently applied to any widget — Drive and Share used this on
-   mobile for a short half-height bar instead of a full square, but paired
-   against a full-height neighbor in the same row (Essensplan, Chat) that
-   read as a layout bug rather than a deliberate shape, so both went back
-   to plain squares. Kept in case a future mobile-only compact widget wants
-   this shape while genuinely sharing its row with another compact one. */
+/* Drive + Share: same 1x1 square as every other widget from tablet up, but
+   a short half-height bar on mobile — their content is a single short line
+   each, not enough to justify a full square on the narrowest screens. Each
+   stays its own separate grid item (not merged into a shared cell), so the
+   two sit side by side in the same row, just shorter — not stacked. They're
+   placed last in index.html specifically so they land as each other's
+   row-mate on mobile's 2-column grid instead of paired against a
+   full-height square, which read as a layout bug rather than a deliberate
+   shape. */
 @media (max-width: 599.98px) {
   .w-mobile-half {
     aspect-ratio: 2/1;
