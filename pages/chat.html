@@ -3,20 +3,24 @@
 
   <div class="page-scroll-1col no-scrollbar" id="chat-list-view">
     <div class="page-inner">
-      <div id="chat-search-bar" style="display:none;margin-bottom:12px;">
-        <input type="search" name="search" class="m3-input" id="chat-search-input" placeholder="Chats durchsuchen…" oninput="renderChatList()" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" inputmode="search" enterkeyhint="search" data-form-type="other" data-lpignore="true" data-1p-ignore="true" data-bwignore="true">
-      </div>
       <div id="chat-conversations-list"></div>
       <div id="chat-no-conversations" style="display:none;text-align:center;padding:60px 20px;opacity:0.4;">
         <i data-lucide="message-circle" style="width:48px;height:48px;margin-bottom:12px;display:block;margin-left:auto;margin-right:auto;"></i>
         <div style="font-weight:600;">Noch keine Chats</div>
-        <div style="font-size:0.85rem;margin-top:4px;">Tippe unten rechts, um einen neuen Chat zu starten.</div>
+        <div style="font-size:0.85rem;margin-top:4px;">Nutze die Suche oben, um neue Chats oder Gruppen zu starten.</div>
       </div>
     </div>
   </div>
 
   <div id="chat-detail-view" style="display:none;flex-direction:column;flex:1;min-height:0;overflow:hidden;">
     <div id="chat-messages-scroll" style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:8px;"></div>
+    <div id="chat-edit-bar" style="display:none;align-items:center;gap:10px;padding:8px 14px;background:#e8def8;border-top:1px solid rgba(0,0,0,0.06);flex-shrink:0;">
+      <i data-lucide="edit-2" style="width:16px;height:16px;color:#6750a4;flex-shrink:0;"></i>
+      <div style="flex:1;min-width:0;font-size:0.82rem;color:#21005d;font-weight:600;">Nachricht bearbeiten</div>
+      <button onclick="cancelChatEdit()" style="background:none;border:none;cursor:pointer;opacity:0.6;padding:4px;flex-shrink:0;">
+        <i data-lucide="x" style="width:16px;height:16px;"></i>
+      </button>
+    </div>
     <div id="chat-reply-bar" style="display:none;align-items:center;gap:10px;padding:8px 14px;background:#f3edf7;border-top:1px solid rgba(0,0,0,0.06);flex-shrink:0;">
       <div style="flex:1;min-width:0;border-left:3px solid #6750a4;padding-left:8px;">
         <div style="font-size:0.72rem;font-weight:700;color:#6750a4;" id="chat-reply-sender"></div>
@@ -28,6 +32,7 @@
     </div>
     <input type="file" id="chat-file-input" style="display:none;" onchange="handleChatFileSelect(this.files[0])">
     <input type="file" id="chat-camera-input" accept="image/*" capture="environment" style="display:none;" onchange="handleChatCameraSelect(this.files[0])">
+    <input type="file" id="chat-group-avatar-input" accept="image/*" style="display:none;" onchange="handleGroupAvatarFileSelect(this.files[0])">
     <div id="chat-compose-row" style="display:flex;gap:8px;align-items:flex-end;padding:10px 14px calc(10px + env(safe-area-inset-bottom));background:#fff;border-top:1px solid rgba(0,0,0,0.06);flex-shrink:0;">
       <button onclick="toggleChatAttachMenu(this)" title="Anhang hinzufügen" style="width:42px;height:42px;border-radius:50%;background:#f3edf7;color:#6750a4;border:none;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;">
         <i data-lucide="plus" style="width:20px;height:20px;"></i>
@@ -55,14 +60,14 @@
     </div>
   </div>
 
-  <div id="chat-fab-slot"></div>
-
   <style>
   .chat-bubble-row { display:flex; }
   .chat-bubble-row.mine { justify-content:flex-end; }
   .chat-bubble { max-width:75%; padding:9px 14px; border-radius:18px; font-size:0.9rem; line-height:1.4; word-wrap:break-word; }
   .chat-bubble-row.mine .chat-bubble { background:#6750a4; color:#fff; border-bottom-right-radius:5px; }
   .chat-bubble-row:not(.mine) .chat-bubble { background:#fff; color:#1c1b1f; border-bottom-left-radius:5px; box-shadow:0 1px 3px rgba(0,0,0,0.08); }
+  .chat-bubble-new { animation: chat-bubble-in 0.2s cubic-bezier(0.2,0.8,0.3,1); }
+  @keyframes chat-bubble-in { 0% { opacity:0; transform:translateY(8px) scale(0.96); } 100% { opacity:1; transform:translateY(0) scale(1); } }
   .chat-bubble-sender { font-size:0.7rem; font-weight:700; opacity:0.6; margin-bottom:2px; }
   .chat-bubble-time { font-size:0.62rem; opacity:0.55; margin-top:3px; }
   .chat-poll-opt { display:block; width:100%; text-align:left; border:none; background:none; padding:0; margin:6px 0; cursor:pointer; font-family:inherit; }
@@ -87,24 +92,37 @@
   .chat-voice-progress-fill { height:100%; width:0%; border-radius:2px; background:#6750a4; }
   .chat-bubble-row.mine .chat-voice-progress-fill { background:#fff; }
   .chat-voice-time { font-size:0.72rem; opacity:0.7; flex-shrink:0; min-width:30px; text-align:right; font-variant-numeric:tabular-nums; }
+  .chat-header-clickable:active { opacity:0.75; }
+  .chat-beeper-overlay { position:fixed; inset:0; z-index:99999; background:rgba(0,0,0,0.45); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px); display:flex; flex-direction:column; align-items:center; justify-content:center; padding:16px; opacity:0; transition:opacity 0.2s cubic-bezier(0.2,0.8,0.3,1); }
+  .chat-beeper-overlay.active { opacity:1; }
   </style>
 </div>
 
 <script>
-document.getElementById('ph-chat').outerHTML = pageHeader({
-  backAction: 'chatHeaderBack()',
-  titleHtml: `<div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;">
+document.getElementById('ph-chat').outerHTML = `
+  <div class="page-header" id="chat-main-header" style="position:relative;overflow:hidden;">
+    <button class="back-btn" id="chat-header-back-btn" onclick="chatHeaderBack()" title="Zurück">
+      <i data-lucide="arrow-left" style="width:22px;height:22px;"></i>
+    </button>
+    <div id="chat-header-info-btn" class="chat-header-clickable" onclick="openChatHeaderInfo()" style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;cursor:pointer;">
       <div id="chat-header-avatar" class="avatar" style="display:none;width:36px;height:36px;border-radius:50%;background:#eaddff;color:#442b7a;align-items:center;justify-content:center;font-weight:700;font-size:0.8rem;flex-shrink:0;"></div>
       <span class="page-title" id="chat-title" style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Chat</span>
-    </div>`,
-  trailing: `<button class="icon-btn" id="chat-search-btn" onclick="toggleChatSearch()" title="Chats durchsuchen">
+    </div>
+    <button class="icon-btn" id="chat-search-btn" onclick="toggleChatSearch(true)" title="Chats durchsuchen">
       <i data-lucide="search" style="width:20px;height:20px;"></i>
     </button>
-    <button class="icon-btn" id="chat-mute-btn" onclick="toggleChatMute()" title="Stummschalten" style="display:none;">
-      <i data-lucide="bell" id="chat-mute-icon" style="width:20px;height:20px;"></i>
-    </button>`,
-});
-document.getElementById('chat-fab-slot').outerHTML = fab({ icon: 'plus', onclick: 'openNewChatSheet()', title: 'Neuer Chat' });
+
+    <div id="chat-header-search-overlay" style="display:none;position:absolute;inset:0;background:#fff;z-index:20;align-items:center;padding:0 12px;gap:8px;">
+      <button class="icon-btn" onclick="toggleChatSearch(false)" title="Suche schließen" style="flex-shrink:0;">
+        <i data-lucide="arrow-left" style="width:22px;height:22px;"></i>
+      </button>
+      <input type="search" id="chat-header-search-input" placeholder="Chats & Mitschüler:innen suchen…" oninput="onChatHeaderSearchInput()" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" inputmode="search" enterkeyhint="search" data-form-type="other" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" style="flex:1;border:none;outline:none;background:none;font-family:inherit;font-size:0.95rem;color:#1c1b1f;">
+      <button class="icon-btn" id="chat-header-search-clear" onclick="clearChatHeaderSearch()" title="Leeren" style="display:none;flex-shrink:0;">
+        <i data-lucide="x" style="width:18px;height:18px;"></i>
+      </button>
+    </div>
+  </div>
+`;
 
 let chatConversations = [], chatClassUsers = [];
 let chatCurrentConversationId = null;
@@ -124,9 +142,7 @@ async function init_chat() {
   if (subTarget) {
     document.getElementById('chat-list-view').style.display = 'none';
     document.getElementById('chat-detail-view').style.display = 'flex';
-    document.querySelector('#page-chat .fab')?.style.setProperty('display', 'none');
     document.getElementById('chat-title').textContent = 'Chat';
-    document.getElementById('chat-mute-btn').style.display = 'none';
     document.getElementById('chat-search-btn').style.display = 'none';
     const msgsEl = document.getElementById('chat-messages-scroll');
     if (msgsEl) {
@@ -181,21 +197,71 @@ function chatRelTime(iso) {
 }
 
 function chatOtherParticipants(conv) {
-  return conv.participants.filter(p => !currentUser || p.user_id !== currentUser.id);
+  return (conv.participants || []).filter(p => !currentUser || p.user_id !== currentUser.id);
 }
 
 function chatConversationTitle(conv) {
-  if (conv.is_group) return conv.name || chatOtherParticipants(conv).map(p => p.display_name).join(', ');
+  if (!conv) return 'Chat';
+  if (conv.is_notes) return 'Notizen';
+  if (conv.is_group) return conv.name || chatOtherParticipants(conv).map(p => p.display_name).join(', ') || 'Gruppe';
   const other = chatOtherParticipants(conv)[0];
-  return other ? other.display_name : '?';
+  return other ? other.display_name : (conv.participants?.[0]?.display_name || '?');
 }
 
-function toggleChatSearch() {
-  const bar = document.getElementById('chat-search-bar');
-  const input = document.getElementById('chat-search-input');
-  const showing = bar.style.display === 'none';
-  bar.style.display = showing ? 'block' : 'none';
-  if (showing) { input.focus(); } else { input.value = ''; renderChatList(); }
+let chatSearchActive = false;
+
+function toggleChatSearch(show) {
+  chatSearchActive = !!show;
+  const overlay = document.getElementById('chat-header-search-overlay');
+  const input = document.getElementById('chat-header-search-input');
+  const clearBtn = document.getElementById('chat-header-search-clear');
+  if (!overlay) return;
+
+  if (show) {
+    overlay.style.display = 'flex';
+    if (input) {
+      input.value = '';
+      input.focus();
+    }
+    if (clearBtn) clearBtn.style.display = 'none';
+    renderChatList();
+  } else {
+    overlay.style.display = 'none';
+    if (input) input.value = '';
+    renderChatList();
+  }
+}
+
+function onChatHeaderSearchInput() {
+  const input = document.getElementById('chat-header-search-input');
+  const clearBtn = document.getElementById('chat-header-search-clear');
+  const query = (input?.value || '').trim();
+  if (clearBtn) clearBtn.style.display = query ? 'flex' : 'none';
+  renderChatList();
+}
+
+function clearChatHeaderSearch() {
+  const input = document.getElementById('chat-header-search-input');
+  const clearBtn = document.getElementById('chat-header-search-clear');
+  if (input) {
+    input.value = '';
+    input.focus();
+  }
+  if (clearBtn) clearBtn.style.display = 'none';
+  renderChatList();
+}
+
+async function startDirectChatWithUser(userId) {
+  try {
+    const conv = await API.createChatConversation({ participant_ids: [userId], is_group: false });
+    if (!chatConversations.find(c => c.id === conv.id)) {
+      chatConversations.unshift(conv);
+    }
+    toggleChatSearch(false);
+    openChatConversation(conv.id);
+  } catch (e) {
+    showToast(e.detail || 'Fehler beim Starten des Chats');
+  }
 }
 
 function updateChatHeaderAvatar(conv) {
@@ -203,137 +269,416 @@ function updateChatHeaderAvatar(conv) {
   if (!el) return;
   el.style.display = 'flex';
   if (!conv) { el.textContent = '?'; el.style.backgroundImage = ''; return; }
-  if (conv.is_group) {
+
+  if (conv.is_notes) {
     el.style.backgroundImage = '';
-    el.innerHTML = '<i data-lucide="users" style="width:16px;height:16px;"></i>';
+    el.style.background = '#6750a4';
+    el.style.color = '#fff';
+    el.innerHTML = '<i data-lucide="bookmark" style="width:16px;height:16px;"></i>';
     if (window.lucide) lucide.createIcons();
+    return;
+  }
+
+  if (conv.is_group) {
+    if (conv.avatar_url) {
+      applyAvatarEl(el, { avatar_url: conv.avatar_url }, '');
+    } else {
+      el.style.backgroundImage = '';
+      el.style.background = '#ffdec1';
+      el.style.color = '#442b7a';
+      el.innerHTML = '<i data-lucide="users" style="width:16px;height:16px;"></i>';
+      if (window.lucide) lucide.createIcons();
+    }
   } else {
     const other = chatOtherParticipants(conv)[0];
     applyAvatarEl(el, other ? { avatar_url: other.avatar_url } : null, (chatConversationTitle(conv) || '?').slice(0, 2).toUpperCase());
   }
 }
 
-function renderChatList() {
-  const list = document.getElementById('chat-conversations-list');
-  const empty = document.getElementById('chat-no-conversations');
-  const query = (document.getElementById('chat-search-input')?.value || '').trim().toLowerCase();
-  const filtered = query
-    ? chatConversations.filter(c => chatConversationTitle(c).toLowerCase().includes(query) || (c.last_message || '').toLowerCase().includes(query))
-    : chatConversations;
-  if (!chatConversations.length) {
-    list.innerHTML = '';
-    empty.style.display = 'block';
-    return;
-  }
-  empty.style.display = 'none';
-  if (query && !filtered.length) {
-    list.innerHTML = `<div style="text-align:center;padding:30px 20px;opacity:0.5;font-size:0.88rem;">Keine Chats gefunden.</div>`;
-    return;
-  }
-  list.innerHTML = filtered.map(c => {
-    const title = chatConversationTitle(c);
-    const initials = title.slice(0, 2).toUpperCase();
-    const time = c.last_message_at ? chatRelTime(c.last_message_at) : '';
-    return `
-    <div class="m3-card" style="padding:14px;margin-bottom:8px;display:flex;align-items:center;gap:12px;cursor:pointer;" onclick="openChatConversation(${c.id})">
-      <div class="avatar" style="background:${c.is_group ? '#ffdec1' : '#eaddff'};color:#442b7a;flex-shrink:0;display:flex;align-items:center;justify-content:center;width:46px;height:46px;border-radius:50%;font-weight:700;">
-        ${c.is_group ? '<i data-lucide="users" style="width:20px;height:20px;"></i>' : initials}
+function renderChatCard(c) {
+  const title = chatConversationTitle(c);
+  const time = c.last_message_at ? chatRelTime(c.last_message_at) : '';
+
+  let avatarMarkup = '';
+  if (c.is_notes) {
+    avatarMarkup = `
+      <div class="avatar" style="background:#6750a4;color:#fff;flex-shrink:0;display:flex;align-items:center;justify-content:center;width:46px;height:46px;border-radius:50%;">
+        <i data-lucide="bookmark" style="width:20px;height:20px;"></i>
       </div>
+    `;
+  } else if (c.is_group) {
+    if (c.avatar_url) {
+      avatarMarkup = `
+        <div class="avatar" style="background-image:url('${c.avatar_url}');background-size:cover;background-position:center;flex-shrink:0;width:46px;height:46px;border-radius:50%;"></div>
+      `;
+    } else {
+      avatarMarkup = `
+        <div class="avatar" style="background:#ffdec1;color:#442b7a;flex-shrink:0;display:flex;align-items:center;justify-content:center;width:46px;height:46px;border-radius:50%;font-weight:700;">
+          <i data-lucide="users" style="width:20px;height:20px;"></i>
+        </div>
+      `;
+    }
+  } else {
+    const other = chatOtherParticipants(c)[0];
+    const initials = title.slice(0, 2).toUpperCase();
+    avatarMarkup = `
+      <div class="avatar" style="${avatarImgStyle(other)}background:#eaddff;color:#442b7a;flex-shrink:0;display:flex;align-items:center;justify-content:center;width:46px;height:46px;border-radius:50%;font-weight:700;">
+        ${other && other.avatar_url ? '' : initials}
+      </div>
+    `;
+  }
+
+  const badgeHtml = c.is_notes
+    ? `<span style="font-size:0.7rem;background:#eaddff;color:#442b7a;padding:1px 6px;border-radius:8px;font-weight:600;margin-left:4px;">Du</span>`
+    : '';
+
+  const lastMsg = c.is_notes
+    ? (c.last_message || 'Nachricht an dich selbst')
+    : (c.last_message || 'Noch keine Nachrichten');
+
+  return `
+    <div class="m3-card" style="padding:14px;margin-bottom:8px;display:flex;align-items:center;gap:12px;cursor:pointer;" onclick="openChatConversation(${c.id})">
+      ${avatarMarkup}
       <div style="flex:1;min-width:0;">
         <div style="font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:flex;align-items:center;gap:5px;">
           <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(title)}</span>
+          ${badgeHtml}
           ${c.is_muted ? '<i data-lucide="bell-off" style="width:13px;height:13px;opacity:0.45;flex-shrink:0;"></i>' : ''}
         </div>
-        <div style="font-size:0.8rem;opacity:0.6;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;">${escapeHtml(c.last_message || 'Noch keine Nachrichten')}</div>
+        <div style="font-size:0.8rem;opacity:0.6;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;">${escapeHtml(lastMsg)}</div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0;">
         <span style="font-size:0.7rem;opacity:0.5;">${time}</span>
         ${c.unread_count > 0 ? `<span style="background:${c.is_muted ? '#79747e' : '#b3261e'};color:#fff;font-size:0.68rem;font-weight:700;min-width:18px;height:18px;border-radius:9px;display:flex;align-items:center;justify-content:center;padding:0 5px;">${c.unread_count > 99 ? '99+' : c.unread_count}</span>` : ''}
       </div>
-    </div>`;
-  }).join('');
+    </div>
+  `;
+}
+
+function renderChatList() {
+  const list = document.getElementById('chat-conversations-list');
+  const empty = document.getElementById('chat-no-conversations');
+  if (!list) return;
+
+  if (chatSearchActive) {
+    if (empty) empty.style.display = 'none';
+    const input = document.getElementById('chat-header-search-input');
+    const q = (input?.value || '').trim().toLowerCase();
+
+    const groupCard = `
+      <div class="m3-card" style="padding:12px 14px;margin-bottom:12px;display:flex;align-items:center;gap:12px;cursor:pointer;background:#eaddff;color:#21005d;border-radius:14px;" onclick="openNewGroupSheet()">
+        <div style="width:40px;height:40px;border-radius:50%;background:#6750a4;color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+          <i data-lucide="users" style="width:20px;height:20px;"></i>
+        </div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:700;font-size:0.95rem;">Gruppe erstellen</div>
+          <div style="font-size:0.78rem;opacity:0.7;">Mit mehreren Mitschüler:innen chatten</div>
+        </div>
+        <i data-lucide="chevron-right" style="width:18px;height:18px;opacity:0.6;"></i>
+      </div>
+    `;
+
+    const matchingConvs = q
+      ? chatConversations.filter(c => chatConversationTitle(c).toLowerCase().includes(q) || (c.last_message || '').toLowerCase().includes(q))
+      : [];
+
+    const pickableUsers = chatClassUsers.filter(u => !currentUser || u.id !== currentUser.id);
+    const matchingUsers = q
+      ? pickableUsers.filter(u => (u.display_name || '').toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q))
+      : pickableUsers;
+
+    let convsHtml = '';
+    if (matchingConvs.length > 0) {
+      convsHtml = `
+        <div style="font-size:0.75rem;font-weight:700;opacity:0.5;margin:10px 4px 6px;">CHATS</div>
+        ${matchingConvs.map(c => renderChatCard(c)).join('')}
+      `;
+    }
+
+    let usersHtml = '';
+    if (matchingUsers.length > 0) {
+      usersHtml = `
+        <div style="font-size:0.75rem;font-weight:700;opacity:0.5;margin:16px 4px 6px;">MITSCHÜLER:INNEN</div>
+        ${matchingUsers.map(u => {
+          const existing = chatConversations.find(c => !c.is_group && !c.is_notes && c.participants.some(p => p.user_id === u.id));
+          if (existing) {
+            return `
+              <div class="m3-card" style="padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;gap:12px;cursor:pointer;" onclick="toggleChatSearch(false);openChatConversation(${existing.id})">
+                <div class="avatar" style="${avatarImgStyle(u)}width:42px;height:42px;border-radius:50%;background:#eaddff;color:#442b7a;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.85rem;flex-shrink:0;">
+                  ${u.avatar_url ? '' : escapeHtml((u.display_name || u.email).slice(0, 2).toUpperCase())}
+                </div>
+                <div style="flex:1;min-width:0;">
+                  <div style="font-weight:600;font-size:0.92rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(u.display_name || u.email.split('@')[0])}</div>
+                  <div style="font-size:0.78rem;opacity:0.55;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(existing.last_message || 'Chat öffnen')}</div>
+                </div>
+                <span style="font-size:0.75rem;color:#6750a4;font-weight:600;">Chat</span>
+              </div>
+            `;
+          } else {
+            return `
+              <div class="m3-card" style="padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;gap:12px;cursor:pointer;" onclick="startDirectChatWithUser(${u.id})">
+                <div class="avatar" style="${avatarImgStyle(u)}width:42px;height:42px;border-radius:50%;background:#eaddff;color:#442b7a;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.85rem;flex-shrink:0;">
+                  ${u.avatar_url ? '' : escapeHtml((u.display_name || u.email).slice(0, 2).toUpperCase())}
+                </div>
+                <div style="flex:1;min-width:0;">
+                  <div style="font-weight:600;font-size:0.92rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(u.display_name || u.email.split('@')[0])}</div>
+                  <div style="font-size:0.78rem;opacity:0.55;">Noch kein Chat</div>
+                </div>
+                <button class="chip" style="background:#eaddff;color:#442b7a;border:none;font-weight:600;pointer-events:none;font-size:0.78rem;">Chat starten</button>
+              </div>
+            `;
+          }
+        }).join('')}
+      `;
+    }
+
+    let emptySearchHtml = '';
+    if (q && !matchingConvs.length && !matchingUsers.length) {
+      emptySearchHtml = '<div style="text-align:center;padding:30px 20px;opacity:0.5;font-size:0.88rem;">Keine Ergebnisse gefunden.</div>';
+    }
+
+    list.innerHTML = groupCard + convsHtml + usersHtml + emptySearchHtml;
+    if (window.lucide) lucide.createIcons();
+    return;
+  }
+
+  // Normal mode
+  if (!chatConversations.length) {
+    list.innerHTML = '';
+    if (empty) empty.style.display = 'block';
+    return;
+  }
+  if (empty) empty.style.display = 'none';
+
+  // Sort notes to top, then recent
+  const sorted = [...chatConversations].sort((a, b) => {
+    if (a.is_notes && !b.is_notes) return -1;
+    if (!a.is_notes && b.is_notes) return 1;
+    const timeA = a.last_message_at ? new Date(a.last_message_at).getTime() : 0;
+    const timeB = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
+    return timeB - timeA;
+  });
+
+  list.innerHTML = sorted.map(c => renderChatCard(c)).join('');
   if (window.lucide) lucide.createIcons();
 }
 
-function startChatListPolling() {
-  if (chatListPollInterval) clearInterval(chatListPollInterval);
-  chatListPollInterval = setInterval(async () => {
-    if (!document.getElementById('chat-conversations-list')) { clearInterval(chatListPollInterval); chatListPollInterval = null; return; }
-    if (document.hidden) return;
-    const fresh = await API.chatConversations().catch(() => null);
-    if (!fresh || !document.getElementById('chat-conversations-list')) return;
-    if (JSON.stringify(fresh) !== JSON.stringify(chatConversations)) {
-      chatConversations = fresh;
-      if (chatCurrentConversationId === null) renderChatList();
-    }
-  }, 15000);
-}
-
-// --- New chat sheet ---
-
-function openNewChatSheet() {
-  chatNewGroupMode = false;
-  // API.classUsers() includes the current user too (other features that
-  // reuse it don't care) — not a valid chat partner for yourself, so
-  // filter it out here rather than in the shared endpoint.
+function openNewGroupSheet() {
   const pickable = chatClassUsers.filter(u => !currentUser || u.id !== currentUser.id);
   const userOptions = pickable.map(u => `
-    <label style="display:flex;align-items:center;gap:10px;padding:10px 4px;border-bottom:1px solid rgba(0,0,0,0.06);">
-      <input type="checkbox" class="chat-new-user-cb" value="${u.id}" style="width:18px;height:18px;">
-      <span>${escapeHtml(u.display_name || u.email.split('@')[0])}</span>
-    </label>`).join('');
+    <label style="display:flex;align-items:center;gap:12px;padding:10px 4px;border-bottom:1px solid rgba(0,0,0,0.06);cursor:pointer;">
+      <div class="avatar" style="${avatarImgStyle(u)}width:36px;height:36px;border-radius:50%;background:#eaddff;color:#442b7a;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.78rem;flex-shrink:0;">
+        ${u.avatar_url ? '' : escapeHtml((u.display_name || u.email).slice(0, 2).toUpperCase())}
+      </div>
+      <div style="flex:1;min-width:0;font-size:0.92rem;font-weight:500;">
+        ${escapeHtml(u.display_name || u.email.split('@')[0])}
+      </div>
+      <input type="checkbox" class="chat-new-group-user-cb" value="${u.id}" style="width:20px;height:20px;accent-color:#6750a4;">
+    </label>
+  `).join('');
 
   openSheet(`
     <div style="padding:4px;">
-      <div style="font-weight:700;font-size:1.05rem;margin-bottom:14px;">Neuer Chat</div>
-      <div style="display:flex;gap:8px;margin-bottom:16px;">
-        <button class="chip active" id="chat-new-mode-single" onclick="setChatNewMode(false,this)">Einzelperson</button>
-        <button class="chip" id="chat-new-mode-group" onclick="setChatNewMode(true,this)">Gruppe</button>
+      <div style="font-weight:700;font-size:1.05rem;margin-bottom:14px;display:flex;align-items:center;gap:8px;">
+        <i data-lucide="users" style="width:20px;height:20px;color:#6750a4;"></i>
+        <span>Neue Gruppe erstellen</span>
       </div>
-      <div id="chat-new-group-name-wrap" style="display:none;margin-bottom:14px;">
-        <input type="text" class="m3-input" id="chat-new-group-name" placeholder="Gruppenname">
+      <div style="margin-bottom:14px;">
+        <input type="text" class="m3-input" id="chat-create-group-name" placeholder="Gruppenname (z. B. Mathe Lerngruppe)" autocomplete="off">
       </div>
-      <div style="font-size:0.8rem;font-weight:700;opacity:0.5;margin-bottom:6px;">MITSCHÜLER:INNEN</div>
-      <div style="max-height:280px;overflow-y:auto;margin-bottom:16px;">${userOptions || '<div style="opacity:0.5;font-size:0.85rem;padding:10px 4px;">Keine Mitschüler:innen gefunden.</div>'}</div>
-      <div id="chat-new-err" style="color:#b3261e;font-size:0.82rem;min-height:18px;margin-bottom:4px;"></div>
-      <button class="m3-btn-full" onclick="submitNewChat()">Chat starten</button>
+      <div style="font-size:0.8rem;font-weight:700;opacity:0.5;margin-bottom:8px;">TEILNEHMER:INNEN AUSWÄHLEN</div>
+      <div style="max-height:260px;overflow-y:auto;margin-bottom:16px;">
+        ${userOptions || '<div style="opacity:0.5;font-size:0.85rem;padding:10px 4px;">Keine Mitschüler:innen gefunden.</div>'}
+      </div>
+      <div id="chat-create-group-err" style="color:#b3261e;font-size:0.82rem;min-height:18px;margin-bottom:6px;"></div>
+      <button class="m3-btn-full" onclick="submitCreateGroupChat()">Gruppe erstellen</button>
     </div>
   `);
+  if (window.lucide) lucide.createIcons();
+  setTimeout(() => document.getElementById('chat-create-group-name')?.focus(), 150);
 }
 
-function setChatNewMode(isGroup, btn) {
-  chatNewGroupMode = isGroup;
-  document.querySelectorAll('#chat-new-mode-single, #chat-new-mode-group').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  document.getElementById('chat-new-group-name-wrap').style.display = isGroup ? 'block' : 'none';
-  // Single mode only makes sense with exactly one person selected — force
-  // radio-like behavior by unchecking extras when switching back.
-  if (!isGroup) {
-    const checked = [...document.querySelectorAll('.chat-new-user-cb:checked')];
-    checked.slice(1).forEach(cb => cb.checked = false);
-  }
-}
-
-async function submitNewChat() {
-  const checked = [...document.querySelectorAll('.chat-new-user-cb:checked')].map(cb => parseInt(cb.value));
-  const err = document.getElementById('chat-new-err');
-  if (!checked.length) { err.textContent = 'Mindestens eine Person auswählen'; return; }
-  if (!chatNewGroupMode && checked.length > 1) { err.textContent = 'Für eine Gruppe oben „Gruppe" wählen'; return; }
-
-  const body = { participant_ids: checked, is_group: chatNewGroupMode };
-  if (chatNewGroupMode) {
-    const name = document.getElementById('chat-new-group-name').value.trim();
-    if (!name) { err.textContent = 'Gruppenname eingeben'; return; }
-    body.name = name;
-  }
+async function submitCreateGroupChat() {
+  const name = document.getElementById('chat-create-group-name')?.value.trim();
+  const checked = [...document.querySelectorAll('.chat-new-group-user-cb:checked')].map(cb => parseInt(cb.value));
+  const err = document.getElementById('chat-create-group-err');
+  if (!name) { if (err) err.textContent = 'Bitte einen Gruppennamen eingeben'; return; }
+  if (!checked.length) { if (err) err.textContent = 'Mindestens eine Person auswählen'; return; }
 
   try {
-    const conv = await API.createChatConversation(body);
-    if (!chatConversations.find(c => c.id === conv.id)) chatConversations.unshift(conv);
+    const conv = await API.createChatConversation({ name, participant_ids: checked, is_group: true });
+    if (!chatConversations.find(c => c.id === conv.id)) {
+      chatConversations.unshift(conv);
+    }
     closeSheet();
+    toggleChatSearch(false);
     openChatConversation(conv.id);
   } catch (e) {
-    err.textContent = e.detail || 'Fehler beim Erstellen';
+    if (err) err.textContent = e.detail || 'Fehler beim Erstellen der Gruppe';
+  }
+}
+
+function openChatHeaderInfo() {
+  if (!chatCurrentConversationId) return;
+  const conv = chatConversations.find(c => c.id === chatCurrentConversationId);
+  if (!conv) return;
+
+  if (conv.is_notes) {
+    openSheet(`
+      <div style="padding:6px;text-align:center;">
+        <div style="width:72px;height:72px;border-radius:50%;background:#6750a4;color:#fff;display:flex;align-items:center;justify-content:center;margin:0 auto 14px;box-shadow:0 4px 12px rgba(103,80,164,0.3);">
+          <i data-lucide="bookmark" style="width:36px;height:36px;"></i>
+        </div>
+        <div style="font-weight:700;font-size:1.2rem;color:#1c1b1f;">Notizen</div>
+        <div style="font-size:0.85rem;color:#6750a4;font-weight:600;margin-top:2px;">Nachricht an dich selbst</div>
+        <div style="margin-top:16px;background:#f3edf7;border-radius:14px;padding:14px;text-align:left;font-size:0.86rem;color:#49454f;line-height:1.5;">
+          Hier kannst du dir persönliche Notizen, Links, Erinnerungen, Bilder und Sprachnachrichten speichern. Nur du kannst diesen Chat sehen.
+        </div>
+      </div>
+    `);
+    if (window.lucide) lucide.createIcons();
+    return;
+  }
+
+  if (conv.is_group) {
+    const avatarSrc = conv.avatar_url || '';
+    const avatarHtml = avatarSrc
+      ? `<img src="${avatarSrc}" style="width:84px;height:84px;border-radius:50%;object-fit:cover;">`
+      : `<div style="width:84px;height:84px;border-radius:50%;background:#ffdec1;color:#442b7a;display:flex;align-items:center;justify-content:center;font-size:2rem;font-weight:700;"><i data-lucide="users" style="width:40px;height:40px;"></i></div>`;
+
+    const participantsHtml = conv.participants.map(p => `
+      <div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid rgba(0,0,0,0.05);">
+        <div class="avatar" style="${avatarImgStyle({ avatar_url: p.avatar_url })}width:38px;height:38px;border-radius:50%;background:#eaddff;color:#442b7a;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.8rem;flex-shrink:0;">
+          ${p.avatar_url ? '' : escapeHtml((p.display_name || '?').slice(0, 2).toUpperCase())}
+        </div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:600;font-size:0.92rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+            ${escapeHtml(p.display_name || 'Benutzer')} ${currentUser && p.user_id === currentUser.id ? '<span style="opacity:0.5;font-weight:400;font-size:0.8rem;">(Du)</span>' : ''}
+          </div>
+        </div>
+      </div>
+    `).join('');
+
+    openSheet(`
+      <div style="padding:6px;">
+        <div style="display:flex;flex-direction:column;align-items:center;margin-bottom:18px;position:relative;">
+          <div style="position:relative;cursor:pointer;" onclick="triggerGroupAvatarUpload()" title="Gruppenbild ändern">
+            <div id="chat-group-info-avatar-preview">
+              ${avatarHtml}
+            </div>
+            <div style="position:absolute;bottom:0;right:0;width:28px;height:28px;border-radius:50%;background:#6750a4;color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,0.25);">
+              <i data-lucide="camera" style="width:14px;height:14px;"></i>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:12px;max-width:90%;">
+            <div id="chat-group-info-name" style="font-weight:700;font-size:1.15rem;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+              ${escapeHtml(conv.name || 'Gruppe')}
+            </div>
+            <button onclick="promptEditGroupName()" style="background:none;border:none;cursor:pointer;opacity:0.6;padding:4px;flex-shrink:0;" title="Gruppenname bearbeiten">
+              <i data-lucide="pencil" style="width:16px;height:16px;"></i>
+            </button>
+          </div>
+          <div style="font-size:0.8rem;opacity:0.5;margin-top:2px;">${conv.participants.length} Teilnehmer:innen</div>
+        </div>
+
+        <div style="background:#fff;border-radius:14px;border:1px solid rgba(0,0,0,0.08);padding:10px 14px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <i data-lucide="${conv.is_muted ? 'bell-off' : 'bell'}" style="width:18px;height:18px;color:${conv.is_muted ? '#b3261e' : '#6750a4'};"></i>
+            <span style="font-size:0.9rem;font-weight:600;">Benachrichtigungen stumm</span>
+          </div>
+          <input type="checkbox" id="chat-info-mute-toggle" ${conv.is_muted ? 'checked' : ''} onchange="toggleChatMuteFromInfo(this.checked)" style="width:20px;height:20px;accent-color:#6750a4;cursor:pointer;">
+        </div>
+
+        <div style="font-size:0.8rem;font-weight:700;opacity:0.5;margin-bottom:8px;">TEILNEHMER:INNEN (${conv.participants.length})</div>
+        <div style="max-height:220px;overflow-y:auto;margin-bottom:12px;">
+          ${participantsHtml}
+        </div>
+      </div>
+    `);
+    if (window.lucide) lucide.createIcons();
+    return;
+  }
+
+  // 1:1 Chat Info
+  const other = chatOtherParticipants(conv)[0];
+  const otherTitle = other ? other.display_name : chatConversationTitle(conv);
+  const avatarUrl = other ? other.avatar_url : null;
+  const avatarHtml = avatarUrl
+    ? `<img src="${avatarUrl}" style="width:84px;height:84px;border-radius:50%;object-fit:cover;">`
+    : `<div style="width:84px;height:84px;border-radius:50%;background:#eaddff;color:#442b7a;display:flex;align-items:center;justify-content:center;font-size:2rem;font-weight:700;">${(otherTitle || '?').slice(0, 2).toUpperCase()}</div>`;
+
+  openSheet(`
+    <div style="padding:6px;">
+      <div style="display:flex;flex-direction:column;align-items:center;margin-bottom:18px;">
+        <div style="margin-bottom:12px;">
+          ${avatarHtml}
+        </div>
+        <div style="font-weight:700;font-size:1.2rem;text-align:center;">${escapeHtml(otherTitle)}</div>
+        <div style="font-size:0.82rem;opacity:0.5;margin-top:2px;">Mitschüler:in</div>
+      </div>
+
+      <div style="background:#fff;border-radius:14px;border:1px solid rgba(0,0,0,0.08);padding:10px 14px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <i data-lucide="${conv.is_muted ? 'bell-off' : 'bell'}" style="width:18px;height:18px;color:${conv.is_muted ? '#b3261e' : '#6750a4'};"></i>
+          <span style="font-size:0.9rem;font-weight:600;">Benachrichtigungen stumm</span>
+        </div>
+        <input type="checkbox" id="chat-info-mute-toggle" ${conv.is_muted ? 'checked' : ''} onchange="toggleChatMuteFromInfo(this.checked)" style="width:20px;height:20px;accent-color:#6750a4;cursor:pointer;">
+      </div>
+    </div>
+  `);
+  if (window.lucide) lucide.createIcons();
+}
+
+async function toggleChatMuteFromInfo(muted) {
+  if (!chatCurrentConversationId) return;
+  const conv = chatConversations.find(c => c.id === chatCurrentConversationId);
+  try {
+    await API.setChatMute(chatCurrentConversationId, muted);
+    if (conv) conv.is_muted = muted;
+    showToast(muted ? 'Chat stummgeschaltet' : 'Stummschaltung aufgehoben');
+  } catch {
+    showToast('Fehler beim Ändern');
+  }
+}
+
+function triggerGroupAvatarUpload() {
+  document.getElementById('chat-group-avatar-input')?.click();
+}
+
+async function handleGroupAvatarFileSelect(file) {
+  if (!file || !chatCurrentConversationId) return;
+  showToast('Gruppenbild wird aktualisiert…');
+  try {
+    const res = await API.uploadChatGroupAvatar(chatCurrentConversationId, file);
+    const conv = chatConversations.find(c => c.id === chatCurrentConversationId);
+    if (conv) conv.avatar_url = res.avatar_url;
+    updateChatHeaderAvatar(conv);
+    closeSheet();
+    openChatHeaderInfo();
+    showToast('Gruppenbild aktualisiert');
+  } catch (e) {
+    showToast(e.detail || 'Fehler beim Hochladen des Gruppenbilds');
+  }
+}
+
+async function promptEditGroupName() {
+  if (!chatCurrentConversationId) return;
+  const conv = chatConversations.find(c => c.id === chatCurrentConversationId);
+  const currentName = conv ? conv.name : '';
+  const newName = prompt('Neuer Gruppenname:', currentName);
+  if (newName === null) return;
+  const trimmed = newName.trim();
+  if (!trimmed) { showToast('Gruppenname darf nicht leer sein'); return; }
+
+  try {
+    const updated = await API.updateChatGroup(chatCurrentConversationId, { name: trimmed });
+    if (conv) conv.name = updated.name;
+    document.getElementById('chat-title').textContent = updated.name;
+    const nameEl = document.getElementById('chat-group-info-name');
+    if (nameEl) nameEl.textContent = updated.name;
+    showToast('Gruppenname geändert');
+  } catch (e) {
+    showToast(e.detail || 'Fehler beim Ändern des Gruppennamens');
   }
 }
 
@@ -415,11 +760,8 @@ async function openChatConversation(id, fromDeepLink = false, isPopState = false
   // 2. Immediately switch views & show correct header title/avatar
   document.getElementById('chat-list-view').style.display = 'none';
   document.getElementById('chat-detail-view').style.display = 'flex';
-  document.querySelector('#page-chat .fab')?.style.setProperty('display', 'none');
   document.getElementById('chat-title').textContent = conv ? chatConversationTitle(conv) : 'Chat';
-  document.getElementById('chat-mute-btn').style.display = 'flex';
   document.getElementById('chat-search-btn').style.display = 'none';
-  updateChatMuteIcon(conv?.is_muted);
   updateChatHeaderAvatar(conv);
 
   chatReplyTo = null;
@@ -468,9 +810,7 @@ function closeChatConversation(isPopState) {
   }
   document.getElementById('chat-detail-view').style.display = 'none';
   document.getElementById('chat-list-view').style.display = '';
-  document.querySelector('#page-chat .fab')?.style.setProperty('display', 'flex');
   document.getElementById('chat-title').textContent = 'Chat';
-  document.getElementById('chat-mute-btn').style.display = 'none';
   document.getElementById('chat-search-btn').style.display = 'flex';
   document.getElementById('chat-header-avatar').style.display = 'none';
   renderChatList();
@@ -584,14 +924,17 @@ function renderChatPollBubble(m) {
     <div style="font-size:0.72rem;opacity:0.65;margin-top:2px;">${poll.total_votes} Stimme${poll.total_votes === 1 ? '' : 'n'}</div>`;
 }
 
-// A short one-line summary of any message, regardless of type — used for
-// the reply-quote preview (both in the composer bar and inside a bubble
-// that's replying to something) and doesn't need to match the fuller
-// per-type rendering renderChatMessageBody() does for the message's own
-// bubble.
+// A short one-line summary of any message, regardless of type
 function chatMessagePreviewText(m) {
+  if (m.is_deleted) return '🚫 Diese Nachricht wurde gelöscht';
   if (m.msg_type === 'text') return m.text || '';
-  return { image: '📷 Bild', file: '📎 ' + (m.file_name || 'Datei'), voice: '🎤 Sprachnachricht', poll: '📊 ' + (m.text || 'Umfrage') }[m.msg_type] || '';
+  if (m.msg_type === 'image') {
+    if (m.external_url || (m.file_name && m.file_name.toLowerCase().endsWith('.gif'))) {
+      return '👾 GIF';
+    }
+    return '📷 Bild';
+  }
+  return { file: '📎 ' + (m.file_name || 'Datei'), voice: '🎤 Sprachnachricht', poll: '📊 ' + (m.text || 'Umfrage') }[m.msg_type] || '';
 }
 
 function chatFileUrl(m) {
@@ -616,11 +959,14 @@ function scrollChatToBottom(smooth = false) {
 }
 
 function renderChatMessageBody(m) {
+  if (m.is_deleted) {
+    return `<div style="font-style:italic;opacity:0.6;display:flex;align-items:center;gap:6px;">
+      <i data-lucide="ban" style="width:14px;height:14px;"></i>
+      <span>Diese Nachricht wurde gelöscht</span>
+    </div>`;
+  }
   if (m.msg_type === 'poll') return renderChatPollBubble(m);
   if (m.msg_type === 'image') {
-    // A GIF picked from the GIPHY library streams straight from GIPHY's CDN
-    // (external_url) instead of our own file-serving endpoint — nothing to
-    // download/re-host for something already meant to be publicly embedded.
     const src = m.external_url || chatFileUrl(m);
     return `<img src="${src}" loading="lazy" onload="onChatImageLoaded()" style="max-width:220px;max-height:280px;border-radius:10px;display:block;cursor:pointer;" onclick="window.open('${src}','_blank')">`;
   }
@@ -661,6 +1007,13 @@ function renderChatReactionPills(m) {
   </div>`;
 }
 
+function renderChatMessageTime(m) {
+  const timeStr = chatMsgTime(m.created_at);
+  const editedStr = m.is_edited ? ' <span style="font-size:0.6rem;opacity:0.8;">(bearbeitet)</span>' : '';
+  const pendingStr = m._pending ? ' <i data-lucide="clock" style="width:10px;height:10px;display:inline-block;vertical-align:middle;opacity:0.7;"></i>' : '';
+  return `${timeStr}${editedStr}${pendingStr}`;
+}
+
 function renderChatMessages(forceScrollBottom = false) {
   const el = document.getElementById('chat-messages-scroll');
   if (!el) return;
@@ -675,12 +1028,12 @@ function renderChatMessages(forceScrollBottom = false) {
     return `
     <div class="chat-bubble-row ${mine ? 'mine' : ''}" data-message-id="${m.id}" style="${showSender ? 'gap:6px;align-items:flex-end;' : ''}">
       ${avatarHtml}
-      <div class="chat-bubble" style="${m.msg_type === 'poll' ? 'min-width:220px;' : ''}">
-        ${showSender ? `<div class="chat-bubble-sender">${escapeHtml(m.sender_name)}</div>` : ''}
-        ${renderChatReplyQuote(m.reply_to)}
+      <div class="chat-bubble ${m._pending ? 'chat-bubble-new' : ''}" style="${m.msg_type === 'poll' ? 'min-width:220px;' : ''}${m.is_deleted ? 'background:#e0e0e0;color:#616161;' : ''}">
+        ${showSender && !m.is_deleted ? `<div class="chat-bubble-sender">${escapeHtml(m.sender_name)}</div>` : ''}
+        ${m.is_deleted ? '' : renderChatReplyQuote(m.reply_to)}
         ${renderChatMessageBody(m)}
-        ${renderChatReactionPills(m)}
-        <div class="chat-bubble-time">${chatMsgTime(m.created_at)}</div>
+        ${m.is_deleted ? '' : renderChatReactionPills(m)}
+        <div class="chat-bubble-time">${renderChatMessageTime(m)}</div>
       </div>
     </div>`;
   }).join('');
@@ -735,29 +1088,150 @@ function chatInputKeydown(e) {
   }
 }
 
+let chatEditingMessageId = null;
+
+function startChatEdit(messageId) {
+  closeChatActionMenu();
+  const msg = chatMessages.find(m => m.id === messageId);
+  if (!msg || msg.msg_type !== 'text' || msg.is_deleted) return;
+  chatEditingMessageId = messageId;
+  cancelChatReply();
+  const editBar = document.getElementById('chat-edit-bar');
+  if (editBar) editBar.style.display = 'flex';
+  const input = document.getElementById('chat-input');
+  if (input) {
+    input.value = msg.text || '';
+    chatAutoGrow(input);
+    input.focus();
+  }
+}
+
+function cancelChatEdit() {
+  chatEditingMessageId = null;
+  const editBar = document.getElementById('chat-edit-bar');
+  if (editBar) editBar.style.display = 'none';
+  const input = document.getElementById('chat-input');
+  if (input) {
+    input.value = '';
+    chatAutoGrow(input);
+  }
+}
+
+async function submitChatEdit() {
+  if (!chatCurrentConversationId || chatEditingMessageId === null) return;
+  const input = document.getElementById('chat-input');
+  const newText = input.value.trim();
+  if (!newText) {
+    showToast('Nachricht darf nicht leer sein');
+    return;
+  }
+  const msgId = chatEditingMessageId;
+  cancelChatEdit();
+
+  try {
+    const updated = await API.editChatMessage(chatCurrentConversationId, msgId, newText);
+    const msg = chatMessages.find(m => m.id === msgId);
+    if (msg) {
+      msg.text = updated.text;
+      msg.is_edited = true;
+    }
+    renderChatMessages(false);
+    showToast('Nachricht bearbeitet');
+  } catch (e) {
+    showToast(e.detail || 'Fehler beim Bearbeiten');
+  }
+}
+
+async function confirmDeleteChatMessage(messageId) {
+  closeChatActionMenu();
+  const msg = chatMessages.find(m => m.id === messageId);
+  if (!msg || msg.is_deleted) return;
+
+  const ok = confirm('Möchtest du diese Nachricht wirklich löschen?');
+  if (!ok) return;
+
+  try {
+    await API.deleteChatMessage(chatCurrentConversationId, messageId);
+    msg.is_deleted = true;
+    msg.text = '';
+    msg.file_name = null;
+    msg.storage_filename = null;
+    msg.external_url = null;
+    msg.poll = null;
+    renderChatMessages(false);
+    showToast('Nachricht gelöscht');
+  } catch (e) {
+    showToast(e.detail || 'Fehler beim Löschen');
+  }
+}
+
 async function sendChatMessage() {
   const input = document.getElementById('chat-input');
   const text = input.value.trim();
   if (!text || !chatCurrentConversationId) return;
+
+  if (chatEditingMessageId !== null) {
+    await submitChatEdit();
+    return;
+  }
+
+  // Clear input immediately for instant responsiveness
   input.value = '';
   chatAutoGrow(input);
+
+  const replyToSnapshot = chatReplyTo ? { ...chatReplyTo } : null;
+  cancelChatReply();
+
+  const tempId = -Date.now();
+  const optimisticMsg = {
+    id: tempId,
+    conversation_id: chatCurrentConversationId,
+    sender_id: currentUser ? currentUser.id : null,
+    sender_name: currentUser ? (currentUser.display_name || currentUser.name || 'Ich') : 'Ich',
+    sender_avatar: currentUser ? currentUser.avatar_url : null,
+    msg_type: 'text',
+    text: text,
+    created_at: new Date().toISOString(),
+    reply_to: replyToSnapshot,
+    reactions: [],
+    _pending: true
+  };
+
+  chatMessages.push(optimisticMsg);
+  renderChatMessages(true);
   scrollChatToBottom(true);
-  const btn = document.getElementById('chat-send-btn');
-  btn.disabled = true;
-  const replyToId = chatReplyTo?.id || null;
-  try {
-    const msg = await API.sendChatMessage(chatCurrentConversationId, { msg_type: 'text', text, reply_to_id: replyToId });
-    chatMessages.push(msg);
-    renderChatMessages(true);
-    scrollChatToBottom(false);
-    cancelChatReply();
-    const conv = chatConversations.find(c => c.id === chatCurrentConversationId);
-    if (conv) { conv.last_message = text; conv.last_message_at = msg.created_at; }
-  } catch {
-    showToast('Nachricht konnte nicht gesendet werden');
-    input.value = text;
+
+  const conv = chatConversations.find(c => c.id === chatCurrentConversationId);
+  if (conv) {
+    conv.last_message = text;
+    conv.last_message_at = optimisticMsg.created_at;
   }
-  btn.disabled = false;
+
+  try {
+    const msg = await API.sendChatMessage(chatCurrentConversationId, {
+      msg_type: 'text',
+      text,
+      reply_to_id: replyToSnapshot ? replyToSnapshot.id : null
+    });
+    const idx = chatMessages.findIndex(m => m.id === tempId);
+    if (idx !== -1) {
+      chatMessages[idx] = msg;
+    } else {
+      chatMessages.push(msg);
+    }
+    renderChatMessages(false);
+    if (conv) {
+      conv.last_message = text;
+      conv.last_message_at = msg.created_at;
+    }
+  } catch (err) {
+    const idx = chatMessages.findIndex(m => m.id === tempId);
+    if (idx !== -1) chatMessages.splice(idx, 1);
+    renderChatMessages(false);
+    input.value = text;
+    chatAutoGrow(input);
+    showToast('Nachricht konnte nicht gesendet werden');
+  }
 }
 
 // --- Reply, copy, react (long-press / swipe on a message) ---
@@ -807,55 +1281,65 @@ async function reactToChatMessage(messageId, emoji) {
 const CHAT_QUICK_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
 function closeChatActionMenu() {
-  if (_chatActionMenuEl) { _chatActionMenuEl.remove(); _chatActionMenuEl = null; }
-  if (_chatActionMenuOutsideHandler) { document.removeEventListener('pointerdown', _chatActionMenuOutsideHandler); _chatActionMenuOutsideHandler = null; }
+  if (_chatActionMenuEl) {
+    _chatActionMenuEl.classList.remove('active');
+    const el = _chatActionMenuEl;
+    _chatActionMenuEl = null;
+    setTimeout(() => { el?.remove(); }, 200);
+  }
 }
 
-// Long-press context menu — portaled to <body> and positioned at the touch
-// point (not anchored to a button, unlike toggleMoreMenu() elsewhere in the
-// app, since a long-press can land anywhere on a message bubble). Two
-// separately-elevated surfaces stacked with a gap (a rounded emoji pill
-// above a rounded menu card) — the same two-tier shape most chat apps use
-// for this gesture, built from this app's own Material components
-// (.m3-dropdown-panel/.m3-dropdown-opt) rather than copying their look.
-function openMessageActionMenu(messageId, clientX, clientY) {
+function openMessageActionMenu(messageId) {
   closeChatActionMenu();
   const msg = chatMessages.find(m => m.id === messageId);
-  if (!msg) return;
+  if (!msg || msg.is_deleted) return;
 
-  const wrap = document.createElement('div');
-  wrap.style.cssText = 'position:fixed;z-index:9999;display:flex;flex-direction:column;gap:8px;';
-  wrap.innerHTML = `
-    <div class="m3-dropdown-panel dd-open" style="position:static;display:flex;gap:2px;padding:6px 8px;justify-content:space-between;">
-      ${CHAT_QUICK_EMOJIS.map(e => `<button type="button" onclick="reactToChatMessage(${messageId},'${e}')" style="font-size:1.3rem;background:none;border:none;cursor:pointer;padding:4px 6px;border-radius:50%;line-height:1;">${e}</button>`).join('')}
+  const isMine = currentUser && msg.sender_id === currentUser.id;
+  const conv = chatConversations.find(c => c.id === chatCurrentConversationId);
+  const canEdit = isMine && msg.msg_type === 'text' && !msg.is_deleted;
+  const canDelete = (isMine || (conv && conv.is_notes)) && !msg.is_deleted;
+
+  const row = document.querySelector(`.chat-bubble-row[data-message-id="${messageId}"]`);
+  const bubbleEl = row ? row.querySelector('.chat-bubble') : null;
+  const bubbleHtml = bubbleEl ? bubbleEl.outerHTML : '';
+  const bubbleRowClass = row ? row.className : 'chat-bubble-row';
+
+  const overlay = document.createElement('div');
+  overlay.className = 'chat-beeper-overlay';
+  overlay.innerHTML = `
+    <div style="display:flex;gap:8px;background:rgba(255,255,255,0.94);padding:8px 14px;border-radius:24px;box-shadow:0 8px 24px rgba(0,0,0,0.25);margin-bottom:14px;backdrop-filter:blur(8px);">
+      ${CHAT_QUICK_EMOJIS.map(e => `<button type="button" onclick="reactToChatMessage(${messageId},'${e}')" style="font-size:1.6rem;background:none;border:none;cursor:pointer;padding:2px 6px;line-height:1;transition:transform 0.1s;" onpointerdown="this.style.transform='scale(1.3)'" onpointerup="this.style.transform='scale(1)'">${e}</button>`).join('')}
     </div>
-    <div class="m3-dropdown-panel dd-open" style="position:static;min-width:200px;padding:6px;">
-      <div class="m3-dropdown-opt" onclick="startChatReply(${messageId})" style="gap:10px;">
-        <i data-lucide="reply" style="width:16px;height:16px;"></i><span>Antworten</span>
-      </div>
-      ${msg.msg_type === 'text' ? `<div class="m3-dropdown-opt" onclick="copyChatMessage(${messageId})" style="gap:10px;">
-        <i data-lucide="copy" style="width:16px;height:16px;"></i><span>Kopieren</span>
-      </div>` : ''}
+    <div class="${bubbleRowClass}" style="width:100%;max-width:340px;margin-bottom:14px;pointer-events:none;transform:scale(1.02);filter:drop-shadow(0 8px 20px rgba(0,0,0,0.25));">
+      ${bubbleHtml}
+    </div>
+    <div style="background:rgba(255,255,255,0.95);border-radius:18px;min-width:210px;max-width:85%;padding:6px;box-shadow:0 8px 24px rgba(0,0,0,0.25);display:flex;flex-direction:column;gap:2px;">
+      <button class="m3-dropdown-opt" onclick="startChatReply(${messageId})" style="gap:12px;padding:10px 14px;font-size:0.92rem;width:100%;text-align:left;background:none;border:none;border-radius:12px;display:flex;align-items:center;cursor:pointer;">
+        <i data-lucide="reply" style="width:18px;height:18px;color:#6750a4;"></i><span style="font-weight:600;">Antworten</span>
+      </button>
+      ${msg.msg_type === 'text' && msg.text ? `
+      <button class="m3-dropdown-opt" onclick="copyChatMessage(${messageId})" style="gap:12px;padding:10px 14px;font-size:0.92rem;width:100%;text-align:left;background:none;border:none;border-radius:12px;display:flex;align-items:center;cursor:pointer;">
+        <i data-lucide="copy" style="width:18px;height:18px;color:#6750a4;"></i><span style="font-weight:600;">Kopieren</span>
+      </button>` : ''}
+      ${canEdit ? `
+      <button class="m3-dropdown-opt" onclick="startChatEdit(${messageId})" style="gap:12px;padding:10px 14px;font-size:0.92rem;width:100%;text-align:left;background:none;border:none;border-radius:12px;display:flex;align-items:center;cursor:pointer;">
+        <i data-lucide="edit-2" style="width:18px;height:18px;color:#6750a4;"></i><span style="font-weight:600;">Bearbeiten</span>
+      </button>` : ''}
+      ${canDelete ? `
+      <button class="m3-dropdown-opt" onclick="confirmDeleteChatMessage(${messageId})" style="gap:12px;padding:10px 14px;font-size:0.92rem;width:100%;text-align:left;background:none;border:none;border-radius:12px;display:flex;align-items:center;cursor:pointer;color:#b3261e;">
+        <i data-lucide="trash-2" style="width:18px;height:18px;color:#b3261e;"></i><span style="font-weight:600;">Löschen</span>
+      </button>` : ''}
     </div>
   `;
-  document.body.appendChild(wrap);
-  _chatActionMenuEl = wrap;
 
-  const vw = window.innerWidth, vh = window.innerHeight;
-  const left = Math.min(Math.max(8, clientX - 110), vw - 228);
-  const top = Math.min(Math.max(8, clientY - 20), vh - 220);
-  wrap.style.left = left + 'px';
-  wrap.style.top = top + 'px';
+  overlay.addEventListener('pointerdown', (e) => {
+    if (e.target === overlay) closeChatActionMenu();
+  });
+
+  document.body.appendChild(overlay);
+  requestAnimationFrame(() => overlay.classList.add('active'));
   if (window.lucide) lucide.createIcons();
-
-  // Listens for pointerdown, not click: the long-press gesture that just
-  // opened this menu ends with a pointerup (and often a synthesized click
-  // right after) back at the original bubble, outside the panel — a click
-  // listener would catch that and close the menu the instant it opened. A
-  // NEW pointerdown elsewhere is unambiguous "the user is now interacting
-  // outside the menu" instead, so no artificial delay is needed either.
-  _chatActionMenuOutsideHandler = (e) => { if (!wrap.contains(e.target)) closeChatActionMenu(); };
-  document.addEventListener('pointerdown', _chatActionMenuOutsideHandler);
+  _chatActionMenuEl = overlay;
 }
 
 // Long-press (hold ~450ms without moving) opens the action menu; a

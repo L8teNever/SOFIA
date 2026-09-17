@@ -11,5 +11,7 @@ class ChatConversation(Base):
     class_id = Column(Integer, ForeignKey("class_groups.id"), nullable=False)
     is_group = Column(Boolean, default=False, nullable=False)
     name = Column(String, nullable=True)
+    avatar_url = Column(String, nullable=True)
+    is_notes = Column(Boolean, default=False, nullable=False)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

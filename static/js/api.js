@@ -130,4 +130,8 @@ const API = {
   reactChatMessage:     (convId, msgId, emoji) => API.post(`/chat/conversations/${convId}/messages/${msgId}/react`, { emoji }),
   uploadChatFile:       (convId, form) => API.upload(`/chat/conversations/${convId}/upload`, form),
   searchChatGifs:       (q) => API.get(`/chat/gifs?q=${encodeURIComponent(q || '')}`),
+  editChatMessage:      (convId, msgId, text) => API.patch(`/chat/conversations/${convId}/messages/${msgId}`, { text }),
+  deleteChatMessage:    (convId, msgId) => API.delete(`/chat/conversations/${convId}/messages/${msgId}`),
+  updateChatGroup:      (convId, d) => API.patch(`/chat/conversations/${convId}`, d),
+  uploadChatGroupAvatar: (convId, form) => API.upload(`/chat/conversations/${convId}/avatar`, form),
 };

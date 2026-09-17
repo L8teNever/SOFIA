@@ -15,11 +15,13 @@ from backend.schemas import (
     ChatConversationOut, ChatConversationCreate, ChatParticipantOut, ChatMessageOut, ChatMessageCreate,
     ChatMuteUpdate, ChatPollOptionOut, ChatPollOut, ChatVoteCreate,
     ChatReplyPreviewOut, ChatReactionOut, ChatReactionCreate,
+    ChatMessageUpdate, ChatGroupUpdate,
 )
 from backend.routes.vapid import push_to_users
 from backend.services.notification_scheduler import get_user_settings
 from backend.config import settings
 from backend.services.virus_scanner import scan_file
+from backend.routes.users import _compress_avatar, AVATAR_DIR_NAME
 from datetime import datetime, timezone
 from typing import List, Optional
 import logging, os, uuid, aiofiles, httpx
@@ -141,6 +143,21 @@ async def _reactions_out(db: AsyncSession, messages: List[ChatMessage], current_
 
 @router.get("/conversations", response_model=List[ChatConversationOut])
 async def list_conversations(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if current_user.class_id:
+        notes_check = await db.execute(
+            select(ChatConversation.id).join(ChatParticipant, ChatParticipant.conversation_id == ChatConversation.id)
+            .where(ChatParticipant.user_id == current_user.id, ChatConversation.is_notes == True)
+        )
+        if not notes_check.scalar_one_or_none():
+            notes_conv = ChatConversation(
+                class_id=current_user.class_id, is_group=False, is_notes=True,
+                name="Notizen", created_by=current_user.id,
+            )
+            db.add(notes_conv)
+            await db.flush()
+            db.add(ChatParticipant(conversation_id=notes_conv.id, user_id=current_user.id))
+            await db.commit()
+
     my_rows = await db.execute(select(ChatParticipant).where(ChatParticipant.user_id == current_user.id))
     my_participations = list(my_rows.scalars().all())
     if not my_participations:
@@ -162,9 +179,19 @@ async def list_conversations(db: AsyncSession = Depends(get_db), current_user: U
         last_msg = last_msg_result.scalar_one_or_none()
         last_message = None
         if last_msg:
-            last_message = last_msg.text if last_msg.msg_type == "text" else {
-                "image": "📷 Bild", "file": "📎 Datei", "voice": "🎤 Sprachnachricht", "poll": "📊 Umfrage: " + (last_msg.text or ""),
-            }.get(last_msg.msg_type, last_msg.msg_type)
+            if last_msg.is_deleted:
+                last_message = "🚫 Nachricht gelöscht"
+            elif last_msg.msg_type == "text":
+                last_message = last_msg.text
+            elif last_msg.msg_type == "image":
+                if last_msg.external_url or (last_msg.file_name and last_msg.file_name.lower().endswith(".gif")):
+                    last_message = "👾 GIF"
+                else:
+                    last_message = "📷 Bild"
+            else:
+                last_message = {
+                    "file": "📎 Datei", "voice": "🎤 Sprachnachricht", "poll": "📊 Umfrage: " + (last_msg.text or ""),
+                }.get(last_msg.msg_type, last_msg.msg_type)
 
         unread_query = select(func.count()).select_from(ChatMessage).where(
             ChatMessage.conversation_id == conv.id, ChatMessage.sender_id != current_user.id,
@@ -174,12 +201,13 @@ async def list_conversations(db: AsyncSession = Depends(get_db), current_user: U
         unread_count = (await db.execute(unread_query)).scalar() or 0
 
         out.append(ChatConversationOut(
-            id=conv.id, is_group=conv.is_group, name=conv.name, participants=participants,
+            id=conv.id, is_group=conv.is_group, name=conv.name, avatar_url=conv.avatar_url,
+            is_notes=bool(conv.is_notes), participants=participants,
             last_message=last_message, last_message_at=last_msg.created_at if last_msg else None,
             unread_count=unread_count, is_muted=part.is_muted,
         ))
 
-    out.sort(key=lambda c: c.last_message_at or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+    out.sort(key=lambda c: (c.is_notes, c.last_message_at or datetime.min.replace(tzinfo=timezone.utc)), reverse=True)
     return out
 
 @router.post("/conversations", response_model=ChatConversationOut)
@@ -265,9 +293,17 @@ async def list_messages(conversation_id: int, before: Optional[int] = None, db: 
             id=m.id, conversation_id=m.conversation_id, sender_id=m.sender_id,
             sender_name=senders[m.sender_id].name if m.sender_id in senders else "?",
             sender_avatar=senders[m.sender_id].avatar_url if m.sender_id in senders else None,
-            msg_type=m.msg_type, text=m.text,
-            file_name=m.file_name, file_size=m.file_size, mime_type=m.mime_type, external_url=m.external_url,
-            poll=polls.get(m.id), reply_to=reply_previews.get(m.id), reactions=reactions.get(m.id, []),
+            msg_type=m.msg_type,
+            text=None if m.is_deleted else m.text,
+            file_name=None if m.is_deleted else m.file_name,
+            file_size=None if m.is_deleted else m.file_size,
+            mime_type=None if m.is_deleted else m.mime_type,
+            external_url=None if m.is_deleted else m.external_url,
+            poll=None if m.is_deleted else polls.get(m.id),
+            reply_to=reply_previews.get(m.id),
+            reactions=[] if m.is_deleted else reactions.get(m.id, []),
+            is_edited=bool(m.is_edited),
+            is_deleted=bool(m.is_deleted),
             created_at=m.created_at,
         ) for m in messages
     ]
@@ -341,9 +377,21 @@ async def send_message(conversation_id: int, data: ChatMessageCreate, db: AsyncS
         if ns.enabled and ns.chat_new:
             unmuted_others.append(u)
     if unmuted_others:
-        preview = data.text if data.msg_type == "text" else {
-            "image": "📷 Bild", "file": "📎 Datei", "voice": "🎤 Sprachnachricht", "poll": "📊 Umfrage: " + (data.text or ""),
-        }.get(data.msg_type, "Neue Nachricht")
+        if data.msg_type == "text":
+            preview = data.text
+        elif data.msg_type == "image" and (data.external_url or (data.file_name and data.file_name.lower().endswith(".gif"))):
+            preview = "👾 GIF"
+        elif data.msg_type == "image":
+            preview = "📷 Bild"
+        elif data.msg_type == "file":
+            preview = "📎 Datei"
+        elif data.msg_type == "voice":
+            preview = "🎤 Sprachnachricht"
+        elif data.msg_type == "poll":
+            preview = "📊 Umfrage: " + (data.text or "")
+        else:
+            preview = "Neue Nachricht"
+
         try:
             await push_to_users(
                 db, unmuted_others, title=current_user.name, body=preview or "Neue Nachricht",
@@ -362,7 +410,126 @@ async def send_message(conversation_id: int, data: ChatMessageCreate, db: AsyncS
         sender_name=current_user.name, sender_avatar=current_user.avatar_url,
         msg_type=msg.msg_type, text=msg.text,
         file_name=msg.file_name, file_size=msg.file_size, mime_type=msg.mime_type, external_url=msg.external_url,
-        poll=poll_out, reply_to=reply_out, created_at=msg.created_at,
+        poll=poll_out, reply_to=reply_out, is_edited=False, is_deleted=False, created_at=msg.created_at,
+    )
+
+@router.patch("/conversations/{conversation_id}/messages/{message_id}", response_model=ChatMessageOut)
+async def edit_message(conversation_id: int, message_id: int, data: ChatMessageUpdate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    await _require_participant(db, conversation_id, current_user)
+    msg_result = await db.execute(select(ChatMessage).where(
+        ChatMessage.id == message_id, ChatMessage.conversation_id == conversation_id,
+    ))
+    msg = msg_result.scalar_one_or_none()
+    if not msg:
+        raise HTTPException(404)
+    if msg.sender_id != current_user.id:
+        raise HTTPException(403, "Nur eigene Nachrichten können bearbeitet werden")
+    if msg.is_deleted:
+        raise HTTPException(400, "Gelöschte Nachrichten können nicht bearbeitet werden")
+    if msg.msg_type != "text":
+        raise HTTPException(400, "Nur Textnachrichten können bearbeitet werden")
+    new_text = (data.text or "").strip()
+    if not new_text:
+        raise HTTPException(400, "Nachricht darf nicht leer sein")
+    msg.text = new_text
+    msg.is_edited = True
+    await db.commit()
+    await db.refresh(msg)
+
+    reply_out = None
+    if msg.reply_to_id:
+        previews = await _reply_previews_out(db, [msg])
+        reply_out = previews.get(msg.id)
+    reactions = await _reactions_out(db, [msg], current_user)
+
+    return ChatMessageOut(
+        id=msg.id, conversation_id=msg.conversation_id, sender_id=msg.sender_id,
+        sender_name=current_user.name, sender_avatar=current_user.avatar_url,
+        msg_type=msg.msg_type, text=msg.text,
+        file_name=msg.file_name, file_size=msg.file_size, mime_type=msg.mime_type, external_url=msg.external_url,
+        poll=None, reply_to=reply_out, reactions=reactions.get(msg.id, []),
+        is_edited=True, is_deleted=False, created_at=msg.created_at,
+    )
+
+@router.delete("/conversations/{conversation_id}/messages/{message_id}")
+async def delete_message(conversation_id: int, message_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    conv = await _require_participant(db, conversation_id, current_user)
+    msg_result = await db.execute(select(ChatMessage).where(
+        ChatMessage.id == message_id, ChatMessage.conversation_id == conversation_id,
+    ))
+    msg = msg_result.scalar_one_or_none()
+    if not msg:
+        raise HTTPException(404)
+    if msg.sender_id != current_user.id and not conv.is_notes:
+        raise HTTPException(403, "Nur eigene Nachrichten können gelöscht werden")
+
+    if msg.storage_filename:
+        path = os.path.join(settings.chat_storage_dir, msg.storage_filename)
+        if os.path.exists(path):
+            try:
+                os.remove(path)
+            except Exception:
+                pass
+        msg.storage_filename = None
+
+    msg.is_deleted = True
+    msg.text = None
+    msg.file_name = None
+    msg.file_size = None
+    msg.mime_type = None
+    msg.external_url = None
+    await db.commit()
+    return {"ok": True}
+
+@router.patch("/conversations/{conversation_id}", response_model=ChatConversationOut)
+async def update_conversation(conversation_id: int, data: ChatGroupUpdate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    conv = await _require_participant(db, conversation_id, current_user)
+    if not conv.is_group:
+        raise HTTPException(400, "Nur Gruppen können bearbeitet werden")
+    if data.name is not None:
+        new_name = data.name.strip()
+        if not new_name:
+            raise HTTPException(400, "Gruppenname darf nicht leer sein")
+        conv.name = new_name
+    if data.avatar_url is not None:
+        conv.avatar_url = data.avatar_url
+    await db.commit()
+    await db.refresh(conv)
+    participants = await _participants_out(db, conv.id)
+    return ChatConversationOut(
+        id=conv.id, is_group=conv.is_group, name=conv.name, avatar_url=conv.avatar_url,
+        is_notes=bool(conv.is_notes), participants=participants,
+    )
+
+@router.post("/conversations/{conversation_id}/avatar", response_model=ChatConversationOut)
+async def upload_group_avatar(conversation_id: int, file: UploadFile = File(...), db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    conv = await _require_participant(db, conversation_id, current_user)
+    if not conv.is_group:
+        raise HTTPException(400, "Nur für Gruppenchats")
+    if not (file.content_type or "").startswith("image/"):
+        raise HTTPException(400, "Nur Bilddateien erlaubt")
+    raw = await file.read()
+    if len(raw) > settings.max_file_size:
+        raise HTTPException(413, "Datei zu groß (max. 1 GB)")
+    await scan_file(raw, file.filename or "group_avatar.webp", file.content_type)
+    try:
+        processed = _compress_avatar(raw)
+    except Exception:
+        raise HTTPException(400, "Ungültiges Bild")
+
+    avatar_dir = os.path.join(settings.upload_dir, AVATAR_DIR_NAME)
+    os.makedirs(avatar_dir, exist_ok=True)
+    filename = f"group_{uuid.uuid4().hex}.webp"
+    async with aiofiles.open(os.path.join(avatar_dir, filename), "wb") as out:
+        await out.write(processed)
+
+    conv.avatar_url = f"/uploads/{AVATAR_DIR_NAME}/{filename}"
+    await db.commit()
+    await db.refresh(conv)
+    participants = await _participants_out(db, conv.id)
+    return ChatConversationOut(
+        id=conv.id, is_group=conv.is_group, name=conv.name, avatar_url=conv.avatar_url,
+        is_notes=bool(conv.is_notes), participants=participants,
     )
 
 @router.post("/conversations/{conversation_id}/messages/{message_id}/vote", response_model=ChatPollOut)

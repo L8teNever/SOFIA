@@ -118,6 +118,13 @@ async def _migrate_columns(conn):
     if "is_muted" not in existing_cp:
         await conn.execute(text("ALTER TABLE chat_participants ADD COLUMN is_muted BOOLEAN DEFAULT 0"))
 
+    result_cc = await conn.execute(text("PRAGMA table_info(chat_conversations)"))
+    existing_cc = {row[1] for row in result_cc.fetchall()}
+    if "is_notes" not in existing_cc:
+        await conn.execute(text("ALTER TABLE chat_conversations ADD COLUMN is_notes BOOLEAN DEFAULT 0"))
+    if "avatar_url" not in existing_cc:
+        await conn.execute(text("ALTER TABLE chat_conversations ADD COLUMN avatar_url TEXT"))
+
     result_cm = await conn.execute(text("PRAGMA table_info(chat_messages)"))
     existing_cm = {row[1] for row in result_cm.fetchall()}
     if "reply_to_id" not in existing_cm:
@@ -126,6 +133,10 @@ async def _migrate_columns(conn):
         await conn.execute(text("ALTER TABLE chat_messages ADD COLUMN poll_multi BOOLEAN DEFAULT 0"))
     if "external_url" not in existing_cm:
         await conn.execute(text("ALTER TABLE chat_messages ADD COLUMN external_url TEXT"))
+    if "is_edited" not in existing_cm:
+        await conn.execute(text("ALTER TABLE chat_messages ADD COLUMN is_edited BOOLEAN DEFAULT 0"))
+    if "is_deleted" not in existing_cm:
+        await conn.execute(text("ALTER TABLE chat_messages ADD COLUMN is_deleted BOOLEAN DEFAULT 0"))
 
     result_ns = await conn.execute(text("PRAGMA table_info(user_notification_settings)"))
     existing_ns = {row[1] for row in result_ns.fetchall()}

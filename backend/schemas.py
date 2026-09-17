@@ -232,6 +232,8 @@ class ChatConversationOut(BaseModel):
     id: int
     is_group: bool
     name: Optional[str]
+    avatar_url: Optional[str] = None
+    is_notes: bool = False
     participants: List[ChatParticipantOut]
     last_message: Optional[str] = None
     last_message_at: Optional[datetime] = None
@@ -242,6 +244,10 @@ class ChatConversationCreate(BaseModel):
     participant_ids: List[int]
     is_group: bool = False
     name: Optional[str] = None
+
+class ChatGroupUpdate(BaseModel):
+    name: Optional[str] = None
+    avatar_url: Optional[str] = None
 
 class ChatMuteUpdate(BaseModel):
     muted: bool
@@ -284,6 +290,8 @@ class ChatMessageOut(BaseModel):
     poll: Optional[ChatPollOut] = None
     reply_to: Optional[ChatReplyPreviewOut] = None
     reactions: List[ChatReactionOut] = []
+    is_edited: bool = False
+    is_deleted: bool = False
     created_at: datetime
 
 class ChatMessageCreate(BaseModel):
@@ -297,6 +305,9 @@ class ChatMessageCreate(BaseModel):
     poll_options: Optional[List[str]] = None
     poll_multi: bool = False
     reply_to_id: Optional[int] = None
+
+class ChatMessageUpdate(BaseModel):
+    text: str
 
 class ChatReactionCreate(BaseModel):
     emoji: str
