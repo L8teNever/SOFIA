@@ -209,6 +209,24 @@ function chatHeaderBack() {
   }
 }
 
+// --- Chat list polling ---
+
+function startChatListPolling() {
+  if (chatListPollInterval) clearInterval(chatListPollInterval);
+  chatListPollInterval = setInterval(async () => {
+    if (!document.getElementById('chat-conversations-list')) {
+      clearInterval(chatListPollInterval); chatListPollInterval = null; return;
+    }
+    if (document.hidden) return;
+    const fresh = await API.chatConversations().catch(() => null);
+    if (!fresh || !document.getElementById('chat-conversations-list')) return;
+    if (JSON.stringify(fresh) !== JSON.stringify(chatConversations)) {
+      chatConversations = fresh;
+      if (chatCurrentConversationId === null && !chatInfoViewActive) renderChatList();
+    }
+  }, 15000);
+}
+
 // --- Conversation list ---
 
 function chatRelTime(iso) {
