@@ -77,15 +77,15 @@
   <!-- Widget Grid -->
   <div class="widget-grid" id="widget-grid">
 
-    <!-- Calendar: full-width banner -->
-    <div class="widget w-full-span" style="background:#eaddff;color:#21005d;" onclick="openPage('calendar',this)" data-page="calendar">
-      <div>
-        <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.6;">Nächster Termin</div>
-        <div style="font-size:1.4rem;font-weight:700;margin-top:4px;" id="w-next-event">Keine Termine</div>
-        <div style="font-size:0.82rem;opacity:0.65;margin-top:2px;" id="w-next-event-sub"></div>
+    <!-- Calendar -->
+    <div class="widget w-square" style="background:#eaddff;color:#21005d;" onclick="openPage('calendar',this)" data-page="calendar">
+      <div class="icon-box" style="width:44px;height:44px;background:rgba(33,0,93,0.1);">
+        <i data-lucide="calendar" style="width:22px;height:22px;"></i>
       </div>
-      <div class="icon-box" style="width:52px;height:52px;background:rgba(33,0,93,0.12);">
-        <i data-lucide="calendar" style="width:26px;height:26px;"></i>
+      <div style="overflow:hidden;min-width:0;width:100%;">
+        <div style="font-size:0.8rem;opacity:0.65;margin-top:2px;">Nächster Termin</div>
+        <div style="font-size:1rem;font-weight:700;line-height:1.25;margin-top:2px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;" id="w-next-event">Keine Termine</div>
+        <div style="font-size:0.72rem;opacity:0.6;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" id="w-next-event-sub"></div>
       </div>
     </div>
 
@@ -111,9 +111,6 @@
       </div>
     </div>
 
-    <!-- Timetable, Essensplan: plain 1x1 squares like every other widget
-         above — the grid always divides evenly (see the .w-full-span
-         comment in base.css for the exact math). -->
     <div class="widget w-square" style="background:#ffdec1;color:#442b00;" onclick="openPage('timetable',this)" data-page="timetable">
       <div class="icon-box" style="width:48px;height:48px;background:rgba(68,43,0,0.1);">
         <i data-lucide="clock" style="width:24px;height:24px;"></i>
@@ -160,22 +157,16 @@
       </div>
     </div>
 
-    <!-- Chat: a full-width banner like Calendar rather than a 9th plain
-         square — 9 squares would leave the grid's last row half-empty on
-         every breakpoint (see the .widget-grid comment in base.css: the
-         existing 8-unit total was chosen specifically because 4 columns
-         divides it evenly). A banner showing the latest message is also
-         more useful here than a bare icon tile, same reasoning as Calendar
-         showing the next event instead of just an icon. -->
-    <div class="widget w-full-span" style="background:#c2e7ff;color:#001d31;" onclick="openPage('chat',this)" data-page="chat">
-      <div style="min-width:0;overflow:hidden;">
-        <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.6;">Chat</div>
-        <div style="font-size:1.4rem;font-weight:700;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" id="w-chat-preview">Keine Nachrichten</div>
-        <div style="font-size:0.82rem;opacity:0.65;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" id="w-chat-preview-sub"></div>
-      </div>
-      <div class="icon-box" style="width:52px;height:52px;background:rgba(0,29,49,0.12);position:relative;flex-shrink:0;">
-        <i data-lucide="message-circle" style="width:26px;height:26px;"></i>
+    <!-- Chat -->
+    <div class="widget w-square" style="background:#c2e7ff;color:#001d31;" onclick="openPage('chat',this)" data-page="chat">
+      <div class="icon-box" style="width:44px;height:44px;background:rgba(0,29,49,0.1);position:relative;">
+        <i data-lucide="message-circle" style="width:22px;height:22px;"></i>
         <span id="w-chat-badge" style="display:none;position:absolute;top:-6px;right:-6px;background:#b3261e;color:#fff;font-size:0.68rem;font-weight:700;min-width:20px;height:20px;border-radius:10px;align-items:center;justify-content:center;padding:0 5px;">0</span>
+      </div>
+      <div style="overflow:hidden;min-width:0;width:100%;">
+        <div style="font-size:0.8rem;opacity:0.65;margin-top:2px;">Chat</div>
+        <div style="font-size:1rem;font-weight:700;line-height:1.25;margin-top:2px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;" id="w-chat-preview">Keine Nachrichten</div>
+        <div style="font-size:0.72rem;opacity:0.6;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" id="w-chat-preview-sub"></div>
       </div>
     </div>
 

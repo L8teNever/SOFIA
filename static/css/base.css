@@ -189,9 +189,8 @@ body.has-update-banner { padding-top: 52px; transition: padding-top 0.3s ease; }
 }
 
 /* Widget grid — 2 columns on mobile, 4 from tablet up (unchanged at
-   desktop: every widget below is a plain 1x1 square or a 2-wide calendar
-   banner, so 4 columns divides them evenly at every width from 600px on;
-   see the .w-full-span comment below for the exact math). */
+   desktop: every widget below is a plain 1x1 square, and the total count
+   is a multiple of 4, so 4 columns always divides them evenly). */
 .widget-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -221,19 +220,13 @@ body.has-update-banner { padding-top: 52px; transition: padding-top 0.3s ease; }
 .w-big-square { grid-column: span 1; aspect-ratio: 1/1; flex-direction: column; justify-content: space-between; padding: 26px; }
 .w-square     { aspect-ratio: 1/1; flex-direction: column; justify-content: space-between; padding: 20px; }
 .w-half    { aspect-ratio: 2/1; flex-direction: row; align-items: center; padding: 14px; gap: 12px; }
-/* Calendar banner: 2 columns wide, same height as a normal square widget
-   row (not the tall 3/1 banner shape) from tablet up. At 4 columns that's
-   calendar(2) + 2 single-width widgets filling row one, then the other 4
-   single-width widgets filling row two exactly. Below 600px the row
-   already divides evenly (calendar spans the full 2-column row on its
-   own), so the tall banner shape stays there.
-   Height: a fixed aspect-ratio here (e.g. 2/1) is only an approximation —
-   it ignores the column gap, so a 2-column-wide box always comes out a bit
-   taller than a 1-column-wide square (whose aspect-ratio:1/1 height already
-   nets out the gap for that column). Dropping the aspect-ratio and letting
-   the item use the grid's default stretch sizing instead makes it match
-   its square row-mates' height exactly, since they always share a row with
-   it and their aspect-ratio:1/1 height sets the row's height. */
+/* Not currently used by any dashboard widget (Calendar and Chat were both
+   converted back to plain 1x1 squares) — kept in case a future widget
+   needs a 2-column banner shape again. Height note: a fixed aspect-ratio
+   here (e.g. 2/1) is only an approximation, since it ignores the column
+   gap; dropping the aspect-ratio and letting the item use the grid's
+   default stretch sizing instead matches a same-row square's height
+   exactly, since a square's aspect-ratio:1/1 sets the row's height. */
 @media (min-width: 600px) { .w-full-span { grid-column: span 2; aspect-ratio: auto; } }
 
 /* Drive + Share: same 1x1 square as every other widget from tablet up, but
