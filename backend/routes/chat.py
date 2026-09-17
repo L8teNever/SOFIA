@@ -207,7 +207,17 @@ async def list_conversations(db: AsyncSession = Depends(get_db), current_user: U
             unread_count=unread_count, is_muted=part.is_muted,
         ))
 
-    out.sort(key=lambda c: (c.is_notes, c.last_message_at or datetime.min.replace(tzinfo=timezone.utc)), reverse=True)
+    # SQLite has no timezone-aware datetime type, so ChatMessage.created_at
+    # comes back naive despite the column being declared timezone=True —
+    # datetime.min.replace(tzinfo=timezone.utc) as the "no messages yet"
+    # fallback was AWARE, and comparing it against a real (naive)
+    # last_message_at crashed with "can't compare offset-naive and
+    # offset-aware datetimes" the moment a user had both a conversation
+    # with messages and one without (e.g. their own empty Notizen chat) —
+    # a 500 on every GET /conversations call, which the frontend's
+    # .catch(() => []) turned into a silently empty chat list. Plain
+    # datetime.min matches what's actually returned (naive) instead.
+    out.sort(key=lambda c: (c.is_notes, c.last_message_at or datetime.min), reverse=True)
     return out
 
 @router.post("/conversations", response_model=ChatConversationOut)
@@ -604,10 +614,14 @@ async def vote_poll(conversation_id: int, message_id: int, data: ChatVoteCreate,
 @router.post("/conversations/{conversation_id}/read")
 async def mark_read(conversation_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     await _require_participant(db, conversation_id, current_user)
+    # Naive (matching how created_at actually comes back from SQLite, per
+    # the note on the list_conversations sort above) — an aware value here
+    # would get stored in a different string format and silently skew the
+    # ChatMessage.created_at > last_read_at unread-count comparison.
     await db.execute(
         ChatParticipant.__table__.update()
         .where(ChatParticipant.conversation_id == conversation_id, ChatParticipant.user_id == current_user.id)
-        .values(last_read_at=datetime.now(timezone.utc))
+        .values(last_read_at=datetime.now(timezone.utc).replace(tzinfo=None))
     )
     await db.commit()
     return {"ok": True}
