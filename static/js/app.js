@@ -605,6 +605,17 @@ window.addEventListener('popstate', (e) => {
     return;
   }
 
+  // Drive's own folder-navigation history entries (see drivePushHistory()
+  // in pages/drive.html) — each one carries the full nav state to restore,
+  // rather than this handler having to know anything about Drive's
+  // internal folder-depth logic. Must come before the generic "close the
+  // whole page" fallback below, or popping back out of a folder would
+  // close all of Drive instead of just stepping up one level.
+  if (e.state && e.state.page === 'drive' && typeof driveHandlePopstate === 'function') {
+    driveHandlePopstate(e.state);
+    return;
+  }
+
   // Detail overlays (e.g. a homework item opened on top of the list page)
   // stack on top of a regular .page rather than replacing it — close the
   // overlay first so back-navigation doesn't yank the page underneath it.

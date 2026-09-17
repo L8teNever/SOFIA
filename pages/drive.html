@@ -256,6 +256,41 @@ function renderDriveFolderGrid() {
   return `<div class="drive-folder-grid">${tiles}${unsortedTile}</div>`;
 }
 
+// Mirrors driveFileUrl()'s subject/topic path shape so the address bar
+// reflects wherever you've actually navigated to — /drive, /drive/Deutsch,
+// /drive/Deutsch/Unterrichtsstunden, /drive/Deutsch/19.08.2026, ... —
+// instead of staying on the bare page URL no matter how deep you go.
+function driveUrlPath() {
+  if (driveSelectedSubjectId === null) return '/drive';
+  if (driveSelectedSubjectId === 'unsorted') return '/drive/Unsortiert';
+  const subject = driveSubjects.find(s => s.id === driveSelectedSubjectId);
+  const subjName = encodeURIComponent(subject ? subject.name : 'Fach');
+  if (driveSelectedLessonTopic) return `/drive/${subjName}/${encodeURIComponent(driveSelectedLessonTopic)}`;
+  if (driveInLessonsView) return `/drive/${subjName}/Unterrichtsstunden`;
+  return `/drive/${subjName}`;
+}
+
+// Every forward navigation (open a subject, drill into Unterrichtsstunden,
+// open one date folder) pushes its own history entry carrying the full nav
+// state — going back is then just history.back() (see driveHeaderBack()),
+// with driveHandlePopstate() (hooked into app.js's central popstate
+// handler) restoring state from e.state rather than this file needing its
+// own popstate listener (which would otherwise pile up a duplicate one
+// every time the Drive page script re-runs on each visit).
+function drivePushHistory() {
+  history.pushState({
+    page: 'drive', subjectId: driveSelectedSubjectId,
+    inLessons: driveInLessonsView, lessonTopic: driveSelectedLessonTopic,
+  }, '', driveUrlPath());
+}
+
+function driveHandlePopstate(state) {
+  driveSelectedSubjectId = state.subjectId ?? null;
+  driveInLessonsView = !!state.inLessons;
+  driveSelectedLessonTopic = state.lessonTopic || null;
+  renderDrive();
+}
+
 async function openDriveSubjectFolder(id) {
   driveSelectedSubjectId = id;
   driveInLessonsView = false;
@@ -265,56 +300,36 @@ async function openDriveSubjectFolder(id) {
     driveTopicsCache[id] = await API.driveTopics(id).catch(() => []);
   }
   renderDrive();
-}
-
-function backToDriveFolders() {
-  driveSelectedSubjectId = null;
-  driveInLessonsView = false;
-  driveSelectedLessonTopic = null;
-  driveLabelFilter = null;
-  renderDrive();
-}
-
-// Back button inside a subject folder: one level up from a specific date
-// folder goes to the Unterrichtsstunden tile grid, one level up from there
-// goes to the subject root, one level up from the subject root goes to the
-// folder grid — same behavior as any file browser's back button.
-function driveGoBack() {
-  if (driveSelectedLessonTopic) {
-    driveSelectedLessonTopic = null;
-    renderDrive();
-  } else if (driveInLessonsView) {
-    driveInLessonsView = false;
-    renderDrive();
-  } else {
-    backToDriveFolders();
-  }
+  drivePushHistory();
 }
 
 // The page header's own back arrow (top-left, guaranteed by pageHeader())
 // normally just leaves the page entirely via closePage() — inside Drive
 // that meant one tap out of a folder took you all the way back to the
 // dashboard instead of one level up. This makes that same button context-
-// aware: one level back through the folder hierarchy while browsing,
-// falling through to the normal "leave Drive" behavior only once you're
-// already at the folder grid root.
+// aware: one level back through the folder hierarchy while browsing (via
+// the real browser history, same as the hardware/gesture back button would
+// do), falling through to the normal "leave Drive" behavior only once
+// you're already at the folder grid root.
 function driveHeaderBack() {
   if (driveSelectedSubjectId === null) {
     closePage();
     return;
   }
-  driveGoBack();
+  history.back();
 }
 
 function openDriveLessonsView() {
   driveInLessonsView = true;
   driveSelectedLessonTopic = null;
   renderDrive();
+  drivePushHistory();
 }
 
 function openDriveLessonTopic(name) {
   driveSelectedLessonTopic = name;
   renderDrive();
+  drivePushHistory();
 }
 
 function setDriveLabelFilter(val) {
