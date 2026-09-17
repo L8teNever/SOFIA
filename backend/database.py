@@ -41,7 +41,7 @@ async def init_db():
         push_subscription, notification_setting, sent_notification_log,
         subject_weighting, audit_log, manual_timetable_entry, drive_file, drive_topic,
         google_account, google_sync_map, user_email_alias,
-        chat_conversation, chat_participant, chat_message
+        chat_conversation, chat_participant, chat_message, chat_poll_option, chat_poll_vote
     )
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -111,6 +111,11 @@ async def _migrate_columns(conn):
     existing_df = {row[1] for row in result_df.fetchall()}
     if "is_lecture_notes" not in existing_df:
         await conn.execute(text("ALTER TABLE drive_files ADD COLUMN is_lecture_notes BOOLEAN DEFAULT 0"))
+
+    result_cp = await conn.execute(text("PRAGMA table_info(chat_participants)"))
+    existing_cp = {row[1] for row in result_cp.fetchall()}
+    if "is_muted" not in existing_cp:
+        await conn.execute(text("ALTER TABLE chat_participants ADD COLUMN is_muted BOOLEAN DEFAULT 0"))
 
     # Migrate legacy users.push_subscription into push_subscriptions table
     try:

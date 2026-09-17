@@ -125,4 +125,6 @@ const API = {
   chatMessages:         (id, before) => API.get(`/chat/conversations/${id}/messages` + (before ? `?before=${before}` : '')),
   sendChatMessage:      (id, d)     => API.post(`/chat/conversations/${id}/messages`, d),
   markChatRead:         (id)        => API.post(`/chat/conversations/${id}/read`),
+  voteChatPoll:         (convId, msgId, optionId) => API.post(`/chat/conversations/${convId}/messages/${msgId}/vote`, { option_id: optionId }),
+  setChatMute:          (id, muted) => API.post(`/chat/conversations/${id}/mute`, { muted }),
 };

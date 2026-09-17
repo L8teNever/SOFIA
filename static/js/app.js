@@ -1278,7 +1278,7 @@ async function loadDashboard() {
     document.getElementById('w-files-count').textContent = files.length;
 
     API.chatConversations().then(convs => {
-      const unread = convs.reduce((sum, c) => sum + (c.unread_count || 0), 0);
+      const unread = convs.reduce((sum, c) => sum + (c.is_muted ? 0 : (c.unread_count || 0)), 0);
       const badge = document.getElementById('w-chat-badge');
       if (badge) {
         badge.textContent = unread > 99 ? '99+' : unread;

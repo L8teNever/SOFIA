@@ -15,6 +15,9 @@
   <div id="chat-detail-view" style="display:none;flex-direction:column;flex:1;min-height:0;">
     <div id="chat-messages-scroll" style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:8px;"></div>
     <div style="display:flex;gap:8px;align-items:flex-end;padding:10px 14px calc(10px + env(safe-area-inset-bottom));background:#fff;border-top:1px solid rgba(0,0,0,0.06);flex-shrink:0;">
+      <button onclick="openNewPollSheet()" title="Umfrage erstellen" style="width:42px;height:42px;border-radius:50%;background:#f3edf7;color:#6750a4;border:none;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;">
+        <i data-lucide="bar-chart-2" style="width:18px;height:18px;"></i>
+      </button>
       <textarea id="chat-input" rows="1" placeholder="Nachricht…" style="flex:1;resize:none;border:1px solid rgba(0,0,0,0.12);border-radius:20px;padding:10px 16px;font-family:inherit;font-size:0.92rem;max-height:120px;" onkeydown="chatInputKeydown(event)" oninput="chatAutoGrow(this)"></textarea>
       <button onclick="sendChatMessage()" id="chat-send-btn" style="width:42px;height:42px;border-radius:50%;background:#6750a4;color:#fff;border:none;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;">
         <i data-lucide="send" style="width:18px;height:18px;"></i>
@@ -32,12 +35,22 @@
   .chat-bubble-row:not(.mine) .chat-bubble { background:#fff; color:#1c1b1f; border-bottom-left-radius:5px; box-shadow:0 1px 3px rgba(0,0,0,0.08); }
   .chat-bubble-sender { font-size:0.7rem; font-weight:700; opacity:0.6; margin-bottom:2px; }
   .chat-bubble-time { font-size:0.62rem; opacity:0.55; margin-top:3px; }
+  .chat-poll-opt { display:block; width:100%; text-align:left; border:none; background:none; padding:0; margin:6px 0; cursor:pointer; font-family:inherit; }
+  .chat-poll-opt-bar { position:relative; border-radius:10px; overflow:hidden; background:rgba(0,0,0,0.06); padding:7px 10px; }
+  .chat-bubble-row.mine .chat-poll-opt-bar { background:rgba(255,255,255,0.18); }
+  .chat-poll-opt-fill { position:absolute; top:0; left:0; bottom:0; background:rgba(103,80,164,0.18); z-index:0; }
+  .chat-bubble-row.mine .chat-poll-opt-fill { background:rgba(255,255,255,0.28); }
+  .chat-poll-opt-label { position:relative; z-index:1; display:flex; justify-content:space-between; gap:8px; font-size:0.86rem; }
+  .chat-poll-opt.voted .chat-poll-opt-label { font-weight:700; }
   </style>
 </div>
 
 <script>
 document.getElementById('ph-chat').outerHTML = pageHeader({
   title: 'Chat', titleId: 'chat-title', backAction: 'chatHeaderBack()',
+  trailing: `<button class="icon-btn" id="chat-mute-btn" onclick="toggleChatMute()" title="Stummschalten" style="display:none;">
+      <i data-lucide="bell" id="chat-mute-icon" style="width:20px;height:20px;"></i>
+    </button>`,
 });
 document.getElementById('chat-fab-slot').outerHTML = fab({ icon: 'plus', onclick: 'openNewChatSheet()', title: 'Neuer Chat' });
 
@@ -108,12 +121,15 @@ function renderChatList() {
         ${c.is_group ? '<i data-lucide="users" style="width:20px;height:20px;"></i>' : initials}
       </div>
       <div style="flex:1;min-width:0;">
-        <div style="font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(title)}</div>
+        <div style="font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:flex;align-items:center;gap:5px;">
+          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(title)}</span>
+          ${c.is_muted ? '<i data-lucide="bell-off" style="width:13px;height:13px;opacity:0.45;flex-shrink:0;"></i>' : ''}
+        </div>
         <div style="font-size:0.8rem;opacity:0.6;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;">${escapeHtml(c.last_message || 'Noch keine Nachrichten')}</div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0;">
         <span style="font-size:0.7rem;opacity:0.5;">${time}</span>
-        ${c.unread_count > 0 ? `<span style="background:#b3261e;color:#fff;font-size:0.68rem;font-weight:700;min-width:18px;height:18px;border-radius:9px;display:flex;align-items:center;justify-content:center;padding:0 5px;">${c.unread_count > 99 ? '99+' : c.unread_count}</span>` : ''}
+        ${c.unread_count > 0 ? `<span style="background:${c.is_muted ? '#79747e' : '#b3261e'};color:#fff;font-size:0.68rem;font-weight:700;min-width:18px;height:18px;border-radius:9px;display:flex;align-items:center;justify-content:center;padding:0 5px;">${c.unread_count > 99 ? '99+' : c.unread_count}</span>` : ''}
       </div>
     </div>`;
   }).join('');
@@ -211,6 +227,8 @@ async function openChatConversation(id) {
   document.querySelector('#page-chat .fab')?.style.setProperty('display', 'none');
   const conv = chatConversations.find(c => c.id === id);
   document.getElementById('chat-title').textContent = conv ? chatConversationTitle(conv) : 'Chat';
+  document.getElementById('chat-mute-btn').style.display = 'flex';
+  updateChatMuteIcon(conv?.is_muted);
 
   chatMessages = await API.chatMessages(id).catch(() => []);
   renderChatMessages();
@@ -229,6 +247,7 @@ function closeChatConversation(isPopState) {
   document.getElementById('chat-list-view').style.display = '';
   document.querySelector('#page-chat .fab')?.style.setProperty('display', 'flex');
   document.getElementById('chat-title').textContent = 'Chat';
+  document.getElementById('chat-mute-btn').style.display = 'none';
   renderChatList();
   if (!isPopState && history.state && history.state.chatConv) {
     isSelfPopping = true;
@@ -241,6 +260,28 @@ function chatMsgTime(iso) {
   return d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
 }
 
+function renderChatPollBubble(m) {
+  const poll = m.poll;
+  if (!poll) return '<div style="opacity:0.6;font-style:italic;">Umfrage konnte nicht geladen werden</div>';
+  const options = poll.options.map(opt => {
+    const pct = poll.total_votes ? Math.round(opt.vote_count / poll.total_votes * 100) : 0;
+    const voted = poll.my_vote === opt.id;
+    return `<button type="button" class="chat-poll-opt${voted ? ' voted' : ''}" onclick="castChatVote(${m.id},${opt.id})">
+      <div class="chat-poll-opt-bar">
+        <div class="chat-poll-opt-fill" style="width:${pct}%;"></div>
+        <div class="chat-poll-opt-label"><span>${voted ? '✓ ' : ''}${escapeHtml(opt.option_text)}</span><span>${pct}%</span></div>
+      </div>
+    </button>`;
+  }).join('');
+  return `
+    <div style="display:flex;align-items:center;gap:6px;font-weight:700;margin-bottom:2px;">
+      <i data-lucide="bar-chart-2" style="width:14px;height:14px;flex-shrink:0;"></i>
+      <span>${escapeHtml(poll.question)}</span>
+    </div>
+    ${options}
+    <div style="font-size:0.72rem;opacity:0.65;margin-top:2px;">${poll.total_votes} Stimme${poll.total_votes === 1 ? '' : 'n'}</div>`;
+}
+
 function renderChatMessages() {
   const el = document.getElementById('chat-messages-scroll');
   const wasNearBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 80;
@@ -248,11 +289,12 @@ function renderChatMessages() {
     const mine = currentUser && m.sender_id === currentUser.id;
     const conv = chatConversations.find(c => c.id === chatCurrentConversationId);
     const showSender = !mine && conv && conv.is_group;
+    const body = m.msg_type === 'poll' ? renderChatPollBubble(m) : `<div>${escapeHtml(m.text || '')}</div>`;
     return `
     <div class="chat-bubble-row ${mine ? 'mine' : ''}">
-      <div class="chat-bubble">
+      <div class="chat-bubble" style="${m.msg_type === 'poll' ? 'min-width:220px;' : ''}">
         ${showSender ? `<div class="chat-bubble-sender">${escapeHtml(m.sender_name)}</div>` : ''}
-        <div>${escapeHtml(m.text || '')}</div>
+        ${body}
         <div class="chat-bubble-time">${chatMsgTime(m.created_at)}</div>
       </div>
     </div>`;
@@ -260,6 +302,19 @@ function renderChatMessages() {
   if (wasNearBottom || !el.dataset.scrolledOnce) {
     el.scrollTop = el.scrollHeight;
     el.dataset.scrolledOnce = '1';
+  }
+  if (window.lucide) lucide.createIcons();
+}
+
+async function castChatVote(messageId, optionId) {
+  if (!chatCurrentConversationId) return;
+  try {
+    const updatedPoll = await API.voteChatPoll(chatCurrentConversationId, messageId, optionId);
+    const msg = chatMessages.find(m => m.id === messageId);
+    if (msg) msg.poll = updatedPoll;
+    renderChatMessages();
+  } catch {
+    showToast('Abstimmung fehlgeschlagen');
   }
 }
 
@@ -311,5 +366,80 @@ async function sendChatMessage() {
     input.value = text;
   }
   btn.disabled = false;
+}
+
+// --- Polls ---
+
+function openNewPollSheet() {
+  openSheet(`
+    <div style="padding:4px;">
+      <div style="font-weight:700;font-size:1.05rem;margin-bottom:14px;">Umfrage erstellen</div>
+      <input type="text" class="m3-input" id="chat-poll-question" placeholder="Frage" style="margin-bottom:12px;">
+      <div id="chat-poll-options">
+        <input type="text" class="m3-input chat-poll-opt-input" placeholder="Option 1" style="margin-bottom:8px;">
+        <input type="text" class="m3-input chat-poll-opt-input" placeholder="Option 2" style="margin-bottom:8px;">
+      </div>
+      <button type="button" class="chip" onclick="addChatPollOptionField()" style="margin-bottom:14px;">+ Option hinzufügen</button>
+      <div id="chat-poll-err" style="color:#b3261e;font-size:0.82rem;min-height:18px;margin-bottom:4px;"></div>
+      <button class="m3-btn-full" onclick="submitNewPoll()">Umfrage senden</button>
+    </div>
+  `);
+  setTimeout(() => document.getElementById('chat-poll-question')?.focus(), 100);
+}
+
+function addChatPollOptionField() {
+  const wrap = document.getElementById('chat-poll-options');
+  const n = wrap.querySelectorAll('.chat-poll-opt-input').length + 1;
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'm3-input chat-poll-opt-input';
+  input.placeholder = `Option ${n}`;
+  input.style.marginBottom = '8px';
+  wrap.appendChild(input);
+  input.focus();
+}
+
+async function submitNewPoll() {
+  const question = document.getElementById('chat-poll-question').value.trim();
+  const options = [...document.querySelectorAll('.chat-poll-opt-input')].map(i => i.value.trim()).filter(Boolean);
+  const err = document.getElementById('chat-poll-err');
+  if (!question) { err.textContent = 'Frage eingeben'; return; }
+  if (options.length < 2) { err.textContent = 'Mindestens 2 Antwortmöglichkeiten eingeben'; return; }
+  try {
+    const msg = await API.sendChatMessage(chatCurrentConversationId, { msg_type: 'poll', text: question, poll_options: options });
+    chatMessages.push(msg);
+    renderChatMessages();
+    const conv = chatConversations.find(c => c.id === chatCurrentConversationId);
+    if (conv) { conv.last_message = '📊 Umfrage: ' + question; conv.last_message_at = msg.created_at; }
+    closeSheet();
+  } catch (e) {
+    err.textContent = e.detail || 'Fehler beim Erstellen';
+  }
+}
+
+// --- Mute ---
+
+function updateChatMuteIcon(muted) {
+  const icon = document.getElementById('chat-mute-icon');
+  const btn = document.getElementById('chat-mute-btn');
+  if (!icon || !btn) return;
+  icon.setAttribute('data-lucide', muted ? 'bell-off' : 'bell');
+  btn.title = muted ? 'Stummschaltung aufheben' : 'Stummschalten';
+  btn.dataset.muted = muted ? '1' : '0';
+  if (window.lucide) lucide.createIcons();
+}
+
+async function toggleChatMute() {
+  if (!chatCurrentConversationId) return;
+  const conv = chatConversations.find(c => c.id === chatCurrentConversationId);
+  const newMuted = !(conv && conv.is_muted);
+  try {
+    await API.setChatMute(chatCurrentConversationId, newMuted);
+    if (conv) conv.is_muted = newMuted;
+    updateChatMuteIcon(newMuted);
+    showToast(newMuted ? 'Chat stummgeschaltet' : 'Stummschaltung aufgehoben');
+  } catch {
+    showToast('Fehler beim Ändern');
+  }
 }
 </script>

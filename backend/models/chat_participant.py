@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, ForeignKey, DateTime, UniqueConstraint
+from sqlalchemy import Column, Integer, Boolean, ForeignKey, DateTime, UniqueConstraint
 from sqlalchemy.sql import func
 from backend.database import Base
 
@@ -7,12 +7,16 @@ class ChatParticipant(Base):
     authorization boundary for chat: every conversation/message/file route
     checks for a matching row here, not just "same class" (a class can have
     several unrelated group chats going at once). last_read_at (null until
-    the first read) drives the unread-count badge."""
+    the first read) drives the unread-count badge. is_muted only affects
+    push notifications for THIS user in THIS conversation — everyone else's
+    notifications, and this user's notifications for their other chats, are
+    unaffected."""
     __tablename__ = "chat_participants"
     id = Column(Integer, primary_key=True, index=True)
     conversation_id = Column(Integer, ForeignKey("chat_conversations.id", ondelete="CASCADE"), nullable=False, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     joined_at = Column(DateTime(timezone=True), server_default=func.now())
     last_read_at = Column(DateTime(timezone=True), nullable=True)
+    is_muted = Column(Boolean, default=False, nullable=False)
 
     __table_args__ = (UniqueConstraint("conversation_id", "user_id", name="uq_chat_participant_conv_user"),)

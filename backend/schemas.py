@@ -235,11 +235,26 @@ class ChatConversationOut(BaseModel):
     last_message: Optional[str] = None
     last_message_at: Optional[datetime] = None
     unread_count: int = 0
+    is_muted: bool = False
 
 class ChatConversationCreate(BaseModel):
     participant_ids: List[int]
     is_group: bool = False
     name: Optional[str] = None
+
+class ChatMuteUpdate(BaseModel):
+    muted: bool
+
+class ChatPollOptionOut(BaseModel):
+    id: int
+    option_text: str
+    vote_count: int = 0
+
+class ChatPollOut(BaseModel):
+    question: str
+    options: List[ChatPollOptionOut]
+    my_vote: Optional[int] = None
+    total_votes: int = 0
 
 class ChatMessageOut(BaseModel):
     id: int
@@ -251,6 +266,7 @@ class ChatMessageOut(BaseModel):
     file_name: Optional[str] = None
     file_size: Optional[int] = None
     mime_type: Optional[str] = None
+    poll: Optional[ChatPollOut] = None
     created_at: datetime
 
 class ChatMessageCreate(BaseModel):
@@ -260,6 +276,10 @@ class ChatMessageCreate(BaseModel):
     file_name: Optional[str] = None
     file_size: Optional[int] = None
     mime_type: Optional[str] = None
+    poll_options: Optional[List[str]] = None
+
+class ChatVoteCreate(BaseModel):
+    option_id: int
 
 # Google Sync
 class GoogleStatusOut(BaseModel):
