@@ -62,14 +62,30 @@ const KNOWN_PAGES = ['calendar','homework','grades','timetable','mealplan','driv
 const pageCache = new Map();
 
 function prefetchPages() {
-  KNOWN_PAGES.forEach(name => {
-    if (!pageCache.has(name)) {
+  // Warm pageCache after first paint, idle-scheduled, max 2 in flight —
+  // boot used to fire all 13 HTML fetches in parallel (~700KB+), fighting
+  // the critical API.me / deep-link / dashboard path for bandwidth.
+  const queue = KNOWN_PAGES.filter(name => !pageCache.has(name));
+  if (!queue.length) return;
+  let idx = 0;
+  const CONCURRENCY = 2;
+  const ric = window.requestIdleCallback
+    ? (cb, opts) => window.requestIdleCallback(cb, opts)
+    : (cb) => setTimeout(cb, 100);
+
+  function pump() {
+    if (idx >= queue.length) return;
+    const batch = queue.slice(idx, idx + CONCURRENCY);
+    idx += batch.length;
+    Promise.all(batch.map(name =>
       fetch('/pages/' + name + '.html')
         .then(res => res.ok ? res.text() : null)
         .then(html => { if (html) pageCache.set(name, html); })
-        .catch(() => {});
-    }
-  });
+        .catch(() => {})
+    )).then(() => ric(pump, { timeout: 3000 }));
+  }
+
+  ric(pump, { timeout: 4000 });
 }
 
 // Returns an inline-style fragment that paints a user's avatar_url as the
@@ -487,43 +503,38 @@ async function openPage(name, triggerEl, preserveUrl = false) {
   }
   pageHistory.push(name);
   currentPage = name;
-  if (window.lucide) lucide.createIcons();
+  // Scope icon replacement to this page only — document-wide createIcons()
+  // re-walked the whole dashboard on every navigation.
+  if (window.lucide) {
+    try { lucide.createIcons({ root: page }); }
+    catch (e) { lucide.createIcons(); }
+  }
   enhanceDropdowns(page);
   enhanceDateTimeInputs(page);
   enhanceInputAutofill(page);
 
-  // Run the page's own data-fetch/render before revealing anything: .page
-  // is opacity:0 + pointer-events:none by default regardless of where it
-  // sits in the DOM, so it can sit here fully invisible while init_<name>
-  // awaits its API calls and fills in the real content. Only once that's
-  // done do we hide the outgoing view and animate the new page in — so it
-  // never shows a "wird geladen…" placeholder mid-animation, and the
-  // outgoing page/dashboard stays live on screen for the whole wait
-  // instead of both views going blank at once.
+  // Paint/show first, then init. Waiting on init_<page>() (network) before
+  // .active blocked every navigation on API latency. Placeholders may flash
+  // briefly; init still fills content and errors are logged.
+  page.getBoundingClientRect();
+  requestAnimationFrame(() => page.classList.add('active'));
+
+  document.body.classList.add('has-active-page');
+  const appContainer = document.getElementById('app');
+  if (appContainer) {
+    appContainer.setAttribute('inert', '');
+    appContainer.setAttribute('aria-hidden', 'true');
+  }
+
   // Page names can contain hyphens (notification-settings, google-sync) but
   // a JS function name can't, so the page's own init_<name>() is always
   // declared with underscores — normalize here or the lookup silently
   // misses and the page never actually fetches its data.
   const initFn = window['init_' + name.replace(/-/g, '_')];
   if (initFn) {
-    try {
-      const result = initFn();
-      if (result && typeof result.then === 'function') await result;
-    } catch (err) {
-      console.error('initFn error for page ' + name, err);
-    }
-  }
-
-  // Force layout reflow so animation starts immediately
-  page.getBoundingClientRect();
-  requestAnimationFrame(() => page.classList.add('active'));
-
-  // Completely isolate background dashboard from touch/scroll/selection bleedthrough
-  document.body.classList.add('has-active-page');
-  const appContainer = document.getElementById('app');
-  if (appContainer) {
-    appContainer.setAttribute('inert', '');
-    appContainer.setAttribute('aria-hidden', 'true');
+    Promise.resolve()
+      .then(() => initFn())
+      .catch(err => console.error('initFn error for page ' + name, err));
   }
 }
 
@@ -553,15 +564,9 @@ function goBackOnePage(fromPopstate) {
     }
     // Refresh dashboard widgets, which otherwise kept showing whatever
     // was true at boot (e.g. an "Aufgaben" count from before a task got
-    // checked off on the page just left). Throttled: rapidly bouncing
-    // between several pages would otherwise re-fire every one of
-    // loadDashboard's several API calls each time, easily enough to trip
-    // rate limiting for no real benefit — nothing changes twice in 3s.
-    const now = Date.now();
-    if (now - lastDashboardLoadAt > 3000) {
-      lastDashboardLoadAt = now;
-      loadDashboard();
-    }
+    // checked off on the page just left). loadDashboard() itself throttles
+    // to 3s so rapid bounce / showApp double-calls stay cheap.
+    loadDashboard();
     if (!fromPopstate) history.pushState({ page: null }, '', '/');
   } else {
     pageHistory.pop(); // openPage() below re-pushes it — pop first so it isn't duplicated
@@ -1294,6 +1299,9 @@ document.getElementById('modal-scrim').addEventListener('click', e => {
 });
 
 async function loadDashboard() {
+  const now = Date.now();
+  if (now - lastDashboardLoadAt < 3000) return;
+  lastDashboardLoadAt = now;
   try {
     const [hw, events, grades, files] = await Promise.all([
       API.homework().catch(() => []),
@@ -1557,7 +1565,6 @@ function showApp() {
 async function boot() {
   try {
     currentUser = await API.me();
-    prefetchPages();
   } catch (err) {
     let email = '';
     try { const c = await fetch('/api/v1/auth/check'); const j = await c.json(); email = j.email || ''; } catch {}
@@ -1599,7 +1606,8 @@ async function boot() {
         });
       });
 
-      setInterval(function() { reg.update().catch(function() {}); }, 60 * 1000);
+      // Poll less often; visibilitychange below still checks on tab focus.
+      setInterval(function() { reg.update().catch(function() {}); }, 10 * 60 * 1000);
       document.addEventListener('visibilitychange', function() {
         if (document.visibilityState === 'visible') {
           reg.update().catch(function() {});
@@ -1619,12 +1627,27 @@ async function boot() {
       }
     });
   }
-  await Push.init();
-  if (typeof Push.autoSync === 'function') {
-    Push.autoSync();
-  }
-  refreshNotifBadge();
+
+  // Show intro / deep-link path first; push + badge + HTML prefetch are
+  // non-critical for first usable UI and used to sit on the critical path.
   runIntro(deepLinkPromise);
+
+  Promise.resolve().then(async function() {
+    try {
+      await Push.init();
+      if (typeof Push.autoSync === 'function') Push.autoSync();
+    } catch (e) {}
+    refreshNotifBadge();
+  });
+
+  const schedulePrefetch = function() {
+    const ric = window.requestIdleCallback
+      ? function(cb) { window.requestIdleCallback(cb, { timeout: 4000 }); }
+      : function(cb) { setTimeout(cb, 400); };
+    ric(prefetchPages);
+  };
+  if (document.readyState === 'complete') schedulePrefetch();
+  else window.addEventListener('load', schedulePrefetch, { once: true });
 }
 
 function showUpdateBanner(swWaiting) {
