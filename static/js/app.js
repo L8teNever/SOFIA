@@ -614,6 +614,11 @@ window.addEventListener('popstate', (e) => {
     return;
   }
 
+  if (e.state && e.state.page === 'chat' && typeof chatHandlePopstate === 'function') {
+    chatHandlePopstate(e.state);
+    return;
+  }
+
   const chatDetail = document.getElementById('chat-detail-view');
   if (chatDetail && chatDetail.style.display !== 'none' && typeof closeChatConversation === 'function') {
     closeChatConversation(true);
@@ -1105,6 +1110,10 @@ function enhanceInputAutofill(root = document) {
   if (!root || !root.querySelectorAll) return;
   root.querySelectorAll('.m3-input:not([autocomplete])').forEach(input => {
     input.setAttribute('autocomplete', 'off');
+    input.setAttribute('data-form-type', 'other');
+    input.setAttribute('data-lpignore', 'true');
+    input.setAttribute('data-1p-ignore', 'true');
+    input.setAttribute('data-bwignore', 'true');
   });
 }
 

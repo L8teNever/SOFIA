@@ -4,7 +4,7 @@
   <div class="page-scroll-1col no-scrollbar" id="chat-list-view">
     <div class="page-inner">
       <div id="chat-search-bar" style="display:none;margin-bottom:12px;">
-        <input type="text" class="m3-input" id="chat-search-input" placeholder="Chats durchsuchen…" oninput="renderChatList()">
+        <input type="search" name="search" class="m3-input" id="chat-search-input" placeholder="Chats durchsuchen…" oninput="renderChatList()" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" inputmode="search" enterkeyhint="search" data-form-type="other" data-lpignore="true" data-1p-ignore="true" data-bwignore="true">
       </div>
       <div id="chat-conversations-list"></div>
       <div id="chat-no-conversations" style="display:none;text-align:center;padding:60px 20px;opacity:0.4;">
@@ -114,6 +114,7 @@ let chatReplyTo = null; // the message object currently being replied to, or nul
 let chatTouchState = null; // long-press/swipe tracking, see initChatGestureHandlers()
 let _chatActionMenuEl = null, _chatActionMenuOutsideHandler = null;
 let chatPlayingVoiceId = null; // message id of the voice note currently playing, or null
+let chatOpenedFromDirectUrl = false;
 
 async function init_chat() {
   [chatConversations, chatClassUsers] = await Promise.all([
@@ -122,6 +123,17 @@ async function init_chat() {
   ]);
   renderChatList();
   startChatListPolling();
+
+  const pathParts = window.location.pathname.replace(/^\/chat\/?/, '').split('/');
+  const subTarget = pathParts[0] ? decodeURIComponent(pathParts[0]).trim() : '';
+  if (subTarget) {
+    const targetConv = findConversationBySlugOrId(subTarget, chatConversations);
+    if (targetConv) {
+      openChatConversation(targetConv.id, true);
+    } else {
+      history.replaceState({ page: 'chat' }, '', '/chat');
+    }
+  }
 }
 
 function chatHeaderBack() {
@@ -304,9 +316,68 @@ async function submitNewChat() {
   }
 }
 
+// --- URL Slugs & Deep Linking ---
+
+function chatSlugify(text) {
+  return (text || '')
+    .toString()
+    .trim()
+    .toLowerCase()
+    .replace(/ä/g, 'ae')
+    .replace(/ö/g, 'oe')
+    .replace(/ü/g, 'ue')
+    .replace(/ß/g, 'ss')
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function chatSlug(conv) {
+  if (!conv) return 'chat';
+  const title = chatConversationTitle(conv);
+  const baseSlug = chatSlugify(title) || 'chat';
+  const collision = chatConversations.some(c => c.id !== conv.id && chatSlugify(chatConversationTitle(c)) === baseSlug);
+  return collision ? `${baseSlug}-${conv.id}` : baseSlug;
+}
+
+function chatUrlPath(conv) {
+  if (!conv) return '/chat';
+  const slug = chatSlug(conv);
+  return `/chat/${slug}`;
+}
+
+function findConversationBySlugOrId(slugOrId, list) {
+  if (!slugOrId || !list || !list.length) return null;
+  const decoded = decodeURIComponent(slugOrId).trim().toLowerCase();
+
+  // 1. Direct ID match if numeric
+  const numId = parseInt(decoded, 10);
+  if (!isNaN(numId) && String(numId) === decoded) {
+    const byId = list.find(c => c.id === numId);
+    if (byId) return byId;
+  }
+
+  // 2. Exact slug match
+  const bySlug = list.find(c => chatSlug(c).toLowerCase() === decoded);
+  if (bySlug) return bySlug;
+
+  // 3. Exact title match
+  const byTitle = list.find(c => chatConversationTitle(c).trim().toLowerCase() === decoded);
+  if (byTitle) return byTitle;
+
+  // 4. First name or slugified first name match (e.g. "Simon" for "Simon Kulbarts")
+  const byFirstName = list.find(c => {
+    const title = chatConversationTitle(c).trim().toLowerCase();
+    const firstName = title.split(/\s+/)[0];
+    return firstName === decoded || chatSlugify(firstName) === decoded;
+  });
+  if (byFirstName) return byFirstName;
+
+  return null;
+}
+
 // --- Conversation detail ---
 
-async function openChatConversation(id) {
+async function openChatConversation(id, fromDeepLink = false, isPopState = false) {
   chatCurrentConversationId = id;
   document.getElementById('chat-list-view').style.display = 'none';
   document.getElementById('chat-detail-view').style.display = 'flex';
@@ -328,7 +399,15 @@ async function openChatConversation(id) {
 
   initChatGestureHandlers();
   startChatMsgPolling();
-  history.pushState({ page: currentPage, chatConv: true }, '', window.location.pathname);
+
+  const targetUrl = conv ? chatUrlPath(conv) : `/chat/${id}`;
+  if (fromDeepLink) {
+    chatOpenedFromDirectUrl = true;
+    history.replaceState({ page: 'chat', chatConv: true, conversationId: id }, '', targetUrl);
+  } else if (!isPopState) {
+    chatOpenedFromDirectUrl = false;
+    history.pushState({ page: 'chat', chatConv: true, conversationId: id }, '', targetUrl);
+  }
 }
 
 function closeChatConversation(isPopState) {
@@ -346,9 +425,32 @@ function closeChatConversation(isPopState) {
   document.getElementById('chat-search-btn').style.display = 'flex';
   document.getElementById('chat-header-avatar').style.display = 'none';
   renderChatList();
-  if (!isPopState && history.state && history.state.chatConv) {
+
+  if (isPopState) {
+    chatOpenedFromDirectUrl = false;
+    return;
+  }
+
+  if (chatOpenedFromDirectUrl) {
+    chatOpenedFromDirectUrl = false;
+    history.replaceState({ page: 'chat' }, '', '/chat');
+  } else if (history.state && history.state.chatConv) {
     isSelfPopping = true;
     history.back();
+  } else {
+    history.pushState({ page: 'chat' }, '', '/chat');
+  }
+}
+
+function chatHandlePopstate(state) {
+  if (state && state.chatConv && state.conversationId) {
+    if (chatCurrentConversationId !== state.conversationId) {
+      openChatConversation(state.conversationId, false, true);
+    }
+  } else {
+    if (chatCurrentConversationId !== null) {
+      closeChatConversation(true);
+    }
   }
 }
 
@@ -703,7 +805,7 @@ function openChatGifPicker() {
   openSheet(`
     <div style="padding:4px;">
       <div style="font-weight:700;font-size:1.05rem;margin-bottom:12px;">GIF senden</div>
-      <input type="text" class="m3-input" id="chat-gif-search" placeholder="GIFs durchsuchen…" style="margin-bottom:12px;" oninput="chatGifSearchInput()">
+      <input type="search" name="search" class="m3-input" id="chat-gif-search" placeholder="GIFs durchsuchen…" style="margin-bottom:12px;" oninput="chatGifSearchInput()" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" inputmode="search" enterkeyhint="search" data-form-type="other" data-lpignore="true" data-1p-ignore="true" data-bwignore="true">
       <div id="chat-gif-results" style="max-height:55vh;overflow-y:auto;display:grid;grid-template-columns:repeat(2,1fr);gap:8px;"></div>
     </div>
   `);
