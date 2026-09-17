@@ -264,7 +264,7 @@ async def delete_meal_plan(
 @router.patch("/day/{day_id}", response_model=MealPlanDayOut)
 async def update_meal_plan_day(
     day_id: int, data: MealPlanDayUpdate,
-    db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db), current_user: User = Depends(require_admin),
 ):
     result = await db.execute(select(MealPlanDay).where(MealPlanDay.id == day_id))
     day = result.scalar_one_or_none()

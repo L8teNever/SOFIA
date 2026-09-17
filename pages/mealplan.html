@@ -139,6 +139,7 @@ document.getElementById('meal-day-chips').innerHTML = chipRow({
 });
 let mealPlan = null;
 let mealCanDelete = false;
+let mealCanEdit = false; // correcting a day's text — upload stays open to everyone, editing is admin-only
 let mealActiveFilter = 'today';
 let mealPollInterval = null;
 
@@ -292,6 +293,7 @@ function mealFilter(mode, btn) {
 async function init_mealplan() {
   const me = await API.me().catch(() => null);
   mealCanDelete = !!(me && (me.role === 'admin' || me.role === 'super_admin'));
+  mealCanEdit = mealCanDelete;
   await refreshMealPlan();
 }
 
@@ -399,9 +401,9 @@ function renderMealPlan(res) {
             <span style="font-size:0.85rem;opacity:0.5;font-weight:500;">${dayNum}. ${monthName}</span>
             ${isToday ? '<span style="background:#c4eed0;color:#072711;font-size:0.72rem;font-weight:700;padding:3px 9px;border-radius:10px;">Heute</span>' : ''}
           </div>
-          <button class="icon-btn" style="width:34px;height:34px;border-radius:50%;" onclick="editMealDay(${d.id})" title="Bearbeiten">
+          ${mealCanEdit ? `<button class="icon-btn" style="width:34px;height:34px;border-radius:50%;" onclick="editMealDay(${d.id})" title="Bearbeiten">
             <i data-lucide="pencil" style="width:14px;height:14px;"></i>
-          </button>
+          </button>` : ''}
         </div>
         <div class="meal-card-courses">
           ${formatMealDayHtml(d.meal)}
