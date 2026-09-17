@@ -3,7 +3,7 @@
 
   <div class="page-scroll-1col no-scrollbar" id="chat-list-view">
     <div class="page-inner">
-      <div id="chat-conversations-list"></div>
+      <div id="chat-conversations-list" style="padding-top:6px;"></div>
       <div id="chat-no-conversations" style="display:none;text-align:center;padding:60px 20px;opacity:0.4;">
         <i data-lucide="message-circle" style="width:48px;height:48px;margin-bottom:12px;display:block;margin-left:auto;margin-right:auto;"></i>
         <div style="font-weight:600;">Noch keine Chats</div>
@@ -61,6 +61,10 @@
     </div>
   </div>
 
+  <div class="page-scroll-1col no-scrollbar" id="chat-info-view" style="display:none;flex:1;min-height:0;">
+    <div class="page-inner" id="chat-info-content" style="padding-top:10px;padding-bottom:60px;"></div>
+  </div>
+
   <style>
   #chat-input::-webkit-scrollbar { display: none; width: 0; height: 0; }
   .chat-mention-pill { display: inline-flex; align-items: baseline; background: rgba(103,80,164,0.14); color: #442b7a; font-weight: 700; border-radius: 6px; padding: 0 5px; margin: 0 2px; }
@@ -116,16 +120,16 @@ document.getElementById('ph-chat').outerHTML = `
       <div id="chat-header-avatar" class="avatar" style="display:none;width:36px;height:36px;border-radius:50%;background:#eaddff;color:#442b7a;align-items:center;justify-content:center;font-weight:700;font-size:0.8rem;flex-shrink:0;"></div>
       <span class="page-title" id="chat-title" style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Chat</span>
     </div>
-    <button class="icon-btn" id="chat-search-btn" onclick="toggleChatSearch(true)" title="Chats durchsuchen">
+    <button class="icon-btn" id="chat-search-btn" onclick="toggleChatSearch(true)" title="Chats durchsuchen" style="margin-right:calc(-1 * var(--ph-icon-pull, 12px));">
       <i data-lucide="search" style="width:20px;height:20px;"></i>
     </button>
 
-    <div id="chat-header-search-overlay" style="display:none;position:absolute;inset:0;background:#fff;z-index:20;align-items:center;padding:0 12px;gap:8px;">
-      <button class="icon-btn" onclick="toggleChatSearch(false)" title="Suche schließen" style="flex-shrink:0;">
+    <div id="chat-header-search-overlay" style="display:none;position:absolute;inset:0;background:#f7f9fb;z-index:20;align-items:center;gap:12px;padding:inherit;box-sizing:border-box;">
+      <button class="icon-btn" onclick="toggleChatSearch(false)" title="Suche schließen" style="flex-shrink:0;margin-left:calc(-1 * var(--ph-icon-pull, 12px));">
         <i data-lucide="arrow-left" style="width:22px;height:22px;"></i>
       </button>
-      <input type="search" id="chat-header-search-input" placeholder="Chats & Mitschüler:innen suchen…" oninput="onChatHeaderSearchInput()" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" inputmode="search" enterkeyhint="search" data-form-type="other" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" style="flex:1;border:none;outline:none;background:none;font-family:inherit;font-size:0.95rem;color:#1c1b1f;">
-      <button class="icon-btn" id="chat-header-search-clear" onclick="clearChatHeaderSearch()" title="Leeren" style="display:none;flex-shrink:0;">
+      <input type="search" id="chat-header-search-input" placeholder="Chats & Mitschüler:innen suchen…" oninput="onChatHeaderSearchInput()" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" inputmode="search" enterkeyhint="search" data-form-type="other" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" style="flex:1;min-width:0;border:none;outline:none;background:none;font-family:inherit;font-size:0.95rem;color:#1c1b1f;">
+      <button class="icon-btn" id="chat-header-search-clear" onclick="clearChatHeaderSearch()" title="Leeren" style="display:none;flex-shrink:0;margin-right:calc(-1 * var(--ph-icon-pull, 12px));">
         <i data-lucide="x" style="width:18px;height:18px;"></i>
       </button>
     </div>
@@ -144,6 +148,7 @@ let chatPlayingVoiceId = null; // message id of the voice note currently playing
 let chatOpenedFromDirectUrl = false;
 let chatUserHasScrolledUp = false;
 let chatProgrammaticScrolling = false;
+let chatInfoViewActive = false;
 
 async function init_chat() {
   try {
@@ -193,7 +198,9 @@ async function init_chat() {
 }
 
 function chatHeaderBack() {
-  if (chatCurrentConversationId !== null) {
+  if (chatInfoViewActive) {
+    closeChatInfoView();
+  } else if (chatCurrentConversationId !== null) {
     closeChatConversation();
   } else {
     closePage();
@@ -537,24 +544,98 @@ async function submitCreateGroupChat() {
   }
 }
 
-function openChatHeaderInfo() {
+function openChatHeaderInfo(isPopState = false) {
   if (!chatCurrentConversationId) return;
   const conv = chatConversations.find(c => c.id === chatCurrentConversationId);
   if (!conv) return;
 
+  chatInfoViewActive = true;
+
+  const detailView = document.getElementById('chat-detail-view');
+  const infoView = document.getElementById('chat-info-view');
+  const titleEl = document.getElementById('chat-title');
+  const avatarEl = document.getElementById('chat-header-avatar');
+  const searchBtn = document.getElementById('chat-search-btn');
+
+  if (detailView) detailView.style.display = 'none';
+  if (infoView) infoView.style.display = 'block';
+  if (avatarEl) avatarEl.style.display = 'none';
+  if (searchBtn) searchBtn.style.display = 'none';
+
+  if (titleEl) {
+    if (conv.is_group) titleEl.textContent = 'Gruppeninfo';
+    else if (conv.is_notes) titleEl.textContent = 'Notizen';
+    else titleEl.textContent = 'Kontaktinfo';
+  }
+
+  renderChatInfoContent(conv);
+
+  if (!isPopState) {
+    const targetUrl = chatUrlPath(conv);
+    history.pushState({ page: 'chat', chatConv: true, conversationId: conv.id, chatInfo: true }, '', targetUrl);
+  }
+}
+
+function closeChatInfoView(skipHistory = false) {
+  if (!chatInfoViewActive) return;
+  chatInfoViewActive = false;
+
+  const detailView = document.getElementById('chat-detail-view');
+  const infoView = document.getElementById('chat-info-view');
+  const titleEl = document.getElementById('chat-title');
+  const conv = chatConversations.find(c => c.id === chatCurrentConversationId);
+
+  if (infoView) infoView.style.display = 'none';
+  if (detailView) detailView.style.display = 'flex';
+  if (titleEl) titleEl.textContent = conv ? chatConversationTitle(conv) : 'Chat';
+  updateChatHeaderAvatar(conv);
+
+  if (!skipHistory && history.state && history.state.chatInfo) {
+    history.back();
+  }
+}
+
+async function openDirectChatWithMember(userId) {
+  if (!userId || (currentUser && userId === currentUser.id)) return;
+  closeChatInfoView(true);
+
+  // Check if a 1:1 chat with this user already exists
+  const existing = chatConversations.find(c => !c.is_group && !c.is_notes && c.participants.some(p => p.user_id === userId));
+  if (existing) {
+    await openChatConversation(existing.id);
+  } else {
+    try {
+      const conv = await API.createChatConversation({ participant_ids: [userId], is_group: false });
+      if (!chatConversations.find(c => c.id === conv.id)) {
+        chatConversations.unshift(conv);
+      }
+      await openChatConversation(conv.id);
+    } catch (e) {
+      showToast(e.detail || 'Fehler beim Starten des Chats');
+    }
+  }
+}
+
+function renderChatInfoContent(conv) {
+  const container = document.getElementById('chat-info-content');
+  if (!container || !conv) return;
+
   if (conv.is_notes) {
-    openSheet(`
-      <div style="padding:6px;text-align:center;">
-        <div style="width:72px;height:72px;border-radius:50%;background:#6750a4;color:#fff;display:flex;align-items:center;justify-content:center;margin:0 auto 14px;box-shadow:0 4px 12px rgba(103,80,164,0.3);">
-          <i data-lucide="bookmark" style="width:36px;height:36px;"></i>
+    container.innerHTML = `
+      <div class="m3-card" style="padding:28px 20px;text-align:center;margin-bottom:14px;border-radius:20px;background:#fff;">
+        <div style="width:84px;height:84px;border-radius:50%;background:#6750a4;color:#fff;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;box-shadow:0 6px 16px rgba(103,80,164,0.3);">
+          <i data-lucide="bookmark" style="width:42px;height:42px;"></i>
         </div>
-        <div style="font-weight:700;font-size:1.2rem;color:#1c1b1f;">Notizen</div>
-        <div style="font-size:0.85rem;color:#6750a4;font-weight:600;margin-top:2px;">Nachricht an dich selbst</div>
-        <div style="margin-top:16px;background:#f3edf7;border-radius:14px;padding:14px;text-align:left;font-size:0.86rem;color:#49454f;line-height:1.5;">
-          Hier kannst du dir persönliche Notizen, Links, Erinnerungen, Bilder und Sprachnachrichten speichern. Nur du kannst diesen Chat sehen.
+        <div style="font-weight:700;font-size:1.3rem;color:#1c1b1f;">Notizen</div>
+        <div style="font-size:0.88rem;color:#6750a4;font-weight:600;margin-top:4px;">Nachricht an dich selbst</div>
+      </div>
+      <div class="m3-card" style="padding:18px;border-radius:20px;background:#fff;margin-bottom:14px;">
+        <div style="font-weight:700;font-size:0.95rem;margin-bottom:8px;color:#21005d;">Über diesen Chat</div>
+        <div style="font-size:0.88rem;color:#49454f;line-height:1.55;">
+          Hier kannst du dir persönliche Notizen, Links, Erinnerungen, Bilder und Sprachnachrichten speichern. Nur du kannst diese Nachrichten sehen.
         </div>
       </div>
-    `);
+    `;
     if (window.lucide) lucide.createIcons();
     return;
   }
@@ -562,58 +643,75 @@ function openChatHeaderInfo() {
   if (conv.is_group) {
     const avatarSrc = conv.avatar_url || '';
     const avatarHtml = avatarSrc
-      ? `<img src="${avatarSrc}" style="width:84px;height:84px;border-radius:50%;object-fit:cover;">`
-      : `<div style="width:84px;height:84px;border-radius:50%;background:#ffdec1;color:#442b7a;display:flex;align-items:center;justify-content:center;font-size:2rem;font-weight:700;"><i data-lucide="users" style="width:40px;height:40px;"></i></div>`;
+      ? `<img src="${avatarSrc}" style="width:104px;height:104px;border-radius:50%;object-fit:cover;display:block;box-shadow:0 4px 14px rgba(0,0,0,0.12);">`
+      : `<div style="width:104px;height:104px;border-radius:50%;background:#ffdec1;color:#442b7a;display:flex;align-items:center;justify-content:center;font-size:2.4rem;font-weight:700;box-shadow:0 4px 14px rgba(0,0,0,0.08);"><i data-lucide="users" style="width:48px;height:48px;"></i></div>`;
 
-    const participantsHtml = conv.participants.map(p => `
-      <div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid rgba(0,0,0,0.05);">
-        <div class="avatar" style="${avatarImgStyle({ avatar_url: p.avatar_url })}width:38px;height:38px;border-radius:50%;background:#eaddff;color:#442b7a;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.8rem;flex-shrink:0;">
-          ${p.avatar_url ? '' : escapeHtml((p.display_name || '?').slice(0, 2).toUpperCase())}
+    const participantsHtml = (conv.participants || []).map(p => {
+      const isMe = currentUser && p.user_id === currentUser.id;
+      return `
+        <div class="chat-info-participant-row" onclick="${isMe ? '' : `openDirectChatWithMember(${p.user_id})`}" style="display:flex;align-items:center;gap:14px;padding:12px 14px;border-radius:14px;${isMe ? '' : 'cursor:pointer;'}transition:background 0.15s;" onmouseenter="${isMe ? '' : 'this.style.background=\'#f3edf7\''}" onmouseleave="${isMe ? '' : 'this.style.background=\'transparent\''}">
+          <div class="avatar" style="${avatarImgStyle({ avatar_url: p.avatar_url })}width:42px;height:42px;border-radius:50%;background:#eaddff;color:#442b7a;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.9rem;flex-shrink:0;">
+            ${p.avatar_url ? '' : escapeHtml((p.display_name || '?').slice(0, 2).toUpperCase())}
+          </div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-weight:600;font-size:0.95rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+              ${escapeHtml(p.display_name || 'Benutzer')} ${isMe ? '<span style="opacity:0.5;font-weight:400;font-size:0.8rem;margin-left:4px;">(Du)</span>' : ''}
+            </div>
+            <div style="font-size:0.78rem;opacity:0.55;">${isMe ? 'Gruppenmitglied' : 'Tippen für direkten Chat'}</div>
+          </div>
+          ${isMe ? '' : `<button class="chip" style="background:#eaddff;color:#442b7a;border:none;font-weight:600;font-size:0.78rem;pointer-events:none;padding:4px 10px;border-radius:12px;display:flex;align-items:center;gap:4px;">
+            <i data-lucide="message-square" style="width:13px;height:13px;"></i><span>Chat</span>
+          </button>`}
         </div>
-        <div style="flex:1;min-width:0;">
-          <div style="font-weight:600;font-size:0.92rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-            ${escapeHtml(p.display_name || 'Benutzer')} ${currentUser && p.user_id === currentUser.id ? '<span style="opacity:0.5;font-weight:400;font-size:0.8rem;">(Du)</span>' : ''}
+      `;
+    }).join('');
+
+    container.innerHTML = `
+      <!-- Hero Card: Avatar + Name -->
+      <div class="m3-card" style="padding:28px 20px;display:flex;flex-direction:column;align-items:center;text-align:center;margin-bottom:14px;border-radius:20px;background:#fff;">
+        <div style="position:relative;cursor:pointer;margin-bottom:16px;" onclick="triggerGroupAvatarUpload()" title="Gruppenbild ändern">
+          <div id="chat-group-info-avatar-preview">
+            ${avatarHtml}
+          </div>
+          <div style="position:absolute;bottom:0;right:0;width:32px;height:32px;border-radius:50%;background:#6750a4;color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 8px rgba(0,0,0,0.3);border:2px solid #fff;">
+            <i data-lucide="camera" style="width:16px;height:16px;"></i>
           </div>
         </div>
+        <div style="display:flex;align-items:center;justify-content:center;gap:8px;max-width:90%;">
+          <div id="chat-group-info-name" style="font-weight:700;font-size:1.3rem;color:#1c1b1f;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+            ${escapeHtml(conv.name || 'Gruppe')}
+          </div>
+          <button onclick="promptEditGroupName()" style="background:none;border:none;cursor:pointer;opacity:0.6;padding:6px;flex-shrink:0;border-radius:50%;display:flex;align-items:center;justify-content:center;" title="Gruppenname bearbeiten">
+            <i data-lucide="pencil" style="width:17px;height:17px;color:#6750a4;"></i>
+          </button>
+        </div>
+        <div style="font-size:0.85rem;opacity:0.55;margin-top:4px;">Gruppe · ${conv.participants ? conv.participants.length : 0} Teilnehmer:innen</div>
       </div>
-    `).join('');
 
-    openSheet(`
-      <div style="padding:6px;">
-        <div style="display:flex;flex-direction:column;align-items:center;margin-bottom:18px;position:relative;">
-          <div style="position:relative;cursor:pointer;" onclick="triggerGroupAvatarUpload()" title="Gruppenbild ändern">
-            <div id="chat-group-info-avatar-preview">
-              ${avatarHtml}
-            </div>
-            <div style="position:absolute;bottom:0;right:0;width:28px;height:28px;border-radius:50%;background:#6750a4;color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,0.25);">
-              <i data-lucide="camera" style="width:14px;height:14px;"></i>
-            </div>
+      <!-- Settings Card: Mute Toggle -->
+      <div class="m3-card" style="padding:14px 16px;margin-bottom:14px;border-radius:20px;background:#fff;display:flex;align-items:center;justify-content:space-between;gap:12px;">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div style="width:40px;height:40px;border-radius:50%;background:${conv.is_muted ? '#fce8e6' : '#f3edf7'};color:${conv.is_muted ? '#b3261e' : '#6750a4'};display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+            <i data-lucide="${conv.is_muted ? 'bell-off' : 'bell'}" style="width:20px;height:20px;"></i>
           </div>
-          <div style="display:flex;align-items:center;gap:8px;margin-top:12px;max-width:90%;">
-            <div id="chat-group-info-name" style="font-weight:700;font-size:1.15rem;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-              ${escapeHtml(conv.name || 'Gruppe')}
-            </div>
-            <button onclick="promptEditGroupName()" style="background:none;border:none;cursor:pointer;opacity:0.6;padding:4px;flex-shrink:0;" title="Gruppenname bearbeiten">
-              <i data-lucide="pencil" style="width:16px;height:16px;"></i>
-            </button>
+          <div>
+            <div style="font-weight:600;font-size:0.95rem;color:#1c1b1f;">Stummschalten</div>
+            <div style="font-size:0.78rem;opacity:0.55;">Keine Push-Benachrichtigungen für neue Nachrichten</div>
           </div>
-          <div style="font-size:0.8rem;opacity:0.5;margin-top:2px;">${conv.participants.length} Teilnehmer:innen</div>
         </div>
+        <input type="checkbox" id="chat-info-mute-toggle" ${conv.is_muted ? 'checked' : ''} onchange="toggleChatMuteFromInfo(this.checked)" style="width:22px;height:22px;accent-color:#6750a4;cursor:pointer;flex-shrink:0;">
+      </div>
 
-        <div style="background:#fff;border-radius:14px;border:1px solid rgba(0,0,0,0.08);padding:10px 14px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;">
-          <div style="display:flex;align-items:center;gap:10px;">
-            <i data-lucide="${conv.is_muted ? 'bell-off' : 'bell'}" style="width:18px;height:18px;color:${conv.is_muted ? '#b3261e' : '#6750a4'};"></i>
-            <span style="font-size:0.9rem;font-weight:600;">Benachrichtigungen stumm</span>
-          </div>
-          <input type="checkbox" id="chat-info-mute-toggle" ${conv.is_muted ? 'checked' : ''} onchange="toggleChatMuteFromInfo(this.checked)" style="width:20px;height:20px;accent-color:#6750a4;cursor:pointer;">
+      <!-- Members Card -->
+      <div class="m3-card" style="padding:16px 10px;border-radius:20px;background:#fff;margin-bottom:20px;">
+        <div style="font-size:0.78rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;opacity:0.5;padding:0 8px 10px 8px;border-bottom:1px solid rgba(0,0,0,0.06);">
+          Teilnehmer:innen (${conv.participants ? conv.participants.length : 0})
         </div>
-
-        <div style="font-size:0.8rem;font-weight:700;opacity:0.5;margin-bottom:8px;">TEILNEHMER:INNEN (${conv.participants.length})</div>
-        <div style="max-height:220px;overflow-y:auto;margin-bottom:12px;">
+        <div style="display:flex;flex-direction:column;gap:2px;margin-top:6px;">
           ${participantsHtml}
         </div>
       </div>
-    `);
+    `;
     if (window.lucide) lucide.createIcons();
     return;
   }
@@ -623,28 +721,37 @@ function openChatHeaderInfo() {
   const otherTitle = other ? other.display_name : chatConversationTitle(conv);
   const avatarUrl = other ? other.avatar_url : null;
   const avatarHtml = avatarUrl
-    ? `<img src="${avatarUrl}" style="width:84px;height:84px;border-radius:50%;object-fit:cover;">`
-    : `<div style="width:84px;height:84px;border-radius:50%;background:#eaddff;color:#442b7a;display:flex;align-items:center;justify-content:center;font-size:2rem;font-weight:700;">${(otherTitle || '?').slice(0, 2).toUpperCase()}</div>`;
+    ? `<img src="${avatarUrl}" style="width:104px;height:104px;border-radius:50%;object-fit:cover;display:block;box-shadow:0 4px 14px rgba(0,0,0,0.12);">`
+    : `<div style="width:104px;height:104px;border-radius:50%;background:#eaddff;color:#442b7a;display:flex;align-items:center;justify-content:center;font-size:2.4rem;font-weight:700;box-shadow:0 4px 14px rgba(0,0,0,0.08);">${(otherTitle || '?').slice(0, 2).toUpperCase()}</div>`;
 
-  openSheet(`
-    <div style="padding:6px;">
-      <div style="display:flex;flex-direction:column;align-items:center;margin-bottom:18px;">
-        <div style="margin-bottom:12px;">
-          ${avatarHtml}
-        </div>
-        <div style="font-weight:700;font-size:1.2rem;text-align:center;">${escapeHtml(otherTitle)}</div>
-        <div style="font-size:0.82rem;opacity:0.5;margin-top:2px;">Mitschüler:in</div>
+  container.innerHTML = `
+    <!-- Hero Card -->
+    <div class="m3-card" style="padding:28px 20px;display:flex;flex-direction:column;align-items:center;text-align:center;margin-bottom:14px;border-radius:20px;background:#fff;">
+      <div style="margin-bottom:16px;">
+        ${avatarHtml}
       </div>
-
-      <div style="background:#fff;border-radius:14px;border:1px solid rgba(0,0,0,0.08);padding:10px 14px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;">
-        <div style="display:flex;align-items:center;gap:10px;">
-          <i data-lucide="${conv.is_muted ? 'bell-off' : 'bell'}" style="width:18px;height:18px;color:${conv.is_muted ? '#b3261e' : '#6750a4'};"></i>
-          <span style="font-size:0.9rem;font-weight:600;">Benachrichtigungen stumm</span>
-        </div>
-        <input type="checkbox" id="chat-info-mute-toggle" ${conv.is_muted ? 'checked' : ''} onchange="toggleChatMuteFromInfo(this.checked)" style="width:20px;height:20px;accent-color:#6750a4;cursor:pointer;">
-      </div>
+      <div style="font-weight:700;font-size:1.3rem;color:#1c1b1f;">${escapeHtml(otherTitle)}</div>
+      <div style="font-size:0.85rem;opacity:0.55;margin-top:4px;">${other && other.email ? escapeHtml(other.email) : 'Mitschüler:in'}</div>
+      <button class="m3-btn-full" onclick="closeChatInfoView()" style="margin-top:16px;max-width:200px;padding:10px 18px;font-size:0.9rem;display:flex;align-items:center;justify-content:center;gap:8px;margin-left:auto;margin-right:auto;">
+        <i data-lucide="message-circle" style="width:18px;height:18px;"></i>
+        <span>Nachricht senden</span>
+      </button>
     </div>
-  `);
+
+    <!-- Settings Card: Mute Toggle -->
+    <div class="m3-card" style="padding:14px 16px;margin-bottom:14px;border-radius:20px;background:#fff;display:flex;align-items:center;justify-content:space-between;gap:12px;">
+      <div style="display:flex;align-items:center;gap:12px;">
+        <div style="width:40px;height:40px;border-radius:50%;background:${conv.is_muted ? '#fce8e6' : '#f3edf7'};color:${conv.is_muted ? '#b3261e' : '#6750a4'};display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+          <i data-lucide="${conv.is_muted ? 'bell-off' : 'bell'}" style="width:20px;height:20px;"></i>
+        </div>
+        <div>
+          <div style="font-weight:600;font-size:0.95rem;color:#1c1b1f;">Stummschalten</div>
+          <div style="font-size:0.78rem;opacity:0.55;">Keine Push-Benachrichtigungen für neue Nachrichten</div>
+        </div>
+      </div>
+      <input type="checkbox" id="chat-info-mute-toggle" ${conv.is_muted ? 'checked' : ''} onchange="toggleChatMuteFromInfo(this.checked)" style="width:22px;height:22px;accent-color:#6750a4;cursor:pointer;flex-shrink:0;">
+    </div>
+  `;
   if (window.lucide) lucide.createIcons();
 }
 
@@ -654,6 +761,7 @@ async function toggleChatMuteFromInfo(muted) {
   try {
     await API.setChatMute(chatCurrentConversationId, muted);
     if (conv) conv.is_muted = muted;
+    if (chatInfoViewActive && conv) renderChatInfoContent(conv);
     showToast(muted ? 'Chat stummgeschaltet' : 'Stummschaltung aufgehoben');
   } catch {
     showToast('Fehler beim Ändern');
@@ -665,18 +773,32 @@ function triggerGroupAvatarUpload() {
 }
 
 async function handleGroupAvatarFileSelect(file) {
-  if (!file || !chatCurrentConversationId) return;
+  const input = document.getElementById('chat-group-avatar-input');
+  if (!file || !chatCurrentConversationId) {
+    if (input) input.value = '';
+    return;
+  }
+  if (!file.type.startsWith('image/')) {
+    showToast('Bitte ein Bild auswählen');
+    if (input) input.value = '';
+    return;
+  }
   showToast('Gruppenbild wird aktualisiert…');
   try {
-    const res = await API.uploadChatGroupAvatar(chatCurrentConversationId, file);
+    const form = new FormData();
+    form.append('file', file);
+    const res = await API.uploadChatGroupAvatar(chatCurrentConversationId, form);
     const conv = chatConversations.find(c => c.id === chatCurrentConversationId);
     if (conv) conv.avatar_url = res.avatar_url;
     updateChatHeaderAvatar(conv);
-    closeSheet();
-    openChatHeaderInfo();
+    if (chatInfoViewActive && conv) {
+      renderChatInfoContent(conv);
+    }
     showToast('Gruppenbild aktualisiert');
   } catch (e) {
     showToast(e.detail || 'Fehler beim Hochladen des Gruppenbilds');
+  } finally {
+    if (input) input.value = '';
   }
 }
 
@@ -692,9 +814,10 @@ async function promptEditGroupName() {
   try {
     const updated = await API.updateChatGroup(chatCurrentConversationId, { name: trimmed });
     if (conv) conv.name = updated.name;
-    document.getElementById('chat-title').textContent = updated.name;
     const nameEl = document.getElementById('chat-group-info-name');
     if (nameEl) nameEl.textContent = updated.name;
+    const titleEl = document.getElementById('chat-title');
+    if (titleEl && !chatInfoViewActive) titleEl.textContent = updated.name;
     showToast('Gruppenname geändert');
   } catch (e) {
     showToast(e.detail || 'Fehler beim Ändern des Gruppennamens');
@@ -766,6 +889,11 @@ async function openChatConversation(id, fromDeepLink = false, isPopState = false
   try {
     id = parseInt(id, 10);
     if (isNaN(id)) return;
+    if (chatInfoViewActive) {
+      chatInfoViewActive = false;
+      const infoView = document.getElementById('chat-info-view');
+      if (infoView) infoView.style.display = 'none';
+    }
     chatCurrentConversationId = id;
     const conv = chatConversations.find(c => c.id === id);
 
@@ -782,11 +910,13 @@ async function openChatConversation(id, fromDeepLink = false, isPopState = false
     // 2. Immediately switch views & show correct header title/avatar
     const listView = document.getElementById('chat-list-view');
     const detailView = document.getElementById('chat-detail-view');
+    const infoView = document.getElementById('chat-info-view');
     const titleEl = document.getElementById('chat-title');
     const searchBtn = document.getElementById('chat-search-btn');
     const replyBar = document.getElementById('chat-reply-bar');
 
     if (listView) listView.style.display = 'none';
+    if (infoView) infoView.style.display = 'none';
     if (detailView) detailView.style.display = 'flex';
     if (titleEl) titleEl.textContent = conv ? chatConversationTitle(conv) : 'Chat';
     if (searchBtn) searchBtn.style.display = 'none';
@@ -832,6 +962,11 @@ async function openChatConversation(id, fromDeepLink = false, isPopState = false
 }
 
 function closeChatConversation(isPopState) {
+  if (chatInfoViewActive) {
+    chatInfoViewActive = false;
+    const infoView = document.getElementById('chat-info-view');
+    if (infoView) infoView.style.display = 'none';
+  }
   chatCurrentConversationId = null;
   chatUserHasScrolledUp = false;
   if (chatMsgPollInterval) { clearInterval(chatMsgPollInterval); chatMsgPollInterval = null; }
@@ -848,10 +983,12 @@ function closeChatConversation(isPopState) {
   }
   const listView = document.getElementById('chat-list-view');
   const detailView = document.getElementById('chat-detail-view');
+  const infoView = document.getElementById('chat-info-view');
   const titleEl = document.getElementById('chat-title');
   const searchBtn = document.getElementById('chat-search-btn');
   const avatarEl = document.getElementById('chat-header-avatar');
   if (detailView) detailView.style.display = 'none';
+  if (infoView) infoView.style.display = 'none';
   if (listView) listView.style.display = '';
   if (titleEl) titleEl.textContent = 'Chat';
   if (searchBtn) searchBtn.style.display = 'flex';
@@ -876,10 +1013,22 @@ function closeChatConversation(isPopState) {
 
 function chatHandlePopstate(state) {
   if (state && state.chatConv && state.conversationId) {
-    if (chatCurrentConversationId !== state.conversationId) {
-      openChatConversation(state.conversationId, false, true);
+    if (state.chatInfo) {
+      if (chatCurrentConversationId !== state.conversationId) {
+        openChatConversation(state.conversationId, false, true).then(() => openChatHeaderInfo(true));
+      } else if (!chatInfoViewActive) {
+        openChatHeaderInfo(true);
+      }
+    } else {
+      if (chatInfoViewActive) {
+        closeChatInfoView(true);
+      }
+      if (chatCurrentConversationId !== state.conversationId) {
+        openChatConversation(state.conversationId, false, true);
+      }
     }
   } else {
+    if (chatInfoViewActive) closeChatInfoView(true);
     if (chatCurrentConversationId !== null) {
       closeChatConversation(true);
     }

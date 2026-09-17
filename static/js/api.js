@@ -132,6 +132,12 @@ const API = {
   searchChatGifs:       (q) => API.get(`/chat/gifs?q=${encodeURIComponent(q || '')}`),
   editChatMessage:      (convId, msgId, text) => API.patch(`/chat/conversations/${convId}/messages/${msgId}`, { text }),
   deleteChatMessage:    (convId, msgId) => API.delete(`/chat/conversations/${convId}/messages/${msgId}`),
-  updateChatGroup:      (convId, d) => API.patch(`/chat/conversations/${convId}`, d),
-  uploadChatGroupAvatar: (convId, form) => API.upload(`/chat/conversations/${convId}/avatar`, form),
+  uploadChatGroupAvatar: (convId, formOrFile) => {
+    const form = (formOrFile instanceof FormData) ? formOrFile : (() => {
+      const fd = new FormData();
+      fd.append('file', formOrFile);
+      return fd;
+    })();
+    return API.upload(`/chat/conversations/${convId}/avatar`, form);
+  },
 };

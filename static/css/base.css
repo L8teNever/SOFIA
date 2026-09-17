@@ -453,7 +453,7 @@ body.has-active-page .app-container {
   z-index: 10;
   position: relative;
   max-width: 960px;
-  margin: 0 auto;
+  margin: 0 auto 8px auto;
   width: 100%;
   box-sizing: border-box;
 }
