@@ -1212,6 +1212,7 @@ function enhanceDateTimeInputs(root = document) {
   });
 }
 
+let _sheetViewportHandler = null;
 function openSheet(html) {
   let sheet = document.querySelector('.bottom-sheet');
   if (!sheet) { sheet = document.createElement('div'); sheet.className = 'bottom-sheet'; document.body.appendChild(sheet); }
@@ -1222,14 +1223,34 @@ function openSheet(html) {
   if (window.lucide) lucide.createIcons();
   document.getElementById('bottom-sheet-scrim').classList.add('active');
   requestAnimationFrame(() => sheet.classList.add('active'));
-  
+
+  // The sheet's own 90vh cap is the *layout* viewport, which on mobile
+  // doesn't shrink when the on-screen keyboard opens — so a sheet with a
+  // focused text input (the GIF search box, say) keeps claiming space
+  // behind the keyboard instead of above it, and content near the bottom
+  // ends up hidden under it with no way to scroll it into view.
+  // visualViewport DOES shrink with the keyboard, so mirror its height
+  // onto the sheet's max-height while it's open.
+  if (window.visualViewport) {
+    _sheetViewportHandler = () => {
+      const s = document.querySelector('.bottom-sheet');
+      if (s) s.style.maxHeight = Math.round(window.visualViewport.height * 0.9) + 'px';
+    };
+    window.visualViewport.addEventListener('resize', _sheetViewportHandler);
+    _sheetViewportHandler();
+  }
+
   history.pushState({ page: currentPage, sheet: true }, '', window.location.pathname);
 }
 function closeSheet(isPopState = false) {
   const sheet = document.querySelector('.bottom-sheet');
-  if (sheet) { sheet.classList.remove('active'); setTimeout(() => sheet.remove(), 400); }
+  if (sheet) { sheet.classList.remove('active'); sheet.style.maxHeight = ''; setTimeout(() => sheet.remove(), 400); }
   document.getElementById('bottom-sheet-scrim').classList.remove('active');
-  
+  if (_sheetViewportHandler && window.visualViewport) {
+    window.visualViewport.removeEventListener('resize', _sheetViewportHandler);
+    _sheetViewportHandler = null;
+  }
+
   if (!isPopState && history.state && history.state.sheet) {
     isSelfPopping = true;
     history.back();

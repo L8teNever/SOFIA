@@ -559,6 +559,11 @@ async def get_chat_file(conversation_id: int, message_id: int, db: AsyncSession 
     path = os.path.join(settings.chat_storage_dir, msg.storage_filename)
     if not os.path.exists(path):
         raise HTTPException(404)
+    # Accept-Ranges tells the browser up front that this URL supports byte
+    # ranges — without it, a voice message's <audio> element sees an empty
+    # seekable range even once duration is known, so scrubbing anywhere
+    # snaps straight back to 0 instead of actually seeking.
+    range_headers = {"Accept-Ranges": "bytes"}
     if msg.msg_type == "file":
-        return FileResponse(path, filename=msg.file_name, media_type=msg.mime_type or "application/octet-stream")
-    return FileResponse(path, media_type=msg.mime_type or "application/octet-stream", content_disposition_type="inline")
+        return FileResponse(path, filename=msg.file_name, media_type=msg.mime_type or "application/octet-stream", headers=range_headers)
+    return FileResponse(path, media_type=msg.mime_type or "application/octet-stream", content_disposition_type="inline", headers=range_headers)
