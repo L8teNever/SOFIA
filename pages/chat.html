@@ -13,7 +13,7 @@
   </div>
 
   <div id="chat-detail-view" style="display:none;flex-direction:column;flex:1;min-height:0;overflow:hidden;">
-    <div id="chat-messages-scroll" style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:8px;"></div>
+    <div id="chat-messages-scroll" style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:8px;overscroll-behavior-y:contain;-webkit-overflow-scrolling:touch;"></div>
     <div id="chat-edit-bar" style="display:none;align-items:center;gap:10px;padding:8px 14px;background:#e8def8;border-top:1px solid rgba(0,0,0,0.06);flex-shrink:0;">
       <i data-lucide="edit-2" style="width:16px;height:16px;color:#6750a4;flex-shrink:0;"></i>
       <div style="flex:1;min-width:0;font-size:0.82rem;color:#21005d;font-weight:600;">Nachricht bearbeiten</div>
@@ -142,6 +142,8 @@ let chatTouchState = null; // long-press/swipe tracking, see initChatGestureHand
 let _chatActionMenuEl = null, _chatActionMenuOutsideHandler = null;
 let chatPlayingVoiceId = null; // message id of the voice note currently playing, or null
 let chatOpenedFromDirectUrl = false;
+let chatUserHasScrolledUp = false;
+let chatProgrammaticScrolling = false;
 
 async function init_chat() {
   try {
@@ -796,6 +798,7 @@ async function openChatConversation(id, fromDeepLink = false, isPopState = false
 
     // 3. Immediately clear previous messages to prevent previous chat from flashing
     chatMessages = [];
+    chatUserHasScrolledUp = false;
     const scrollEl = document.getElementById('chat-messages-scroll');
     if (scrollEl) {
       scrollEl.dataset.scrolledOnce = '';
@@ -805,6 +808,7 @@ async function openChatConversation(id, fromDeepLink = false, isPopState = false
           <span>Chat wird geladen…</span>
         </div>`;
     }
+    initChatScrollListener();
 
     // 4. Fetch messages with active conversation guard
     const fetchConvId = id;
@@ -813,6 +817,7 @@ async function openChatConversation(id, fromDeepLink = false, isPopState = false
 
     chatMessages = msgs;
     renderChatMessages(true);
+    scrollChatToBottom(false);
     await API.markChatRead(id).catch(() => {});
     const localConv = chatConversations.find(c => c.id === id);
     if (localConv) localConv.unread_count = 0;
@@ -828,6 +833,7 @@ async function openChatConversation(id, fromDeepLink = false, isPopState = false
 
 function closeChatConversation(isPopState) {
   chatCurrentConversationId = null;
+  chatUserHasScrolledUp = false;
   if (chatMsgPollInterval) { clearInterval(chatMsgPollInterval); chatMsgPollInterval = null; }
   if (chatPlayingVoiceId !== null) {
     document.getElementById(`chat-voice-audio-${chatPlayingVoiceId}`)?.pause();
@@ -981,17 +987,64 @@ function chatFileUrl(m) {
 function onChatImageLoaded() {
   const el = document.getElementById('chat-messages-scroll');
   if (!el) return;
-  const wasNearBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 160;
-  if (wasNearBottom) el.scrollTop = el.scrollHeight;
+  const wasNearBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 350;
+  if (!chatUserHasScrolledUp || wasNearBottom) {
+    el.scrollTop = el.scrollHeight;
+  }
+}
+
+function initChatScrollListener() {
+  const el = document.getElementById('chat-messages-scroll');
+  if (!el || el.dataset.scrollBound) return;
+  el.dataset.scrollBound = '1';
+
+  el.addEventListener('scroll', () => {
+    if (chatProgrammaticScrolling) return;
+    const distanceFromBottom = el.scrollHeight - (el.scrollTop + el.clientHeight);
+    if (distanceFromBottom > 80) {
+      chatUserHasScrolledUp = true;
+    } else if (distanceFromBottom <= 30) {
+      chatUserHasScrolledUp = false;
+    }
+  }, { passive: true });
+
+  el.addEventListener('wheel', () => {
+    chatProgrammaticScrolling = false;
+  }, { passive: true });
+
+  el.addEventListener('touchmove', () => {
+    chatProgrammaticScrolling = false;
+  }, { passive: true });
 }
 
 function scrollChatToBottom(smooth = false) {
   const el = document.getElementById('chat-messages-scroll');
   if (!el) return;
+  chatUserHasScrolledUp = false;
   if (smooth) {
     el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+    setTimeout(() => {
+      if (el && !chatUserHasScrolledUp) el.scrollTop = el.scrollHeight;
+    }, 250);
   } else {
+    chatProgrammaticScrolling = true;
     el.scrollTop = el.scrollHeight;
+    requestAnimationFrame(() => {
+      if (el && !chatUserHasScrolledUp) el.scrollTop = el.scrollHeight;
+      requestAnimationFrame(() => {
+        if (el && !chatUserHasScrolledUp) el.scrollTop = el.scrollHeight;
+        chatProgrammaticScrolling = false;
+      });
+    });
+    setTimeout(() => {
+      if (el && !chatUserHasScrolledUp) el.scrollTop = el.scrollHeight;
+    }, 50);
+    setTimeout(() => {
+      if (el && !chatUserHasScrolledUp) el.scrollTop = el.scrollHeight;
+    }, 150);
+    setTimeout(() => {
+      if (el && !chatUserHasScrolledUp) el.scrollTop = el.scrollHeight;
+    }, 300);
   }
 }
 
@@ -1018,7 +1071,7 @@ function renderChatMessageBody(m) {
   if (m.msg_type === 'poll') return renderChatPollBubble(m);
   if (m.msg_type === 'image') {
     const src = m.external_url || chatFileUrl(m);
-    return `<img src="${src}" loading="lazy" onload="onChatImageLoaded()" style="max-width:220px;max-height:280px;border-radius:10px;display:block;cursor:pointer;" onclick="window.open('${src}','_blank')">`;
+    return `<img src="${src}" loading="lazy" onload="onChatImageLoaded()" onerror="onChatImageLoaded()" style="max-width:220px;max-height:280px;border-radius:10px;display:block;cursor:pointer;" onclick="window.open('${src}','_blank')">`;
   }
   if (m.msg_type === 'file') {
     return `<a href="${chatFileUrl(m)}" download="${escapeHtml(m.file_name || '')}" style="display:flex;align-items:center;gap:8px;text-decoration:none;color:inherit;min-width:140px;">
@@ -1068,9 +1121,21 @@ function renderChatMessages(forceScrollBottom = false) {
   const el = document.getElementById('chat-messages-scroll');
   if (!el) return;
   const wasNearBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 80;
+  const conv = chatConversations.find(c => c.id === chatCurrentConversationId);
+
+  if (!chatMessages || chatMessages.length === 0) {
+    el.innerHTML = `
+      <div style="text-align:center;padding:40px 20px;opacity:0.45;font-size:0.85rem;margin:auto;">
+        <i data-lucide="${conv && conv.is_notes ? 'bookmark' : 'message-square'}" style="width:36px;height:36px;display:block;margin:0 auto 10px;opacity:0.6;"></i>
+        <div>${conv && conv.is_notes ? 'Notizen an dich selbst. Sende Gedanken, Links oder Dateien.' : 'Noch keine Nachrichten. Schreib die erste Nachricht! 👋'}</div>
+      </div>
+    `;
+    if (window.lucide) lucide.createIcons();
+    return;
+  }
+
   el.innerHTML = chatMessages.map(m => {
     const mine = currentUser && m.sender_id === currentUser.id;
-    const conv = chatConversations.find(c => c.id === chatCurrentConversationId);
     const showSender = !mine && conv && conv.is_group;
     const avatarHtml = showSender
       ? `<div class="avatar" style="${avatarImgStyle({ avatar_url: m.sender_avatar })}width:26px;height:26px;border-radius:50%;background:#eaddff;color:#442b7a;display:flex;align-items:center;justify-content:center;font-size:0.62rem;font-weight:700;flex-shrink:0;align-self:flex-end;margin-bottom:2px;">${m.sender_avatar ? '' : escapeHtml((m.sender_name || '?').slice(0, 2).toUpperCase())}</div>`
@@ -1087,14 +1152,22 @@ function renderChatMessages(forceScrollBottom = false) {
       </div>
     </div>`;
   }).join('');
-  if (forceScrollBottom || wasNearBottom || !el.dataset.scrolledOnce) {
-    el.scrollTop = el.scrollHeight;
-    el.dataset.scrolledOnce = '1';
-    requestAnimationFrame(() => {
-      if (el) el.scrollTop = el.scrollHeight;
-    });
-  }
+
   if (window.lucide) lucide.createIcons();
+
+  if (forceScrollBottom || wasNearBottom || !el.dataset.scrolledOnce || !chatUserHasScrolledUp) {
+    el.dataset.scrolledOnce = '1';
+    scrollChatToBottom(false);
+  }
+}
+
+if (document.fonts && document.fonts.ready) {
+  document.fonts.ready.then(() => {
+    const el = document.getElementById('chat-messages-scroll');
+    if (el && !chatUserHasScrolledUp && chatCurrentConversationId !== null) {
+      el.scrollTop = el.scrollHeight;
+    }
+  });
 }
 
 async function castChatVote(messageId, optionId) {
@@ -1825,6 +1898,8 @@ function onChatVoiceLoaded(messageId) {
   const audio = document.getElementById(`chat-voice-audio-${messageId}`);
   const time = document.getElementById(`chat-voice-time-${messageId}`);
   if (audio && time && !audio.currentTime) time.textContent = chatVoiceFormatTime(audio.duration);
+  const el = document.getElementById('chat-messages-scroll');
+  if (el && !chatUserHasScrolledUp) el.scrollTop = el.scrollHeight;
 }
 
 function onChatVoiceProgress(messageId) {
