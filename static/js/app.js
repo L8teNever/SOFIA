@@ -325,6 +325,15 @@ function toggleMoreMenu(btn, items) {
   } else {
     panel.style.bottom = (window.innerHeight - r.top + 6) + 'px';
   }
+  // Right-aligning to the button (right edge = button's right edge, panel
+  // extends leftward) runs off the left edge of the screen when the button
+  // itself sits near the left edge (e.g. chat's leftmost "+" attach
+  // button) — clamp back onto screen by switching to a left-pinned
+  // position instead of letting the panel get cut off.
+  if (panel.getBoundingClientRect().left < 8) {
+    panel.style.right = 'auto';
+    panel.style.left = '8px';
+  }
   if (window.lucide) lucide.createIcons();
 
   panel.querySelectorAll('.m3-dropdown-opt').forEach(opt => {
