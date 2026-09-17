@@ -163,6 +163,25 @@
       </div>
     </div>
 
+    <!-- Chat: a full-width banner like Calendar rather than a 9th plain
+         square — 9 squares would leave the grid's last row half-empty on
+         every breakpoint (see the .widget-grid comment in base.css: the
+         existing 8-unit total was chosen specifically because 4 columns
+         divides it evenly). A banner showing the latest message is also
+         more useful here than a bare icon tile, same reasoning as Calendar
+         showing the next event instead of just an icon. -->
+    <div class="widget w-full-span" style="background:#c2e7ff;color:#001d31;" onclick="openPage('chat',this)" data-page="chat">
+      <div style="min-width:0;overflow:hidden;">
+        <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.6;">Chat</div>
+        <div style="font-size:1.4rem;font-weight:700;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" id="w-chat-preview">Keine Nachrichten</div>
+        <div style="font-size:0.82rem;opacity:0.65;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" id="w-chat-preview-sub"></div>
+      </div>
+      <div class="icon-box" style="width:52px;height:52px;background:rgba(0,29,49,0.12);position:relative;flex-shrink:0;">
+        <i data-lucide="message-circle" style="width:26px;height:26px;"></i>
+        <span id="w-chat-badge" style="display:none;position:absolute;top:-6px;right:-6px;background:#b3261e;color:#fff;font-size:0.68rem;font-weight:700;min-width:20px;height:20px;border-radius:10px;align-items:center;justify-content:center;padding:0 5px;">0</span>
+      </div>
+    </div>
+
   </div>
 </div>
 

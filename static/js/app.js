@@ -58,7 +58,7 @@ if (window.visualViewport) {
   window.visualViewport.addEventListener('resize', updateAppHeight);
 }
 
-const KNOWN_PAGES = ['calendar','homework','grades','timetable','mealplan','drive','quickshare','settings','admin','notifications','notification-settings','google-sync'];
+const KNOWN_PAGES = ['calendar','homework','grades','timetable','mealplan','drive','quickshare','settings','admin','notifications','notification-settings','google-sync','chat'];
 const pageCache = new Map();
 
 function prefetchPages() {
@@ -602,6 +602,12 @@ window.addEventListener('popstate', (e) => {
   const drivePreview = document.getElementById('drive-preview-lightbox');
   if (drivePreview && drivePreview.style.display !== 'none' && typeof closeDriveFilePreview === 'function') {
     closeDriveFilePreview(true);
+    return;
+  }
+
+  const chatDetail = document.getElementById('chat-detail-view');
+  if (chatDetail && chatDetail.style.display !== 'none' && typeof closeChatConversation === 'function') {
+    closeChatConversation(true);
     return;
   }
 
@@ -1270,7 +1276,29 @@ async function loadDashboard() {
       document.getElementById('w-grade-avg').textContent = avg;
     }
     document.getElementById('w-files-count').textContent = files.length;
-    
+
+    API.chatConversations().then(convs => {
+      const unread = convs.reduce((sum, c) => sum + (c.unread_count || 0), 0);
+      const badge = document.getElementById('w-chat-badge');
+      if (badge) {
+        badge.textContent = unread > 99 ? '99+' : unread;
+        badge.style.display = unread > 0 ? 'flex' : 'none';
+      }
+      const preview = document.getElementById('w-chat-preview');
+      const sub = document.getElementById('w-chat-preview-sub');
+      if (preview && sub) {
+        const latest = convs[0]; // already sorted newest-first by the API
+        if (latest && latest.last_message) {
+          const title = latest.is_group ? latest.name : (latest.participants.find(p => !currentUser || p.user_id !== currentUser.id)?.display_name || '?');
+          preview.textContent = latest.last_message;
+          sub.textContent = title || '';
+        } else {
+          preview.textContent = 'Keine Nachrichten';
+          sub.textContent = '';
+        }
+      }
+    }).catch(() => {});
+
     // Fetch and update Timetable widget
     API.timetable().then(ttData => {
       if (ttData && ttData.configured && !ttData.error) {
