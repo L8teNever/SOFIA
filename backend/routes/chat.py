@@ -524,14 +524,22 @@ async def search_gifs(q: str = "", current_user: User = Depends(get_current_user
     results = []
     for item in data.get("data", []):
         images = item.get("images", {})
-        preview = images.get("fixed_height") or {}
-        original = images.get("original") or preview
-        if not original.get("url"):
+        # fixed_height_small (~100px tall) keeps the search grid light —
+        # loading 24 originals at once (several MB each for longer/complex
+        # GIFs) was both slow to browse and, worse, the same oversized
+        # original was what got sent and rendered in the chat bubble
+        # afterward. fixed_height (200px, GIPHY's own recommended
+        # "present after selection" size) matches the bubble's own
+        # max-height:280px display cap almost exactly, so nothing is lost
+        # by not using the full original.
+        preview = images.get("fixed_height_small") or images.get("fixed_height") or {}
+        send = images.get("fixed_height") or images.get("original") or preview
+        if not send.get("url"):
             continue
         results.append({
             "id": item.get("id"),
-            "preview_url": preview.get("url") or original.get("url"),
-            "gif_url": original.get("url"),
+            "preview_url": preview.get("url") or send.get("url"),
+            "gif_url": send.get("url"),
             "width": int(preview.get("width") or 0),
             "height": int(preview.get("height") or 0),
         })

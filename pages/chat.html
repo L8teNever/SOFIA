@@ -388,7 +388,7 @@ function renderChatMessageBody(m) {
     // (external_url) instead of our own file-serving endpoint — nothing to
     // download/re-host for something already meant to be publicly embedded.
     const src = m.external_url || chatFileUrl(m);
-    return `<img src="${src}" style="max-width:220px;max-height:280px;border-radius:10px;display:block;cursor:pointer;" onclick="window.open('${src}','_blank')">`;
+    return `<img src="${src}" loading="lazy" style="max-width:220px;max-height:280px;border-radius:10px;display:block;cursor:pointer;" onclick="window.open('${src}','_blank')">`;
   }
   if (m.msg_type === 'file') {
     return `<a href="${chatFileUrl(m)}" download="${escapeHtml(m.file_name || '')}" style="display:flex;align-items:center;gap:8px;text-decoration:none;color:inherit;min-width:140px;">
