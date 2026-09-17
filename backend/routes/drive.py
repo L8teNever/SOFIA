@@ -213,8 +213,8 @@ async def upload_drive_file(
         logger.warning("Drive upload analysis failed, keeping original name: %s", e)
 
     filename = f"{uuid.uuid4().hex}{ext}"
-    dest = os.path.join(settings.upload_dir, filename)
-    os.makedirs(settings.upload_dir, exist_ok=True)
+    dest = os.path.join(settings.drive_storage_dir, filename)
+    os.makedirs(settings.drive_storage_dir, exist_ok=True)
     async with aiofiles.open(dest, "wb") as out:
         await out.write(content)
 
@@ -246,7 +246,7 @@ async def upload_drive_file(
 @router.get("/download/{file_id}")
 async def download_drive_file(file_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     df = await _get_visible(db, file_id, current_user)
-    path = os.path.join(settings.upload_dir, df.filename)
+    path = os.path.join(settings.drive_storage_dir, df.filename)
     if not os.path.exists(path):
         raise HTTPException(404)
     return FileResponse(path, filename=df.original_name, media_type=df.mime_type or "application/octet-stream")
@@ -254,7 +254,7 @@ async def download_drive_file(file_id: int, db: AsyncSession = Depends(get_db), 
 @router.get("/preview/{file_id}")
 async def preview_drive_file(file_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     df = await _get_visible(db, file_id, current_user)
-    path = os.path.join(settings.upload_dir, df.filename)
+    path = os.path.join(settings.drive_storage_dir, df.filename)
     if not os.path.exists(path):
         raise HTTPException(404)
     return FileResponse(path, media_type=df.mime_type or "application/octet-stream", content_disposition_type="inline")
@@ -315,7 +315,7 @@ async def get_drive_file_text(file_id: int, db: AsyncSession = Depends(get_db), 
     df = await _get_visible(db, file_id, current_user)
     if _ext(df.original_name) not in TEXT_EDITABLE_EXTS:
         raise HTTPException(400, "Diese Datei kann nicht als Text bearbeitet werden")
-    path = os.path.join(settings.upload_dir, df.filename)
+    path = os.path.join(settings.drive_storage_dir, df.filename)
     if not os.path.exists(path):
         raise HTTPException(404)
     async with aiofiles.open(path, "r", encoding="utf-8", errors="replace") as fh:
@@ -327,7 +327,7 @@ async def update_drive_file_text(file_id: int, data: DriveTextUpdate, request: R
     df = await _get_visible(db, file_id, current_user)
     if _ext(df.original_name) not in TEXT_EDITABLE_EXTS:
         raise HTTPException(400, "Diese Datei kann nicht als Text bearbeitet werden")
-    path = os.path.join(settings.upload_dir, df.filename)
+    path = os.path.join(settings.drive_storage_dir, df.filename)
     encoded = data.content.encode("utf-8")
     async with aiofiles.open(path, "wb") as fh:
         await fh.write(encoded)
@@ -418,6 +418,13 @@ async def delete_drive_topic(topic_id: int, db: AsyncSession = Depends(get_db), 
     topic = result.scalar_one_or_none()
     if not topic or topic.class_id != current_user.class_id:
         raise HTTPException(404)
+    # Unlike a single file (which only ever belongs to one uploader), a
+    # folder can hold files from the whole class at once — deleting it
+    # un-files all of them in one action, so this needs the same elevated
+    # role individual file deletion already requires, not just "any
+    # classmate can do it".
+    if current_user.role not in ("admin", "super_admin"):
+        raise HTTPException(403)
 
     # Deleting a folder un-files its contents (moved to "Ohne Thema") rather
     # than deleting the files themselves — matches how a folder delete
@@ -437,7 +444,7 @@ async def delete_drive_file(request: Request, file_id: int, db: AsyncSession = D
     df = await _get_visible(db, file_id, current_user)
     if df.uploader_id != current_user.id and current_user.role not in ("admin", "super_admin"):
         raise HTTPException(403)
-    path = os.path.join(settings.upload_dir, df.filename)
+    path = os.path.join(settings.drive_storage_dir, df.filename)
     if os.path.exists(path):
         try:
             os.remove(path)
@@ -463,3 +470,27 @@ async def _get_visible(db: AsyncSession, file_id: int, current_user: User) -> Dr
     if not df or df.class_id != current_user.class_id:
         raise HTTPException(404)
     return df
+
+# --- Human-readable file URLs ---
+# A plain /api/v1/drive/preview/{id} tells a human nothing about what the
+# link actually is. These mirror the download/preview/view routes above at
+# a tidier path that also shows the subject/folder/filename — file_id is
+# still the ONLY thing actually looked up and authorization-checked (same
+# _get_visible() class-membership check as everywhere else in this file);
+# the surrounding segments are purely cosmetic and never trusted, so a
+# mismatched or fake subject/topic/filename in the URL has no effect on
+# what gets served — changing file_id to someone else's is exactly the
+# "what if I just edit the URL" case _get_visible() exists to catch.
+public_router = APIRouter(prefix="/drive", tags=["drive-files"])
+
+@public_router.get("/{file_id}/{subject}/{topic}/{filename}/download")
+async def pretty_download_drive_file(file_id: int, subject: str, topic: str, filename: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    return await download_drive_file(file_id, db, current_user)
+
+@public_router.get("/{file_id}/{subject}/{topic}/{filename}/raw")
+async def pretty_preview_drive_file(file_id: int, subject: str, topic: str, filename: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    return await preview_drive_file(file_id, db, current_user)
+
+@public_router.get("/{file_id}/{subject}/{topic}/{filename}", response_class=HTMLResponse)
+async def pretty_view_drive_file(file_id: int, subject: str, topic: str, filename: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    return await view_drive_file(file_id, db, current_user)

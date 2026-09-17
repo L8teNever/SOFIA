@@ -136,6 +136,15 @@ class Settings:
     internal_service_token: str      = _internal_service_token
     mcp_default_user_email: str      = os.getenv("MCP_DEFAULT_USER_EMAIL", "l8tenever@gmail.com")
     upload_dir:        str           = os.getenv("UPLOAD_DIR", "./uploads")
+    # Deliberately NOT under upload_dir: that whole tree is served publicly
+    # and unauthenticated at /uploads/... (see backend/main.py's StaticFiles
+    # mount) — a Drive file's raw bytes must only ever be reachable through
+    # the API routes in backend/routes/drive.py, which check the requesting
+    # user's class membership before serving anything. Reuses the same
+    # directory the self-healing keys already live in (backend/config.py's
+    # _data_dir()) since that volume is already persisted but never mounted
+    # as a static route anywhere.
+    drive_storage_dir: str           = os.getenv("DRIVE_STORAGE_DIR", os.path.join(_data_dir(), "drive_files"))
     max_file_size:     int           = int(os.getenv("MAX_FILE_SIZE", "1073741824"))  # 1 GB
     dev_email:         Optional[str] = os.getenv("DEV_EMAIL")
     gemini_api_key:    str           = os.getenv("GEMINI_API_KEY", "")

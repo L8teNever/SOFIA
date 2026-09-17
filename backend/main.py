@@ -38,6 +38,7 @@ app.add_middleware(RateLimiterMiddleware)
 # API routes
 for r in [auth_routes, users, classes, subjects, calendar, homework, grades, files, vapid, admin, timetable, mealplan, notifications, drive, google_sync]:
     app.include_router(r.router)
+app.include_router(drive.public_router)
 
 
 # Static files

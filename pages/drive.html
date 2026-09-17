@@ -103,6 +103,20 @@ function formatBytes(b) {
   return (b/1048576).toFixed(1) + ' MB';
 }
 
+// A tidier, human-readable URL for a file — /drive/{id}/{subject}/{topic}/
+// {filename}[/raw|/download] — instead of the bare /api/v1/drive/preview/{id}
+// kind of link. The id is still the only part that's actually looked up
+// server-side (backend/routes/drive.py's public_router just delegates to
+// the same _get_visible()-checked handlers as the /api/v1 routes) — the
+// other segments are purely cosmetic, so encoding them for readability
+// here is all that's needed, no need to keep them in sync with anything.
+function driveFileUrl(f, suffix) {
+  const subject = encodeURIComponent(f.subject_name || 'Unsortiert');
+  const topic = encodeURIComponent(f.topic || 'Ohne-Thema');
+  const filename = encodeURIComponent(f.original_name || 'Datei');
+  return `/drive/${f.id}/${subject}/${topic}/${filename}${suffix ? '/' + suffix : ''}`;
+}
+
 function driveRelTime(iso) {
   const then = new Date(iso).getTime();
   const diffMin = Math.floor((Date.now() - then) / 60000);
@@ -559,7 +573,7 @@ function renderDriveFileList(files, showTag) {
       <button onclick="openMoveFileSheet(${f.id})" style="background:#f3edf7;border:none;border-radius:12px;padding:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;cursor:pointer;" title="Verschieben">
         <i data-lucide="move" style="width:18px;height:18px;"></i>
       </button>
-      <a href="/api/v1/drive/download/${f.id}" download style="background:#f3edf7;border-radius:12px;padding:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;" title="Herunterladen">
+      <a href="${driveFileUrl(f, 'download')}" download style="background:#f3edf7;border-radius:12px;padding:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;" title="Herunterladen">
         <i data-lucide="download" style="width:18px;height:18px;"></i>
       </a>
       ${canDelete ? `<button onclick="deleteDriveFileConfirm(${f.id})" style="background:none;border:none;cursor:pointer;opacity:0.4;padding:4px;flex-shrink:0;" title="Löschen">
@@ -787,9 +801,9 @@ function openDriveFile(id) {
   if (DRIVE_TEXT_EXTS.includes(driveExt(f.original_name))) {
     openDriveFilePreview(id);
   } else if (window.innerWidth >= 1100) {
-    window.open('/api/v1/drive/preview/' + id, '_blank', 'noopener');
+    window.open(driveFileUrl(f, 'raw'), '_blank', 'noopener');
   } else {
-    window.open('/api/v1/drive/view/' + id, '_blank', 'noopener');
+    window.open(driveFileUrl(f), '_blank', 'noopener');
   }
 }
 
@@ -830,7 +844,7 @@ async function openDriveFilePreview(id) {
     // everywhere else too) — initDriveZoomPan() below adds pinch/wheel/
     // double-tap zoom + pan by hand instead of relying on either.
     body.innerHTML = `<div id="drive-preview-image-wrap" style="width:100%;height:100%;overflow:hidden;touch-action:none;position:relative;">
-      <img id="drive-preview-image" src="/api/v1/drive/preview/${id}" style="max-width:100%;max-height:100%;position:absolute;top:0;left:0;transform-origin:0 0;will-change:transform;">
+      <img id="drive-preview-image" src="${driveFileUrl(f, 'raw')}" style="max-width:100%;max-height:100%;position:absolute;top:0;left:0;transform-origin:0 0;will-change:transform;">
     </div>`;
     const img = document.getElementById('drive-preview-image');
     if (img.complete) initDriveZoomPan('drive-preview-image-wrap', 'drive-preview-image');
@@ -855,8 +869,8 @@ async function openDriveFilePreview(id) {
   }
 
   document.getElementById('drive-preview-actions').innerHTML = `
-    <a href="/api/v1/drive/download/${id}" download class="m3-btn-outline" style="flex:1;text-align:center;text-decoration:none;">Herunterladen</a>
-    ${!isText ? `<a href="/api/v1/drive/view/${id}" target="_blank" rel="noopener" class="m3-btn-outline" style="flex:1;text-align:center;text-decoration:none;">In neuem Tab öffnen</a>` : ''}
+    <a href="${driveFileUrl(f, 'download')}" download class="m3-btn-outline" style="flex:1;text-align:center;text-decoration:none;">Herunterladen</a>
+    ${!isText ? `<a href="${driveFileUrl(f)}" target="_blank" rel="noopener" class="m3-btn-outline" style="flex:1;text-align:center;text-decoration:none;">In neuem Tab öffnen</a>` : ''}
     ${isText ? `<button class="m3-btn-primary" style="flex:1;" onclick="startDriveTextEdit(${id})" id="drive-edit-toggle-btn">Bearbeiten</button>` : ''}
   `;
 
@@ -1034,9 +1048,11 @@ async function renderDrivePdfPreview(id) {
   const wrap = document.getElementById('drive-preview-pdf-wrap');
   const pagesEl = document.getElementById('drive-preview-pdf-pages');
   if (!wrap || !pagesEl) return;
+  const f = driveFiles.find(x => x.id === id);
+  if (!f) return;
   try {
     const pdfjsLib = await loadPdfJs();
-    const pdf = await pdfjsLib.getDocument({ url: '/api/v1/drive/preview/' + id }).promise;
+    const pdf = await pdfjsLib.getDocument({ url: driveFileUrl(f, 'raw') }).promise;
     const wrapWidth = wrap.clientWidth || 320;
     const dpr = window.devicePixelRatio || 1;
     for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {

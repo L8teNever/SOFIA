@@ -45,6 +45,30 @@ async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         await _migrate_columns(conn)
+        await _migrate_drive_storage(conn)
+
+async def _migrate_drive_storage(conn):
+    """One-time move of any Drive file still sitting in its old location
+    (settings.upload_dir, served publicly and unauthenticated at /uploads/...
+    — see backend/main.py) into settings.drive_storage_dir, which nothing
+    serves directly. Safe to run on every startup: a file already in its new
+    home is simply skipped."""
+    from sqlalchemy import text
+    from backend.config import settings
+    import shutil
+
+    os.makedirs(settings.drive_storage_dir, exist_ok=True)
+    result = await conn.execute(text("SELECT filename FROM drive_files"))
+    moved = 0
+    for (filename,) in result.fetchall():
+        old_path = os.path.join(settings.upload_dir, filename)
+        new_path = os.path.join(settings.drive_storage_dir, filename)
+        if os.path.exists(old_path) and not os.path.exists(new_path):
+            shutil.move(old_path, new_path)
+            moved += 1
+    if moved:
+        import logging
+        logging.getLogger(__name__).info("Moved %d Drive file(s) to the non-public storage directory", moved)
 
 async def _migrate_columns(conn):
     from sqlalchemy import text

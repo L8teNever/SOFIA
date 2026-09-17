@@ -479,7 +479,7 @@ function openTtLessonModal(idx) {
         <i data-lucide="book-open" style="width:26px;height:26px;color:#442b00;"></i>
       </div>
       <div style="font-size:1.25rem;font-weight:800;color:#1c1b1f;${l.cancelled?'text-decoration:line-through;color:#8a3a3a;':''}">${escapeHtml(l.subject||'–')}</div>
-      <div style="opacity:0.6;font-size:0.85rem;margin-top:4px;">${_fmtTime(l.startTime)} – ${_fmtTime(l.endTime)} Uhr</div>
+      <div style="color:#49454f;font-size:0.85rem;font-weight:600;margin-top:4px;">${_fmtTime(l.startTime)} – ${_fmtTime(l.endTime)} Uhr</div>
       ${badges.length ? `<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:12px;">
         ${badges.map(b => `<span style="background:${b.bg};color:${b.fg};padding:4px 10px;border-radius:8px;font-size:0.72rem;font-weight:700;">${b.label}</span>`).join('')}
       </div>` : ''}
