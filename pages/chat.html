@@ -229,8 +229,23 @@ function startChatListPolling() {
 
 // --- Conversation list ---
 
+// The backend stores/serializes created_at as a naive "YYYY-MM-DDTHH:MM:SS"
+// string with no timezone marker (SQLite has no timezone-aware datetime
+// type, so it comes back naive even though the value is UTC). A bare
+// `new Date(iso)` in the browser reads that as LOCAL time instead of UTC —
+// for a user in Germany (UTC+1/+2) a message sent seconds ago then shows
+// up 1-2 hours "in the past" (chat list times, message bubble times, and
+// which conversation looks most recently active all quietly went wrong by
+// exactly the timezone offset). Appending Z when there's no timezone
+// suffix already is the standard fix — every timestamp from the API goes
+// through this before being handed to Date().
+function chatParseUTC(iso) {
+  if (!iso) return new Date(NaN);
+  return new Date(/[Zz]|[+-]\d\d:?\d\d$/.test(iso) ? iso : iso + 'Z');
+}
+
 function chatRelTime(iso) {
-  const then = new Date(iso).getTime();
+  const then = chatParseUTC(iso).getTime();
   const diffMin = Math.floor((Date.now() - then) / 60000);
   if (diffMin < 1) return 'jetzt';
   if (diffMin < 60) return diffMin + ' Min.';
@@ -238,7 +253,7 @@ function chatRelTime(iso) {
   if (diffH < 24) return diffH + ' Std.';
   const diffD = Math.floor(diffH / 24);
   if (diffD < 7) return diffD + ' Tag' + (diffD === 1 ? '' : 'en');
-  const d = new Date(iso);
+  const d = chatParseUTC(iso);
   return d.getDate() + '.' + (d.getMonth()+1) + '.';
 }
 
@@ -500,8 +515,8 @@ function renderChatList() {
   const sorted = [...chatConversations].sort((a, b) => {
     if (a.is_notes && !b.is_notes) return -1;
     if (!a.is_notes && b.is_notes) return 1;
-    const timeA = a.last_message_at ? new Date(a.last_message_at).getTime() : 0;
-    const timeB = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
+    const timeA = a.last_message_at ? chatParseUTC(a.last_message_at).getTime() : 0;
+    const timeB = b.last_message_at ? chatParseUTC(b.last_message_at).getTime() : 0;
     return timeB - timeA;
   });
 
@@ -1108,7 +1123,7 @@ function initChatKeyboardLock() {
 }
 
 function chatMsgTime(iso) {
-  const d = new Date(iso);
+  const d = chatParseUTC(iso);
   return d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
 }
 
