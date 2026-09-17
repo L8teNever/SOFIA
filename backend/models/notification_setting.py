@@ -22,6 +22,9 @@ class UserNotificationSetting(Base):
     event_new = Column(Boolean, default=True, nullable=False)
     event_reminders = Column(Text, default=DEFAULT_EVENT_REMINDERS, nullable=False)
 
+    # Chat
+    chat_new = Column(Boolean, default=True, nullable=False)
+
     # Essenplan
     meal_reminder_mode = Column(String, default="same_day", nullable=False) # "same_day", "day_before", "none"
     meal_reminder_time = Column(String, default="07:00", nullable=False)

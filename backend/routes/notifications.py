@@ -34,6 +34,7 @@ def _to_out(ns: UserNotificationSetting) -> NotificationSettingOut:
         homework_daily_time=ns.homework_daily_time,
         event_new=ns.event_new,
         event_reminders=ev_rem,
+        chat_new=ns.chat_new,
         meal_reminder_mode=ns.meal_reminder_mode,
         meal_reminder_time=ns.meal_reminder_time,
         timetable_changes=ns.timetable_changes,
@@ -82,6 +83,8 @@ async def update_settings(data: NotificationSettingUpdate, db: AsyncSession = De
         ns.event_new = data.event_new
     if data.event_reminders is not None:
         ns.event_reminders = json.dumps([r.model_dump() for r in data.event_reminders])
+    if data.chat_new is not None:
+        ns.chat_new = data.chat_new
     if data.meal_reminder_mode is not None:
         ns.meal_reminder_mode = data.meal_reminder_mode
     if data.meal_reminder_time is not None:

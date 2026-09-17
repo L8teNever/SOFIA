@@ -41,7 +41,8 @@ async def init_db():
         push_subscription, notification_setting, sent_notification_log,
         subject_weighting, audit_log, manual_timetable_entry, drive_file, drive_topic,
         google_account, google_sync_map, user_email_alias,
-        chat_conversation, chat_participant, chat_message, chat_poll_option, chat_poll_vote
+        chat_conversation, chat_participant, chat_message, chat_poll_option, chat_poll_vote,
+        chat_message_reaction
     )
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -116,6 +117,52 @@ async def _migrate_columns(conn):
     existing_cp = {row[1] for row in result_cp.fetchall()}
     if "is_muted" not in existing_cp:
         await conn.execute(text("ALTER TABLE chat_participants ADD COLUMN is_muted BOOLEAN DEFAULT 0"))
+
+    result_cm = await conn.execute(text("PRAGMA table_info(chat_messages)"))
+    existing_cm = {row[1] for row in result_cm.fetchall()}
+    if "reply_to_id" not in existing_cm:
+        await conn.execute(text("ALTER TABLE chat_messages ADD COLUMN reply_to_id INTEGER"))
+    if "poll_multi" not in existing_cm:
+        await conn.execute(text("ALTER TABLE chat_messages ADD COLUMN poll_multi BOOLEAN DEFAULT 0"))
+
+    result_ns = await conn.execute(text("PRAGMA table_info(user_notification_settings)"))
+    existing_ns = {row[1] for row in result_ns.fetchall()}
+    if "chat_new" not in existing_ns:
+        await conn.execute(text("ALTER TABLE user_notification_settings ADD COLUMN chat_new BOOLEAN DEFAULT 1"))
+
+    # chat_poll_votes originally had a UNIQUE(message_id, user_id) constraint
+    # (one vote per user per poll, full stop). Multi-choice polls need a user
+    # to hold several rows for the same poll — one per option — so the
+    # constraint has to become (message_id, option_id, user_id) instead.
+    # SQLite can't ALTER a constraint in place, so detect the old unique
+    # index by its exact column set and, if found, rebuild the table.
+    idx_result = await conn.execute(text("PRAGMA index_list(chat_poll_votes)"))
+    needs_pv_migration = False
+    for row in idx_result.fetchall():
+        if not row[2]:  # not unique
+            continue
+        cols_result = await conn.execute(text(f"PRAGMA index_info({row[1]})"))
+        cols = {c[2] for c in cols_result.fetchall()}
+        if cols == {"message_id", "user_id"}:
+            needs_pv_migration = True
+            break
+    if needs_pv_migration:
+        await conn.execute(text("ALTER TABLE chat_poll_votes RENAME TO chat_poll_votes_old"))
+        await conn.execute(text("""
+            CREATE TABLE chat_poll_votes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                message_id INTEGER NOT NULL REFERENCES chat_messages(id) ON DELETE CASCADE,
+                option_id INTEGER NOT NULL REFERENCES chat_poll_options(id) ON DELETE CASCADE,
+                user_id INTEGER NOT NULL REFERENCES users(id),
+                created_at DATETIME,
+                CONSTRAINT uq_chat_poll_vote_message_option_user UNIQUE (message_id, option_id, user_id)
+            )
+        """))
+        await conn.execute(text(
+            "INSERT INTO chat_poll_votes (id, message_id, option_id, user_id, created_at) "
+            "SELECT id, message_id, option_id, user_id, created_at FROM chat_poll_votes_old"
+        ))
+        await conn.execute(text("DROP TABLE chat_poll_votes_old"))
 
     # Migrate legacy users.push_subscription into push_subscriptions table
     try:

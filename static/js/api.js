@@ -127,4 +127,6 @@ const API = {
   markChatRead:         (id)        => API.post(`/chat/conversations/${id}/read`),
   voteChatPoll:         (convId, msgId, optionId) => API.post(`/chat/conversations/${convId}/messages/${msgId}/vote`, { option_id: optionId }),
   setChatMute:          (id, muted) => API.post(`/chat/conversations/${id}/mute`, { muted }),
+  reactChatMessage:     (convId, msgId, emoji) => API.post(`/chat/conversations/${convId}/messages/${msgId}/react`, { emoji }),
+  uploadChatFile:       (convId, form) => API.upload(`/chat/conversations/${convId}/upload`, form),
 };

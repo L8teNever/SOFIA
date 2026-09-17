@@ -93,7 +93,25 @@
 
         <div style="height:1px;background:rgba(0,0,0,0.06);margin:14px 0;"></div>
 
-        <!-- 3. Speiseplan -->
+        <!-- 3. Chat -->
+        <div style="margin-bottom:18px;">
+          <div style="display:flex;align-items:center;gap:8px;font-weight:700;color:var(--m3-prim);font-size:0.92rem;margin-bottom:10px;">
+            <i data-lucide="message-circle" style="width:18px;height:18px;"></i>
+            Chat
+          </div>
+
+          <div style="display:flex;align-items:center;justify-content:space-between;padding-left:4px;">
+            <div>
+              <div style="font-size:0.86rem;font-weight:600;">Bei neuer Nachricht</div>
+              <div style="font-size:0.76rem;opacity:0.6;">Sofortige Benachrichtigung, außer in stummgeschalteten Chats</div>
+            </div>
+            <div class="m3-switch on" id="ns-chat-new" onclick="toggleNotifProp('chat_new', this)"></div>
+          </div>
+        </div>
+
+        <div style="height:1px;background:rgba(0,0,0,0.06);margin:14px 0;"></div>
+
+        <!-- 4. Speiseplan -->
         <div style="margin-bottom:18px;">
           <div style="display:flex;align-items:center;gap:8px;font-weight:700;color:var(--m3-prim);font-size:0.92rem;margin-bottom:10px;">
             <i data-lucide="utensils" style="width:18px;height:18px;"></i>
@@ -116,7 +134,7 @@
 
         <div style="height:1px;background:rgba(0,0,0,0.06);margin:14px 0;"></div>
 
-        <!-- 4. Stundenplan (WebUntis) -->
+        <!-- 5. Stundenplan (WebUntis) -->
         <div>
           <div style="display:flex;align-items:center;gap:8px;font-weight:700;color:var(--m3-prim);font-size:0.92rem;margin-bottom:4px;">
             <i data-lucide="clock" style="width:18px;height:18px;"></i>
@@ -333,6 +351,9 @@ async function loadNotificationSettings() {
   // Termine
   const evNew = document.getElementById('ns-event-new');
   if (evNew) evNew.classList.toggle('on', !!notifSettings.event_new);
+
+  const chatNew = document.getElementById('ns-chat-new');
+  if (chatNew) chatNew.classList.toggle('on', !!notifSettings.chat_new);
   renderReminderChips('event');
 
   // Speiseplan

@@ -226,6 +226,7 @@ class DriveTopicRename(BaseModel):
 class ChatParticipantOut(BaseModel):
     user_id: int
     display_name: str
+    avatar_url: Optional[str] = None
 
 class ChatConversationOut(BaseModel):
     id: int
@@ -253,20 +254,35 @@ class ChatPollOptionOut(BaseModel):
 class ChatPollOut(BaseModel):
     question: str
     options: List[ChatPollOptionOut]
-    my_vote: Optional[int] = None
+    my_votes: List[int] = []
+    allow_multiple: bool = False
     total_votes: int = 0
+
+class ChatReplyPreviewOut(BaseModel):
+    id: int
+    sender_name: str
+    msg_type: str
+    text: Optional[str] = None
+
+class ChatReactionOut(BaseModel):
+    emoji: str
+    count: int
+    reacted_by_me: bool = False
 
 class ChatMessageOut(BaseModel):
     id: int
     conversation_id: int
     sender_id: int
     sender_name: str
+    sender_avatar: Optional[str] = None
     msg_type: str
     text: Optional[str]
     file_name: Optional[str] = None
     file_size: Optional[int] = None
     mime_type: Optional[str] = None
     poll: Optional[ChatPollOut] = None
+    reply_to: Optional[ChatReplyPreviewOut] = None
+    reactions: List[ChatReactionOut] = []
     created_at: datetime
 
 class ChatMessageCreate(BaseModel):
@@ -277,6 +293,11 @@ class ChatMessageCreate(BaseModel):
     file_size: Optional[int] = None
     mime_type: Optional[str] = None
     poll_options: Optional[List[str]] = None
+    poll_multi: bool = False
+    reply_to_id: Optional[int] = None
+
+class ChatReactionCreate(BaseModel):
+    emoji: str
 
 class ChatVoteCreate(BaseModel):
     option_id: int
@@ -346,6 +367,7 @@ class NotificationSettingOut(BaseModel):
     homework_daily_time: str
     event_new: bool
     event_reminders: List[ReminderItem]
+    chat_new: bool
     meal_reminder_mode: str
     meal_reminder_time: str
     timetable_changes: bool
@@ -369,6 +391,7 @@ class NotificationSettingUpdate(BaseModel):
     homework_daily_time: Optional[str] = None
     event_new: Optional[bool] = None
     event_reminders: Optional[List[ReminderItem]] = None
+    chat_new: Optional[bool] = None
     meal_reminder_mode: Optional[str] = None
     meal_reminder_time: Optional[str] = None
     timetable_changes: Optional[bool] = None

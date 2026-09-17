@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File
+from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, func
 from backend.database import get_db
@@ -8,15 +9,20 @@ from backend.models.chat_participant import ChatParticipant
 from backend.models.chat_message import ChatMessage
 from backend.models.chat_poll_option import ChatPollOption
 from backend.models.chat_poll_vote import ChatPollVote
+from backend.models.chat_message_reaction import ChatMessageReaction
 from backend.models.user import User
 from backend.schemas import (
     ChatConversationOut, ChatConversationCreate, ChatParticipantOut, ChatMessageOut, ChatMessageCreate,
     ChatMuteUpdate, ChatPollOptionOut, ChatPollOut, ChatVoteCreate,
+    ChatReplyPreviewOut, ChatReactionOut, ChatReactionCreate,
 )
 from backend.routes.vapid import push_to_users
+from backend.services.notification_scheduler import get_user_settings
+from backend.config import settings
+from backend.services.virus_scanner import scan_file
 from datetime import datetime, timezone
 from typing import List, Optional
-import logging
+import logging, os, uuid, aiofiles
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +49,7 @@ async def _participants_out(db: AsyncSession, conversation_id: int) -> List[Chat
         select(User).join(ChatParticipant, ChatParticipant.user_id == User.id)
         .where(ChatParticipant.conversation_id == conversation_id)
     )
-    return [ChatParticipantOut(user_id=u.id, display_name=u.name) for u in result.scalars().all()]
+    return [ChatParticipantOut(user_id=u.id, display_name=u.name, avatar_url=u.avatar_url) for u in result.scalars().all()]
 
 async def _polls_out(db: AsyncSession, messages: List[ChatMessage], current_user: User) -> dict:
     """Builds poll data (options + vote counts + the requester's own vote)
@@ -64,11 +70,11 @@ async def _polls_out(db: AsyncSession, messages: List[ChatMessage], current_user
     votes_result = await db.execute(select(ChatPollVote).where(ChatPollVote.message_id.in_(poll_msg_ids)))
     votes = list(votes_result.scalars().all())
     counts: dict[int, int] = {}
-    my_votes: dict[int, int] = {}
+    my_votes: dict[int, list[int]] = {}
     for v in votes:
         counts[v.option_id] = counts.get(v.option_id, 0) + 1
         if v.user_id == current_user.id:
-            my_votes[v.message_id] = v.option_id
+            my_votes.setdefault(v.message_id, []).append(v.option_id)
 
     out = {}
     for msg in messages:
@@ -79,9 +85,58 @@ async def _polls_out(db: AsyncSession, messages: List[ChatMessage], current_user
         out[msg.id] = ChatPollOut(
             question=msg.text or "",
             options=[ChatPollOptionOut(id=o.id, option_text=o.option_text, vote_count=counts.get(o.id, 0)) for o in opts],
-            my_vote=my_votes.get(msg.id),
+            my_votes=my_votes.get(msg.id, []),
+            allow_multiple=bool(msg.poll_multi),
             total_votes=total,
         )
+    return out
+
+async def _reply_previews_out(db: AsyncSession, messages: List[ChatMessage]) -> dict:
+    """A small quoted preview of whatever message each of these is replying
+    to (if any) — batched the same way _polls_out is, one query for the
+    whole page of messages instead of one per reply."""
+    reply_ids = {m.reply_to_id for m in messages if m.reply_to_id}
+    if not reply_ids:
+        return {}
+    result = await db.execute(select(ChatMessage).where(ChatMessage.id.in_(reply_ids)))
+    originals = {m.id: m for m in result.scalars().all()}
+    sender_ids = {m.sender_id for m in originals.values()}
+    senders = {}
+    if sender_ids:
+        sres = await db.execute(select(User).where(User.id.in_(sender_ids)))
+        senders = {u.id: u.name for u in sres.scalars().all()}
+
+    out = {}
+    for m in messages:
+        if not m.reply_to_id or m.reply_to_id not in originals:
+            continue
+        orig = originals[m.reply_to_id]
+        out[m.id] = ChatReplyPreviewOut(
+            id=orig.id, sender_name=senders.get(orig.sender_id, "?"), msg_type=orig.msg_type, text=orig.text,
+        )
+    return out
+
+async def _reactions_out(db: AsyncSession, messages: List[ChatMessage], current_user: User) -> dict:
+    """Reactions grouped by (message, emoji) with a count and whether the
+    requester is among them — same batched-in-one-query shape as polls."""
+    msg_ids = [m.id for m in messages]
+    if not msg_ids:
+        return {}
+    result = await db.execute(select(ChatMessageReaction).where(ChatMessageReaction.message_id.in_(msg_ids)))
+    reactions = list(result.scalars().all())
+
+    grouped: dict[tuple, dict] = {}
+    for r in reactions:
+        key = (r.message_id, r.emoji)
+        if key not in grouped:
+            grouped[key] = {"count": 0, "mine": False}
+        grouped[key]["count"] += 1
+        if r.user_id == current_user.id:
+            grouped[key]["mine"] = True
+
+    out: dict[int, list] = {}
+    for (msg_id, emoji), data in grouped.items():
+        out.setdefault(msg_id, []).append(ChatReactionOut(emoji=emoji, count=data["count"], reacted_by_me=data["mine"]))
     return out
 
 @router.get("/conversations", response_model=List[ChatConversationOut])
@@ -199,16 +254,21 @@ async def list_messages(conversation_id: int, before: Optional[int] = None, db: 
     senders = {}
     if sender_ids:
         sender_result = await db.execute(select(User).where(User.id.in_(sender_ids)))
-        senders = {u.id: u.name for u in sender_result.scalars().all()}
+        senders = {u.id: u for u in sender_result.scalars().all()}
 
     polls = await _polls_out(db, messages, current_user)
+    reply_previews = await _reply_previews_out(db, messages)
+    reactions = await _reactions_out(db, messages, current_user)
 
     return [
         ChatMessageOut(
             id=m.id, conversation_id=m.conversation_id, sender_id=m.sender_id,
-            sender_name=senders.get(m.sender_id, "?"), msg_type=m.msg_type, text=m.text,
+            sender_name=senders[m.sender_id].name if m.sender_id in senders else "?",
+            sender_avatar=senders[m.sender_id].avatar_url if m.sender_id in senders else None,
+            msg_type=m.msg_type, text=m.text,
             file_name=m.file_name, file_size=m.file_size, mime_type=m.mime_type,
-            poll=polls.get(m.id), created_at=m.created_at,
+            poll=polls.get(m.id), reply_to=reply_previews.get(m.id), reactions=reactions.get(m.id, []),
+            created_at=m.created_at,
         ) for m in messages
     ]
 
@@ -227,10 +287,19 @@ async def send_message(conversation_id: int, data: ChatMessageCreate, db: AsyncS
     elif data.msg_type not in ("text", "poll") and not data.storage_filename:
         raise HTTPException(400, "Datei fehlt")
 
+    reply_to_id = None
+    if data.reply_to_id:
+        orig_result = await db.execute(select(ChatMessage).where(
+            ChatMessage.id == data.reply_to_id, ChatMessage.conversation_id == conversation_id,
+        ))
+        if orig_result.scalar_one_or_none():
+            reply_to_id = data.reply_to_id
+
     msg = ChatMessage(
         conversation_id=conversation_id, sender_id=current_user.id, msg_type=data.msg_type,
         text=data.text, storage_filename=data.storage_filename, file_name=data.file_name,
-        file_size=data.file_size, mime_type=data.mime_type,
+        file_size=data.file_size, mime_type=data.mime_type, reply_to_id=reply_to_id,
+        poll_multi=data.poll_multi if data.msg_type == "poll" else False,
     )
     db.add(msg)
     await db.flush()
@@ -244,7 +313,7 @@ async def send_message(conversation_id: int, data: ChatMessageCreate, db: AsyncS
         poll_out = ChatPollOut(
             question=msg.text or "",
             options=[ChatPollOptionOut(id=o.id, option_text=o.option_text, vote_count=0) for o in opt_rows],
-            my_vote=None, total_votes=0,
+            my_votes=[], allow_multiple=data.poll_multi, total_votes=0,
         )
 
     await db.commit()
@@ -263,7 +332,13 @@ async def send_message(conversation_id: int, data: ChatMessageCreate, db: AsyncS
         select(User, ChatParticipant.is_muted).join(ChatParticipant, ChatParticipant.user_id == User.id)
         .where(ChatParticipant.conversation_id == conversation_id, ChatParticipant.user_id != current_user.id)
     )
-    unmuted_others = [u for u, muted in others_result.all() if not muted]
+    unmuted_others = []
+    for u, muted in others_result.all():
+        if muted:
+            continue
+        ns = await get_user_settings(db, u.id)
+        if ns.enabled and ns.chat_new:
+            unmuted_others.append(u)
     if unmuted_others:
         preview = data.text if data.msg_type == "text" else {
             "image": "📷 Bild", "file": "📎 Datei", "voice": "🎤 Sprachnachricht", "poll": "📊 Umfrage: " + (data.text or ""),
@@ -273,11 +348,17 @@ async def send_message(conversation_id: int, data: ChatMessageCreate, db: AsyncS
         except Exception as e:
             logger.warning("Chat push notification failed: %s", e)
 
+    reply_out = None
+    if msg.reply_to_id:
+        previews = await _reply_previews_out(db, [msg])
+        reply_out = previews.get(msg.id)
+
     return ChatMessageOut(
         id=msg.id, conversation_id=msg.conversation_id, sender_id=msg.sender_id,
-        sender_name=current_user.name, msg_type=msg.msg_type, text=msg.text,
+        sender_name=current_user.name, sender_avatar=current_user.avatar_url,
+        msg_type=msg.msg_type, text=msg.text,
         file_name=msg.file_name, file_size=msg.file_size, mime_type=msg.mime_type,
-        poll=poll_out, created_at=msg.created_at,
+        poll=poll_out, reply_to=reply_out, created_at=msg.created_at,
     )
 
 @router.post("/conversations/{conversation_id}/messages/{message_id}/vote", response_model=ChatPollOut)
@@ -297,12 +378,26 @@ async def vote_poll(conversation_id: int, message_id: int, data: ChatVoteCreate,
     if not opt_result.scalar_one_or_none():
         raise HTTPException(400, "Ungültige Option")
 
-    # Single-choice: replace any existing vote by this user on this poll
-    # rather than adding a second one.
-    await db.execute(
-        ChatPollVote.__table__.delete().where(ChatPollVote.message_id == message_id, ChatPollVote.user_id == current_user.id)
-    )
-    db.add(ChatPollVote(message_id=message_id, option_id=data.option_id, user_id=current_user.id))
+    if msg.poll_multi:
+        # Multi-choice: tapping an option toggles just that one — add it if
+        # not yet selected, remove it if it already was — leaving the
+        # user's other selections on this poll untouched.
+        existing_result = await db.execute(select(ChatPollVote).where(
+            ChatPollVote.message_id == message_id, ChatPollVote.option_id == data.option_id,
+            ChatPollVote.user_id == current_user.id,
+        ))
+        existing = existing_result.scalar_one_or_none()
+        if existing:
+            await db.delete(existing)
+        else:
+            db.add(ChatPollVote(message_id=message_id, option_id=data.option_id, user_id=current_user.id))
+    else:
+        # Single-choice: replace any existing vote by this user on this poll
+        # rather than adding a second one.
+        await db.execute(
+            ChatPollVote.__table__.delete().where(ChatPollVote.message_id == message_id, ChatPollVote.user_id == current_user.id)
+        )
+        db.add(ChatPollVote(message_id=message_id, option_id=data.option_id, user_id=current_user.id))
     await db.commit()
 
     polls = await _polls_out(db, [msg], current_user)
@@ -332,3 +427,83 @@ async def set_mute(conversation_id: int, data: ChatMuteUpdate, db: AsyncSession 
     )
     await db.commit()
     return {"ok": True, "muted": data.muted}
+
+@router.post("/conversations/{conversation_id}/messages/{message_id}/react", response_model=List[ChatReactionOut])
+async def react_to_message(conversation_id: int, message_id: int, data: ChatReactionCreate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Single reaction per user per message — tapping the same emoji again
+    removes it (toggle off), tapping a different one swaps it, same
+    single-choice pattern the poll vote already uses."""
+    await _require_participant(db, conversation_id, current_user)
+
+    msg_result = await db.execute(select(ChatMessage).where(
+        ChatMessage.id == message_id, ChatMessage.conversation_id == conversation_id,
+    ))
+    msg = msg_result.scalar_one_or_none()
+    if not msg:
+        raise HTTPException(404)
+
+    existing_result = await db.execute(select(ChatMessageReaction).where(
+        ChatMessageReaction.message_id == message_id, ChatMessageReaction.user_id == current_user.id,
+    ))
+    existing = existing_result.scalar_one_or_none()
+
+    if existing and existing.emoji == data.emoji:
+        await db.delete(existing)
+    elif existing:
+        existing.emoji = data.emoji
+    else:
+        db.add(ChatMessageReaction(message_id=message_id, user_id=current_user.id, emoji=data.emoji))
+    await db.commit()
+
+    reactions = await _reactions_out(db, [msg], current_user)
+    return reactions.get(message_id, [])
+
+CHAT_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"}
+
+def _chat_ext(name: str) -> str:
+    return os.path.splitext(name or "")[1].lower()
+
+@router.post("/conversations/{conversation_id}/upload")
+async def upload_chat_file(conversation_id: int, file: UploadFile = File(...), db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Uploads immediately, before the message itself is sent — the client
+    references the returned storage_filename in a follow-up POST .../messages
+    call, same two-step flow homework's solution attachments and Drive
+    already use."""
+    await _require_participant(db, conversation_id, current_user)
+
+    content = await file.read()
+    if len(content) > settings.max_file_size:
+        raise HTTPException(413, "Datei zu groß (max. 1 GB)")
+    await scan_file(content, file.filename or "unknown", file.content_type)
+
+    ext = _chat_ext(file.filename or "")
+    storage_filename = f"{uuid.uuid4().hex}{ext}"
+    os.makedirs(settings.chat_storage_dir, exist_ok=True)
+    dest = os.path.join(settings.chat_storage_dir, storage_filename)
+    async with aiofiles.open(dest, "wb") as out:
+        await out.write(content)
+
+    is_image = ext in CHAT_IMAGE_EXTS or (file.content_type or "").startswith("image/")
+    return {
+        "storage_filename": storage_filename,
+        "file_name": file.filename or "Datei",
+        "file_size": len(content),
+        "mime_type": file.content_type,
+        "msg_type": "image" if is_image else "file",
+    }
+
+@router.get("/conversations/{conversation_id}/messages/{message_id}/file")
+async def get_chat_file(conversation_id: int, message_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    await _require_participant(db, conversation_id, current_user)
+    msg_result = await db.execute(select(ChatMessage).where(
+        ChatMessage.id == message_id, ChatMessage.conversation_id == conversation_id,
+    ))
+    msg = msg_result.scalar_one_or_none()
+    if not msg or not msg.storage_filename:
+        raise HTTPException(404)
+    path = os.path.join(settings.chat_storage_dir, msg.storage_filename)
+    if not os.path.exists(path):
+        raise HTTPException(404)
+    if msg.msg_type == "file":
+        return FileResponse(path, filename=msg.file_name, media_type=msg.mime_type or "application/octet-stream")
+    return FileResponse(path, media_type=msg.mime_type or "application/octet-stream", content_disposition_type="inline")
