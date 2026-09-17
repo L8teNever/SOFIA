@@ -27,6 +27,7 @@
       </button>
     </div>
     <input type="file" id="chat-file-input" style="display:none;" onchange="handleChatFileSelect(this.files[0])">
+    <input type="file" id="chat-camera-input" accept="image/*" capture="environment" style="display:none;" onchange="handleChatCameraSelect(this.files[0])">
     <div id="chat-compose-row" style="display:flex;gap:8px;align-items:flex-end;padding:10px 14px calc(10px + env(safe-area-inset-bottom));background:#fff;border-top:1px solid rgba(0,0,0,0.06);flex-shrink:0;">
       <button onclick="toggleChatAttachMenu(this)" title="Anhang hinzufügen" style="width:42px;height:42px;border-radius:50%;background:#f3edf7;color:#6750a4;border:none;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;">
         <i data-lucide="plus" style="width:20px;height:20px;"></i>
@@ -790,6 +791,7 @@ function initChatGestureHandlers() {
 
 function toggleChatAttachMenu(btn) {
   toggleMoreMenu(btn, [
+    { icon: 'camera', label: 'Kamera', onclick: () => triggerChatCamera() },
     { icon: 'image', label: 'Bild', onclick: () => triggerChatFilePicker('image/*') },
     { icon: 'file', label: 'Datei', onclick: () => triggerChatFilePicker('') },
     { icon: 'sticker', label: 'GIF', onclick: () => openChatGifPicker() },
@@ -863,6 +865,21 @@ async function sendChatGif(url) {
   } catch {
     showToast('GIF konnte nicht gesendet werden');
   }
+}
+
+function triggerChatCamera() {
+  const input = document.getElementById('chat-camera-input');
+  if (input) {
+    input.value = '';
+    input.click();
+  }
+}
+
+async function handleChatCameraSelect(file) {
+  const input = document.getElementById('chat-camera-input');
+  if (!file || !chatCurrentConversationId) { if (input) input.value = ''; return; }
+  await uploadAndSendChatFile(file, 'image');
+  if (input) input.value = '';
 }
 
 function triggerChatFilePicker(accept) {
