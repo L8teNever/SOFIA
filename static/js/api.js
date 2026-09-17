@@ -120,4 +120,9 @@ const API = {
   storageStats:  ()       => API.get('/admin/storage-stats'),
   cleanupMealplans: ()    => API.post('/admin/cleanup-mealplans'),
   auditLogs:     (p)      => API.get('/admin/audit-logs' + (p ? `?${new URLSearchParams(p)}` : '')),
+  chatConversations:    ()          => API.get('/chat/conversations'),
+  createChatConversation: (d)       => API.post('/chat/conversations', d),
+  chatMessages:         (id, before) => API.get(`/chat/conversations/${id}/messages` + (before ? `?before=${before}` : '')),
+  sendChatMessage:      (id, d)     => API.post(`/chat/conversations/${id}/messages`, d),
+  markChatRead:         (id)        => API.post(`/chat/conversations/${id}/read`),
 };

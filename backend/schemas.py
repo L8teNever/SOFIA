@@ -222,6 +222,45 @@ class DriveTopicCreate(BaseModel):
 class DriveTopicRename(BaseModel):
     name: str
 
+# Chat
+class ChatParticipantOut(BaseModel):
+    user_id: int
+    display_name: str
+
+class ChatConversationOut(BaseModel):
+    id: int
+    is_group: bool
+    name: Optional[str]
+    participants: List[ChatParticipantOut]
+    last_message: Optional[str] = None
+    last_message_at: Optional[datetime] = None
+    unread_count: int = 0
+
+class ChatConversationCreate(BaseModel):
+    participant_ids: List[int]
+    is_group: bool = False
+    name: Optional[str] = None
+
+class ChatMessageOut(BaseModel):
+    id: int
+    conversation_id: int
+    sender_id: int
+    sender_name: str
+    msg_type: str
+    text: Optional[str]
+    file_name: Optional[str] = None
+    file_size: Optional[int] = None
+    mime_type: Optional[str] = None
+    created_at: datetime
+
+class ChatMessageCreate(BaseModel):
+    msg_type: str = "text"
+    text: Optional[str] = None
+    storage_filename: Optional[str] = None
+    file_name: Optional[str] = None
+    file_size: Optional[int] = None
+    mime_type: Optional[str] = None
+
 # Google Sync
 class GoogleStatusOut(BaseModel):
     configured: bool

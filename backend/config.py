@@ -145,6 +145,13 @@ class Settings:
     # _data_dir()) since that volume is already persisted but never mounted
     # as a static route anywhere.
     drive_storage_dir: str           = os.getenv("DRIVE_STORAGE_DIR", os.path.join(_data_dir(), "drive_files"))
+    # Same reasoning as drive_storage_dir above — chat attachments (images,
+    # files, voice notes) must only ever be reachable through the
+    # participant-checked routes in backend/routes/chat.py, never a public
+    # static mount. Note: uploads/chat/ already exists on disk as an unused
+    # leftover directory — deliberately not reused, since it sits under the
+    # publicly-mounted upload_dir.
+    chat_storage_dir:  str           = os.getenv("CHAT_STORAGE_DIR", os.path.join(_data_dir(), "chat_files"))
     max_file_size:     int           = int(os.getenv("MAX_FILE_SIZE", "1073741824"))  # 1 GB
     dev_email:         Optional[str] = os.getenv("DEV_EMAIL")
     gemini_api_key:    str           = os.getenv("GEMINI_API_KEY", "")
