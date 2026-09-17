@@ -280,6 +280,7 @@ class ChatMessageOut(BaseModel):
     file_name: Optional[str] = None
     file_size: Optional[int] = None
     mime_type: Optional[str] = None
+    external_url: Optional[str] = None
     poll: Optional[ChatPollOut] = None
     reply_to: Optional[ChatReplyPreviewOut] = None
     reactions: List[ChatReactionOut] = []
@@ -292,6 +293,7 @@ class ChatMessageCreate(BaseModel):
     file_name: Optional[str] = None
     file_size: Optional[int] = None
     mime_type: Optional[str] = None
+    external_url: Optional[str] = None
     poll_options: Optional[List[str]] = None
     poll_multi: bool = False
     reply_to_id: Optional[int] = None

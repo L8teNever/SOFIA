@@ -129,4 +129,5 @@ const API = {
   setChatMute:          (id, muted) => API.post(`/chat/conversations/${id}/mute`, { muted }),
   reactChatMessage:     (convId, msgId, emoji) => API.post(`/chat/conversations/${convId}/messages/${msgId}/react`, { emoji }),
   uploadChatFile:       (convId, form) => API.upload(`/chat/conversations/${convId}/upload`, form),
+  searchChatGifs:       (q) => API.get(`/chat/gifs?q=${encodeURIComponent(q || '')}`),
 };

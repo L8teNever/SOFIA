@@ -22,4 +22,8 @@ class ChatMessage(Base):
     mime_type = Column(String, nullable=True)
     reply_to_id = Column(Integer, ForeignKey("chat_messages.id", ondelete="SET NULL"), nullable=True)
     poll_multi = Column(Boolean, default=False, nullable=False)
+    # A GIF picked from Tenor lives on Tenor's CDN — external_url points
+    # straight at it instead of storage_filename, so we never download and
+    # re-host something that's already meant to be publicly embeddable.
+    external_url = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

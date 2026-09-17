@@ -384,7 +384,11 @@ function chatFileUrl(m) {
 function renderChatMessageBody(m) {
   if (m.msg_type === 'poll') return renderChatPollBubble(m);
   if (m.msg_type === 'image') {
-    return `<img src="${chatFileUrl(m)}" style="max-width:220px;max-height:280px;border-radius:10px;display:block;cursor:pointer;" onclick="window.open('${chatFileUrl(m)}','_blank')">`;
+    // A GIF picked from the Tenor library streams straight from Tenor's CDN
+    // (external_url) instead of our own file-serving endpoint — nothing to
+    // download/re-host for something already meant to be publicly embedded.
+    const src = m.external_url || chatFileUrl(m);
+    return `<img src="${src}" style="max-width:220px;max-height:280px;border-radius:10px;display:block;cursor:pointer;" onclick="window.open('${src}','_blank')">`;
   }
   if (m.msg_type === 'file') {
     return `<a href="${chatFileUrl(m)}" download="${escapeHtml(m.file_name || '')}" style="display:flex;align-items:center;gap:8px;text-decoration:none;color:inherit;min-width:140px;">
@@ -659,14 +663,68 @@ function toggleChatAttachMenu(btn) {
   toggleMoreMenu(btn, [
     { icon: 'image', label: 'Bild', onclick: () => triggerChatFilePicker('image/*') },
     { icon: 'file', label: 'Datei', onclick: () => triggerChatFilePicker('') },
-    // A GIF is just an animated image file — there's no searchable GIF
-    // library here (that needs a Tenor/Giphy API key someone has to get
-    // themselves, same situation as the Google OAuth credentials earlier),
-    // so "sending a GIF" means picking a .gif from the device, which then
-    // plays back normally since it's stored/served like any other image.
-    { icon: 'sticker', label: 'GIF', onclick: () => triggerChatFilePicker('image/gif') },
+    { icon: 'sticker', label: 'GIF', onclick: () => openChatGifPicker() },
     { icon: 'bar-chart-2', label: 'Umfrage erstellen', onclick: () => openNewPollSheet() },
   ]);
+}
+
+// --- GIF picker (Tenor) ---
+
+let chatGifSearchDebounce = null;
+
+function openChatGifPicker() {
+  openSheet(`
+    <div style="padding:4px;">
+      <div style="font-weight:700;font-size:1.05rem;margin-bottom:12px;">GIF senden</div>
+      <input type="text" class="m3-input" id="chat-gif-search" placeholder="GIFs durchsuchen…" style="margin-bottom:12px;" oninput="chatGifSearchInput()">
+      <div id="chat-gif-results" style="max-height:55vh;overflow-y:auto;display:grid;grid-template-columns:repeat(2,1fr);gap:8px;"></div>
+    </div>
+  `);
+  loadChatGifs('');
+  setTimeout(() => document.getElementById('chat-gif-search')?.focus(), 150);
+}
+
+function chatGifSearchInput() {
+  clearTimeout(chatGifSearchDebounce);
+  const q = document.getElementById('chat-gif-search').value;
+  chatGifSearchDebounce = setTimeout(() => loadChatGifs(q), 350);
+}
+
+async function loadChatGifs(q) {
+  const grid = document.getElementById('chat-gif-results');
+  if (!grid) return;
+  grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;opacity:0.5;padding:30px 10px;">Lädt…</div>';
+  try {
+    const data = await API.searchChatGifs(q);
+    if (!document.getElementById('chat-gif-results')) return; // sheet closed while awaiting
+    if (!data.results.length) {
+      grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;opacity:0.5;padding:30px 10px;">Keine GIFs gefunden.</div>';
+      return;
+    }
+    grid.innerHTML = data.results.map(g => `
+      <img src="${g.preview_url}" loading="lazy" style="width:100%;border-radius:10px;cursor:pointer;aspect-ratio:${g.width && g.height ? g.width + '/' + g.height : '1/1'};object-fit:cover;background:rgba(0,0,0,0.06);" onclick="sendChatGif('${g.gif_url.replace(/'/g, "\\'")}')">
+    `).join('');
+  } catch (e) {
+    if (!document.getElementById('chat-gif-results')) return;
+    grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;opacity:0.6;padding:30px 10px;font-size:0.85rem;">${e.status === 503 ? 'GIF-Suche ist noch nicht eingerichtet.' : 'GIFs konnten nicht geladen werden.'}</div>`;
+  }
+}
+
+async function sendChatGif(url) {
+  closeSheet();
+  if (!chatCurrentConversationId) return;
+  try {
+    const msg = await API.sendChatMessage(chatCurrentConversationId, {
+      msg_type: 'image', external_url: url, reply_to_id: chatReplyTo?.id || null,
+    });
+    chatMessages.push(msg);
+    renderChatMessages();
+    cancelChatReply();
+    const conv = chatConversations.find(c => c.id === chatCurrentConversationId);
+    if (conv) { conv.last_message = chatMessagePreviewText(msg); conv.last_message_at = msg.created_at; }
+  } catch {
+    showToast('GIF konnte nicht gesendet werden');
+  }
 }
 
 function triggerChatFilePicker(accept) {

@@ -22,7 +22,7 @@ from backend.config import settings
 from backend.services.virus_scanner import scan_file
 from datetime import datetime, timezone
 from typing import List, Optional
-import logging, os, uuid, aiofiles
+import logging, os, uuid, aiofiles, httpx
 
 logger = logging.getLogger(__name__)
 
@@ -266,7 +266,7 @@ async def list_messages(conversation_id: int, before: Optional[int] = None, db: 
             sender_name=senders[m.sender_id].name if m.sender_id in senders else "?",
             sender_avatar=senders[m.sender_id].avatar_url if m.sender_id in senders else None,
             msg_type=m.msg_type, text=m.text,
-            file_name=m.file_name, file_size=m.file_size, mime_type=m.mime_type,
+            file_name=m.file_name, file_size=m.file_size, mime_type=m.mime_type, external_url=m.external_url,
             poll=polls.get(m.id), reply_to=reply_previews.get(m.id), reactions=reactions.get(m.id, []),
             created_at=m.created_at,
         ) for m in messages
@@ -284,7 +284,7 @@ async def send_message(conversation_id: int, data: ChatMessageCreate, db: AsyncS
             raise HTTPException(400, "Frage darf nicht leer sein")
         if len(options) < 2:
             raise HTTPException(400, "Mindestens 2 Antwortmöglichkeiten angeben")
-    elif data.msg_type not in ("text", "poll") and not data.storage_filename:
+    elif data.msg_type not in ("text", "poll") and not data.storage_filename and not data.external_url:
         raise HTTPException(400, "Datei fehlt")
 
     reply_to_id = None
@@ -300,6 +300,7 @@ async def send_message(conversation_id: int, data: ChatMessageCreate, db: AsyncS
         text=data.text, storage_filename=data.storage_filename, file_name=data.file_name,
         file_size=data.file_size, mime_type=data.mime_type, reply_to_id=reply_to_id,
         poll_multi=data.poll_multi if data.msg_type == "poll" else False,
+        external_url=data.external_url,
     )
     db.add(msg)
     await db.flush()
@@ -360,7 +361,7 @@ async def send_message(conversation_id: int, data: ChatMessageCreate, db: AsyncS
         id=msg.id, conversation_id=msg.conversation_id, sender_id=msg.sender_id,
         sender_name=current_user.name, sender_avatar=current_user.avatar_url,
         msg_type=msg.msg_type, text=msg.text,
-        file_name=msg.file_name, file_size=msg.file_size, mime_type=msg.mime_type,
+        file_name=msg.file_name, file_size=msg.file_size, mime_type=msg.mime_type, external_url=msg.external_url,
         poll=poll_out, reply_to=reply_out, created_at=msg.created_at,
     )
 
@@ -494,6 +495,51 @@ async def upload_chat_file(conversation_id: int, file: UploadFile = File(...), d
         "mime_type": file.content_type,
         "msg_type": "image" if is_image else "file",
     }
+
+@router.get("/gifs")
+async def search_gifs(q: str = "", current_user: User = Depends(get_current_user)):
+    """Proxies Tenor so the API key never reaches the client — not
+    conversation-scoped (no _require_participant) since browsing GIFs isn't
+    conversation-specific, only actually sending one is (that still goes
+    through the normal participant-checked POST .../messages). Empty q
+    returns Tenor's trending feed instead of a search."""
+    if not settings.tenor_api_key:
+        raise HTTPException(503, "GIF-Suche nicht konfiguriert")
+
+    q = q.strip()
+    base = "https://tenor.googleapis.com/v2/search" if q else "https://tenor.googleapis.com/v2/featured"
+    params = {
+        "key": settings.tenor_api_key, "client_key": "sofia-chat",
+        "limit": 24, "media_filter": "gif,tinygif", "contentfilter": "high",
+    }
+    if q:
+        params["q"] = q
+
+    try:
+        async with httpx.AsyncClient(timeout=8) as client:
+            resp = await client.get(base, params=params)
+            resp.raise_for_status()
+            data = resp.json()
+    except Exception as e:
+        logger.warning("Tenor request failed: %s", e)
+        raise HTTPException(502, "GIF-Suche momentan nicht erreichbar")
+
+    results = []
+    for item in data.get("results", []):
+        media = item.get("media_formats", {})
+        gif = media.get("gif") or {}
+        tiny = media.get("tinygif") or gif
+        if not gif.get("url"):
+            continue
+        dims = gif.get("dims") or [0, 0]
+        results.append({
+            "id": item.get("id"),
+            "preview_url": tiny.get("url"),
+            "gif_url": gif.get("url"),
+            "width": dims[0] if len(dims) > 0 else 0,
+            "height": dims[1] if len(dims) > 1 else 0,
+        })
+    return {"results": results}
 
 @router.get("/conversations/{conversation_id}/messages/{message_id}/file")
 async def get_chat_file(conversation_id: int, message_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):

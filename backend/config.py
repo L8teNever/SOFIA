@@ -156,6 +156,11 @@ class Settings:
     dev_email:         Optional[str] = os.getenv("DEV_EMAIL")
     gemini_api_key:    str           = os.getenv("GEMINI_API_KEY", "")
     gemini_model:      str           = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
+    # Chat's GIF picker (Tenor). Must come from a free Google Cloud Console
+    # API key a human creates — no way to self-generate one. The route
+    # checks for an empty string and reports "not configured" rather than
+    # failing, same convention as the Gemini/Google-OAuth keys above.
+    tenor_api_key:     str           = os.getenv("TENOR_API_KEY", "")
     # Google OAuth ("Google Sync": push calendar events / homework to each
     # user's own Google Calendar & Tasks). Must come from a Google Cloud
     # Console project a human sets up — there's no way to self-generate a

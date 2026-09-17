@@ -124,6 +124,8 @@ async def _migrate_columns(conn):
         await conn.execute(text("ALTER TABLE chat_messages ADD COLUMN reply_to_id INTEGER"))
     if "poll_multi" not in existing_cm:
         await conn.execute(text("ALTER TABLE chat_messages ADD COLUMN poll_multi BOOLEAN DEFAULT 0"))
+    if "external_url" not in existing_cm:
+        await conn.execute(text("ALTER TABLE chat_messages ADD COLUMN external_url TEXT"))
 
     result_ns = await conn.execute(text("PRAGMA table_info(user_notification_settings)"))
     existing_ns = {row[1] for row in result_ns.fetchall()}
