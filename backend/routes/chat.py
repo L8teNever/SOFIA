@@ -498,20 +498,17 @@ async def upload_chat_file(conversation_id: int, file: UploadFile = File(...), d
 
 @router.get("/gifs")
 async def search_gifs(q: str = "", current_user: User = Depends(get_current_user)):
-    """Proxies Tenor so the API key never reaches the client — not
+    """Proxies GIPHY so the API key never reaches the client — not
     conversation-scoped (no _require_participant) since browsing GIFs isn't
     conversation-specific, only actually sending one is (that still goes
     through the normal participant-checked POST .../messages). Empty q
-    returns Tenor's trending feed instead of a search."""
-    if not settings.tenor_api_key:
+    returns GIPHY's trending feed instead of a search."""
+    if not settings.giphy_api_key:
         raise HTTPException(503, "GIF-Suche nicht konfiguriert")
 
     q = q.strip()
-    base = "https://tenor.googleapis.com/v2/search" if q else "https://tenor.googleapis.com/v2/featured"
-    params = {
-        "key": settings.tenor_api_key, "client_key": "sofia-chat",
-        "limit": 24, "media_filter": "gif,tinygif", "contentfilter": "high",
-    }
+    base = "https://api.giphy.com/v1/gifs/search" if q else "https://api.giphy.com/v1/gifs/trending"
+    params = {"api_key": settings.giphy_api_key, "limit": 24, "rating": "g"}
     if q:
         params["q"] = q
 
@@ -521,23 +518,22 @@ async def search_gifs(q: str = "", current_user: User = Depends(get_current_user
             resp.raise_for_status()
             data = resp.json()
     except Exception as e:
-        logger.warning("Tenor request failed: %s", e)
+        logger.warning("GIPHY request failed: %s", e)
         raise HTTPException(502, "GIF-Suche momentan nicht erreichbar")
 
     results = []
-    for item in data.get("results", []):
-        media = item.get("media_formats", {})
-        gif = media.get("gif") or {}
-        tiny = media.get("tinygif") or gif
-        if not gif.get("url"):
+    for item in data.get("data", []):
+        images = item.get("images", {})
+        preview = images.get("fixed_height") or {}
+        original = images.get("original") or preview
+        if not original.get("url"):
             continue
-        dims = gif.get("dims") or [0, 0]
         results.append({
             "id": item.get("id"),
-            "preview_url": tiny.get("url"),
-            "gif_url": gif.get("url"),
-            "width": dims[0] if len(dims) > 0 else 0,
-            "height": dims[1] if len(dims) > 1 else 0,
+            "preview_url": preview.get("url") or original.get("url"),
+            "gif_url": original.get("url"),
+            "width": int(preview.get("width") or 0),
+            "height": int(preview.get("height") or 0),
         })
     return {"results": results}
 
