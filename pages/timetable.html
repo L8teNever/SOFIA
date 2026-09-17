@@ -53,6 +53,12 @@ let ttLessons = [], ttColorMap = {}, ttMode = 'day';
 let ttDayOffset = 0, ttWeekOffset = 0;
 let ttHolidays = [];
 let ttNowLineInterval = null;
+// Freshly rebuilt on every render (day and week both) — a lesson block's
+// onclick references its index here rather than embedding the lesson's own
+// data inline, since some fields (subst_text, room names, ...) can contain
+// characters ("'" from an umlaut/name) that would otherwise need careful
+// escaping to survive inside an onclick="" attribute string.
+let ttModalLessons = [];
 
 // Returns the holiday covering date `dateStr` (YYYYMMDD), if any — start/end
 // from Untis are inclusive, so a plain string-range compare is enough.
@@ -257,6 +263,7 @@ function ttRenderDay() {
   const SINGLE_H = 68, GAP = 8;
   let html = '';
   let nowLineInserted = nowMin === null;
+  ttModalLessons = [];
   for (let i = 0; i < lessons.length; i++) {
     const l = lessons[i];
     const prev = i > 0 ? lessons[i-1] : null;
@@ -274,7 +281,11 @@ function ttRenderDay() {
 
     // Insert the "now" line right before the first lesson that hasn't
     // ended yet — everything above it in the list has already happened.
-    if (!nowLineInserted && nowMin < _toMin(l.startTime)) {
+    // Comparing against startTime here (instead of endTime, as the comment
+    // above always intended) made the line skip past whatever lesson was
+    // currently in progress and land one lesson too late — right after it
+    // instead of right before it.
+    if (!nowLineInserted && nowMin < _toMin(l.endTime)) {
       html += ttNowLineHtml(now);
       nowLineInserted = true;
     }
@@ -297,7 +308,8 @@ function ttRenderDay() {
     const roomChip = l.original_room
       ? '<span style="font-size:0.68rem;font-weight:700;background:#ffdec1;color:#7d3c00;padding:2px 7px;border-radius:8px;">'+l.original_room+' → '+(l.room||'–')+'</span>'
       : (l.room ? '<span style="font-size:0.68rem;font-weight:600;background:rgba(0,0,0,0.08);padding:2px 7px;border-radius:8px;">'+l.room+'</span>' : '');
-    html += '<div class="tt-block" style="'+fillStyle+'margin-bottom:'+GAP+'px;opacity:'+(lessonPast?.55:1)+';'+dblStyle+(l.cancelled?'border:1px dashed rgba(179,26,26,0.3);':'')+'">'
+    const modalIdx = ttModalLessons.push(l) - 1;
+    html += '<div class="tt-block" onclick="openTtLessonModal('+modalIdx+')" style="cursor:pointer;'+fillStyle+'margin-bottom:'+GAP+'px;opacity:'+(lessonPast?.55:1)+';'+dblStyle+(l.cancelled?'border:1px dashed rgba(179,26,26,0.3);':'')+'">'
       +'<div style="min-width:44px;text-align:center;">'
       +'<div style="font-size:0.72rem;font-weight:700;">'+_fmtTime(l.startTime)+'</div>'
       +'<div style="font-size:0.62rem;opacity:0.4;">–</div>'
@@ -373,6 +385,7 @@ function ttRenderWeek() {
       +(isHoliday?'<div style="font-size:0.6rem;font-weight:600;margin-top:1px;">🏖️ Ferien</div>':'')+'</div>';
   }).join('');
 
+  ttModalLessons = [];
   const colsHtml = days.map((d, di) => {
     const lessons = dayLessons[di];
     const dayPast = d < _today();
@@ -407,8 +420,9 @@ function ttRenderWeek() {
             : '<div style="font-size:0.54rem;opacity:0.45;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+l.room+'</div>')
         : '';
       const opacity = lessonPast ? 0.5 : 1;
+      const modalIdx = ttModalLessons.push(l) - 1;
 
-      return '<div style="position:absolute;top:'+top+'px;left:1px;right:1px;height:'+height+'px;'+fillStyle+borderStyle+'border-radius:8px;padding:4px 5px;overflow:hidden;opacity:'+opacity+';">'
+      return '<div onclick="openTtLessonModal('+modalIdx+')" style="cursor:pointer;position:absolute;top:'+top+'px;left:1px;right:1px;height:'+height+'px;'+fillStyle+borderStyle+'border-radius:8px;padding:4px 5px;overflow:hidden;opacity:'+opacity+';">'
         +'<div style="font-size:0.68rem;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;'+(l.cancelled?'text-decoration:line-through;color:#8a3a3a;':'')+'">'
           +(l.subject_short||l.subject||'–')
           +(l._double?' <span style="font-size:0.56rem;opacity:0.6;">2×</span>':'')
@@ -433,5 +447,49 @@ function ttRenderWeek() {
   }).join('');
 
   grid.innerHTML = headerHtml + axisHtml + colsHtml;
+}
+
+// Tapping any lesson block (day or week view, including a substituted or
+// cancelled one) opens this with the full detail — mainly worth it for the
+// week grid, whose compact blocks have no room to show subst_text or a
+// room change at all, and for a substitution's full replacement note in
+// the day view too (there it's only ever shown as one truncation-free but
+// still easy-to-miss line among several).
+function openTtLessonModal(idx) {
+  const l = ttModalLessons[idx];
+  if (!l) return;
+
+  const color = l.cancelled ? '#f7f3ef' : (ttColorMap[l.subject_short] || '#eaddff');
+  const badges = [
+    l._double    ? { label: '2× Doppelstunde', bg: 'rgba(0,0,0,0.08)', fg: '#442b00' } : null,
+    l.cancelled  ? { label: 'Ausfall', bg: '#f9dedc', fg: '#b3261e' } : null,
+    l.substituted? { label: 'Vertretung', bg: '#ffdec1', fg: '#7d3c00' } : null,
+  ].filter(Boolean);
+
+  const teacherRow = l.original_teacher
+    ? `<div style="display:flex;justify-content:space-between;gap:12px;"><span style="opacity:0.6;">Lehrkraft</span><b>${escapeHtml(l.original_teacher)} → ${escapeHtml(l.teacher||'–')}</b></div>`
+    : (l.teacher ? `<div style="display:flex;justify-content:space-between;gap:12px;"><span style="opacity:0.6;">Lehrkraft</span><b>${escapeHtml(l.teacher)}</b></div>` : '');
+  const roomRow = l.original_room
+    ? `<div style="display:flex;justify-content:space-between;gap:12px;"><span style="opacity:0.6;">Raum</span><b>${escapeHtml(l.original_room)} → ${escapeHtml(l.room||'–')}</b></div>`
+    : (l.room ? `<div style="display:flex;justify-content:space-between;gap:12px;"><span style="opacity:0.6;">Raum</span><b>${escapeHtml(l.room)}</b></div>` : '');
+
+  openModal(`
+    <div style="text-align:center;padding:4px 4px 14px;">
+      <div style="width:54px;height:54px;border-radius:16px;background:${color};display:flex;align-items:center;justify-content:center;margin:0 auto 14px;">
+        <i data-lucide="book-open" style="width:26px;height:26px;color:#442b00;"></i>
+      </div>
+      <div style="font-size:1.25rem;font-weight:800;color:#1c1b1f;${l.cancelled?'text-decoration:line-through;color:#8a3a3a;':''}">${escapeHtml(l.subject||'–')}</div>
+      <div style="opacity:0.6;font-size:0.85rem;margin-top:4px;">${_fmtTime(l.startTime)} – ${_fmtTime(l.endTime)} Uhr</div>
+      ${badges.length ? `<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:12px;">
+        ${badges.map(b => `<span style="background:${b.bg};color:${b.fg};padding:4px 10px;border-radius:8px;font-size:0.72rem;font-weight:700;">${b.label}</span>`).join('')}
+      </div>` : ''}
+    </div>
+    ${(teacherRow || roomRow) ? `<div style="background:#f7f3ef;border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;font-size:0.88rem;color:#1c1b1f;">
+      ${teacherRow}${roomRow}
+    </div>` : ''}
+    ${l.cancelled_subject ? `<div style="margin-top:14px;font-size:0.85rem;opacity:0.7;font-style:italic;">Ersetzt: ${escapeHtml(l.cancelled_subject)}</div>` : ''}
+    ${l.subst_text ? `<div style="margin-top:14px;font-size:0.85rem;color:#1c1b1f;line-height:1.4;">${escapeHtml(l.subst_text)}</div>` : ''}
+    <button class="m3-btn-full" style="margin-top:20px;" onclick="closeModal()">Schließen</button>
+  `);
 }
 </script>
