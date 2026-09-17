@@ -1330,8 +1330,13 @@ async function loadDashboard() {
       const preview = document.getElementById('w-chat-preview');
       const sub = document.getElementById('w-chat-preview-sub');
       if (preview && sub) {
-        const latest = convs[0]; // already sorted newest-first by the API
-        if (latest && latest.last_message) {
+        // convs[0] is no longer reliably "the latest actual conversation" —
+        // the API pins each user's own Notizen self-chat first regardless
+        // of recency, and it starts out (usually stays) empty, which made
+        // this widget show "Keine Nachrichten" on every dashboard visit
+        // even with real, recent chat activity elsewhere. Skip past it.
+        const latest = convs.find(c => !c.is_notes && c.last_message);
+        if (latest) {
           const title = latest.is_group ? latest.name : (latest.participants.find(p => !currentUser || p.user_id !== currentUser.id)?.display_name || '?');
           preview.textContent = latest.last_message;
           sub.textContent = title || '';
