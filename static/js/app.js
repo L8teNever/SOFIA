@@ -506,8 +506,12 @@ async function openPage(name, triggerEl, preserveUrl = false) {
   // misses and the page never actually fetches its data.
   const initFn = window['init_' + name.replace(/-/g, '_')];
   if (initFn) {
-    const result = initFn();
-    if (result && typeof result.then === 'function') await result;
+    try {
+      const result = initFn();
+      if (result && typeof result.then === 'function') await result;
+    } catch (err) {
+      console.error('initFn error for page ' + name, err);
+    }
   }
 
   // Force layout reflow so animation starts immediately
@@ -1568,67 +1572,101 @@ async function boot() {
   const didOnboard = await checkAndRunOnboarding();
   updateGreeting();
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js').then(function(reg) {
-      // If a new SW is already waiting right after registration (rare but possible)
-      if (reg.waiting) showUpdateBanner(reg.waiting);
+    let isRefreshing = false;
+    navigator.serviceWorker.addEventListener('controllerchange', function() {
+      if (isRefreshing) return;
+      isRefreshing = true;
+      window.location.reload();
+    });
 
-      // A new SW downloaded and installed — waiting for activation
+    navigator.serviceWorker.register('/sw.js').then(function(reg) {
+      if (reg.waiting && navigator.serviceWorker.controller) {
+        showUpdateBanner(reg.waiting);
+      }
+
       reg.addEventListener('updatefound', function() {
         const newSW = reg.installing;
         if (!newSW) return;
         newSW.addEventListener('statechange', function() {
           if (newSW.state === 'installed' && navigator.serviceWorker.controller) {
-            // New version waiting — show banner
             showUpdateBanner(newSW);
           }
         });
       });
 
-      // The browser only re-fetches sw.js on its own when the page navigates,
-      // so a tab left open for a while would never notice a new deploy until
-      // the user manually reloads. Poll for updates ourselves so the banner
-      // shows up while the app is still open, not just after a reload.
       setInterval(function() { reg.update().catch(function() {}); }, 60 * 1000);
       document.addEventListener('visibilitychange', function() {
-        if (document.visibilityState === 'visible') reg.update().catch(function() {});
+        if (document.visibilityState === 'visible') {
+          reg.update().catch(function() {});
+          if (typeof Push !== 'undefined' && typeof Push.autoSync === 'function') {
+            Push.autoSync();
+          }
+        }
       });
     }).catch(function() {});
 
-    // SW sends SW_UPDATED after it claims all clients → reload to get fresh assets
     navigator.serviceWorker.addEventListener('message', function(e) {
       if (e.data && e.data.type === 'SW_UPDATED') {
-        window.location.reload();
+        if (!isRefreshing) {
+          isRefreshing = true;
+          window.location.reload();
+        }
       }
     });
   }
   await Push.init();
+  if (typeof Push.autoSync === 'function') {
+    Push.autoSync();
+  }
   refreshNotifBadge();
   runIntro(deepLinkPromise);
 }
 
 function showUpdateBanner(swWaiting) {
-  // Remove any existing banner
+  if (sessionStorage.getItem('sofia_update_banner_dismissed')) return;
+
   const existing = document.getElementById('update-banner');
   if (existing) existing.remove();
 
   const banner = document.createElement('div');
   banner.id = 'update-banner';
   banner.innerHTML =
-    '<span>🚀 Neue Version verfügbar</span>' +
-    '<button id="update-reload-btn">Jetzt aktualisieren</button>';
+    '<div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;justify-content:center;">' +
+      '<span>🚀 Neue Version verfügbar</span>' +
+      '<button id="update-reload-btn">Jetzt aktualisieren</button>' +
+    '</div>' +
+    '<button id="update-dismiss-btn" title="Schließen" style="background:none;border:none;color:#eaddff;cursor:pointer;padding:6px;display:flex;align-items:center;justify-content:center;opacity:0.75;margin-left:8px;border-radius:50%;">' +
+      '<i data-lucide="x" style="width:18px;height:18px;"></i>' +
+    '</button>';
   document.body.appendChild(banner);
-  // Push the whole app down so the banner can never end up hidden behind the
-  // header or covered by FABs/composer bars — it stays put until the user
-  // actually updates, there is no dismiss-without-updating path.
   document.body.classList.add('has-update-banner');
 
+  if (window.lucide) lucide.createIcons();
   requestAnimationFrame(() => banner.classList.add('active'));
 
+  document.getElementById('update-dismiss-btn').addEventListener('click', function() {
+    sessionStorage.setItem('sofia_update_banner_dismissed', '1');
+    banner.classList.remove('active');
+    document.body.classList.remove('has-update-banner');
+    setTimeout(() => banner.remove(), 400);
+  });
+
   document.getElementById('update-reload-btn').addEventListener('click', function() {
-    // Tell the waiting SW to take over
-    swWaiting.postMessage({ type: 'SKIP_WAITING' });
-    // Reload will be triggered by the SW_UPDATED message above
-    setTimeout(() => window.location.reload(), 400);
+    const btn = document.getElementById('update-reload-btn');
+    if (btn) {
+      btn.textContent = 'Wird aktualisiert…';
+      btn.disabled = true;
+      btn.style.opacity = '0.7';
+    }
+    if (swWaiting) swWaiting.postMessage({ type: 'SKIP_WAITING' });
+    if (navigator.serviceWorker) {
+      navigator.serviceWorker.getRegistration().then(function(reg) {
+        if (reg && reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+      }).catch(function() {});
+    }
+    setTimeout(function() {
+      window.location.reload();
+    }, 1000);
   });
 }
 

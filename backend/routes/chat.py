@@ -369,36 +369,63 @@ async def send_message(conversation_id: int, data: ChatMessageCreate, db: AsyncS
         select(User, ChatParticipant.is_muted).join(ChatParticipant, ChatParticipant.user_id == User.id)
         .where(ChatParticipant.conversation_id == conversation_id, ChatParticipant.user_id != current_user.id)
     )
-    unmuted_others = []
-    for u, muted in others_result.all():
-        if muted:
-            continue
+    all_others = others_result.all()
+    mentioned_users = []
+    normal_unmuted = []
+    text_lower = (data.text or "").lower() if data.msg_type == "text" else ""
+
+    for u, muted in all_others:
+        u_name = (u.display_name or u.name or "").lower()
+        u_first = u_name.split()[0] if u_name else ""
+        is_mentioned = False
+        if text_lower and u_name and (f"@{u_name}" in text_lower or (u_first and f"@{u_first}" in text_lower)):
+            is_mentioned = True
+
         ns = await get_user_settings(db, u.id)
         if ns.enabled and ns.chat_new:
-            unmuted_others.append(u)
-    if unmuted_others:
-        if data.msg_type == "text":
-            preview = data.text
-        elif data.msg_type == "image" and (data.external_url or (data.file_name and data.file_name.lower().endswith(".gif"))):
-            preview = "👾 GIF"
-        elif data.msg_type == "image":
-            preview = "📷 Bild"
-        elif data.msg_type == "file":
-            preview = "📎 Datei"
-        elif data.msg_type == "voice":
-            preview = "🎤 Sprachnachricht"
-        elif data.msg_type == "poll":
-            preview = "📊 Umfrage: " + (data.text or "")
-        else:
-            preview = "Neue Nachricht"
+            if is_mentioned:
+                mentioned_users.append(u)
+            elif not muted:
+                normal_unmuted.append(u)
 
-        try:
+    conv_info = await db.execute(select(ChatConversation).where(ChatConversation.id == conversation_id))
+    conv_row = conv_info.scalar_one_or_none()
+    group_prefix = f" [{conv_row.name}]" if conv_row and conv_row.is_group and conv_row.name else ""
+
+    if data.msg_type == "text":
+        preview = data.text
+    elif data.msg_type == "image" and (data.external_url or (data.file_name and data.file_name.lower().endswith(".gif"))):
+        preview = "👾 GIF"
+    elif data.msg_type == "image":
+        preview = "📷 Bild"
+    elif data.msg_type == "file":
+        preview = "📎 Datei"
+    elif data.msg_type == "voice":
+        preview = "🎤 Sprachnachricht"
+    elif data.msg_type == "poll":
+        preview = "📊 Umfrage: " + (data.text or "")
+    else:
+        preview = "Neue Nachricht"
+
+    try:
+        if mentioned_users:
             await push_to_users(
-                db, unmuted_others, title=current_user.name, body=preview or "Neue Nachricht",
-                tag=f"chat-{conversation_id}", url="/chat",
+                db, mentioned_users,
+                title=f"{current_user.name}{group_prefix} hat dich erwähnt",
+                body=preview or "Erwähnung in einer Nachricht",
+                tag=f"chat-{conversation_id}",
+                url="/chat",
             )
-        except Exception as e:
-            logger.warning("Chat push notification failed: %s", e)
+        if normal_unmuted:
+            await push_to_users(
+                db, normal_unmuted,
+                title=f"{current_user.name}{group_prefix}",
+                body=preview or "Neue Nachricht",
+                tag=f"chat-{conversation_id}",
+                url="/chat",
+            )
+    except Exception as e:
+        logger.warning("Chat push notification failed: %s", e)
 
     reply_out = None
     if msg.reply_to_id:

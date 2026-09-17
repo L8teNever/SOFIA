@@ -11,34 +11,35 @@ const PRECACHE = [
 ];
 
 self.addEventListener('install', e => {
-  // Pre-cache core assets and activate immediately so PWA is installable on first visit
+  self.skipWaiting();
   e.waitUntil(
-    caches.open(CACHE)
-      .then(c => c.addAll(PRECACHE))
-      .then(() => self.skipWaiting())
-  );
-});
-
-self.addEventListener('activate', e => {
-  // Delete all old caches (different version name = old deployment)
-  e.waitUntil(
-    caches.keys().then(keys => {
-      const oldKeys = keys.filter(k => k !== CACHE);
-      return Promise.all(oldKeys.map(k => caches.delete(k))).then(() => {
-        return self.clients.claim().then(() => {
-          // Only notify of SW_UPDATED if an older deployment cache was actually replaced
-          if (oldKeys.length > 0) {
-            self.clients.matchAll({ type: 'window' }).then(clients => {
-              clients.forEach(c => c.postMessage({ type: 'SW_UPDATED' }));
-            });
-          }
-        });
+    caches.open(CACHE).then(c => {
+      return c.addAll(PRECACHE).catch(err => {
+        console.warn('SW precache error:', err);
       });
     })
   );
 });
 
-// Allow the page to trigger skipWaiting (used by the update toast "Neu laden" button)
+self.addEventListener('activate', e => {
+  e.waitUntil(
+    Promise.all([
+      self.clients.claim(),
+      caches.keys().then(keys => {
+        const oldKeys = keys.filter(k => k !== CACHE);
+        return Promise.all(oldKeys.map(k => caches.delete(k))).then(() => {
+          if (oldKeys.length > 0) {
+            return self.clients.matchAll({ type: 'window' }).then(clients => {
+              clients.forEach(c => c.postMessage({ type: 'SW_UPDATED' }));
+            });
+          }
+        });
+      })
+    ])
+  );
+});
+
+// Allow the page to trigger skipWaiting
 self.addEventListener('message', e => {
   if (e.data && e.data.type === 'SKIP_WAITING') {
     self.skipWaiting();

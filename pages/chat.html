@@ -33,11 +33,12 @@
     <input type="file" id="chat-file-input" style="display:none;" onchange="handleChatFileSelect(this.files[0])">
     <input type="file" id="chat-camera-input" accept="image/*" capture="environment" style="display:none;" onchange="handleChatCameraSelect(this.files[0])">
     <input type="file" id="chat-group-avatar-input" accept="image/*" style="display:none;" onchange="handleGroupAvatarFileSelect(this.files[0])">
-    <div id="chat-compose-row" style="display:flex;gap:8px;align-items:flex-end;padding:10px 14px calc(10px + env(safe-area-inset-bottom));background:#fff;border-top:1px solid rgba(0,0,0,0.06);flex-shrink:0;">
+    <div id="chat-compose-row" style="position:relative;display:flex;gap:8px;align-items:flex-end;padding:10px 14px calc(10px + env(safe-area-inset-bottom));background:#fff;border-top:1px solid rgba(0,0,0,0.06);flex-shrink:0;">
+      <div id="chat-mention-popup" style="display:none;position:absolute;bottom:calc(100% + 4px);left:12px;right:12px;background:#fff;border-radius:16px;box-shadow:0 8px 28px rgba(0,0,0,0.2);border:1px solid rgba(0,0,0,0.08);max-height:220px;overflow-y:auto;z-index:60;padding:6px;" class="no-scrollbar"></div>
       <button onclick="toggleChatAttachMenu(this)" title="Anhang hinzufügen" style="width:42px;height:42px;border-radius:50%;background:#f3edf7;color:#6750a4;border:none;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;">
         <i data-lucide="plus" style="width:20px;height:20px;"></i>
       </button>
-      <textarea id="chat-input" rows="1" placeholder="Nachricht…" style="flex:1;resize:none;border:1px solid rgba(0,0,0,0.12);border-radius:20px;padding:10px 16px;font-family:inherit;font-size:0.92rem;max-height:120px;" onkeydown="chatInputKeydown(event)" oninput="chatAutoGrow(this)"></textarea>
+      <textarea id="chat-input" rows="1" placeholder="Nachricht…" class="no-scrollbar" style="flex:1;resize:none;border:1px solid rgba(0,0,0,0.12);border-radius:20px;padding:10px 16px;font-family:inherit;font-size:0.92rem;max-height:120px;overflow-y:hidden;scrollbar-width:none;-ms-overflow-style:none;" onkeydown="chatInputKeydown(event)" oninput="chatAutoGrow(this)"></textarea>
       <button onclick="toggleChatVoiceRecording()" title="Sprachnachricht aufnehmen" style="width:42px;height:42px;border-radius:50%;background:#f3edf7;color:#6750a4;border:none;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;">
         <i data-lucide="mic" style="width:18px;height:18px;"></i>
       </button>
@@ -61,6 +62,13 @@
   </div>
 
   <style>
+  #chat-input::-webkit-scrollbar { display: none; width: 0; height: 0; }
+  .chat-mention-pill { display: inline-flex; align-items: baseline; background: rgba(103,80,164,0.14); color: #442b7a; font-weight: 700; border-radius: 6px; padding: 0 5px; margin: 0 2px; }
+  .chat-bubble-row.mine .chat-mention-pill { background: rgba(255,255,255,0.28); color: #fff; }
+  .chat-mention-pill.mention-me { background: #ffd8e4; color: #630026; box-shadow: 0 0 0 1px #ba1a1a; font-weight: 800; }
+  .chat-bubble-row.mine .chat-mention-pill.mention-me { background: #ffd8e4; color: #630026; }
+  .chat-mention-item { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 12px; cursor: pointer; transition: background 0.1s; }
+  .chat-mention-item:hover, .chat-mention-item.selected { background: #f3edf7; }
   .chat-bubble-row { display:flex; }
   .chat-bubble-row.mine { justify-content:flex-end; }
   .chat-bubble { max-width:75%; padding:9px 14px; border-radius:18px; font-size:0.9rem; line-height:1.4; word-wrap:break-word; }
@@ -101,7 +109,7 @@
 <script>
 document.getElementById('ph-chat').outerHTML = `
   <div class="page-header" id="chat-main-header" style="position:relative;overflow:hidden;">
-    <button class="back-btn" id="chat-header-back-btn" onclick="chatHeaderBack()" title="Zurück">
+    <button class="icon-btn" id="chat-header-back-btn" onclick="chatHeaderBack()" title="Zurück" style="flex-shrink:0;">
       <i data-lucide="arrow-left" style="width:22px;height:22px;"></i>
     </button>
     <div id="chat-header-info-btn" class="chat-header-clickable" onclick="openChatHeaderInfo()" style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;cursor:pointer;">
@@ -136,39 +144,48 @@ let chatPlayingVoiceId = null; // message id of the voice note currently playing
 let chatOpenedFromDirectUrl = false;
 
 async function init_chat() {
-  const pathParts = window.location.pathname.replace(/^\/chat\/?/, '').split('/');
-  const subTarget = pathParts[0] ? decodeURIComponent(pathParts[0]).trim() : '';
+  try {
+    const pathParts = window.location.pathname.replace(/^\/chat\/?/, '').split('/');
+    const subTarget = pathParts[0] ? decodeURIComponent(pathParts[0]).trim() : '';
 
-  if (subTarget) {
-    document.getElementById('chat-list-view').style.display = 'none';
-    document.getElementById('chat-detail-view').style.display = 'flex';
-    document.getElementById('chat-title').textContent = 'Chat';
-    document.getElementById('chat-search-btn').style.display = 'none';
-    const msgsEl = document.getElementById('chat-messages-scroll');
-    if (msgsEl) {
-      msgsEl.innerHTML = `
-        <div id="chat-loading-spinner" style="display:flex;align-items:center;justify-content:center;height:100%;opacity:0.5;gap:8px;font-size:0.9rem;">
-          <span style="width:8px;height:8px;border-radius:50%;background:#6750a4;animation:chat-rec-pulse 1s infinite;"></span>
-          <span>Chat wird geladen…</span>
-        </div>`;
+    if (subTarget) {
+      const lv = document.getElementById('chat-list-view');
+      const dv = document.getElementById('chat-detail-view');
+      const ct = document.getElementById('chat-title');
+      const sb = document.getElementById('chat-search-btn');
+      if (lv) lv.style.display = 'none';
+      if (dv) dv.style.display = 'flex';
+      if (ct) ct.textContent = 'Chat';
+      if (sb) sb.style.display = 'none';
+      const msgsEl = document.getElementById('chat-messages-scroll');
+      if (msgsEl) {
+        msgsEl.innerHTML = `
+          <div id="chat-loading-spinner" style="display:flex;align-items:center;justify-content:center;height:100%;opacity:0.5;gap:8px;font-size:0.9rem;">
+            <span style="width:8px;height:8px;border-radius:50%;background:#6750a4;animation:chat-rec-pulse 1s infinite;"></span>
+            <span>Chat wird geladen…</span>
+          </div>`;
+      }
     }
-  }
 
-  [chatConversations, chatClassUsers] = await Promise.all([
-    API.chatConversations().catch(() => []),
-    API.classUsers().catch(() => []),
-  ]);
-  startChatListPolling();
+    [chatConversations, chatClassUsers] = await Promise.all([
+      API.chatConversations().catch(() => []),
+      API.classUsers().catch(() => []),
+    ]);
+    startChatListPolling();
 
-  if (subTarget) {
-    const targetConv = findConversationBySlugOrId(subTarget, chatConversations);
-    if (targetConv) {
-      openChatConversation(targetConv.id, true);
+    if (subTarget) {
+      const targetConv = findConversationBySlugOrId(subTarget, chatConversations);
+      if (targetConv) {
+        await openChatConversation(targetConv.id, true);
+      } else {
+        closeChatConversation(true);
+        history.replaceState({ page: 'chat' }, '', '/chat');
+      }
     } else {
-      closeChatConversation(true);
-      history.replaceState({ page: 'chat' }, '', '/chat');
+      renderChatList();
     }
-  } else {
+  } catch (err) {
+    console.error('init_chat error:', err);
     renderChatList();
   }
 }
@@ -744,55 +761,69 @@ function findConversationBySlugOrId(slugOrId, list) {
 // --- Conversation detail ---
 
 async function openChatConversation(id, fromDeepLink = false, isPopState = false) {
-  chatCurrentConversationId = id;
-  const conv = chatConversations.find(c => c.id === id);
+  try {
+    id = parseInt(id, 10);
+    if (isNaN(id)) return;
+    chatCurrentConversationId = id;
+    const conv = chatConversations.find(c => c.id === id);
 
-  // 1. Immediately sync browser URL on click (no async network delay)
-  const targetUrl = conv ? chatUrlPath(conv) : `/chat/${id}`;
-  if (fromDeepLink) {
-    chatOpenedFromDirectUrl = true;
-    history.replaceState({ page: 'chat', chatConv: true, conversationId: id }, '', targetUrl);
-  } else if (!isPopState) {
-    chatOpenedFromDirectUrl = false;
-    history.pushState({ page: 'chat', chatConv: true, conversationId: id }, '', targetUrl);
+    // 1. Immediately sync browser URL on click (no async network delay)
+    const targetUrl = conv ? chatUrlPath(conv) : `/chat/${id}`;
+    if (fromDeepLink) {
+      chatOpenedFromDirectUrl = true;
+      history.replaceState({ page: 'chat', chatConv: true, conversationId: id }, '', targetUrl);
+    } else if (!isPopState) {
+      chatOpenedFromDirectUrl = false;
+      history.pushState({ page: 'chat', chatConv: true, conversationId: id }, '', targetUrl);
+    }
+
+    // 2. Immediately switch views & show correct header title/avatar
+    const listView = document.getElementById('chat-list-view');
+    const detailView = document.getElementById('chat-detail-view');
+    const titleEl = document.getElementById('chat-title');
+    const searchBtn = document.getElementById('chat-search-btn');
+    const replyBar = document.getElementById('chat-reply-bar');
+
+    if (listView) listView.style.display = 'none';
+    if (detailView) detailView.style.display = 'flex';
+    if (titleEl) titleEl.textContent = conv ? chatConversationTitle(conv) : 'Chat';
+    if (searchBtn) searchBtn.style.display = 'none';
+    updateChatHeaderAvatar(conv);
+
+    chatReplyTo = null;
+    if (replyBar) replyBar.style.display = 'none';
+    closeChatMentionPopup();
+
+    // 3. Immediately clear previous messages to prevent previous chat from flashing
+    chatMessages = [];
+    const scrollEl = document.getElementById('chat-messages-scroll');
+    if (scrollEl) {
+      scrollEl.dataset.scrolledOnce = '';
+      scrollEl.innerHTML = `
+        <div id="chat-loading-spinner" style="display:flex;align-items:center;justify-content:center;height:100%;opacity:0.5;gap:8px;font-size:0.9rem;">
+          <span style="width:8px;height:8px;border-radius:50%;background:#6750a4;animation:chat-rec-pulse 1s infinite;"></span>
+          <span>Chat wird geladen…</span>
+        </div>`;
+    }
+
+    // 4. Fetch messages with active conversation guard
+    const fetchConvId = id;
+    const msgs = await API.chatMessages(id).catch(() => []);
+    if (chatCurrentConversationId !== fetchConvId) return;
+
+    chatMessages = msgs;
+    renderChatMessages(true);
+    await API.markChatRead(id).catch(() => {});
+    const localConv = chatConversations.find(c => c.id === id);
+    if (localConv) localConv.unread_count = 0;
+
+    initChatGestureHandlers();
+    startChatMsgPolling();
+    initChatKeyboardLock();
+  } catch (err) {
+    console.error('Error opening chat conversation:', err);
+    showToast('Chat konnte nicht geladen werden');
   }
-
-  // 2. Immediately switch views & show correct header title/avatar
-  document.getElementById('chat-list-view').style.display = 'none';
-  document.getElementById('chat-detail-view').style.display = 'flex';
-  document.getElementById('chat-title').textContent = conv ? chatConversationTitle(conv) : 'Chat';
-  document.getElementById('chat-search-btn').style.display = 'none';
-  updateChatHeaderAvatar(conv);
-
-  chatReplyTo = null;
-  document.getElementById('chat-reply-bar').style.display = 'none';
-
-  // 3. Immediately clear previous messages to prevent previous chat from flashing
-  chatMessages = [];
-  const scrollEl = document.getElementById('chat-messages-scroll');
-  if (scrollEl) {
-    scrollEl.dataset.scrolledOnce = '';
-    scrollEl.innerHTML = `
-      <div id="chat-loading-spinner" style="display:flex;align-items:center;justify-content:center;height:100%;opacity:0.5;gap:8px;font-size:0.9rem;">
-        <span style="width:8px;height:8px;border-radius:50%;background:#6750a4;animation:chat-rec-pulse 1s infinite;"></span>
-        <span>Chat wird geladen…</span>
-      </div>`;
-  }
-
-  // 4. Fetch messages with active conversation guard
-  const fetchConvId = id;
-  const msgs = await API.chatMessages(id).catch(() => []);
-  if (chatCurrentConversationId !== fetchConvId) return;
-
-  chatMessages = msgs;
-  renderChatMessages(true);
-  await API.markChatRead(id).catch(() => {});
-  const localConv = chatConversations.find(c => c.id === id);
-  if (localConv) localConv.unread_count = 0;
-
-  initChatGestureHandlers();
-  startChatMsgPolling();
-  initChatKeyboardLock();
 }
 
 function closeChatConversation(isPopState) {
@@ -802,17 +833,23 @@ function closeChatConversation(isPopState) {
     document.getElementById(`chat-voice-audio-${chatPlayingVoiceId}`)?.pause();
     chatPlayingVoiceId = null;
   }
+  closeChatMentionPopup();
   chatMessages = [];
   const scrollEl = document.getElementById('chat-messages-scroll');
   if (scrollEl) {
     scrollEl.dataset.scrolledOnce = '';
     scrollEl.innerHTML = '';
   }
-  document.getElementById('chat-detail-view').style.display = 'none';
-  document.getElementById('chat-list-view').style.display = '';
-  document.getElementById('chat-title').textContent = 'Chat';
-  document.getElementById('chat-search-btn').style.display = 'flex';
-  document.getElementById('chat-header-avatar').style.display = 'none';
+  const listView = document.getElementById('chat-list-view');
+  const detailView = document.getElementById('chat-detail-view');
+  const titleEl = document.getElementById('chat-title');
+  const searchBtn = document.getElementById('chat-search-btn');
+  const avatarEl = document.getElementById('chat-header-avatar');
+  if (detailView) detailView.style.display = 'none';
+  if (listView) listView.style.display = '';
+  if (titleEl) titleEl.textContent = 'Chat';
+  if (searchBtn) searchBtn.style.display = 'flex';
+  if (avatarEl) avatarEl.style.display = 'none';
   renderChatList();
 
   if (isPopState) {
@@ -958,6 +995,19 @@ function scrollChatToBottom(smooth = false) {
   }
 }
 
+function formatChatMentions(text) {
+  if (!text) return '';
+  const escaped = escapeHtml(text);
+  const myName = currentUser ? (currentUser.display_name || currentUser.name || '').trim().toLowerCase() : '';
+  const myFirstName = myName ? myName.split(/\s+/)[0] : '';
+
+  return escaped.replace(/@([a-zA-Z0-9_äöüÄÖÜß-]+(?:\s+[a-zA-Z0-9_äöüÄÖÜß-]+)?)/g, (fullMatch, mentionName) => {
+    const rawName = mentionName.trim().toLowerCase();
+    const isMe = (myName && rawName === myName) || (myFirstName && rawName === myFirstName);
+    return `<span class="chat-mention-pill${isMe ? ' mention-me' : ''}">@${mentionName}</span>`;
+  });
+}
+
 function renderChatMessageBody(m) {
   if (m.is_deleted) {
     return `<div style="font-style:italic;opacity:0.6;display:flex;align-items:center;gap:6px;">
@@ -989,7 +1039,7 @@ function renderChatMessageBody(m) {
         onloadedmetadata="onChatVoiceLoaded(${m.id})" ontimeupdate="onChatVoiceProgress(${m.id})" onended="onChatVoiceEnded(${m.id})"></audio>
     </div>`;
   }
-  return `<div>${escapeHtml(m.text || '')}</div>`;
+  return `<div>${formatChatMentions(m.text || '')}</div>`;
 }
 
 function renderChatReplyQuote(reply) {
@@ -1076,12 +1126,164 @@ function startChatMsgPolling() {
   }, 3000);
 }
 
+let chatMentionState = {
+  active: false,
+  query: '',
+  selectedIndex: 0,
+  candidates: [],
+  startIndex: -1,
+  endIndex: -1
+};
+
+function onChatMentionInput() {
+  const input = document.getElementById('chat-input');
+  const popup = document.getElementById('chat-mention-popup');
+  if (!input || !popup || !chatCurrentConversationId) {
+    closeChatMentionPopup();
+    return;
+  }
+
+  const val = input.value;
+  const cursor = input.selectionStart || 0;
+  const textBeforeCursor = val.slice(0, cursor);
+
+  const match = /(?:^|\s)@([^\s@]*)$/.exec(textBeforeCursor);
+  if (!match) {
+    closeChatMentionPopup();
+    return;
+  }
+
+  const query = match[1].toLowerCase();
+  const atIndex = textBeforeCursor.lastIndexOf('@');
+  chatMentionState.startIndex = atIndex;
+  chatMentionState.endIndex = cursor;
+  chatMentionState.query = query;
+
+  const conv = chatConversations.find(c => c.id === chatCurrentConversationId);
+  let users = [];
+  if (conv && conv.participants && conv.participants.length) {
+    users = conv.participants.map(p => ({
+      id: p.user_id,
+      name: p.display_name,
+      avatar_url: p.avatar_url
+    }));
+  } else if (chatClassUsers && chatClassUsers.length) {
+    users = chatClassUsers.map(u => ({
+      id: u.id,
+      name: u.display_name || (u.email ? u.email.split('@')[0] : 'User'),
+      avatar_url: u.avatar_url
+    }));
+  }
+
+  const candidates = users.filter(u => {
+    if (currentUser && u.id === currentUser.id) return false;
+    if (!query) return true;
+    return (u.name || '').toLowerCase().includes(query);
+  });
+
+  if (!candidates.length) {
+    closeChatMentionPopup();
+    return;
+  }
+
+  chatMentionState.active = true;
+  chatMentionState.candidates = candidates;
+  if (chatMentionState.selectedIndex >= candidates.length) {
+    chatMentionState.selectedIndex = 0;
+  }
+
+  renderChatMentionPopup();
+}
+
+function renderChatMentionPopup() {
+  const popup = document.getElementById('chat-mention-popup');
+  if (!popup || !chatMentionState.active) return;
+
+  popup.innerHTML = `
+    <div style="font-size:0.7rem;font-weight:700;opacity:0.5;padding:4px 8px 6px;letter-spacing:0.05em;">PERSON ERWÄHNEN</div>
+    ${chatMentionState.candidates.map((u, i) => {
+      const isSel = i === chatMentionState.selectedIndex;
+      const initials = (u.name || '?').slice(0, 2).toUpperCase();
+      const avatarStyle = avatarImgStyle(u);
+      return `
+        <div class="chat-mention-item${isSel ? ' selected' : ''}" data-index="${i}" onmousedown="insertChatMention(${i}); event.preventDefault();">
+          <div class="avatar" style="${avatarStyle}width:28px;height:28px;border-radius:50%;background:#eaddff;color:#442b7a;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.75rem;flex-shrink:0;">
+            ${u.avatar_url ? '' : escapeHtml(initials)}
+          </div>
+          <div style="flex:1;min-width:0;font-size:0.86rem;font-weight:600;color:#1c1b1f;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+            ${escapeHtml(u.name)}
+          </div>
+          <span style="font-size:0.7rem;opacity:0.5;">@${escapeHtml(u.name.replace(/\s+/g, ''))}</span>
+        </div>
+      `;
+    }).join('')}
+  `;
+  popup.style.display = 'block';
+}
+
+function closeChatMentionPopup() {
+  chatMentionState.active = false;
+  chatMentionState.candidates = [];
+  chatMentionState.selectedIndex = 0;
+  const popup = document.getElementById('chat-mention-popup');
+  if (popup) popup.style.display = 'none';
+}
+
+function insertChatMention(candidateIndex) {
+  const candidate = chatMentionState.candidates[candidateIndex];
+  const input = document.getElementById('chat-input');
+  if (!candidate || !input) return;
+
+  const val = input.value;
+  const start = chatMentionState.startIndex;
+  const end = chatMentionState.endIndex;
+
+  const mentionText = `@${candidate.name} `;
+  const newVal = val.slice(0, start) + mentionText + val.slice(end);
+  input.value = newVal;
+
+  const newCursor = start + mentionText.length;
+  input.focus();
+  input.setSelectionRange(newCursor, newCursor);
+
+  closeChatMentionPopup();
+  chatAutoGrow(input);
+}
+
 function chatAutoGrow(el) {
   el.style.height = 'auto';
-  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+  const newHeight = Math.min(el.scrollHeight, 120);
+  el.style.height = newHeight + 'px';
+  el.style.overflowY = el.scrollHeight > 120 ? 'auto' : 'hidden';
+  onChatMentionInput();
 }
 
 function chatInputKeydown(e) {
+  if (chatMentionState.active && chatMentionState.candidates.length) {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      chatMentionState.selectedIndex = (chatMentionState.selectedIndex + 1) % chatMentionState.candidates.length;
+      renderChatMentionPopup();
+      return;
+    }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      chatMentionState.selectedIndex = (chatMentionState.selectedIndex - 1 + chatMentionState.candidates.length) % chatMentionState.candidates.length;
+      renderChatMentionPopup();
+      return;
+    }
+    if (e.key === 'Enter' || e.key === 'Tab') {
+      e.preventDefault();
+      insertChatMention(chatMentionState.selectedIndex);
+      return;
+    }
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      closeChatMentionPopup();
+      return;
+    }
+  }
+
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
     sendChatMessage();

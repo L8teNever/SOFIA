@@ -23,9 +23,6 @@
         showToast('Sofia wurde erfolgreich als App installiert! ✓');
       }
     });
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').catch(function(){});
-    }
   </script>
   <title>Sofia</title>
   <link rel="manifest" href="/static/manifest.json">
