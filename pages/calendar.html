@@ -48,6 +48,21 @@
     </div>
   </div>
 
+  <!-- Week View — hourly time-grid, Google Calendar-style. Hidden by
+       default; toggled with .cal-main-container via calDisplayMode. Reuses
+       the exact block-positioning approach the Timetable page's week view
+       already uses (top/height in px from minutes-since-grid-start), so
+       the two grids behave identically even though they're separate
+       implementations (Timetable's lessons have real start/end times;
+       calendar events only have an optional single time, see
+       CAL_WEEK_EVENT_DURATION_MIN). -->
+  <div id="cal-week-view" style="display:none;">
+    <div class="cal-week-scroll">
+      <div class="cal-week-allday-row" id="cal-week-allday-row"></div>
+      <div id="cal-week-grid" class="cal-week-grid"></div>
+    </div>
+  </div>
+
   <!-- Floating Action Button -->
   <div id="cal-fab-slot"></div>
 
@@ -329,6 +344,63 @@
   border: 1px dashed rgba(103, 80, 164, 0.2);
   margin-top: 10px;
 }
+
+/* Week view */
+#cal-week-view { padding: 4px 16px 100px 16px; max-width: 1140px; margin: 0 auto; width: 100%; box-sizing: border-box; }
+@media (min-width: 768px) { #cal-week-view { padding: 8px 28px 100px 28px; } }
+
+/* All-day row shares the exact same column template and min-width as the
+   grid below, and lives inside the same scroll container (see the HTML) —
+   otherwise on mobile the grid scrolls horizontally with wide columns
+   while this row stays squeezed to the viewport width, misaligning the
+   two and truncating chip text far more aggressively than the grid ever
+   needs to. */
+.cal-week-allday-row {
+  display: grid;
+  grid-template-columns: 34px repeat(7, minmax(74px, 1fr));
+  gap: 3px;
+  min-width: 560px;
+  margin-bottom: 6px;
+}
+.cal-week-allday-row:empty { display: none; margin-bottom: 0; }
+.cal-week-allday-chip {
+  font-size: 0.68rem; font-weight: 700; padding: 4px 6px; border-radius: 7px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer;
+}
+
+.cal-week-scroll {
+  background: #ffffff;
+  border-radius: 24px;
+  box-shadow: 0 2px 12px rgba(103, 80, 164, 0.08), 0 1px 3px rgba(0,0,0,0.04);
+  border: 1px solid rgba(103, 80, 164, 0.08);
+  padding: 10px 6px;
+  overflow-x: auto;
+}
+.cal-week-grid {
+  display: grid;
+  grid-template-columns: 34px repeat(7, minmax(74px, 1fr));
+  gap: 3px;
+  min-width: 560px;
+}
+.cal-week-day-header {
+  text-align: center; font-size: 0.68rem; font-weight: 700; padding: 6px 2px 8px;
+  border-radius: 10px; color: #21005d; opacity: 0.6;
+}
+.cal-week-day-header.is-today { background: #6750a4; color: #fff; opacity: 1; }
+.cal-week-hour-label { position: absolute; right: 3px; font-size: 0.58rem; opacity: 0.4; color: #21005d; }
+.cal-week-hourline { position: absolute; left: 0; right: 0; height: 1px; background: rgba(103,80,164,0.1); }
+.cal-week-day-col { position: relative; border-radius: 8px; }
+.cal-week-day-col.is-today { background: rgba(103,80,164,0.04); }
+.cal-week-event-block {
+  position: absolute; left: 1px; right: 1px; border-radius: 7px; padding: 3px 5px;
+  overflow: hidden; cursor: pointer; font-size: 0.64rem; font-weight: 700; line-height: 1.25;
+}
+.cal-week-event-time { font-size: 0.56rem; font-weight: 600; opacity: 0.7; display: block; }
+.cal-week-now-line { position: absolute; left: 0; right: 0; height: 2px; background: #ba1a1a; z-index: 5; }
+.cal-week-now-line::before {
+  content: ''; position: absolute; left: -3px; top: -3px; width: 8px; height: 8px;
+  border-radius: 50%; background: #ba1a1a;
+}
 </style>
 </div>
 
@@ -347,9 +419,12 @@ document.getElementById('ph-calendar').outerHTML = pageHeader({
       </div>
     </div>`,
   trailing: `<div class="cal-nav-row" style="display:flex;align-items:center;flex-shrink:0;">
-      <button onclick="calNav(-1)" class="icon-btn cal-nav-btn" title="Vorheriger Monat"><i data-lucide="chevron-left"></i></button>
+      <button type="button" id="cal-viewmode-btn" class="icon-btn cal-nav-btn" onclick="toggleCalDisplayMode()" title="Wochenansicht">
+        <i data-lucide="calendar-days" id="cal-viewmode-icon"></i>
+      </button>
+      <button onclick="calNav(-1)" class="icon-btn cal-nav-btn" title="Vorheriger Monat" id="cal-nav-prev"><i data-lucide="chevron-left"></i></button>
       <button onclick="calToday()" class="m3-btn-outline cal-today-btn" title="Zum heutigen Tag springen">Heute</button>
-      <button onclick="calNav(1)" class="icon-btn cal-nav-btn" title="Nächster Monat"><i data-lucide="chevron-right"></i></button>
+      <button onclick="calNav(1)" class="icon-btn cal-nav-btn" title="Nächster Monat" id="cal-nav-next"><i data-lucide="chevron-right"></i></button>
       <button type="button" id="cal-header-search-btn" class="icon-btn cal-nav-btn cal-search-header-btn" onclick="toggleCalHeaderSearch()" title="Termine durchsuchen">
         <i data-lucide="search"></i>
       </button>
@@ -375,6 +450,17 @@ var calCurrentUser = null;
 // Persisted the same way the timetable's Tag/Woche choice is.
 var calViewScope = 'month';
 try { calViewScope = localStorage.getItem('cal_view_scope') === 'all' ? 'all' : 'month'; } catch {}
+
+// 'month' (the existing mini-grid + list) or 'week' (new: an hourly
+// Google Calendar-style time-grid). Independent of calViewScope above —
+// that's about how much the LIST spans, this is a whole different layout.
+// Persisted the same way.
+var calDisplayMode = 'month';
+try { calDisplayMode = localStorage.getItem('cal_display_mode') === 'week' ? 'week' : 'month'; } catch {}
+// Any date within the week currently shown — Monday of its week is
+// derived from this each render rather than stored directly, same as
+// calYear/calMonth representing "the month" without a specific day.
+var calWeekAnchor = new Date();
 
 // Search matches title/description across every event regardless of
 // month, scope, or whether it's already past — a search is a "find it
@@ -468,13 +554,21 @@ function startCalPolling() {
   calPollInterval = setInterval(async () => {
     if (!document.getElementById('cal-grid')) { clearInterval(calPollInterval); calPollInterval = null; return; }
     if (document.hidden) return;
-    const fresh = calViewScope === 'all'
-      ? await API.events().catch(() => null)
-      : await API.events(calYear + '-' + String(calMonth + 1).padStart(2, '0')).catch(() => null);
+    let fresh;
+    if (calViewScope === 'all') {
+      fresh = await API.events().catch(() => null);
+    } else if (calDisplayMode === 'week') {
+      const months = _calMonthsForWeek(calWeekAnchor);
+      const results = await Promise.all([...months].map(m => API.events(m).catch(() => []))).catch(() => null);
+      if (results) { const merged = new Map(); results.flat().forEach(e => merged.set(e.id, e)); fresh = [...merged.values()]; }
+    } else {
+      fresh = await API.events(calYear + '-' + String(calMonth + 1).padStart(2, '0')).catch(() => null);
+    }
     if (!fresh || !document.getElementById('cal-grid')) return;
     if (JSON.stringify(fresh) !== JSON.stringify(calEvents)) {
       calEvents = fresh;
-      if (calViewScope !== 'all') renderCalGridOnly(false); // no month-change entrance animation for a quiet background sync
+      if (calDisplayMode === 'week') renderCalWeekView();
+      else if (calViewScope !== 'all') renderCalGridOnly(false); // no month-change entrance animation for a quiet background sync
       renderEventList();
     }
   }, 15000);
@@ -523,10 +617,41 @@ async function loadCalSubjects() {
   }
 }
 
+function _calMonday(d) {
+  const day = (d.getDay() + 6) % 7; // 0=Mo ... 6=So
+  const r = new Date(d);
+  r.setDate(r.getDate() - day);
+  r.setHours(0, 0, 0, 0);
+  return r;
+}
+function _calAddDays(d, n) { const r = new Date(d); r.setDate(r.getDate() + n); return r; }
+function _calToMin(hhmm) {
+  const parts = (hhmm || '0:0').split(':').map(Number);
+  return parts[0] * 60 + (parts[1] || 0);
+}
+
+// The month(s) a given week's events could fall under — usually one, but a
+// week straddling a month boundary needs both fetched and merged, since
+// the events API is scoped to a single calendar month.
+function _calMonthsForWeek(anchor) {
+  const monday = _calMonday(anchor);
+  const sunday = _calAddDays(monday, 6);
+  return new Set([
+    monday.getFullYear() + '-' + String(monday.getMonth() + 1).padStart(2, '0'),
+    sunday.getFullYear() + '-' + String(sunday.getMonth() + 1).padStart(2, '0'),
+  ]);
+}
+
 async function loadCalEvents() {
   try {
     if (calViewScope === 'all') {
       calEvents = await API.events(); // no month param -> every event for the class
+    } else if (calDisplayMode === 'week') {
+      const months = _calMonthsForWeek(calWeekAnchor);
+      const results = await Promise.all([...months].map(m => API.events(m).catch(() => [])));
+      const merged = new Map();
+      results.flat().forEach(e => merged.set(e.id, e));
+      calEvents = [...merged.values()];
     } else {
       const m = String(calMonth + 1).padStart(2, '0');
       calEvents = await API.events(calYear + '-' + m);
@@ -646,12 +771,14 @@ async function calToday() {
   const today = new Date();
   calYear = today.getFullYear();
   calMonth = today.getMonth();
+  calWeekAnchor = today;
   selectedCalDate = localDateStr(today);
   await loadCalEvents();
   renderCal();
 }
 
 async function calNav(dir) {
+  if (calDisplayMode === 'week') { await calWeekNav(dir); return; }
   calMonth += dir;
   if (calMonth < 0) { calMonth = 11; calYear--; }
   if (calMonth > 11) { calMonth = 0; calYear++; }
@@ -660,19 +787,73 @@ async function calNav(dir) {
   renderCal(dir);
 }
 
+async function calWeekNav(dir) {
+  calWeekAnchor = _calAddDays(calWeekAnchor, dir * 7);
+  await loadCalEvents();
+  renderCal(dir);
+}
+
+// Switches between the existing month-grid+list layout and the new
+// Google Calendar-style hourly week grid. 'all' (every upcoming event,
+// no day-grid at all) has no meaning for a specific week, so entering
+// week mode quietly drops back to 'month' scope first.
+async function toggleCalDisplayMode() {
+  calDisplayMode = calDisplayMode === 'week' ? 'month' : 'week';
+  try { localStorage.setItem('cal_display_mode', calDisplayMode); } catch {}
+  if (calDisplayMode === 'week') {
+    if (calViewScope === 'all') {
+      calViewScope = 'month';
+      try { localStorage.setItem('cal_view_scope', 'month'); } catch {}
+    }
+    calWeekAnchor = selectedCalDate ? new Date(selectedCalDate + 'T00:00') : new Date();
+  } else {
+    calYear = calWeekAnchor.getFullYear();
+    calMonth = calWeekAnchor.getMonth();
+  }
+  await loadCalEvents();
+  renderCal();
+}
+
 function renderCal(dir) {
   const leftPane = document.querySelector('.cal-left-pane');
   const navRow = document.querySelector('.cal-nav-row');
+  const mainContainer = document.querySelector('.cal-main-container');
+  const weekView = document.getElementById('cal-week-view');
+  const viewIcon = document.getElementById('cal-viewmode-icon');
+  const viewBtn = document.getElementById('cal-viewmode-btn');
+
+  if (viewIcon) viewIcon.setAttribute('data-lucide', calDisplayMode === 'week' ? 'layout-grid' : 'calendar-days');
+  if (viewBtn) viewBtn.title = calDisplayMode === 'week' ? 'Monatsansicht' : 'Wochenansicht';
+
   // A search result list spans however many months match, same as "Alle" —
-  // neither a single month's grid nor stepping months makes sense while
-  // either is active, so both hide, leaving just the filter button.
-  const showGrid = calViewScope === 'month' && !calSearchQuery;
+  // neither a single month's grid, the week grid, nor stepping through
+  // either makes sense while search is active, so all three hide, leaving
+  // just the filter/view-mode buttons.
+  const showWeek = calDisplayMode === 'week' && !calSearchQuery;
+  const showGrid = !showWeek && calViewScope === 'month' && !calSearchQuery;
+
+  if (mainContainer) mainContainer.style.display = showWeek ? 'none' : '';
+  if (weekView) weekView.style.display = showWeek ? 'block' : 'none';
+
+  if (showWeek) {
+    const monday = _calMonday(calWeekAnchor);
+    const sunday = _calAddDays(monday, 6);
+    const MONTHS_SHORT = ['Jan.','Feb.','März','Apr.','Mai','Juni','Juli','Aug.','Sept.','Okt.','Nov.','Dez.'];
+    document.getElementById('cal-month-title').textContent = monday.getMonth() === sunday.getMonth()
+      ? `${monday.getDate()}. – ${sunday.getDate()}. ${MONTHS_SHORT[monday.getMonth()]}`
+      : `${monday.getDate()}. ${MONTHS_SHORT[monday.getMonth()]} – ${sunday.getDate()}. ${MONTHS_SHORT[sunday.getMonth()]}`;
+    document.getElementById('cal-year-label').textContent = String(sunday.getFullYear());
+    if (navRow) [...navRow.children].forEach(c => { c.style.display = ''; });
+    renderCalWeekView();
+    if (window.lucide) lucide.createIcons();
+    return;
+  }
 
   if (!showGrid) {
     if (leftPane) leftPane.style.display = 'none';
     document.getElementById('cal-month-title').textContent = calSearchQuery ? 'Suche' : 'Alle Termine';
     document.getElementById('cal-year-label').textContent = '';
-    if (navRow) [...navRow.children].forEach(c => { if (c.id !== 'cal-filter-btn') c.style.display = 'none'; });
+    if (navRow) [...navRow.children].forEach(c => { if (c.id !== 'cal-filter-btn' && c.id !== 'cal-viewmode-btn') c.style.display = 'none'; });
   } else {
     if (leftPane) leftPane.style.display = '';
     const months = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
@@ -764,6 +945,124 @@ function _buildCalGrid(grid) {
     grid.appendChild(el);
   }
 
+}
+
+// --- Week view (hourly time-grid) ---
+
+const CAL_WEEK_PX_PER_MIN = 1.4;
+const CAL_WEEK_MIN_BLOCK_H = 30;
+// Calendar events only ever have a single optional time, never a duration
+// (unlike Timetable's lessons, which have real start/end times) — this is
+// purely a rendering assumption for how tall a timed event's block looks,
+// it isn't stored or sent anywhere.
+const CAL_WEEK_EVENT_DURATION_MIN = 60;
+const CAL_WEEKDAY_SHORT = ['Mo','Di','Mi','Do','Fr','Sa','So'];
+const CAL_TYPE_SOLID = { exam: '#ba1a1a', holiday: '#8a5a00', trip: '#006d3a', personal: '#006399', other: '#6750a4' };
+
+function calEventColors(ev) {
+  return { bg: CAL_TYPE_SOLID[ev.event_type] || CAL_TYPE_SOLID.other, color: '#ffffff' };
+}
+
+// Long-press-menu style click target for a week-view event: same
+// permission check the list's edit/delete menu already uses (personal
+// events are creator-only, everything else is open to the whole class) —
+// a read-only user gets a quick toast instead of a dead click.
+function calWeekEventClick(id) {
+  const ev = calEvents.find(e => e.id === id);
+  if (!ev) return;
+  if (calCanModifyEvent(ev)) openEditEventSheet(id);
+  else showToast(ev.title + (ev.time ? ' · ' + ev.time + ' Uhr' : ''));
+}
+
+function renderCalWeekView() {
+  const grid = document.getElementById('cal-week-grid');
+  const alldayRow = document.getElementById('cal-week-allday-row');
+  if (!grid) return;
+
+  const monday = _calMonday(calWeekAnchor);
+  const days = Array.from({ length: 7 }, (_, i) => _calAddDays(monday, i));
+  const dayStrs = days.map(d => localDateStr(d));
+  const todayStr = localDateStr();
+
+  // Split each day's covering events into "timed" (gets a positioned block
+  // in the hourly grid) vs "all-day" (no time at all, or spans multiple
+  // days) — the same split Google Calendar's own all-day row above the
+  // grid uses. Keyed per-day so a multi-day event's chip correctly repeats
+  // across every day it covers instead of only appearing once.
+  const timedByDay = dayStrs.map(() => []);
+  const alldayEvents = new Map();
+  days.forEach((d, i) => {
+    const ds = dayStrs[i];
+    calEvents.forEach(ev => {
+      if (!eventCoversDate(ev, ds)) return;
+      if (activeCategoryFilter !== 'all' && (ev.event_type || 'other') !== activeCategoryFilter) return;
+      const isMulti = Boolean(ev.end_date && ev.end_date !== ev.date);
+      if (ev.time && !isMulti) timedByDay[i].push(ev);
+      else alldayEvents.set(ev.id + '-' + ds, ev);
+    });
+  });
+
+  alldayRow.innerHTML = alldayEvents.size ? '<div></div>' + days.map((d, i) => {
+    const ds = dayStrs[i];
+    return [...alldayEvents.values()].filter(ev => eventCoversDate(ev, ds)).map(ev => {
+      const { bg, color } = calEventColors(ev);
+      return `<div class="cal-week-allday-chip" style="background:${bg};color:${color};" onclick="calWeekEventClick(${ev.id})" title="${escapeHtml(ev.title)}">${escapeHtml(ev.title)}</div>`;
+    }).join('');
+  }).join('') : '';
+
+  // Time range: like Timetable's week view, derive from what's actually
+  // scheduled this week (rounded out to whole hours), falling back to a
+  // sensible default range when there's nothing timed at all.
+  const allTimed = timedByDay.flat();
+  let minStart = allTimed.length ? Math.min(...allTimed.map(e => _calToMin(e.time))) : 8 * 60;
+  let maxEnd = allTimed.length ? Math.max(...allTimed.map(e => _calToMin(e.time) + CAL_WEEK_EVENT_DURATION_MIN)) : 16 * 60;
+  minStart = Math.floor(minStart / 60) * 60;
+  maxEnd = Math.max(Math.ceil(maxEnd / 60) * 60, minStart + 60);
+  const gridHeight = (maxEnd - minStart) * CAL_WEEK_PX_PER_MIN;
+
+  let hourLines = '';
+  for (let m = minStart; m <= maxEnd; m += 60) {
+    hourLines += `<div class="cal-week-hourline" style="top:${(m - minStart) * CAL_WEEK_PX_PER_MIN}px;"></div>`;
+  }
+
+  let axisHtml = `<div style="position:relative;height:${gridHeight}px;">`;
+  for (let m = minStart; m <= maxEnd; m += 60) {
+    axisHtml += `<div class="cal-week-hour-label" style="top:${(m - minStart) * CAL_WEEK_PX_PER_MIN - 6}px;">${Math.floor(m / 60)}</div>`;
+  }
+  axisHtml += '</div>';
+
+  const headerHtml = '<div></div>' + days.map((d, i) => {
+    const isToday = dayStrs[i] === todayStr;
+    return `<div class="cal-week-day-header${isToday ? ' is-today' : ''}">${CAL_WEEKDAY_SHORT[i]} ${d.getDate()}.</div>`;
+  }).join('');
+
+  const now = new Date();
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+
+  const colsHtml = days.map((d, i) => {
+    const ds = dayStrs[i];
+    const isToday = ds === todayStr;
+    const blocks = timedByDay[i].map(ev => {
+      const top = (_calToMin(ev.time) - minStart) * CAL_WEEK_PX_PER_MIN;
+      const height = Math.max(CAL_WEEK_EVENT_DURATION_MIN * CAL_WEEK_PX_PER_MIN, CAL_WEEK_MIN_BLOCK_H);
+      const { bg, color } = calEventColors(ev);
+      return `<div class="cal-week-event-block" style="top:${top}px;height:${height}px;background:${bg};color:${color};" onclick="event.stopPropagation();calWeekEventClick(${ev.id})">`
+        + `<span>${escapeHtml(ev.title)}</span>`
+        + `<span class="cal-week-event-time">${ev.time} Uhr</span>`
+        + `</div>`;
+    }).join('');
+    let nowLine = '';
+    if (isToday && nowMin >= minStart && nowMin <= maxEnd) {
+      nowLine = `<div class="cal-week-now-line" style="top:${(nowMin - minStart) * CAL_WEEK_PX_PER_MIN}px;"></div>`;
+    }
+    // Clicking empty space in a day column starts a new event pre-filled
+    // with that date — event blocks stop the click from bubbling here via
+    // stopPropagation above, so this only fires on a genuinely empty tap.
+    return `<div class="cal-week-day-col${isToday ? ' is-today' : ''}" style="height:${gridHeight}px;" onclick="openNewEventSheet('${ds}')">${hourLines}${blocks}${nowLine}</div>`;
+  }).join('');
+
+  grid.innerHTML = headerHtml + axisHtml + colsHtml;
+  if (window.lucide) lucide.createIcons();
 }
 
 function renderEventList() {
