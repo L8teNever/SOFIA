@@ -21,18 +21,25 @@
       </section>
 
       <section id="cal-view-time" class="cal-view" hidden>
-        <div class="cal-time-card">
-          <div class="cal-time-header">
-            <div class="cal-time-gutter"></div>
-            <div id="cal-time-header-cols" class="cal-time-header-cols"></div>
-          </div>
-          <div id="cal-time-allday" class="cal-time-allday" hidden>
-            <div class="cal-time-gutter"></div>
-            <div id="cal-time-allday-cols" class="cal-time-header-cols"></div>
-          </div>
+        <div class="m3-card cal-time-card" id="cal-time-card">
+          <!-- One scroll box for header + hours, so the day columns stay
+               aligned with their headings no matter how wide the
+               scrollbar is or how far down the hours are scrolled. -->
           <div id="cal-time-scroll" class="cal-time-scroll">
-            <div id="cal-time-hours" class="cal-time-hours"></div>
-            <div id="cal-time-cols" class="cal-time-cols"></div>
+            <div class="cal-time-sticky">
+              <div class="cal-time-row">
+                <div class="cal-time-gutter"></div>
+                <div id="cal-time-header-cols" class="cal-time-colgrid"></div>
+              </div>
+              <div id="cal-time-allday" class="cal-time-row cal-time-allday" hidden>
+                <div class="cal-time-gutter cal-time-allday-label">ganztägig</div>
+                <div id="cal-time-allday-cols" class="cal-time-colgrid"></div>
+              </div>
+            </div>
+            <div class="cal-time-row cal-time-body">
+              <div id="cal-time-hours" class="cal-time-hours"></div>
+              <div id="cal-time-cols" class="cal-time-colgrid cal-time-cols"></div>
+            </div>
           </div>
         </div>
       </section>
@@ -58,8 +65,9 @@
 <style>
 .cal-header-row { gap: 8px; }
 .cal-nav-row { gap: 4px; display: flex; align-items: center; flex-shrink: 0; }
-.cal-back-btn, .cal-nav-btn { width: 40px; height: 40px; }
-.cal-nav-btn { border-radius: 14px; }
+/* Same tonal icon buttons the rest of the app uses, just scaled down on
+   phones — the header carries four of them next to the month title. */
+.cal-back-btn, .cal-nav-btn { width: 40px; height: 40px; border-radius: 16px; }
 .cal-back-btn i, .cal-nav-btn i { width: 18px; height: 18px; }
 .cal-title-btn {
   display: flex; align-items: center; gap: 4px; min-width: 0;
@@ -68,6 +76,8 @@
 }
 .cal-title-btn:hover { background: rgba(103,80,164,0.06); }
 .cal-title-btn:active { background: #e8def8; }
+.cal-title-btn:disabled { cursor: default; }
+.cal-title-btn:disabled:hover, .cal-title-btn:disabled:active { background: none; }
 .cal-month-title {
   font-size: 1.28rem; font-weight: 800; color: #1c1b1f;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -88,7 +98,7 @@
 @media (min-width: 600px) {
   .cal-header-row { gap: 12px; }
   .cal-nav-row { gap: 6px; }
-  .cal-back-btn, .cal-nav-btn { width: 48px; height: 48px; }
+  .cal-back-btn, .cal-nav-btn { width: 48px; height: 48px; border-radius: 20px; }
   .cal-back-btn i, .cal-nav-btn i { width: 22px; height: 22px; }
   .cal-month-title { font-size: 1.55rem; }
   .cal-today-icon { width: 24px; height: 24px; font-size: 11px; }
@@ -96,14 +106,22 @@
 }
 @media (min-width: 900px) {
   .cal-period-nav { display: flex; }
+  /* Matches .page-title once there's room for it beside the nav row. */
+  .cal-month-title { font-size: 1.75rem; }
 }
 
-/* Body: one scrolling stage; drawer beside it on desktop */
+/* Capped and padded with the same values as .page-header above it, so the
+   calendar's left/right edges line up with the back button instead of
+   running out to a wide window's own corners like they used to. */
 .cal-body {
-  flex: 1; min-height: 0; display: flex; flex-direction: column;
-  overflow: hidden; padding: 0 12px 12px; gap: 10px;
+  flex: 1; min-height: 0; width: 100%; max-width: 960px; margin: 0 auto;
+  box-sizing: border-box;
+  display: flex; flex-direction: column;
+  overflow: hidden; padding: 0 20px 20px; gap: 12px;
 }
-@media (min-width: 768px) { .cal-body { padding: 0 24px 16px; gap: 14px; } }
+@media (min-width: 600px)  { .cal-body { padding: 0 28px 24px; } }
+@media (min-width: 760px)  { .cal-body { padding: 0 40px 28px; gap: 16px; } }
+@media (min-width: 1100px) { .cal-body { padding: 0 60px 32px; } }
 @media (min-width: 900px) {
   .cal-body.drawer-open { flex-direction: row; align-items: stretch; }
 }
@@ -117,49 +135,54 @@
 }
 .cal-view[hidden] { display: none !important; }
 
-/* Mini-month drawer */
+/* Mini-month drawer — a plain .m3-card like every other card in the app
+   (white, 28px radius, hairline border, whisper of a shadow). */
 .cal-mini-drawer {
   flex-shrink: 0; max-height: 46%; overflow: auto;
-  background: #fff; border-radius: 24px; padding: 12px 12px 10px;
-  box-shadow: 0 2px 12px rgba(103,80,164,0.08), 0 1px 3px rgba(0,0,0,0.04);
-  border: 1px solid rgba(103,80,164,0.08);
+  background: #fff; border-radius: 28px; padding: 14px 14px 12px;
+  border: 1px solid rgba(0,0,0,0.04);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
 }
 .cal-mini-drawer[hidden] { display: none !important; }
 @media (min-width: 900px) {
+  /* Hugs its own content instead of stretching to the stage's full height —
+     stretching left a tall empty white area under the month grid. */
   .cal-body.drawer-open .cal-mini-drawer {
-    width: 300px; max-height: none; align-self: stretch;
+    width: 304px; align-self: flex-start; max-height: 100%;
   }
 }
 .cal-month-pills {
-  display: flex; gap: 6px; overflow-x: auto; padding: 2px 0 10px;
+  display: flex; gap: 6px; overflow-x: auto; padding: 2px 0 12px;
   -webkit-overflow-scrolling: touch; scrollbar-width: none;
 }
 .cal-month-pills::-webkit-scrollbar { display: none; }
 .cal-month-pill {
-  flex-shrink: 0; border: 1px solid rgba(103,80,164,0.16); border-radius: 999px;
-  padding: 6px 14px; font-family: inherit; font-size: 0.78rem; font-weight: 600;
-  cursor: pointer; background: transparent; color: #1c1b1f;
+  flex-shrink: 0; border: 1px solid rgba(0,0,0,0.05); border-radius: 12px;
+  padding: 8px 14px; font-family: inherit; font-size: 0.8rem; font-weight: 500;
+  cursor: pointer; background: #f3edf7; color: #1c1b1f; white-space: nowrap;
 }
-.cal-month-pill.active { background: #6750a4; color: #fff; border-color: #6750a4; font-weight: 700; }
+.cal-month-pill.active { background: #21005d; color: #fff; border-color: transparent; font-weight: 700; }
 .cal-mini-weekdays {
-  display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; margin-bottom: 4px;
+  display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; margin-bottom: 6px;
 }
 .cal-mini-weekdays div {
-  text-align: center; font-size: 0.62rem; font-weight: 800; color: #6750a4; opacity: 0.5;
+  text-align: center; font-size: 0.66rem; font-weight: 700; color: #79747e;
 }
-.cal-mini-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.cal-mini-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
 .cal-mini-cell {
   aspect-ratio: 1; display: flex; flex-direction: column; align-items: center;
-  justify-content: center; border-radius: 10px; cursor: pointer; position: relative;
-  font-size: 0.72rem; font-weight: 700; color: #1c1b1f; background: transparent; border: none;
-  font-family: inherit; padding: 0;
+  justify-content: center; border-radius: 50%; cursor: pointer; position: relative;
+  font-size: 0.8rem; font-weight: 600; color: #1c1b1f; background: transparent;
+  border: 1.5px solid transparent; font-family: inherit; padding: 0;
+  transition: background 0.12s ease;
 }
-.cal-mini-cell.muted { opacity: 0.35; }
-.cal-mini-cell.today { background: #6750a4; color: #fff; }
-.cal-mini-cell.selected:not(.today) { background: #ede7f6; color: #6750a4; }
+.cal-mini-cell:hover:not(.muted):not(.today):not(.selected) { background: #f3edf7; }
+.cal-mini-cell.muted { color: #cac4d0; }
+.cal-mini-cell.today { background: #6750a4; color: #fff; font-weight: 700; }
+.cal-mini-cell.selected:not(.today) { border-color: #6750a4; color: #6750a4; font-weight: 700; }
 .cal-mini-dot {
   width: 4px; height: 4px; border-radius: 50%; background: #6750a4;
-  position: absolute; bottom: 3px;
+  position: absolute; bottom: 4px;
 }
 .cal-mini-cell.today .cal-mini-dot { background: #fff; }
 
@@ -183,22 +206,22 @@
 
 /* Month grid */
 .cal-card {
-  flex: 1; min-height: 0; margin: 0; border-radius: 24px; padding: 12px 8px 8px;
+  flex: 1; min-height: 0; margin: 0; border-radius: 28px; padding: 14px 10px 10px;
   display: flex; flex-direction: column;
-  box-shadow: 0 2px 12px rgba(103, 80, 164, 0.08), 0 1px 3px rgba(0,0,0,0.04);
-  border: 1px solid rgba(103, 80, 164, 0.08);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  border: 1px solid rgba(0,0,0,0.04);
 }
 .cal-weekdays-grid {
-  display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; margin-bottom: 4px; flex-shrink: 0;
+  display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; margin-bottom: 6px; flex-shrink: 0;
 }
 .cal-weekdays-grid div {
-  text-align: center; font-size: 0.7rem; font-weight: 800;
-  color: #6750a4; opacity: 0.55; padding: 4px 0;
+  text-align: center; font-size: 0.72rem; font-weight: 700;
+  color: #79747e; padding: 2px 0 6px;
 }
 .cal-days-grid {
   flex: 1; min-height: 0;
   display: grid; grid-template-columns: repeat(7, 1fr);
-  grid-template-rows: repeat(6, minmax(0, 1fr));
+  grid-template-rows: repeat(var(--cal-rows, 6), minmax(0, 1fr));
   gap: 2px;
 }
 .cal-day {
@@ -228,110 +251,139 @@
 }
 .cal-day-more { font-size: 0.52rem; font-weight: 700; opacity: 0.55; padding: 0 3px; }
 @media (min-width: 600px) {
-  .cal-card { padding: 16px 12px 10px; border-radius: 28px; }
+  .cal-card { padding: 18px 14px 12px; }
   .cal-day { padding: 5px 4px 4px; border-radius: 12px; }
   .cal-day-num { width: 26px; height: 26px; font-size: 0.85rem; margin-bottom: 3px; }
   .cal-day-bar { font-size: 0.68rem; padding: 1px 5px; }
 }
 
-/* Day / week time grid */
+/* Day / week time grid — same visual language as the timetable's week
+   grid: no gray header band, today's date as a filled pill, hour lines as
+   hairlines, and the accent-red "now" line. */
 .cal-time-card {
   flex: 1; min-height: 0; display: flex; flex-direction: column;
-  background: #fff; border-radius: 24px; overflow: hidden;
-  box-shadow: 0 2px 12px rgba(103, 80, 164, 0.08), 0 1px 3px rgba(0,0,0,0.04);
-  border: 1px solid rgba(103, 80, 164, 0.08);
+  background: #fff; border-radius: 28px; overflow: hidden;
+  padding: 0; margin: 0;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  border: 1px solid rgba(0,0,0,0.04);
   --cal-hour-h: 48px;
-  --cal-gutter: 44px;
+  --cal-gutter: 46px;
+  --cal-days: 7;
 }
-@media (min-width: 768px) {
-  .cal-time-card { --cal-hour-h: 56px; --cal-gutter: 52px; border-radius: 28px; }
-}
-.cal-time-gutter { width: var(--cal-gutter); flex-shrink: 0; }
-.cal-time-header, .cal-time-allday {
-  display: flex; flex-shrink: 0; border-bottom: 1px solid rgba(103,80,164,0.1);
-  background: #fff;
-}
-.cal-time-header-cols {
-  flex: 1; min-width: 0; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr));
-}
-.cal-time-header-cols.cal-days-1 { grid-template-columns: minmax(0, 1fr); }
-.cal-time-day-head {
-  text-align: center; padding: 8px 2px 10px; cursor: pointer;
-  border-left: 1px solid rgba(103,80,164,0.08);
-}
-.cal-time-day-head .wd {
-  font-size: 0.68rem; font-weight: 800; text-transform: uppercase;
-  letter-spacing: 0.04em; color: #6750a4; opacity: 0.65;
-}
-.cal-time-day-head .num {
-  margin-top: 4px; width: 28px; height: 28px; border-radius: 50%;
-  display: inline-flex; align-items: center; justify-content: center;
-  font-size: 0.95rem; font-weight: 700; color: #1c1b1f;
-}
-.cal-time-day-head.is-today .wd { color: #6750a4; opacity: 1; }
-.cal-time-day-head.is-today .num { background: #6750a4; color: #fff; }
-.cal-time-allday { padding: 4px 0; max-height: 72px; overflow-y: auto; }
-.cal-allday-cell { min-width: 0; padding: 2px 3px; display: flex; flex-direction: column; gap: 2px; border-left: 1px solid rgba(103,80,164,0.08); }
-.cal-allday-chip {
-  font-size: 0.68rem; font-weight: 700; padding: 3px 6px; border-radius: 6px;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; color: #fff;
+@media (min-width: 760px) {
+  .cal-time-card { --cal-hour-h: 56px; --cal-gutter: 54px; }
 }
 .cal-time-scroll {
-  flex: 1; min-height: 0; overflow: auto; display: flex;
+  flex: 1; min-height: 0; overflow: auto;
   -webkit-overflow-scrolling: touch;
+}
+.cal-time-row { display: flex; }
+/* Own display rule beats the UA's [hidden] one, so the all-day strip needs
+   this to actually disappear on a week without all-day events. */
+.cal-time-row[hidden] { display: none !important; }
+.cal-time-gutter { width: var(--cal-gutter); flex-shrink: 0; }
+.cal-time-colgrid {
+  flex: 1; min-width: 0; display: grid;
+  grid-template-columns: repeat(var(--cal-days), minmax(0, 1fr));
+}
+.cal-time-sticky {
+  position: sticky; top: 0; z-index: 4; background: #fff;
+  box-shadow: 0 1px 0 rgba(0,0,0,0.07);
+}
+.cal-time-day-head {
+  text-align: center; padding: 12px 2px 10px; cursor: pointer;
+  background: none; border: none; font-family: inherit;
+}
+.cal-time-day-head .wd {
+  font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.06em; color: #79747e;
+}
+.cal-time-day-head .num {
+  margin-top: 5px; width: 30px; height: 30px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 0.95rem; font-weight: 600; color: #1c1b1f;
+}
+.cal-time-day-head:hover .num { background: #f3edf7; }
+.cal-time-day-head.is-today .wd { color: #6750a4; }
+.cal-time-day-head.is-today .num { background: #6750a4; color: #fff; font-weight: 700; }
+.cal-time-allday {
+  padding: 2px 0 6px; max-height: 86px; overflow-y: auto;
+  border-top: 1px solid rgba(0,0,0,0.06);
+}
+/* Sized to actually fit the hour gutter — uppercase + letter-spacing made
+   "ganztägig" wider than the 46px it has to live in, so it got cut off. */
+.cal-time-allday-label {
+  font-size: 0.56rem; font-weight: 700; color: #79747e;
+  display: flex; align-items: flex-start; justify-content: flex-end;
+  padding: 7px 7px 0 2px; overflow: hidden;
+}
+.cal-allday-cell { min-width: 0; padding: 4px 3px 0; display: flex; flex-direction: column; gap: 3px; }
+.cal-allday-chip {
+  font-size: 0.68rem; font-weight: 600; padding: 4px 8px; border-radius: 8px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; color: #fff;
 }
 .cal-time-hours {
   width: var(--cal-gutter); flex-shrink: 0; position: relative;
 }
 .cal-time-hour-label {
-  height: var(--cal-hour-h); text-align: right; padding-right: 8px;
-  font-size: 0.68rem; font-weight: 600; color: #6750a4; opacity: 0.45;
+  height: var(--cal-hour-h); text-align: right; padding-right: 10px;
+  font-size: 0.68rem; font-weight: 500; color: #79747e;
   transform: translateY(-0.55em);
 }
-.cal-time-cols {
-  flex: 1; min-width: 0; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr));
-  position: relative;
-}
-.cal-time-cols.cal-days-1 { grid-template-columns: minmax(0, 1fr); }
+.cal-time-cols { position: relative; }
 .cal-time-col {
-  position: relative; border-left: 1px solid rgba(103,80,164,0.08);
+  position: relative; border-left: 1px solid rgba(0,0,0,0.05);
   background-image: repeating-linear-gradient(
     to bottom,
     transparent 0,
     transparent calc(var(--cal-hour-h) - 1px),
-    rgba(103,80,164,0.1) calc(var(--cal-hour-h) - 1px),
-    rgba(103,80,164,0.1) var(--cal-hour-h)
+    rgba(0,0,0,0.055) calc(var(--cal-hour-h) - 1px),
+    rgba(0,0,0,0.055) var(--cal-hour-h)
   );
 }
-.cal-time-col.is-today { background-color: rgba(103,80,164,0.04); }
+.cal-time-col:first-child { border-left: none; }
+.cal-time-col.is-today { background-color: rgba(103,80,164,0.035); }
 .cal-time-block {
-  position: absolute; left: 3px; right: 3px; border-radius: 8px; padding: 4px 6px;
-  overflow: hidden; cursor: pointer; font-size: 0.7rem; font-weight: 700; line-height: 1.25;
-  color: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+  position: absolute; left: 3px; right: 3px; border-radius: 10px; padding: 5px 7px;
+  overflow: hidden; cursor: pointer; font-size: 0.72rem; font-weight: 600; line-height: 1.25;
+  color: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.1);
 }
-.cal-time-block-time { font-size: 0.62rem; font-weight: 600; opacity: 0.85; display: block; }
+.cal-time-block-time { font-size: 0.62rem; font-weight: 500; opacity: 0.85; display: block; }
 .cal-now-line {
-  position: absolute; left: 0; right: 0; height: 2px; background: #ba1a1a; z-index: 5; pointer-events: none;
+  position: absolute; left: 0; right: 0; height: 2px; background: #b3261e; z-index: 5; pointer-events: none;
 }
 .cal-now-line::before {
-  content: ''; position: absolute; left: -4px; top: -4px; width: 10px; height: 10px;
-  border-radius: 50%; background: #ba1a1a;
+  content: ''; position: absolute; left: -3px; top: -3px; width: 8px; height: 8px;
+  border-radius: 50%; background: #b3261e;
 }
 
 /* Agenda */
-.cal-agenda-wrap { overflow-y: auto; padding: 4px 2px 88px; -webkit-overflow-scrolling: touch; }
+.cal-agenda-wrap { overflow-y: auto; padding: 0 2px 96px; -webkit-overflow-scrolling: touch; }
 .cal-list-header {
   margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; gap: 10px;
 }
 .cal-list-header-label {
-  font-size: 0.75rem; font-weight: 700; text-transform: uppercase;
-  letter-spacing: 0.08em; color: #6750a4;
+  font-size: 0.72rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.12em; color: #6750a4;
 }
 .cal-list-header-count { font-size: 0.75rem; color: #49454f; font-weight: 600; }
-.cal-agenda-group { margin-bottom: 18px; }
+/* Month heading — the one signpost in a list that now spans the whole
+   school year, so it stays pinned while you scroll through its events. */
+.cal-agenda-month {
+  position: sticky; top: 0; z-index: 2;
+  background: #f9f6fc; padding: 10px 4px 8px;
+  font-size: 0.82rem; font-weight: 800; color: #21005d;
+  letter-spacing: -0.01em;
+}
+.cal-agenda-group { margin-bottom: 16px; }
 .cal-agenda-group-title {
-  font-size: 0.78rem; font-weight: 800; color: #6750a4; margin: 0 0 8px 2px;
-  text-transform: uppercase; letter-spacing: 0.04em;
+  font-size: 0.72rem; font-weight: 700; color: #6750a4; margin: 0 0 8px 4px;
+  text-transform: uppercase; letter-spacing: 0.1em;
+  display: flex; align-items: center; gap: 8px;
+}
+.cal-agenda-today-pill {
+  background: #6750a4; color: #fff; border-radius: 8px;
+  padding: 2px 8px; font-size: 0.64rem; font-weight: 700; letter-spacing: 0.06em;
 }
 .cal-event-card {
   margin-bottom: 10px; padding: 14px 16px; display: flex; align-items: center;
@@ -631,13 +683,17 @@ async function calMiniPickMonth(y, m) {
   renderCalMiniDrawer();
   renderCal();
 }
+// Picking a day deliberately leaves the drawer open — it's a date picker
+// you keep using to hop from day to day, so it stays until it's closed
+// again via the chevron next to the month title in the header.
 async function calMiniPickDay(dateStr) {
   const d = new Date(dateStr + 'T00:00');
   calYear = d.getFullYear();
   calMonth = d.getMonth();
   calWeekAnchor = d;
   selectedCalDate = dateStr;
-  closeCalMiniDrawer();
+  calMiniYear = calYear;
+  calMiniMonth = calMonth;
   await setCalDisplayMode('day', { skipReload: false, anchor: d });
 }
 
@@ -699,6 +755,9 @@ async function setCalDisplayMode(mode, opts = {}) {
     calMonth = calWeekAnchor.getMonth();
   }
   if (mode === 'day') selectedCalDate = localDateStr(calWeekAnchor);
+  // The agenda isn't bound to a single month, so a month picker beside it
+  // has nothing left to pick — it closes itself on the way in.
+  if (mode === 'agenda') closeCalMiniDrawer();
 
   if (!opts.skipReload) await loadCalEvents();
   renderCal();
@@ -862,6 +921,9 @@ async function loadCalSubjects() {
 }
 
 async function _fetchCalEventsForMode() {
+  // Agenda lists the whole calendar, so it asks for every event instead of
+  // a single month like the date-bound views do.
+  if (calDisplayMode === 'agenda') return await API.events();
   if (calDisplayMode === 'week') {
     const months = _calMonthsForWeek(calWeekAnchor);
     const results = await Promise.all([...months].map(m => API.events(m).catch(() => [])));
@@ -942,6 +1004,7 @@ async function calToday() {
   calWeekAnchor = today;
   selectedCalDate = localDateStr(today);
   syncCalTodayBtn();
+  if (calDisplayMode === 'agenda') { scrollAgendaToToday('smooth'); return; }
   await loadCalEvents();
   renderCal();
   if (calMiniOpen) {
@@ -956,6 +1019,7 @@ async function calNav(dir) {
   return navigatePeriod(dir);
 }
 async function navigatePeriod(dir) {
+  if (calDisplayMode === 'agenda') return;
   if (calDisplayMode === 'week') {
     calWeekAnchor = _calAddDays(calWeekAnchor, dir * 7);
     calYear = calWeekAnchor.getFullYear();
@@ -996,8 +1060,18 @@ function renderCal(dir) {
   if (timeEl) timeEl.hidden = !(calDisplayMode === 'week' || calDisplayMode === 'day');
   if (agendaEl) agendaEl.hidden = calDisplayMode !== 'agenda';
 
+  // Agenda shows every month at once, so a single month in the title (and
+  // the month picker + prev/next that go with it) would be a lie there.
+  const isAgenda = calDisplayMode === 'agenda';
   const titleEl = document.getElementById('cal-month-title');
-  if (titleEl) titleEl.textContent = CAL_MONTHS[calMonth] + ' ' + calYear;
+  if (titleEl) titleEl.textContent = isAgenda ? 'Alle Termine' : CAL_MONTHS[calMonth] + ' ' + calYear;
+  const titleBtn = document.getElementById('cal-title-block');
+  if (titleBtn) titleBtn.disabled = isAgenda;
+  const chevron = document.getElementById('cal-title-chevron');
+  if (chevron) chevron.style.display = isAgenda ? 'none' : '';
+  document.querySelectorAll('.cal-period-nav').forEach(btn => {
+    btn.style.display = isAgenda ? 'none' : '';
+  });
 
   if (calDisplayMode === 'month') renderCalGridOnly(true, dir);
   if (calDisplayMode === 'week' || calDisplayMode === 'day') renderCalTimeGrid(calDisplayMode === 'day' ? 1 : 7);
@@ -1024,7 +1098,12 @@ function _buildCalGrid(grid) {
   const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
   const prevDays = new Date(calYear, calMonth, 0).getDate();
   const todayStr = localDateStr();
-    const totalSlots = 42;
+  // Only as many weeks as the month actually touches — a fixed six rows
+  // left months like this one with a whole trailing row of nothing but
+  // greyed-out next-month days, and made every cell shorter for it.
+  const weeks = Math.ceil((startDay + daysInMonth) / 7);
+  const totalSlots = weeks * 7;
+  grid.style.setProperty('--cal-rows', String(weeks));
 
   for (let i = 0; i < totalSlots; i++) {
     let dateObj;
@@ -1092,9 +1171,10 @@ function renderCalTimeGrid(dayCount) {
   const dayStrs = days.map(d => localDateStr(d));
   const todayStr = localDateStr();
 
-  headerCols.classList.toggle('cal-days-1', dayCount === 1);
-  colsEl.classList.toggle('cal-days-1', dayCount === 1);
-  if (alldayCols) alldayCols.classList.toggle('cal-days-1', dayCount === 1);
+  // One variable drives the column count of the heading row, the all-day
+  // row and the hour grid at once, so the three can't fall out of sync.
+  const card = document.getElementById('cal-time-card');
+  if (card) card.style.setProperty('--cal-days', String(dayCount));
 
   headerCols.innerHTML = days.map((d, i) => {
     const isToday = dayStrs[i] === todayStr;
@@ -1180,21 +1260,17 @@ function onCalSlotClick(e) {
 function renderCalWeekView() { renderCalTimeGrid(calDisplayMode === 'day' ? 1 : 7); }
 function calWeekEventClick(id) { openCalEventDetail(id); }
 
+// The agenda deliberately isn't limited to the month the other views are
+// showing — it's the one place to see every event the class has, so it
+// lists all of them (grouped by day, under a pinned month heading) and
+// opens scrolled to today instead of at the very first entry.
 function renderAgendaList() {
   const list = document.getElementById('cal-events-list');
   const headerEl = document.getElementById('cal-events-header');
   const emptyEl = document.getElementById('cal-no-events');
   if (!list) return;
 
-  const monthStart = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-01`;
-  const lastDay = new Date(calYear, calMonth + 1, 0).getDate();
-  const monthEnd = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
-
-  let pool = calEvents.filter(e => {
-    const s = (e.date || '').slice(0, 10);
-    const end = (e.end_date || s).slice(0, 10);
-    return s <= monthEnd && end >= monthStart;
-  });
+  let pool = calEvents.slice();
   if (activeCategoryFilter !== 'all') {
     pool = pool.filter(e => (e.event_type || 'other') === activeCategoryFilter);
   }
@@ -1202,7 +1278,7 @@ function renderAgendaList() {
 
   headerEl.innerHTML = `
     <div class="cal-list-header">
-      <div class="cal-list-header-label">Terminübersicht</div>
+      <div class="cal-list-header-label">Alle Termine</div>
       <span class="cal-list-header-count">${pool.length} ${pool.length === 1 ? 'Eintrag' : 'Einträge'}</span>
     </div>`;
 
@@ -1211,7 +1287,7 @@ function renderAgendaList() {
     emptyEl.style.display = 'block';
     document.getElementById('cal-empty-title').textContent = 'Keine Termine';
     document.getElementById('cal-empty-sub').textContent = activeCategoryFilter === 'all'
-      ? 'In diesem Monat stehen keine Termine an.'
+      ? 'Es sind noch keine Termine eingetragen.'
       : 'Keine Termine in dieser Kategorie vorhanden.';
     return;
   }
@@ -1227,12 +1303,41 @@ function renderAgendaList() {
   const todayStr = localDateStr();
   const subMap = Object.fromEntries((calSubjects || []).map(s => [s.id, s]));
 
+  let lastMonthKey = '';
   list.innerHTML = [...groups.entries()].map(([dateKey, events]) => {
     const d = new Date(dateKey + 'T00:00');
+    const monthKey = dateKey.slice(0, 7);
+    const monthHead = monthKey === lastMonthKey
+      ? ''
+      : `<div class="cal-agenda-month">${CAL_MONTHS[d.getMonth()]} ${d.getFullYear()}</div>`;
+    lastMonthKey = monthKey;
     const groupTitle = d.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' });
+    const todayPill = dateKey === todayStr ? '<span class="cal-agenda-today-pill">Heute</span>' : '';
     const cards = events.map(e => renderCalEventCard(e, { todayStr, subMap, isPast: (e.end_date || e.date || '').slice(0, 10) < todayStr })).join('');
-    return `<div class="cal-agenda-group"><div class="cal-agenda-group-title">${escapeHtml(groupTitle)}</div>${cards}</div>`;
+    return `${monthHead}<div class="cal-agenda-group" data-date="${dateKey}">
+      <div class="cal-agenda-group-title">${escapeHtml(groupTitle)}${todayPill}</div>${cards}
+    </div>`;
   }).join('');
+
+  scrollAgendaToToday();
+}
+
+// Puts the first group that hasn't happened yet at the top of the list —
+// with every event of the year in here, starting at last September's first
+// entry would mean scrolling past months of history to find this week.
+function scrollAgendaToToday(behavior = 'auto') {
+  const wrap = document.getElementById('cal-view-agenda');
+  const list = document.getElementById('cal-events-list');
+  if (!wrap || !list) return;
+  const todayStr = localDateStr();
+  const groups = [...list.querySelectorAll('.cal-agenda-group')];
+  const target = groups.find(g => (g.dataset.date || '') >= todayStr) || groups[groups.length - 1];
+  if (!target) return;
+  // Leave room for the pinned month heading, which would otherwise sit on
+  // top of the very day the scroll was supposed to bring into view.
+  const stickyH = list.querySelector('.cal-agenda-month')?.offsetHeight || 0;
+  const top = target.getBoundingClientRect().top - wrap.getBoundingClientRect().top + wrap.scrollTop - stickyH;
+  wrap.scrollTo({ top: Math.max(0, top), behavior });
 }
 
 function renderCalEventCard(e, { todayStr, subMap, isPast }) {
