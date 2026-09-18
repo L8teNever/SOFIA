@@ -177,7 +177,7 @@
 .cal-days-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: 2px 0;
+  gap: 3px;
 }
 @keyframes cal-grid-enter {
   from { opacity: 0; transform: translateY(4px); }
@@ -185,60 +185,61 @@
 }
 .cal-days-grid.cal-grid-enter { animation: cal-grid-enter 0.22s ease; }
 
+/* Rectangular cell holding real event bars, Google Calendar month-grid
+   style — replaces the old circular date-picker cell with dot indicators,
+   since a dot can't carry a title and forced a separate day-agenda list
+   to be the only place to actually read what's on a given day. */
 .cal-day {
   position: relative;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  aspect-ratio: 1/1;
+  align-items: stretch;
   width: 100%;
-  max-width: 44px;
-  margin: 0 auto;
-  border-radius: 50%;
-  font-size: 0.88rem;
-  font-weight: 600;
+  min-height: 64px;
+  padding: 3px 2px 2px;
+  border-radius: 10px;
   cursor: pointer;
-  transition: transform 0.15s cubic-bezier(0.2,0.8,0.2,1), background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+  transition: background 0.15s ease;
   user-select: none;
   background: transparent;
   color: #1c1b1f;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 .cal-day:hover:not(.muted):not(.selected) { background: #f3edf7; }
-.cal-day:active:not(.muted) { transform: scale(0.92); }
-.cal-day.muted { opacity: 0.28; cursor: default; }
-.cal-day.today {
-  box-shadow: inset 0 0 0 2px #6750a4;
-  color: #6750a4;
-  font-weight: 800;
-}
-.cal-day.selected {
-  background: #6750a4 !important;
-  color: #ffffff !important;
-  font-weight: 800;
-  box-shadow: 0 3px 10px rgba(103, 80, 164, 0.4);
-}
-.cal-day-num { line-height: 1; font-size: 0.85rem; z-index: 1; }
+.cal-day:active:not(.muted) { background: #e8def8; }
+.cal-day.muted { opacity: 0.4; }
+.cal-day.selected { background: #ede7f6; }
 
-.cal-dots-wrap {
-  position: absolute;
-  bottom: 6px; left: 0; right: 0;
+.cal-day-num {
+  align-self: flex-start;
+  line-height: 1; font-size: 0.74rem; font-weight: 700;
+  width: 20px; height: 20px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
-  gap: 2.5px; pointer-events: none; height: 5px;
+  flex-shrink: 0; margin-bottom: 2px; z-index: 1;
 }
-.cal-dot {
-  width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0;
+.cal-day.today .cal-day-num { background: #6750a4; color: #fff; font-weight: 800; }
+.cal-day.selected .cal-day-num { box-shadow: inset 0 0 0 2px #6750a4; color: #6750a4; font-weight: 800; }
+.cal-day.selected.today .cal-day-num { background: #6750a4; color: #fff; box-shadow: none; }
+
+.cal-day-bars { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.cal-day-bar {
+  font-size: 0.56rem; font-weight: 700; line-height: 1.5;
+  padding: 0 3px; border-radius: 3px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.cal-dot-exam { background: #ba1a1a; }
-.cal-dot-holiday { background: #8a5a00; }
-.cal-dot-trip { background: #006d3a; }
-.cal-dot-personal { background: #006399; }
-.cal-dot-other { background: #6750a4; }
-.cal-dot-more {
-  font-size: 0.58rem; line-height: 1; font-weight: 800; color: #6750a4;
+.cal-day-more { font-size: 0.52rem; font-weight: 700; opacity: 0.55; padding: 0 3px; margin-top: 1px; }
+
+@media (min-width: 400px) {
+  .cal-day-bar { font-size: 0.6rem; }
+  .cal-day-more { font-size: 0.56rem; }
 }
-.cal-day.selected .cal-dot { box-shadow: 0 0 0 1px rgba(255,255,255,0.95); }
-.cal-day.selected .cal-dot-more { color: rgba(255,255,255,0.95); }
+@media (min-width: 600px) {
+  .cal-day { min-height: 92px; padding: 5px 4px 4px; border-radius: 12px; }
+  .cal-day-num { width: 26px; height: 26px; font-size: 0.85rem; margin-bottom: 4px; }
+  .cal-day-bar { font-size: 0.68rem; padding: 1px 5px; line-height: 1.6; }
+  .cal-day-more { font-size: 0.62rem; }
+}
 
 /* ── Search (M3 filled tonal) ── */
 .cal-search-bar-mobile {
@@ -545,9 +546,9 @@ document.getElementById('ph-calendar').outerHTML = pageHeader({
       <button type="button" id="cal-viewmode-btn" class="icon-btn cal-nav-btn cal-flat-btn" onclick="toggleCalDisplayMode()" title="Wochenansicht">
         <i data-lucide="calendar-days" id="cal-viewmode-icon"></i>
       </button>
-      <button onclick="calNav(-1)" class="icon-btn cal-nav-btn" title="Vorheriger Monat" id="cal-nav-prev"><i data-lucide="chevron-left"></i></button>
+      <button onclick="calNav(-1)" class="icon-btn cal-nav-btn cal-flat-btn" title="Vorheriger Monat" id="cal-nav-prev"><i data-lucide="chevron-left"></i></button>
       <button onclick="calToday()" class="cal-today-btn cal-today-icon-btn" id="cal-today-btn" title="Zum heutigen Tag springen"></button>
-      <button onclick="calNav(1)" class="icon-btn cal-nav-btn" title="Nächster Monat" id="cal-nav-next"><i data-lucide="chevron-right"></i></button>
+      <button onclick="calNav(1)" class="icon-btn cal-nav-btn cal-flat-btn" title="Nächster Monat" id="cal-nav-next"><i data-lucide="chevron-right"></i></button>
       <button type="button" id="cal-header-search-btn" class="icon-btn cal-nav-btn cal-search-header-btn cal-flat-btn" onclick="toggleCalHeaderSearch()" title="Termine durchsuchen">
         <i data-lucide="search"></i>
       </button>
@@ -1088,23 +1089,26 @@ function _buildCalGrid(grid) {
 
     el.className = cls;
 
-    let dotsHtml = '';
+    let barsHtml = '';
     if (hasEvent) {
-      const maxDots = 3;
-      const dotsToShow = covering.slice(0, maxDots);
-      const dotsTags = dotsToShow.map(ev => {
-        const type = ev.event_type || 'other';
-        return `<span class="cal-dot cal-dot-${type}" title="${escapeHtml(ev.title)}"></span>`;
+      // Real colored event bars in the cell itself, Google Calendar's
+      // month-grid look — enough of the title to recognize the event
+      // without opening the day, instead of an unlabeled dot.
+      const maxBars = 2;
+      const barsToShow = covering.slice(0, maxBars);
+      const barTags = barsToShow.map(ev => {
+        const { bg, color } = calEventColors(ev);
+        return `<div class="cal-day-bar" style="background:${bg};color:${color};" title="${escapeHtml(ev.title)}" onclick="event.stopPropagation();calWeekEventClick(${ev.id})">${escapeHtml(ev.title)}</div>`;
       }).join('');
 
       let moreTag = '';
-      if (covering.length > maxDots) {
-        moreTag = `<span class="cal-dot-more">+${covering.length - maxDots + 1}</span>`;
+      if (covering.length > maxBars) {
+        moreTag = `<div class="cal-day-more">+${covering.length - maxBars} weitere</div>`;
       }
-      dotsHtml = `<div class="cal-dots-wrap">${dotsTags}${moreTag}</div>`;
+      barsHtml = `<div class="cal-day-bars">${barTags}${moreTag}</div>`;
     }
 
-    el.innerHTML = `<span class="cal-day-num">${d}</span>${dotsHtml}`;
+    el.innerHTML = `<span class="cal-day-num">${d}</span>${barsHtml}`;
     el.onclick = () => selectDay(dateStr);
     grid.appendChild(el);
   }
