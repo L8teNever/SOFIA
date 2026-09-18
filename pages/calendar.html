@@ -1,1 +1,1616 @@
-PLACEHOLDER_READ_FROM_FILE
+<div class="page" id="page-calendar" style="background:#f9f6fc;">
+  <div id="ph-calendar"></div>
+
+  <div class="cal-body" id="cal-body">
+    <aside id="cal-mini-drawer" class="cal-mini-drawer" hidden>
+      <div id="cal-month-pills" class="cal-month-pills"></div>
+      <div class="cal-mini-weekdays"><div>M</div><div>D</div><div>M</div><div>D</div><div>F</div><div>S</div><div>S</div></div>
+      <div id="cal-mini-grid" class="cal-mini-grid"></div>
+    </aside>
+
+    <div class="cal-stage" id="cal-stage">
+      <div id="cal-search-dropdown" class="cal-search-dropdown" hidden></div>
+
+      <section id="cal-view-month" class="cal-view">
+        <div class="m3-card cal-card">
+          <div class="cal-weekdays-grid">
+            <div>Mo</div><div>Di</div><div>Mi</div><div>Do</div><div>Fr</div><div>Sa</div><div>So</div>
+          </div>
+          <div id="cal-grid" class="cal-days-grid"></div>
+        </div>
+      </section>
+
+      <section id="cal-view-time" class="cal-view" hidden>
+        <div class="cal-time-card">
+          <div class="cal-time-header">
+            <div class="cal-time-gutter"></div>
+            <div id="cal-time-header-cols" class="cal-time-header-cols"></div>
+          </div>
+          <div id="cal-time-allday" class="cal-time-allday" hidden>
+            <div class="cal-time-gutter"></div>
+            <div id="cal-time-allday-cols" class="cal-time-header-cols"></div>
+          </div>
+          <div id="cal-time-scroll" class="cal-time-scroll">
+            <div id="cal-time-hours" class="cal-time-hours"></div>
+            <div id="cal-time-cols" class="cal-time-cols"></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="cal-view-agenda" class="cal-view cal-agenda-wrap no-scrollbar" hidden>
+        <div id="cal-events-header"></div>
+        <div id="cal-events-list" class="cal-events-list"></div>
+        <div id="cal-no-events" class="cal-empty-card" style="display:none;">
+          <div class="cal-empty-icon"><i data-lucide="calendar"></i></div>
+          <div class="cal-empty-title" id="cal-empty-title">Keine Termine</div>
+          <div class="cal-empty-sub" id="cal-empty-sub">Für diesen Zeitraum sind keine Termine eingetragen.</div>
+          <button class="m3-btn-primary cal-empty-cta" onclick="openNewEventSheet(selectedCalDate)">
+            <i data-lucide="plus"></i>
+            <span>Neuen Termin eintragen</span>
+          </button>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <div id="cal-fab-slot"></div>
+
+<style>
+.cal-header-row { gap: 8px; }
+.cal-nav-row { gap: 4px; display: flex; align-items: center; flex-shrink: 0; }
+.cal-back-btn, .cal-nav-btn { width: 40px; height: 40px; }
+.cal-nav-btn { border-radius: 14px; }
+.cal-back-btn i, .cal-nav-btn i { width: 18px; height: 18px; }
+.cal-title-btn {
+  display: flex; align-items: center; gap: 4px; min-width: 0;
+  background: none; border: none; padding: 4px 8px 4px 2px; margin: 0;
+  cursor: pointer; font-family: inherit; color: inherit; border-radius: 16px;
+}
+.cal-title-btn:hover { background: rgba(103,80,164,0.06); }
+.cal-title-btn:active { background: #e8def8; }
+.cal-month-title {
+  font-size: 1.28rem; font-weight: 800; color: #1c1b1f;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  letter-spacing: -0.01em; line-height: 1.15;
+}
+#cal-title-chevron { width: 20px; height: 20px; flex-shrink: 0; opacity: 0.55; transition: transform 0.2s ease; }
+.cal-today-icon {
+  width: 22px; height: 22px; border: 2px solid currentColor; border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 800; line-height: 1; position: relative;
+  padding-top: 1px; color: #6750a4;
+}
+.cal-today-icon::before {
+  content: ''; position: absolute; top: -3px; left: 3px; right: 3px;
+  height: 2px; background: currentColor; border-radius: 1px;
+}
+.cal-period-nav { display: none; }
+@media (min-width: 600px) {
+  .cal-header-row { gap: 12px; }
+  .cal-nav-row { gap: 6px; }
+  .cal-back-btn, .cal-nav-btn { width: 48px; height: 48px; }
+  .cal-back-btn i, .cal-nav-btn i { width: 22px; height: 22px; }
+  .cal-month-title { font-size: 1.55rem; }
+  .cal-today-icon { width: 24px; height: 24px; font-size: 11px; }
+  #cal-filter-dot { top: 8px !important; right: 8px !important; }
+}
+@media (min-width: 900px) {
+  .cal-period-nav { display: flex; }
+}
+
+/* Body: one scrolling stage; drawer beside it on desktop */
+.cal-body {
+  flex: 1; min-height: 0; display: flex; flex-direction: column;
+  overflow: hidden; padding: 0 12px 12px; gap: 10px;
+}
+@media (min-width: 768px) { .cal-body { padding: 0 24px 16px; gap: 14px; } }
+@media (min-width: 900px) {
+  .cal-body.drawer-open { flex-direction: row; align-items: stretch; }
+}
+
+.cal-stage {
+  flex: 1; min-height: 0; display: flex; flex-direction: column;
+  position: relative; overflow: hidden;
+}
+.cal-view {
+  flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden;
+}
+.cal-view[hidden] { display: none !important; }
+
+/* Mini-month drawer */
+.cal-mini-drawer {
+  flex-shrink: 0; max-height: 46%; overflow: auto;
+  background: #fff; border-radius: 24px; padding: 12px 12px 10px;
+  box-shadow: 0 2px 12px rgba(103,80,164,0.08), 0 1px 3px rgba(0,0,0,0.04);
+  border: 1px solid rgba(103,80,164,0.08);
+}
+.cal-mini-drawer[hidden] { display: none !important; }
+@media (min-width: 900px) {
+  .cal-body.drawer-open .cal-mini-drawer {
+    width: 300px; max-height: none; align-self: stretch;
+  }
+}
+.cal-month-pills {
+  display: flex; gap: 6px; overflow-x: auto; padding: 2px 0 10px;
+  -webkit-overflow-scrolling: touch; scrollbar-width: none;
+}
+.cal-month-pills::-webkit-scrollbar { display: none; }
+.cal-month-pill {
+  flex-shrink: 0; border: 1px solid rgba(103,80,164,0.16); border-radius: 999px;
+  padding: 6px 14px; font-family: inherit; font-size: 0.78rem; font-weight: 600;
+  cursor: pointer; background: transparent; color: #1c1b1f;
+}
+.cal-month-pill.active { background: #6750a4; color: #fff; border-color: #6750a4; font-weight: 700; }
+.cal-mini-weekdays {
+  display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; margin-bottom: 4px;
+}
+.cal-mini-weekdays div {
+  text-align: center; font-size: 0.62rem; font-weight: 800; color: #6750a4; opacity: 0.5;
+}
+.cal-mini-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.cal-mini-cell {
+  aspect-ratio: 1; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; border-radius: 10px; cursor: pointer; position: relative;
+  font-size: 0.72rem; font-weight: 700; color: #1c1b1f; background: transparent; border: none;
+  font-family: inherit; padding: 0;
+}
+.cal-mini-cell.muted { opacity: 0.35; }
+.cal-mini-cell.today { background: #6750a4; color: #fff; }
+.cal-mini-cell.selected:not(.today) { background: #ede7f6; color: #6750a4; }
+.cal-mini-dot {
+  width: 4px; height: 4px; border-radius: 50%; background: #6750a4;
+  position: absolute; bottom: 3px;
+}
+.cal-mini-cell.today .cal-mini-dot { background: #fff; }
+
+/* Search dropdown */
+.cal-search-dropdown {
+  position: absolute; left: 0; right: 0; top: 0; z-index: 40;
+  background: #fff; border-radius: 16px;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.14), 0 2px 8px rgba(103,80,164,0.12);
+  border: 1px solid rgba(103,80,164,0.1);
+  max-height: min(60vh, 420px); overflow-y: auto; padding: 6px;
+}
+.cal-search-hit {
+  display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+  border-radius: 12px; cursor: pointer; border: none; background: none;
+  width: 100%; text-align: left; font-family: inherit; color: #1c1b1f;
+}
+.cal-search-hit:hover, .cal-search-hit:active { background: #f3edf7; }
+.cal-search-hit-title { font-weight: 700; font-size: 0.92rem; }
+.cal-search-hit-meta { font-size: 0.75rem; color: #49454f; margin-top: 2px; }
+.cal-search-empty { padding: 18px 12px; text-align: center; font-size: 0.85rem; color: #49454f; }
+
+/* Month grid */
+.cal-card {
+  flex: 1; min-height: 0; margin: 0; border-radius: 24px; padding: 12px 8px 8px;
+  display: flex; flex-direction: column;
+  box-shadow: 0 2px 12px rgba(103, 80, 164, 0.08), 0 1px 3px rgba(0,0,0,0.04);
+  border: 1px solid rgba(103, 80, 164, 0.08);
+}
+.cal-weekdays-grid {
+  display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; margin-bottom: 4px; flex-shrink: 0;
+}
+.cal-weekdays-grid div {
+  text-align: center; font-size: 0.7rem; font-weight: 800;
+  color: #6750a4; opacity: 0.55; padding: 4px 0;
+}
+.cal-days-grid {
+  flex: 1; min-height: 0;
+  display: grid; grid-template-columns: repeat(7, 1fr);
+  grid-template-rows: repeat(6, minmax(0, 1fr));
+  gap: 2px;
+}
+.cal-day {
+  position: relative; display: flex; flex-direction: column; align-items: stretch;
+  min-height: 0; padding: 3px 2px 2px; border-radius: 10px;
+  cursor: pointer; transition: background 0.15s ease; user-select: none;
+  background: transparent; color: #1c1b1f; overflow: hidden;
+}
+.cal-day:hover:not(.muted):not(.selected) { background: #f3edf7; }
+.cal-day:active:not(.muted) { background: #e8def8; }
+.cal-day.muted { opacity: 0.38; }
+.cal-day.selected { background: #ede7f6; }
+.cal-day-num {
+  align-self: flex-start; line-height: 1; font-size: 0.74rem; font-weight: 700;
+  width: 20px; height: 20px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; margin-bottom: 2px;
+}
+.cal-day.today .cal-day-num { background: #6750a4; color: #fff; font-weight: 800; }
+.cal-day.selected .cal-day-num { box-shadow: inset 0 0 0 2px #6750a4; color: #6750a4; font-weight: 800; }
+.cal-day.selected.today .cal-day-num { background: #6750a4; color: #fff; box-shadow: none; }
+.cal-day-bars { display: flex; flex-direction: column; gap: 2px; min-width: 0; overflow: hidden; }
+.cal-day-bar {
+  font-size: 0.56rem; font-weight: 700; line-height: 1.45;
+  padding: 0 3px; border-radius: 3px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer;
+}
+.cal-day-more { font-size: 0.52rem; font-weight: 700; opacity: 0.55; padding: 0 3px; }
+@media (min-width: 600px) {
+  .cal-card { padding: 16px 12px 10px; border-radius: 28px; }
+  .cal-day { padding: 5px 4px 4px; border-radius: 12px; }
+  .cal-day-num { width: 26px; height: 26px; font-size: 0.85rem; margin-bottom: 3px; }
+  .cal-day-bar { font-size: 0.68rem; padding: 1px 5px; }
+}
+
+/* Day / week time grid */
+.cal-time-card {
+  flex: 1; min-height: 0; display: flex; flex-direction: column;
+  background: #fff; border-radius: 24px; overflow: hidden;
+  box-shadow: 0 2px 12px rgba(103, 80, 164, 0.08), 0 1px 3px rgba(0,0,0,0.04);
+  border: 1px solid rgba(103, 80, 164, 0.08);
+  --cal-hour-h: 48px;
+  --cal-gutter: 44px;
+}
+@media (min-width: 768px) {
+  .cal-time-card { --cal-hour-h: 56px; --cal-gutter: 52px; border-radius: 28px; }
+}
+.cal-time-gutter { width: var(--cal-gutter); flex-shrink: 0; }
+.cal-time-header, .cal-time-allday {
+  display: flex; flex-shrink: 0; border-bottom: 1px solid rgba(103,80,164,0.1);
+  background: #fff;
+}
+.cal-time-header-cols {
+  flex: 1; min-width: 0; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+.cal-time-header-cols.cal-days-1 { grid-template-columns: minmax(0, 1fr); }
+.cal-time-day-head {
+  text-align: center; padding: 8px 2px 10px; cursor: pointer;
+  border-left: 1px solid rgba(103,80,164,0.08);
+}
+.cal-time-day-head .wd {
+  font-size: 0.68rem; font-weight: 800; text-transform: uppercase;
+  letter-spacing: 0.04em; color: #6750a4; opacity: 0.65;
+}
+.cal-time-day-head .num {
+  margin-top: 4px; width: 28px; height: 28px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 0.95rem; font-weight: 700; color: #1c1b1f;
+}
+.cal-time-day-head.is-today .wd { color: #6750a4; opacity: 1; }
+.cal-time-day-head.is-today .num { background: #6750a4; color: #fff; }
+.cal-time-allday { padding: 4px 0; max-height: 72px; overflow-y: auto; }
+.cal-allday-cell { min-width: 0; padding: 2px 3px; display: flex; flex-direction: column; gap: 2px; border-left: 1px solid rgba(103,80,164,0.08); }
+.cal-allday-chip {
+  font-size: 0.68rem; font-weight: 700; padding: 3px 6px; border-radius: 6px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; color: #fff;
+}
+.cal-time-scroll {
+  flex: 1; min-height: 0; overflow: auto; display: flex;
+  -webkit-overflow-scrolling: touch;
+}
+.cal-time-hours {
+  width: var(--cal-gutter); flex-shrink: 0; position: relative;
+}
+.cal-time-hour-label {
+  height: var(--cal-hour-h); text-align: right; padding-right: 8px;
+  font-size: 0.68rem; font-weight: 600; color: #6750a4; opacity: 0.45;
+  transform: translateY(-0.55em);
+}
+.cal-time-cols {
+  flex: 1; min-width: 0; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr));
+  position: relative;
+}
+.cal-time-cols.cal-days-1 { grid-template-columns: minmax(0, 1fr); }
+.cal-time-col {
+  position: relative; border-left: 1px solid rgba(103,80,164,0.08);
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent calc(var(--cal-hour-h) - 1px),
+    rgba(103,80,164,0.1) calc(var(--cal-hour-h) - 1px),
+    rgba(103,80,164,0.1) var(--cal-hour-h)
+  );
+}
+.cal-time-col.is-today { background-color: rgba(103,80,164,0.04); }
+.cal-time-block {
+  position: absolute; left: 3px; right: 3px; border-radius: 8px; padding: 4px 6px;
+  overflow: hidden; cursor: pointer; font-size: 0.7rem; font-weight: 700; line-height: 1.25;
+  color: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+}
+.cal-time-block-time { font-size: 0.62rem; font-weight: 600; opacity: 0.85; display: block; }
+.cal-now-line {
+  position: absolute; left: 0; right: 0; height: 2px; background: #ba1a1a; z-index: 5; pointer-events: none;
+}
+.cal-now-line::before {
+  content: ''; position: absolute; left: -4px; top: -4px; width: 10px; height: 10px;
+  border-radius: 50%; background: #ba1a1a;
+}
+
+/* Agenda */
+.cal-agenda-wrap { overflow-y: auto; padding: 4px 2px 88px; -webkit-overflow-scrolling: touch; }
+.cal-list-header {
+  margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; gap: 10px;
+}
+.cal-list-header-label {
+  font-size: 0.75rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.08em; color: #6750a4;
+}
+.cal-list-header-count { font-size: 0.75rem; color: #49454f; font-weight: 600; }
+.cal-agenda-group { margin-bottom: 18px; }
+.cal-agenda-group-title {
+  font-size: 0.78rem; font-weight: 800; color: #6750a4; margin: 0 0 8px 2px;
+  text-transform: uppercase; letter-spacing: 0.04em;
+}
+.cal-event-card {
+  margin-bottom: 10px; padding: 14px 16px; display: flex; align-items: center;
+  justify-content: space-between; gap: 12px; border-radius: 20px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.05); cursor: pointer;
+}
+.cal-event-card:active { transform: scale(0.985); }
+.cal-event-card.is-past { opacity: 0.55 !important; }
+.cal-event-body { display: flex; align-items: center; flex: 1; min-width: 0; }
+.cal-event-main { flex: 1; min-width: 0; }
+.cal-event-tags { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 5px; }
+.cal-event-title {
+  font-weight: 700; font-size: 0.98rem; color: #1c1b1f;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.cal-event-meta {
+  font-size: 0.78rem; color: #49454f; margin-top: 2px;
+  display: flex; align-items: center; gap: 5px; flex-wrap: wrap;
+}
+.cal-event-meta i { width: 13px; height: 13px; opacity: 0.6; flex-shrink: 0; }
+.cal-event-desc {
+  font-size: 0.78rem; color: #49454f; opacity: 0.75; margin-top: 4px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.cal-event-actions { display: flex; align-items: center; flex-shrink: 0; }
+.cal-personal-note {
+  font-size: 0.72rem; font-weight: 600; color: #49454f;
+  display: inline-flex; align-items: center; gap: 3px;
+}
+.cal-personal-note i { width: 11px; height: 11px; }
+.cal-subject-badge { font-size: 0.7rem; font-weight: 700; padding: 2px 8px; border-radius: 6px; color: #1c1b1f; }
+.ev-date-badge {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  width: 44px; height: 48px; border-radius: 14px; background: #f3edf7; color: #21005d;
+  margin-right: 14px; flex-shrink: 0; border: 1px solid rgba(103, 80, 164, 0.1);
+}
+.ev-date-badge.is-today {
+  background: #6750a4; color: #ffffff; border-color: #6750a4;
+  box-shadow: 0 2px 6px rgba(103, 80, 164, 0.3);
+}
+.ev-date-num { font-size: 1.15rem; font-weight: 800; line-height: 1; }
+.ev-date-wd { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; opacity: 0.75; margin-top: 2px; line-height: 1; }
+.ev-category-pill { font-size: 0.7rem; font-weight: 800; padding: 3px 9px; border-radius: 8px; white-space: nowrap; }
+
+.cal-empty-card {
+  background: #ffffff; border-radius: 24px; padding: 36px 20px; text-align: center;
+  border: 1px dashed rgba(103, 80, 164, 0.2); margin-top: 10px;
+}
+.cal-empty-icon {
+  width: 54px; height: 54px; border-radius: 18px; background: #ede7f6; color: #6750a4;
+  display: flex; align-items: center; justify-content: center; margin: 0 auto 12px;
+}
+.cal-empty-icon i { width: 28px; height: 28px; }
+.cal-empty-title { font-weight: 700; font-size: 1.05rem; color: #1c1b1f; margin-bottom: 4px; }
+.cal-empty-sub { font-size: 0.85rem; color: #49454f; margin-bottom: 16px; }
+.cal-empty-cta { display: inline-flex; align-items: center; gap: 6px; }
+.cal-empty-cta i { width: 18px; height: 18px; }
+
+.cal-detail-row {
+  display: flex; align-items: flex-start; gap: 12px; margin-bottom: 14px; color: #1c1b1f;
+}
+.cal-detail-row i { width: 18px; height: 18px; color: #6750a4; flex-shrink: 0; margin-top: 2px; }
+.cal-detail-actions { display: flex; gap: 8px; margin-top: 8px; }
+</style>
+</div>
+
+<script>
+document.getElementById('ph-calendar').outerHTML = pageHeader({
+  className: 'cal-header-row',
+  backClassName: 'cal-back-btn',
+  titleHtml: `<div style="flex:1;min-width:0;">
+      <button type="button" id="cal-title-block" class="cal-title-btn" onclick="toggleCalMiniDrawer()" title="Monatsübersicht">
+        <span class="page-title cal-month-title" id="cal-month-title">Kalender</span>
+        <i data-lucide="chevron-down" id="cal-title-chevron"></i>
+      </button>
+      <div id="cal-header-search-wrap" style="display:none;align-items:center;height:100%;width:100%;">
+        <i data-lucide="search" style="width:18px;height:18px;opacity:0.45;flex-shrink:0;margin-right:8px;"></i>
+        <input type="text" id="cal-header-search-input" placeholder="Termine durchsuchen..." autocomplete="off"
+          style="flex:1;min-width:0;border:none;outline:none;background:none;font-family:inherit;font-size:1.05rem;font-weight:700;color:#1c1b1f;"
+          oninput="onCalSearchInput(this.value)" onkeydown="if(event.key==='Escape')toggleCalHeaderSearch(false)">
+        <button type="button" class="icon-btn cal-nav-btn" onclick="toggleCalHeaderSearch(false)" title="Suche schließen" style="flex-shrink:0;">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+    </div>`,
+  trailing: `<div class="cal-nav-row">
+      <button onclick="calNav(-1)" class="icon-btn cal-nav-btn cal-period-nav" title="Zurück" id="cal-nav-prev"><i data-lucide="chevron-left"></i></button>
+      <button onclick="calToday()" class="icon-btn cal-nav-btn" title="Heute" id="cal-today-btn"><span class="cal-today-icon" id="cal-today-num"></span></button>
+      <button onclick="calNav(1)" class="icon-btn cal-nav-btn cal-period-nav" title="Weiter" id="cal-nav-next"><i data-lucide="chevron-right"></i></button>
+      <button type="button" id="cal-viewmode-btn" class="icon-btn cal-nav-btn" onclick="toggleCalViewPicker(this)" title="Ansicht">
+        <i data-lucide="layout-grid" id="cal-viewmode-icon"></i>
+      </button>
+      <button type="button" id="cal-header-search-btn" class="icon-btn cal-nav-btn" onclick="toggleCalHeaderSearch()" title="Termine durchsuchen">
+        <i data-lucide="search"></i>
+      </button>
+      <button type="button" id="cal-filter-btn" class="icon-btn cal-nav-btn" onclick="toggleCalFilterMenu(this)" title="Nach Kategorie filtern" style="position:relative;">
+        <i data-lucide="filter"></i>
+        <span id="cal-filter-dot" style="display:none;position:absolute;top:6px;right:6px;width:8px;height:8px;border-radius:50%;background:#6750a4;border:2px solid #f9f6fc;"></span>
+      </button>
+    </div>`
+});
+document.getElementById('cal-fab-slot').outerHTML = fab({
+  onclick: 'openNewEventSheet()', title: 'Neuen Termin erstellen'
+});
+
+const CAL_MONTHS = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+const CAL_MONTHS_PILL = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
+const CAL_WEEKDAY_SHORT = ['Mo','Di','Mi','Do','Fr','Sa','So'];
+const CAL_VIEW_MODES = [
+  { id: 'agenda', label: 'Terminübersicht', icon: 'list' },
+  { id: 'day',    label: 'Tag',             icon: 'calendar-range' },
+  { id: 'week',   label: 'Woche',           icon: 'calendar-days' },
+  { id: 'month',  label: 'Monat',           icon: 'layout-grid' },
+];
+const CAL_TYPE_SOLID = { exam: '#ba1a1a', holiday: '#8a5a00', trip: '#006d3a', personal: '#006399', other: '#6750a4' };
+const CAL_TYPE_LABEL = { exam: 'Klassenarbeit', holiday: 'Schulferien', trip: 'Ausflug', personal: 'Persönlich', other: 'Sonstiges' };
+const CAL_TYPE_BG = {
+  exam: 'rgba(186, 26, 26, 0.1)', holiday: 'rgba(138, 90, 0, 0.1)',
+  trip: 'rgba(0, 109, 58, 0.1)', personal: 'rgba(0, 99, 153, 0.1)', other: 'rgba(103, 80, 164, 0.1)'
+};
+const CAL_WEEK_EVENT_DURATION_MIN = 60;
+
+var calYear = new Date().getFullYear();
+var calMonth = new Date().getMonth();
+var calEvents = [];
+var calSubjects = [];
+var selectedCalDate = null;
+var activeCategoryFilter = 'all';
+var calCurrentUser = null;
+var calWeekAnchor = new Date();
+var calMiniOpen = false;
+var calMiniYear = calYear;
+var calMiniMonth = calMonth;
+
+var calDisplayMode = 'month';
+(function restoreCalMode() {
+  try {
+    const saved = localStorage.getItem('cal_display_mode');
+    if (CAL_VIEW_MODES.some(m => m.id === saved)) calDisplayMode = saved;
+  } catch {}
+})();
+
+var calSearchQuery = '';
+var calSearchPool = [];
+var calSearchDebounce = null;
+let calHeaderSearchOpen = false;
+let calViewPickerEl = null;
+let calFilterMenuEl = null;
+let calPollInterval = null;
+
+function calEventColors(ev) {
+  return { bg: CAL_TYPE_SOLID[ev.event_type] || CAL_TYPE_SOLID.other, color: '#ffffff' };
+}
+function calTypeMeta(ev) {
+  const t = ev.event_type || 'other';
+  return {
+    label: CAL_TYPE_LABEL[t] || CAL_TYPE_LABEL.other,
+    color: CAL_TYPE_SOLID[t] || CAL_TYPE_SOLID.other,
+    bg: CAL_TYPE_BG[t] || CAL_TYPE_BG.other,
+  };
+}
+function _calMonday(d) {
+  const day = (d.getDay() + 6) % 7;
+  const r = new Date(d);
+  r.setDate(r.getDate() - day);
+  r.setHours(0, 0, 0, 0);
+  return r;
+}
+function _calAddDays(d, n) { const r = new Date(d); r.setDate(r.getDate() + n); return r; }
+function _calToMin(hhmm) {
+  const parts = (hhmm || '0:0').split(':').map(Number);
+  return parts[0] * 60 + (parts[1] || 0);
+}
+function _calMonthsForRange(start, end) {
+  const set = new Set();
+  const cur = new Date(start.getFullYear(), start.getMonth(), 1);
+  const last = new Date(end.getFullYear(), end.getMonth(), 1);
+  while (cur <= last) {
+    set.add(cur.getFullYear() + '-' + String(cur.getMonth() + 1).padStart(2, '0'));
+    cur.setMonth(cur.getMonth() + 1);
+  }
+  return set;
+}
+function _calMonthsForWeek(anchor) {
+  const monday = _calMonday(anchor);
+  return _calMonthsForRange(monday, _calAddDays(monday, 6));
+}
+function eventCoversDate(ev, dateStr) {
+  const start = ev.date ? ev.date.slice(0, 10) : '';
+  const end = ev.end_date ? ev.end_date.slice(0, 10) : start;
+  return dateStr >= start && dateStr <= end;
+}
+function calCanModifyEvent(ev) {
+  if (!calCurrentUser) return false;
+  if (ev.event_type === 'personal') return ev.created_by === calCurrentUser.id;
+  return true;
+}
+function calHourPx() {
+  const card = document.querySelector('.cal-time-card');
+  if (!card) return 48;
+  const v = parseFloat(getComputedStyle(card).getPropertyValue('--cal-hour-h'));
+  return Number.isFinite(v) && v > 0 ? v : 48;
+}
+function syncCalTodayBtn() {
+  const el = document.getElementById('cal-today-num');
+  if (el) el.textContent = String(new Date().getDate());
+}
+
+function toggleCalMiniDrawer() {
+  if (calHeaderSearchOpen) return;
+  calMiniOpen = !calMiniOpen;
+  const drawer = document.getElementById('cal-mini-drawer');
+  const body = document.getElementById('cal-body');
+  const chevron = document.getElementById('cal-title-chevron');
+  if (!drawer) return;
+  if (calMiniOpen) {
+    calMiniYear = calYear;
+    calMiniMonth = calMonth;
+    drawer.hidden = false;
+    if (body) body.classList.add('drawer-open');
+    renderCalMiniDrawer();
+    if (chevron) chevron.style.transform = 'rotate(180deg)';
+  } else {
+    drawer.hidden = true;
+    if (body) body.classList.remove('drawer-open');
+    if (chevron) chevron.style.transform = '';
+  }
+}
+function closeCalMiniDrawer() {
+  if (!calMiniOpen) return;
+  calMiniOpen = false;
+  const drawer = document.getElementById('cal-mini-drawer');
+  const body = document.getElementById('cal-body');
+  const chevron = document.getElementById('cal-title-chevron');
+  if (drawer) drawer.hidden = true;
+  if (body) body.classList.remove('drawer-open');
+  if (chevron) chevron.style.transform = '';
+}
+function renderCalMiniDrawer() {
+  const pills = document.getElementById('cal-month-pills');
+  const grid = document.getElementById('cal-mini-grid');
+  if (!pills || !grid) return;
+
+  let html = '';
+  for (let i = -2; i <= 6; i++) {
+    const d = new Date(calMiniYear, calMiniMonth + i, 1);
+    const active = i === 0;
+    const label = (d.getMonth() === 0 && i !== 0)
+      ? String(d.getFullYear())
+      : CAL_MONTHS_PILL[d.getMonth()];
+    html += `<button type="button" class="cal-month-pill${active ? ' active' : ''}" onclick="calMiniPickMonth(${d.getFullYear()},${d.getMonth()})">${label}</button>`;
+  }
+  pills.innerHTML = html;
+  const activePill = pills.querySelector('.active');
+  if (activePill) activePill.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'auto' });
+
+  const first = new Date(calMiniYear, calMiniMonth, 1);
+  const startDay = (first.getDay() + 6) % 7;
+  const daysInMonth = new Date(calMiniYear, calMiniMonth + 1, 0).getDate();
+  const prevDays = new Date(calMiniYear, calMiniMonth, 0).getDate();
+  const todayStr = localDateStr();
+  const sel = selectedCalDate || localDateStr(calWeekAnchor);
+
+  let cells = '';
+  for (let i = startDay - 1; i >= 0; i--) {
+    const d = prevDays - i;
+    const pm = calMiniMonth === 0 ? 11 : calMiniMonth - 1;
+    const py = calMiniMonth === 0 ? calMiniYear - 1 : calMiniYear;
+    const ds = py + '-' + String(pm + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+    cells += `<button type="button" class="cal-mini-cell muted" onclick="calMiniPickDay('${ds}')">${d}</button>`;
+  }
+  for (let d = 1; d <= daysInMonth; d++) {
+    const ds = calMiniYear + '-' + String(calMiniMonth + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+    const has = calEvents.some(e => eventCoversDate(e, ds) && (activeCategoryFilter === 'all' || (e.event_type || 'other') === activeCategoryFilter));
+    let cls = 'cal-mini-cell';
+    if (ds === todayStr) cls += ' today';
+    else if (ds === sel) cls += ' selected';
+    cells += `<button type="button" class="${cls}" onclick="calMiniPickDay('${ds}')">${d}${has ? '<span class="cal-mini-dot"></span>' : ''}</button>`;
+  }
+  const totalSoFar = startDay + daysInMonth;
+  const rem = (7 - (totalSoFar % 7)) % 7;
+  for (let d = 1; d <= rem; d++) {
+    const nm = calMiniMonth === 11 ? 0 : calMiniMonth + 1;
+    const ny = calMiniMonth === 11 ? calMiniYear + 1 : calMiniYear;
+    const ds = ny + '-' + String(nm + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+    cells += `<button type="button" class="cal-mini-cell muted" onclick="calMiniPickDay('${ds}')">${d}</button>`;
+  }
+  grid.innerHTML = cells;
+}
+async function calMiniPickMonth(y, m) {
+  calMiniYear = y;
+  calMiniMonth = m;
+  calYear = y;
+  calMonth = m;
+  calWeekAnchor = new Date(y, m, Math.min(calWeekAnchor.getDate(), 28));
+  await loadCalEvents();
+  renderCalMiniDrawer();
+  renderCal();
+}
+async function calMiniPickDay(dateStr) {
+  const d = new Date(dateStr + 'T00:00');
+  calYear = d.getFullYear();
+  calMonth = d.getMonth();
+  calWeekAnchor = d;
+  selectedCalDate = dateStr;
+  closeCalMiniDrawer();
+  await setCalDisplayMode('day', { skipReload: false, anchor: d });
+}
+
+function toggleCalViewPicker(btn) {
+  if (calViewPickerEl) { closeCalViewPicker(); return; }
+  closeCalFilterMenu();
+  const panel = document.createElement('div');
+  panel.className = 'm3-dropdown-panel dd-open';
+  panel.style.maxHeight = '320px';
+  panel.innerHTML = CAL_VIEW_MODES.map(m =>
+    `<div class="m3-dropdown-opt${m.id === calDisplayMode ? ' dd-sel' : ''}" data-mode="${m.id}">
+      <i data-lucide="${m.icon}" style="width:16px;height:16px;margin-right:10px;flex-shrink:0;"></i>${m.label}
+    </div>`
+  ).join('');
+  document.body.appendChild(panel);
+  calViewPickerEl = panel;
+  if (window.lucide) {
+    try { lucide.createIcons({ root: panel }); }
+    catch { lucide.createIcons(); }
+  }
+
+  const r = btn.getBoundingClientRect();
+  panel.style.minWidth = '220px';
+  panel.style.left = 'auto';
+  panel.style.right = Math.max(8, window.innerWidth - r.right) + 'px';
+  panel.style.top = (r.bottom + 6) + 'px';
+
+  panel.querySelectorAll('[data-mode]').forEach(opt => {
+    opt.addEventListener('click', () => {
+      setCalDisplayMode(opt.dataset.mode);
+      closeCalViewPicker();
+    });
+  });
+  setTimeout(() => document.addEventListener('click', onCalViewPickerOutside), 0);
+}
+function onCalViewPickerOutside(e) {
+  if (calViewPickerEl && !calViewPickerEl.contains(e.target) && !e.target.closest('#cal-viewmode-btn')) {
+    closeCalViewPicker();
+  }
+}
+function closeCalViewPicker() {
+  if (calViewPickerEl) { calViewPickerEl.remove(); calViewPickerEl = null; }
+  document.removeEventListener('click', onCalViewPickerOutside);
+}
+
+async function setCalDisplayMode(mode, opts = {}) {
+  if (!CAL_VIEW_MODES.some(m => m.id === mode)) return;
+  const prev = calDisplayMode;
+  calDisplayMode = mode;
+  try { localStorage.setItem('cal_display_mode', mode); } catch {}
+
+  if (opts.anchor) calWeekAnchor = opts.anchor;
+  else if (mode === 'day' || mode === 'week') {
+    if (selectedCalDate) calWeekAnchor = new Date(selectedCalDate + 'T00:00');
+    else if (prev === 'month') calWeekAnchor = new Date(calYear, calMonth, Math.min(new Date().getDate(), new Date(calYear, calMonth + 1, 0).getDate()));
+  }
+  if (mode === 'month' || mode === 'agenda') {
+    calYear = calWeekAnchor.getFullYear();
+    calMonth = calWeekAnchor.getMonth();
+  }
+  if (mode === 'day') selectedCalDate = localDateStr(calWeekAnchor);
+
+  if (!opts.skipReload) await loadCalEvents();
+  renderCal();
+}
+
+async function onCalSearchInput(value) {
+  const q = value.trim();
+  const startingSearch = q && !calSearchQuery;
+  calSearchQuery = q;
+  clearTimeout(calSearchDebounce);
+  if (startingSearch) {
+    calSearchPool = await API.events().catch(() => []);
+  }
+  calSearchDebounce = setTimeout(() => renderCalSearchDropdown(), startingSearch ? 0 : 120);
+}
+function renderCalSearchDropdown() {
+  const dd = document.getElementById('cal-search-dropdown');
+  if (!dd) return;
+  if (!calSearchQuery) {
+    dd.hidden = true;
+    dd.innerHTML = '';
+    return;
+  }
+  const q = calSearchQuery.toLowerCase();
+  let hits = calSearchPool.filter(e =>
+    (e.title || '').toLowerCase().includes(q) || (e.description || '').toLowerCase().includes(q)
+  );
+  if (activeCategoryFilter !== 'all') {
+    hits = hits.filter(e => (e.event_type || 'other') === activeCategoryFilter);
+  }
+  hits.sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.time || '').localeCompare(b.time || ''));
+  hits = hits.slice(0, 12);
+
+  if (!hits.length) {
+    dd.innerHTML = `<div class="cal-search-empty">Kein Termin passt zu „${escapeHtml(calSearchQuery)}“.</div>`;
+  } else {
+    dd.innerHTML = hits.map(e => {
+      const d = e.date ? new Date(e.date + 'T00:00').toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'short' }) : '';
+      const meta = [d, e.time ? e.time + ' Uhr' : null].filter(Boolean).join(' · ');
+      return `<button type="button" class="cal-search-hit" onclick="onCalSearchHit(${e.id})">
+        <div style="width:8px;height:8px;border-radius:50%;background:${calEventColors(e).bg};flex-shrink:0;"></div>
+        <div style="min-width:0;flex:1;">
+          <div class="cal-search-hit-title">${escapeHtml(e.title)}</div>
+          <div class="cal-search-hit-meta">${escapeHtml(meta)}</div>
+        </div>
+      </button>`;
+    }).join('');
+  }
+  dd.hidden = false;
+}
+async function onCalSearchHit(id) {
+  const pool = calSearchPool.length ? calSearchPool : calEvents;
+  const ev = pool.find(e => e.id === id);
+  toggleCalHeaderSearch(false);
+  if (ev && ev.date) {
+    const d = new Date(ev.date.slice(0, 10) + 'T00:00');
+    calWeekAnchor = d;
+    calYear = d.getFullYear();
+    calMonth = d.getMonth();
+    selectedCalDate = ev.date.slice(0, 10);
+    if (calDisplayMode === 'month') await setCalDisplayMode('agenda');
+    else { await loadCalEvents(); renderCal(); }
+  }
+  openCalEventDetail(id, pool);
+}
+function clearCalSearch() {
+  calSearchQuery = '';
+  const input = document.getElementById('cal-header-search-input');
+  if (input) input.value = '';
+  const dd = document.getElementById('cal-search-dropdown');
+  if (dd) { dd.hidden = true; dd.innerHTML = ''; }
+}
+function toggleCalHeaderSearch(force) {
+  calHeaderSearchOpen = typeof force === 'boolean' ? force : !calHeaderSearchOpen;
+  const titleBlock = document.getElementById('cal-title-block');
+  const searchWrap = document.getElementById('cal-header-search-wrap');
+  const input = document.getElementById('cal-header-search-input');
+  const searchBtn = document.getElementById('cal-header-search-btn');
+  closeCalMiniDrawer();
+  closeCalViewPicker();
+  if (calHeaderSearchOpen) {
+    if (titleBlock) titleBlock.style.display = 'none';
+    if (searchWrap) searchWrap.style.display = 'flex';
+    if (searchBtn) searchBtn.style.display = 'none';
+    if (input) { input.value = calSearchQuery; input.focus(); }
+    if (calSearchQuery) renderCalSearchDropdown();
+  } else {
+    if (titleBlock) titleBlock.style.display = 'flex';
+    if (searchWrap) searchWrap.style.display = 'none';
+    if (searchBtn) searchBtn.style.display = '';
+    clearCalSearch();
+  }
+  if (window.lucide) lucide.createIcons();
+}
+
+async function init_calendar() {
+  syncCalTodayBtn();
+  const [, , me] = await Promise.all([
+    loadCalEvents(),
+    loadCalSubjects(),
+    API.me().catch(() => null),
+  ]);
+  calCurrentUser = me;
+  if (!selectedCalDate) {
+    const t = new Date();
+    if (calDisplayMode === 'day' || (t.getFullYear() === calYear && t.getMonth() === calMonth)) {
+      selectedCalDate = localDateStr(t);
+      calWeekAnchor = t;
+    }
+  }
+  const dot = document.getElementById('cal-filter-dot');
+  if (dot) dot.style.display = activeCategoryFilter !== 'all' ? 'block' : 'none';
+  renderCal();
+  initCalSwipe();
+  startCalPolling();
+}
+
+function startCalPolling() {
+  if (calPollInterval) clearInterval(calPollInterval);
+  calPollInterval = setInterval(async () => {
+    if (!document.getElementById('page-calendar')) { clearInterval(calPollInterval); calPollInterval = null; return; }
+    if (document.hidden) return;
+    let fresh;
+    try { fresh = await _fetchCalEventsForMode(); }
+    catch { return; }
+    if (!fresh || !document.getElementById('page-calendar')) return;
+    if (JSON.stringify(fresh) !== JSON.stringify(calEvents)) {
+      calEvents = fresh;
+      renderCal();
+    }
+  }, 15000);
+}
+
+function initCalSwipe() {
+  const targets = [
+    document.getElementById('cal-view-month'),
+    document.getElementById('cal-view-time'),
+    document.getElementById('cal-view-agenda'),
+  ].filter(Boolean);
+  targets.forEach(el => {
+    let startX = null, startY = null;
+    el.addEventListener('touchstart', (e) => {
+      startX = e.touches[0].clientX;
+      startY = e.touches[0].clientY;
+    }, { passive: true });
+    el.addEventListener('touchend', (e) => {
+      if (startX == null) return;
+      const dx = e.changedTouches[0].clientX - startX;
+      const dy = e.changedTouches[0].clientY - startY;
+      startX = null;
+      if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+        calNav(dx < 0 ? 1 : -1);
+      }
+    }, { passive: true });
+  });
+}
+
+async function loadCalSubjects() {
+  try { calSubjects = await API.subjects(); }
+  catch { calSubjects = []; }
+}
+
+async function _fetchCalEventsForMode() {
+  if (calDisplayMode === 'week') {
+    const months = _calMonthsForWeek(calWeekAnchor);
+    const results = await Promise.all([...months].map(m => API.events(m).catch(() => [])));
+    const merged = new Map();
+    results.flat().forEach(e => merged.set(e.id, e));
+    return [...merged.values()];
+  }
+  if (calDisplayMode === 'day') {
+    const ds = localDateStr(calWeekAnchor);
+    return await API.events(ds.slice(0, 7));
+  }
+  const key = calYear + '-' + String(calMonth + 1).padStart(2, '0');
+  return await API.events(key);
+}
+
+async function loadCalEvents() {
+  try { calEvents = await _fetchCalEventsForMode(); }
+  catch { calEvents = []; }
+}
+
+function setCalCategoryFilter(cat) {
+  activeCategoryFilter = cat;
+  const dot = document.getElementById('cal-filter-dot');
+  if (dot) dot.style.display = cat === 'all' ? 'none' : 'block';
+  renderCal();
+}
+
+const CAL_FILTER_OPTIONS = [
+  { value: 'all', label: 'Alle Termine' },
+  { value: 'exam', label: 'Klassenarbeiten' },
+  { value: 'holiday', label: 'Ferien' },
+  { value: 'trip', label: 'Ausflüge' },
+  { value: 'personal', label: 'Persönlich' },
+  { value: 'other', label: 'Sonstige' },
+];
+
+function toggleCalFilterMenu(btn) {
+  if (calFilterMenuEl) { closeCalFilterMenu(); return; }
+  closeCalViewPicker();
+  const panel = document.createElement('div');
+  panel.className = 'm3-dropdown-panel dd-open';
+  panel.style.maxHeight = '360px';
+  panel.innerHTML = `
+    <div style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;opacity:0.5;padding:4px 12px 2px;">Kategorie</div>
+    ${CAL_FILTER_OPTIONS.map(o =>
+      `<div class="m3-dropdown-opt${o.value === activeCategoryFilter ? ' dd-sel' : ''}" data-value="${o.value}">${o.label}</div>`
+    ).join('')}
+  `;
+  document.body.appendChild(panel);
+  calFilterMenuEl = panel;
+  const r = btn.getBoundingClientRect();
+  panel.style.minWidth = '190px';
+  panel.style.left = 'auto';
+  panel.style.right = Math.max(8, window.innerWidth - r.right) + 'px';
+  panel.style.top = (r.bottom + 6) + 'px';
+  panel.querySelectorAll('.m3-dropdown-opt').forEach(opt => {
+    opt.addEventListener('click', () => {
+      setCalCategoryFilter(opt.dataset.value);
+      closeCalFilterMenu();
+    });
+  });
+  setTimeout(() => document.addEventListener('click', onCalFilterMenuOutsideClick), 0);
+}
+function onCalFilterMenuOutsideClick(e) {
+  if (calFilterMenuEl && !calFilterMenuEl.contains(e.target) && !e.target.closest('#cal-filter-btn')) {
+    closeCalFilterMenu();
+  }
+}
+function closeCalFilterMenu() {
+  if (calFilterMenuEl) { calFilterMenuEl.remove(); calFilterMenuEl = null; }
+  document.removeEventListener('click', onCalFilterMenuOutsideClick);
+}
+
+async function calToday() {
+  const today = new Date();
+  calYear = today.getFullYear();
+  calMonth = today.getMonth();
+  calWeekAnchor = today;
+  selectedCalDate = localDateStr(today);
+  syncCalTodayBtn();
+  await loadCalEvents();
+  renderCal();
+  if (calMiniOpen) {
+    calMiniYear = calYear;
+    calMiniMonth = calMonth;
+    renderCalMiniDrawer();
+  }
+}
+async function goToToday() { return calToday(); }
+
+async function calNav(dir) {
+  return navigatePeriod(dir);
+}
+async function navigatePeriod(dir) {
+  if (calDisplayMode === 'week') {
+    calWeekAnchor = _calAddDays(calWeekAnchor, dir * 7);
+    calYear = calWeekAnchor.getFullYear();
+    calMonth = calWeekAnchor.getMonth();
+  } else if (calDisplayMode === 'day') {
+    calWeekAnchor = _calAddDays(calWeekAnchor, dir);
+    calYear = calWeekAnchor.getFullYear();
+    calMonth = calWeekAnchor.getMonth();
+    selectedCalDate = localDateStr(calWeekAnchor);
+  } else {
+    calMonth += dir;
+    if (calMonth < 0) { calMonth = 11; calYear--; }
+    if (calMonth > 11) { calMonth = 0; calYear++; }
+    calWeekAnchor = new Date(calYear, calMonth, Math.min(calWeekAnchor.getDate(), 28));
+    if (calDisplayMode === 'month') selectedCalDate = null;
+  }
+  await loadCalEvents();
+  renderCal(dir);
+  if (calMiniOpen) {
+    calMiniYear = calYear;
+    calMiniMonth = calMonth;
+    renderCalMiniDrawer();
+  }
+}
+
+function renderCal(dir) {
+  syncCalTodayBtn();
+  const modeMeta = CAL_VIEW_MODES.find(m => m.id === calDisplayMode) || CAL_VIEW_MODES[3];
+  const viewIcon = document.getElementById('cal-viewmode-icon');
+  const viewBtn = document.getElementById('cal-viewmode-btn');
+  if (viewIcon) viewIcon.setAttribute('data-lucide', modeMeta.icon);
+  if (viewBtn) viewBtn.title = 'Ansicht: ' + modeMeta.label;
+
+  const monthEl = document.getElementById('cal-view-month');
+  const timeEl = document.getElementById('cal-view-time');
+  const agendaEl = document.getElementById('cal-view-agenda');
+  if (monthEl) monthEl.hidden = calDisplayMode !== 'month';
+  if (timeEl) timeEl.hidden = !(calDisplayMode === 'week' || calDisplayMode === 'day');
+  if (agendaEl) agendaEl.hidden = calDisplayMode !== 'agenda';
+
+  const titleEl = document.getElementById('cal-month-title');
+  if (titleEl) titleEl.textContent = CAL_MONTHS[calMonth] + ' ' + calYear;
+
+  if (calDisplayMode === 'month') renderCalGridOnly(true, dir);
+  if (calDisplayMode === 'week' || calDisplayMode === 'day') renderCalTimeGrid(calDisplayMode === 'day' ? 1 : 7);
+  if (calDisplayMode === 'agenda') renderAgendaList();
+  if (calMiniOpen) renderCalMiniDrawer();
+  if (window.lucide) lucide.createIcons();
+}
+
+function renderCalGridOnly(animate, dir) {
+  const grid = document.getElementById('cal-grid');
+  if (!grid) return;
+  const build = () => { grid.innerHTML = ''; _buildCalGrid(grid); };
+  if (dir) { slideNav(grid, dir, build); return; }
+  if (animate) {
+    grid.style.opacity = '0';
+    requestAnimationFrame(() => { grid.style.transition = 'opacity 0.18s ease'; grid.style.opacity = '1'; });
+  }
+  build();
+}
+
+function _buildCalGrid(grid) {
+  const first = new Date(calYear, calMonth, 1);
+  const startDay = (first.getDay() + 6) % 7;
+  const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+  const prevDays = new Date(calYear, calMonth, 0).getDate();
+  const todayStr = localDateStr();
+    const totalSlots = 42;
+
+  for (let i = 0; i < totalSlots; i++) {
+    let dateObj;
+    let inMonth = true;
+    if (i < startDay) {
+      dateObj = new Date(calYear, calMonth - 1, prevDays - startDay + i + 1);
+      inMonth = false;
+    } else if (i >= startDay + daysInMonth) {
+      dateObj = new Date(calYear, calMonth + 1, i - (startDay + daysInMonth) + 1);
+      inMonth = false;
+    } else {
+      dateObj = new Date(calYear, calMonth, i - startDay + 1);
+    }
+    const dateStr = localDateStr(dateObj);
+    const covering = inMonth ? calEvents.filter(e =>
+      eventCoversDate(e, dateStr) &&
+      (activeCategoryFilter === 'all' || (e.event_type || 'other') === activeCategoryFilter)
+    ) : [];
+    const isToday = dateStr === todayStr;
+    const isSelected = selectedCalDate === dateStr;
+
+    const el = document.createElement('div');
+    let cls = 'cal-day';
+    if (!inMonth) cls += ' muted';
+    if (isToday) cls += ' today';
+    if (isSelected && inMonth) cls += ' selected';
+    el.className = cls;
+
+    let barsHtml = '';
+    if (covering.length) {
+      const maxBars = 3;
+      const barTags = covering.slice(0, maxBars).map(ev => {
+        const { bg, color } = calEventColors(ev);
+        return `<div class="cal-day-bar" style="background:${bg};color:${color};" title="${escapeHtml(ev.title)}" onclick="event.stopPropagation();openCalEventDetail(${ev.id})">${escapeHtml(ev.title)}</div>`;
+      }).join('');
+      const moreTag = covering.length > maxBars
+        ? `<div class="cal-day-more">+${covering.length - maxBars} weitere</div>` : '';
+      barsHtml = `<div class="cal-day-bars">${barTags}${moreTag}</div>`;
+    }
+    el.innerHTML = `<span class="cal-day-num">${dateObj.getDate()}</span>${barsHtml}`;
+    el.onclick = () => {
+      selectedCalDate = dateStr;
+      calWeekAnchor = new Date(dateStr + 'T00:00');
+      calYear = calWeekAnchor.getFullYear();
+      calMonth = calWeekAnchor.getMonth();
+      setCalDisplayMode('day');
+    };
+    grid.appendChild(el);
+  }
+}
+
+function renderCalTimeGrid(dayCount) {
+  const headerCols = document.getElementById('cal-time-header-cols');
+  const alldayWrap = document.getElementById('cal-time-allday');
+  const alldayCols = document.getElementById('cal-time-allday-cols');
+  const hoursEl = document.getElementById('cal-time-hours');
+  const colsEl = document.getElementById('cal-time-cols');
+  const scrollEl = document.getElementById('cal-time-scroll');
+  if (!headerCols || !colsEl || !hoursEl) return;
+
+  const hourH = calHourPx();
+  const days = dayCount === 1
+    ? [new Date(calWeekAnchor.getFullYear(), calWeekAnchor.getMonth(), calWeekAnchor.getDate())]
+    : Array.from({ length: 7 }, (_, i) => _calAddDays(_calMonday(calWeekAnchor), i));
+  const dayStrs = days.map(d => localDateStr(d));
+  const todayStr = localDateStr();
+
+  headerCols.classList.toggle('cal-days-1', dayCount === 1);
+  colsEl.classList.toggle('cal-days-1', dayCount === 1);
+  if (alldayCols) alldayCols.classList.toggle('cal-days-1', dayCount === 1);
+
+  headerCols.innerHTML = days.map((d, i) => {
+    const isToday = dayStrs[i] === todayStr;
+    const wd = CAL_WEEKDAY_SHORT[(d.getDay() + 6) % 7];
+    return `<button type="button" class="cal-time-day-head${isToday ? ' is-today' : ''}" onclick="calMiniPickDay('${dayStrs[i]}')">
+      <div class="wd">${wd}</div>
+      <div class="num">${d.getDate()}</div>
+    </button>`;
+  }).join('');
+
+  const timedByDay = dayStrs.map(() => []);
+  const alldayByDay = dayStrs.map(() => []);
+  days.forEach((d, i) => {
+    const ds = dayStrs[i];
+    calEvents.forEach(ev => {
+      if (!eventCoversDate(ev, ds)) return;
+      if (activeCategoryFilter !== 'all' && (ev.event_type || 'other') !== activeCategoryFilter) return;
+      const isMulti = Boolean(ev.end_date && ev.end_date !== ev.date);
+      if (ev.time && !isMulti) timedByDay[i].push(ev);
+      else alldayByDay[i].push(ev);
+    });
+  });
+
+  const hasAllday = alldayByDay.some(list => list.length);
+  if (alldayWrap && alldayCols) {
+    alldayWrap.hidden = !hasAllday;
+    alldayCols.innerHTML = days.map((d, i) => {
+      const chips = alldayByDay[i].map(ev => {
+        const { bg } = calEventColors(ev);
+        return `<div class="cal-allday-chip" style="background:${bg};" onclick="openCalEventDetail(${ev.id})" title="${escapeHtml(ev.title)}">${escapeHtml(ev.title)}</div>`;
+      }).join('');
+      return `<div class="cal-allday-cell">${chips}</div>`;
+    }).join('');
+  }
+
+  hoursEl.innerHTML = Array.from({ length: 24 }, (_, h) =>
+    `<div class="cal-time-hour-label">${h === 0 ? '' : String(h).padStart(2, '0') + ':00'}</div>`
+  ).join('');
+  hoursEl.style.height = (24 * hourH) + 'px';
+
+  const now = new Date();
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+
+  colsEl.style.height = (24 * hourH) + 'px';
+  colsEl.innerHTML = days.map((d, i) => {
+    const ds = dayStrs[i];
+    const isToday = ds === todayStr;
+    const blocks = timedByDay[i].map(ev => {
+      const start = _calToMin(ev.time);
+      const top = (start / 60) * hourH;
+      const height = Math.max((CAL_WEEK_EVENT_DURATION_MIN / 60) * hourH, 28);
+      const { bg } = calEventColors(ev);
+      return `<div class="cal-time-block" style="top:${top}px;height:${height - 2}px;background:${bg};" onclick="event.stopPropagation();openCalEventDetail(${ev.id})">
+        <span>${escapeHtml(ev.title)}</span>
+        <span class="cal-time-block-time">${ev.time} Uhr</span>
+      </div>`;
+    }).join('');
+    const nowLine = (isToday)
+      ? `<div class="cal-now-line" style="top:${(nowMin / 60) * hourH}px;"></div>` : '';
+    return `<div class="cal-time-col${isToday ? ' is-today' : ''}" data-date="${ds}" onclick="onCalSlotClick(event)">${blocks}${nowLine}</div>`;
+  }).join('');
+
+  if (scrollEl) {
+    const targetHour = isTodayInView(dayStrs, todayStr) ? Math.max(0, now.getHours() - 1) : 7;
+    scrollEl.scrollTop = targetHour * hourH;
+  }
+}
+function isTodayInView(dayStrs, todayStr) {
+  return dayStrs.includes(todayStr);
+}
+function onCalSlotClick(e) {
+  const col = e.currentTarget;
+  const ds = col.dataset.date;
+  const hourH = calHourPx();
+  const rel = Math.max(0, e.clientY - col.getBoundingClientRect().top);
+  let minutes = Math.round((rel / hourH) * 60 / 15) * 15;
+  minutes = Math.max(0, Math.min(23 * 60 + 45, minutes));
+  const hh = String(Math.floor(minutes / 60)).padStart(2, '0');
+  const mm = String(minutes % 60).padStart(2, '0');
+  openNewEventSheet(ds, hh + ':' + mm);
+}
+
+function renderCalWeekView() { renderCalTimeGrid(calDisplayMode === 'day' ? 1 : 7); }
+function calWeekEventClick(id) { openCalEventDetail(id); }
+
+function renderAgendaList() {
+  const list = document.getElementById('cal-events-list');
+  const headerEl = document.getElementById('cal-events-header');
+  const emptyEl = document.getElementById('cal-no-events');
+  if (!list) return;
+
+  const monthStart = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-01`;
+  const lastDay = new Date(calYear, calMonth + 1, 0).getDate();
+  const monthEnd = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+
+  let pool = calEvents.filter(e => {
+    const s = (e.date || '').slice(0, 10);
+    const end = (e.end_date || s).slice(0, 10);
+    return s <= monthEnd && end >= monthStart;
+  });
+  if (activeCategoryFilter !== 'all') {
+    pool = pool.filter(e => (e.event_type || 'other') === activeCategoryFilter);
+  }
+  pool.sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.time || '').localeCompare(b.time || ''));
+
+  headerEl.innerHTML = `
+    <div class="cal-list-header">
+      <div class="cal-list-header-label">Terminübersicht</div>
+      <span class="cal-list-header-count">${pool.length} ${pool.length === 1 ? 'Eintrag' : 'Einträge'}</span>
+    </div>`;
+
+  if (!pool.length) {
+    list.innerHTML = '';
+    emptyEl.style.display = 'block';
+    document.getElementById('cal-empty-title').textContent = 'Keine Termine';
+    document.getElementById('cal-empty-sub').textContent = activeCategoryFilter === 'all'
+      ? 'In diesem Monat stehen keine Termine an.'
+      : 'Keine Termine in dieser Kategorie vorhanden.';
+    return;
+  }
+  emptyEl.style.display = 'none';
+
+  const groups = new Map();
+  pool.forEach(e => {
+    const key = (e.date || '').slice(0, 10);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(e);
+  });
+
+  const todayStr = localDateStr();
+  const subMap = Object.fromEntries((calSubjects || []).map(s => [s.id, s]));
+
+  list.innerHTML = [...groups.entries()].map(([dateKey, events]) => {
+    const d = new Date(dateKey + 'T00:00');
+    const groupTitle = d.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' });
+    const cards = events.map(e => renderCalEventCard(e, { todayStr, subMap, isPast: (e.end_date || e.date || '').slice(0, 10) < todayStr })).join('');
+    return `<div class="cal-agenda-group"><div class="cal-agenda-group-title">${escapeHtml(groupTitle)}</div>${cards}</div>`;
+  }).join('');
+}
+
+function renderCalEventCard(e, { todayStr, subMap, isPast }) {
+  const isEvToday = eventCoversDate(e, todayStr);
+  const isMulti = Boolean(e.end_date && e.end_date !== e.date);
+  const canEdit = calCanModifyEvent(e);
+  const sDate = new Date(e.date + 'T00:00');
+  const dayNum = sDate.getDate();
+  const weekday = sDate.toLocaleDateString('de-DE', { weekday: 'short' });
+  let dayLabel = sDate.toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'short' });
+  if (isMulti) {
+    const eDate = new Date(e.end_date + 'T00:00');
+    dayLabel = `${sDate.toLocaleDateString('de-DE', { day: 'numeric', month: 'short' })} – ${eDate.toLocaleDateString('de-DE', { day: 'numeric', month: 'short' })}`;
+  }
+  const meta = calTypeMeta(e);
+  const subObj = e.subject_id ? subMap[e.subject_id] : null;
+  const subName = subObj ? (subObj.name || subObj.short_name) : null;
+  const subColor = subObj ? (subObj.color || '#ede7f6') : null;
+  const personalNote = e.event_type === 'personal'
+    ? `<span class="cal-personal-note"><i data-lucide="lock"></i> Nur für dich</span>` : '';
+  const subjectBadge = subName
+    ? `<span class="cal-subject-badge" style="background:${subColor || '#ede7f6'};">${escapeHtml(subName)}</span>` : '';
+
+  return `
+    <div class="m3-card cal-event-card list-card-enter${isPast ? ' is-past' : ''}" data-id="${e.id}" onclick="openCalEventDetail(${e.id})">
+      <div class="cal-event-body">
+        <div class="ev-date-badge ${isEvToday ? 'is-today' : ''}">
+          <span class="ev-date-num">${dayNum}</span>
+          <span class="ev-date-wd">${weekday}</span>
+        </div>
+        <div class="cal-event-main">
+          <div class="cal-event-tags">
+            <span class="ev-category-pill" style="background:${meta.bg};color:${meta.color};">${meta.label}</span>
+            ${subjectBadge}${personalNote}
+          </div>
+          <div class="cal-event-title">${escapeHtml(e.title)}</div>
+          <div class="cal-event-meta">
+            <i data-lucide="calendar"></i><span>${dayLabel}</span>
+            ${e.time ? `<span style="opacity:0.4;">·</span><i data-lucide="clock"></i><span>${e.time} Uhr</span>` : ''}
+          </div>
+          ${e.description ? `<div class="cal-event-desc">${escapeHtml(e.description)}</div>` : ''}
+        </div>
+      </div>
+      <div class="cal-event-actions" onclick="event.stopPropagation()">
+        ${canEdit ? moreMenuBtn(`openCalEventMenu(this, ${e.id})`) : ''}
+      </div>
+    </div>`;
+}
+
+function openCalEventMenu(btn, eventId) {
+  toggleMoreMenu(btn, [
+    { icon: 'pencil', label: 'Bearbeiten', onclick: () => openEditEventSheet(eventId) },
+    { icon: 'trash-2', label: 'Löschen', onclick: () => confirmDelEvent(eventId), danger: true },
+  ]);
+}
+
+function openCalEventDetail(eventId, pool) {
+  const src = pool || calEvents;
+  let ev = src.find(x => x.id === eventId);
+  if (!ev && calSearchPool.length) ev = calSearchPool.find(x => x.id === eventId);
+  if (!ev) { showToast('Termin nicht gefunden'); return; }
+
+  const meta = calTypeMeta(ev);
+  const canEdit = calCanModifyEvent(ev);
+  const sDate = new Date(ev.date + 'T00:00');
+  let when = sDate.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  if (ev.end_date && ev.end_date !== ev.date) {
+    const eDate = new Date(ev.end_date + 'T00:00');
+    when = sDate.toLocaleDateString('de-DE', { day: 'numeric', month: 'short' })
+      + ' – ' + eDate.toLocaleDateString('de-DE', { day: 'numeric', month: 'short', year: 'numeric' });
+  }
+  const subMap = Object.fromEntries((calSubjects || []).map(s => [s.id, s]));
+  const subObj = ev.subject_id ? subMap[ev.subject_id] : null;
+
+  openSheet(`
+    <div class="sheet-title" style="font-size:1.25rem;font-weight:800;color:#1c1b1f;margin-bottom:6px;">${escapeHtml(ev.title)}</div>
+    <div style="margin-bottom:16px;">
+      <span class="ev-category-pill" style="background:${meta.bg};color:${meta.color};">${meta.label}</span>
+      ${ev.event_type === 'personal' ? `<span class="cal-personal-note" style="margin-left:8px;"><i data-lucide="lock"></i> Nur für dich</span>` : ''}
+    </div>
+    <div class="cal-detail-row"><i data-lucide="calendar"></i><div>${escapeHtml(when)}</div></div>
+    ${ev.time ? `<div class="cal-detail-row"><i data-lucide="clock"></i><div>${escapeHtml(ev.time)} Uhr</div></div>` : ''}
+    ${subObj ? `<div class="cal-detail-row"><i data-lucide="book-open"></i><div>${escapeHtml(subObj.name || subObj.short_name || '')}</div></div>` : ''}
+    ${ev.description ? `<div class="cal-detail-row"><i data-lucide="align-left"></i><div style="white-space:pre-wrap;line-height:1.45;">${escapeHtml(ev.description)}</div></div>` : ''}
+    ${canEdit ? `
+      <div class="cal-detail-actions">
+        <button class="m3-btn-primary" style="flex:1;" onclick="closeSheet();openEditEventSheet(${ev.id})">
+          <i data-lucide="pencil" style="width:16px;height:16px;"></i> Bearbeiten
+        </button>
+        <button class="m3-btn-outline" style="flex:1;color:#ba1a1a;border-color:rgba(186,26,26,0.35);" onclick="closeSheet();confirmDelEvent(${ev.id})">
+          <i data-lucide="trash-2" style="width:16px;height:16px;"></i> Löschen
+        </button>
+      </div>` : ''}
+  `);
+}
+
+function setEventRangeMode(isRange) {
+  const btnSingle = document.getElementById('ev-mode-single');
+  const btnRange = document.getElementById('ev-mode-range');
+  const wrap = document.getElementById('ev-end-date-wrap');
+  const startLbl = document.getElementById('ev-start-label');
+  if (btnSingle) btnSingle.classList.toggle('active', !isRange);
+  if (btnRange) btnRange.classList.toggle('active', isRange);
+  if (startLbl) startLbl.textContent = isRange ? 'Startdatum (Ab):' : 'Datum:';
+  if (wrap) {
+    wrap.style.display = isRange ? 'block' : 'none';
+    if (isRange) {
+      const startVal = document.getElementById('ev-date')?.value;
+      const endInput = document.getElementById('ev-end-date');
+      if (startVal && endInput && (!endInput.value || endInput.value < startVal)) endInput.value = startVal;
+      if (typeof enhanceDateTimeInputs === 'function') enhanceDateTimeInputs(wrap);
+    }
+  }
+}
+function toggleEventTime() {
+  const btn = document.getElementById('ev-time-toggle');
+  const wrap = document.getElementById('ev-time-wrap');
+  if (wrap) {
+    wrap.style.display = 'block';
+    if (btn) btn.style.display = 'none';
+    if (typeof enhanceDateTimeInputs === 'function') enhanceDateTimeInputs(wrap);
+  }
+}
+function toggleEventMore() {
+  const wrap = document.getElementById('ev-more-wrap');
+  const toggleWrap = document.getElementById('ev-more-toggle-wrap');
+  if (wrap) wrap.style.display = 'block';
+  if (toggleWrap) toggleWrap.style.display = 'none';
+}
+
+async function openNewEventSheet(defaultDate, defaultTime) {
+  await loadCalSubjects();
+  const today = defaultDate || selectedCalDate || localDateStr(calWeekAnchor) || localDateStr();
+  const hasTime = Boolean(defaultTime);
+  const subOpts = (calSubjects || []).map(s => `<option value="${s.id}">${escapeHtml(s.name || s.short_name || '')}</option>`).join('');
+
+  openSheet(`
+    <div class="sheet-title" style="font-size:1.25rem;font-weight:800;color:#1c1b1f;margin-bottom:16px;">Neuer Termin</div>
+    <div class="m3-field">
+      <label class="m3-field-label">Titel des Termins:</label>
+      <input class="m3-input" id="ev-title" placeholder="z. B. Mathearbeit, Schulausflug, Zahnarzt...">
+    </div>
+    <div class="m3-field">
+      <label class="m3-field-label">Beschreibung (optional):</label>
+      <textarea class="m3-input" id="ev-description" rows="3" placeholder="Weitere Details zum Termin..." style="resize:none;height:auto;font-family:inherit;line-height:1.4;"></textarea>
+    </div>
+    <div class="m3-field" id="ev-start-date-wrap">
+      <label id="ev-start-label" class="m3-field-label">Datum:</label>
+      <input class="m3-input" id="ev-date" type="date" value="${today}">
+    </div>
+    <div id="ev-end-date-wrap" class="m3-field" style="display:none;">
+      <label class="m3-field-label">Enddatum (Bis einschließlich):</label>
+      <input class="m3-input" id="ev-end-date" type="date" value="${today}">
+    </div>
+    <div class="m3-field">
+      <label class="m3-field-label">Kategorie:</label>
+      <select class="m3-select" id="ev-type">
+        <option value="other">Sonstiges</option>
+        <option value="exam">Klassenarbeit</option>
+        <option value="trip">Ausflug / Klassenfahrt</option>
+        <option value="holiday">Ferien</option>
+        <option value="personal">Persönlich (nur für dich sichtbar)</option>
+      </select>
+    </div>
+    <div id="ev-subject-row" class="m3-field" style="display:none;">
+      <label class="m3-field-label">Fach für die Klassenarbeit:</label>
+      <select class="m3-select" id="ev-subject">
+        <option value="">Fach auswählen (optional)</option>
+        ${subOpts}
+      </select>
+    </div>
+    <div class="m3-field" id="ev-more-toggle-wrap" style="display:${hasTime ? 'none' : 'block'};">
+      <button type="button" id="ev-more-toggle" class="m3-inline-toggle m3-more-toggle" onclick="toggleEventMore()">
+        <span style="display:flex;align-items:center;gap:6px;"><i data-lucide="sliders-horizontal" style="width:16px;height:16px;"></i> Weitere Optionen</span>
+        <i data-lucide="chevron-down" style="width:16px;height:16px;"></i>
+      </button>
+    </div>
+    <div id="ev-more-wrap" style="display:${hasTime ? 'block' : 'none'};">
+      <div class="m3-field">
+        <label class="m3-field-label">Dauer:</label>
+        <div class="ev-segmented-wrap">
+          <button type="button" id="ev-mode-single" class="ev-seg-btn active" onclick="setEventRangeMode(false)">
+            <i data-lucide="calendar" style="width:16px;height:16px;"></i><span>Einzelner Tag</span>
+          </button>
+          <button type="button" id="ev-mode-range" class="ev-seg-btn" onclick="setEventRangeMode(true)">
+            <i data-lucide="calendar-range" style="width:16px;height:16px;"></i><span>Zeitraum (mehrere Tage)</span>
+          </button>
+        </div>
+      </div>
+      <div class="m3-field">
+        <button type="button" id="ev-time-toggle" class="m3-inline-toggle" style="display:${hasTime ? 'none' : 'flex'};" onclick="toggleEventTime()">
+          <i data-lucide="clock" style="width:16px;height:16px;"></i> + Uhrzeit hinzufügen (optional)
+        </button>
+        <div id="ev-time-wrap" style="display:${hasTime ? 'block' : 'none'};margin-top:6px;">
+          <label class="m3-field-label">Uhrzeit:</label>
+          <input class="m3-input" id="ev-time" type="time" placeholder="Uhrzeit (optional)" value="${defaultTime || ''}">
+        </div>
+      </div>
+    </div>
+    ${sheetActions({ saveAction: 'saveEvent()' })}
+  `);
+
+  const typeEl = document.getElementById('ev-type');
+  const subRow = document.getElementById('ev-subject-row');
+  if (typeEl && subRow) {
+    typeEl.addEventListener('change', () => {
+      subRow.style.display = typeEl.value === 'exam' ? 'block' : 'none';
+    });
+  }
+}
+
+async function saveEvent() {
+  const title = document.getElementById('ev-title').value.trim();
+  const date = document.getElementById('ev-date').value;
+  if (!title || !date) { showToast('Titel und Datum erforderlich'); return; }
+  const description = document.getElementById('ev-description').value.trim() || null;
+  const isRange = document.getElementById('ev-mode-range')?.classList.contains('active');
+  const endVal = document.getElementById('ev-end-date')?.value;
+  const end_date = isRange && endVal && endVal >= date ? endVal : (isRange && endVal ? date : null);
+  const event_type = document.getElementById('ev-type').value;
+  const subEl = document.getElementById('ev-subject');
+  const subject_id = (event_type === 'exam' && subEl && subEl.value) ? parseInt(subEl.value, 10) : null;
+  const timeEl = document.getElementById('ev-time');
+  const time = (timeEl && timeEl.value) ? timeEl.value : null;
+  try {
+    await API.createEvent({ title, description, date, end_date, time, event_type, subject_id });
+    closeSheet();
+    await loadCalEvents();
+    renderCal();
+    showToast('Termin gespeichert');
+  } catch {
+    showToast('Fehler beim Speichern');
+  }
+}
+
+async function openEditEventSheet(eventId) {
+  let ev = calEvents.find(x => x.id === eventId);
+  if (!ev && calSearchPool.length) ev = calSearchPool.find(x => x.id === eventId);
+  if (!ev) { showToast('Termin nicht gefunden'); return; }
+
+  await loadCalSubjects();
+  const isRange = Boolean(ev.end_date && ev.end_date !== ev.date);
+  const subOpts = (calSubjects || []).map(s => {
+    const sel = s.id === ev.subject_id ? 'selected' : '';
+    return `<option value="${s.id}" ${sel}>${escapeHtml(s.name || s.short_name || '')}</option>`;
+  }).join('');
+  const typeOpts = [
+    { value: 'other', label: 'Sonstiges' },
+    { value: 'exam', label: 'Klassenarbeit' },
+    { value: 'trip', label: 'Ausflug / Klassenfahrt' },
+    { value: 'holiday', label: 'Ferien' },
+    { value: 'personal', label: 'Persönlich (nur für dich sichtbar)' }
+  ].map(t => `<option value="${t.value}" ${t.value === ev.event_type ? 'selected' : ''}>${t.label}</option>`).join('');
+  const hasTime = Boolean(ev.time);
+  const hasMore = isRange || hasTime;
+
+  openSheet(`
+    <div class="sheet-title" style="font-size:1.25rem;font-weight:800;color:#1c1b1f;margin-bottom:16px;">Termin bearbeiten</div>
+    <div class="m3-field">
+      <label class="m3-field-label">Titel des Termins:</label>
+      <input class="m3-input" id="ev-title" placeholder="Titel" value="${escapeHtml(ev.title)}">
+    </div>
+    <div class="m3-field">
+      <label class="m3-field-label">Beschreibung (optional):</label>
+      <textarea class="m3-input" id="ev-description" rows="3" placeholder="Weitere Details zum Termin..." style="resize:none;height:auto;font-family:inherit;line-height:1.4;">${escapeHtml(ev.description || '')}</textarea>
+    </div>
+    <div class="m3-field" id="ev-start-date-wrap">
+      <label id="ev-start-label" class="m3-field-label">${isRange ? 'Startdatum (Ab):' : 'Datum:'}</label>
+      <input class="m3-input" id="ev-date" type="date" value="${ev.date}">
+    </div>
+    <div id="ev-end-date-wrap" class="m3-field" style="display:${isRange ? 'block' : 'none'};">
+      <label class="m3-field-label">Enddatum (Bis einschließlich):</label>
+      <input class="m3-input" id="ev-end-date" type="date" value="${ev.end_date || ev.date}">
+    </div>
+    <div class="m3-field">
+      <label class="m3-field-label">Kategorie:</label>
+      <select class="m3-select" id="ev-type">${typeOpts}</select>
+    </div>
+    <div id="ev-subject-row" class="m3-field" style="display:${ev.event_type === 'exam' ? 'block' : 'none'};">
+      <label class="m3-field-label">Fach für die Klassenarbeit:</label>
+      <select class="m3-select" id="ev-subject">
+        <option value="">Fach auswählen (optional)</option>${subOpts}
+      </select>
+    </div>
+    <div class="m3-field" id="ev-more-toggle-wrap" style="display:${hasMore ? 'none' : 'block'};">
+      <button type="button" id="ev-more-toggle" class="m3-inline-toggle m3-more-toggle" onclick="toggleEventMore()">
+        <span style="display:flex;align-items:center;gap:6px;"><i data-lucide="sliders-horizontal" style="width:16px;height:16px;"></i> Weitere Optionen</span>
+        <i data-lucide="chevron-down" style="width:16px;height:16px;"></i>
+      </button>
+    </div>
+    <div id="ev-more-wrap" style="display:${hasMore ? 'block' : 'none'};">
+      <div class="m3-field">
+        <label class="m3-field-label">Dauer:</label>
+        <div class="ev-segmented-wrap">
+          <button type="button" id="ev-mode-single" class="ev-seg-btn ${!isRange ? 'active' : ''}" onclick="setEventRangeMode(false)">
+            <i data-lucide="calendar" style="width:16px;height:16px;"></i><span>Einzelner Tag</span>
+          </button>
+          <button type="button" id="ev-mode-range" class="ev-seg-btn ${isRange ? 'active' : ''}" onclick="setEventRangeMode(true)">
+            <i data-lucide="calendar-range" style="width:16px;height:16px;"></i><span>Zeitraum (mehrere Tage)</span>
+          </button>
+        </div>
+      </div>
+      <div class="m3-field">
+        <button type="button" id="ev-time-toggle" class="m3-inline-toggle" style="display:${hasTime ? 'none' : 'flex'};" onclick="toggleEventTime()">
+          <i data-lucide="clock" style="width:16px;height:16px;"></i> + Uhrzeit hinzufügen (optional)
+        </button>
+        <div id="ev-time-wrap" style="display:${hasTime ? 'block' : 'none'};margin-top:6px;">
+          <label class="m3-field-label">Uhrzeit:</label>
+          <input class="m3-input" id="ev-time" type="time" placeholder="Uhrzeit (optional)" value="${ev.time || ''}">
+        </div>
+      </div>
+    </div>
+    ${sheetActions({ saveAction: `saveEditedEvent(${ev.id})` })}
+  `);
+
+  const typeEl = document.getElementById('ev-type');
+  const subRow = document.getElementById('ev-subject-row');
+  if (typeEl && subRow) {
+    typeEl.addEventListener('change', () => {
+      subRow.style.display = typeEl.value === 'exam' ? 'block' : 'none';
+    });
+  }
+}
+
+async function saveEditedEvent(eventId) {
+  const title = document.getElementById('ev-title').value.trim();
+  const date = document.getElementById('ev-date').value;
+  if (!title || !date) { showToast('Titel und Datum erforderlich'); return; }
+  const description = document.getElementById('ev-description').value.trim() || null;
+  const isRange = document.getElementById('ev-mode-range')?.classList.contains('active');
+  const endVal = document.getElementById('ev-end-date')?.value;
+  const end_date = isRange && endVal && endVal >= date ? endVal : (isRange && endVal ? date : null);
+  const event_type = document.getElementById('ev-type').value;
+  const subEl = document.getElementById('ev-subject');
+  const subject_id = (event_type === 'exam' && subEl && subEl.value) ? parseInt(subEl.value, 10) : null;
+  const timeEl = document.getElementById('ev-time');
+  const time = (timeEl && timeEl.value) ? timeEl.value : null;
+  try {
+    await API.updateEvent(eventId, { title, description, date, end_date, time, event_type, subject_id });
+    closeSheet();
+    await loadCalEvents();
+    renderCal();
+    showToast('Termin aktualisiert');
+  } catch {
+    showToast('Fehler beim Aktualisieren');
+  }
+}
+
+function confirmDelEvent(eventId) {
+  const ev = calEvents.find(x => x.id === eventId) || calSearchPool.find(x => x.id === eventId);
+  const title = ev ? escapeHtml(ev.title) : 'diesen Termin';
+  openModal(confirmDelete({
+    title: 'Termin löschen?',
+    message: `Willst du das wirklich löschen?<br><span style="font-weight:700;color:#1c1b1f;display:inline-block;margin-top:6px;">„${title}“</span>`,
+    onConfirm: `doDelEvent(${eventId})`,
+  }));
+}
+
+async function doDelEvent(eventId) {
+  closeModal();
+  animateCardRemoval(document.getElementById('cal-events-list'), eventId);
+  try {
+    await API.deleteEvent(eventId);
+    calEvents = calEvents.filter(e => e.id !== eventId);
+    calSearchPool = calSearchPool.filter(e => e.id !== eventId);
+    showToast('Termin gelöscht');
+  } catch {
+    showToast('Fehler beim Löschen');
+  }
+  renderCal();
+}
+
+function selectDay(dateStr) {
+  selectedCalDate = dateStr;
+  calWeekAnchor = new Date(dateStr + 'T00:00');
+  setCalDisplayMode('day');
+}
+function toggleCalDisplayMode() { toggleCalViewPicker(document.getElementById('cal-viewmode-btn')); }
+function renderEventList() { if (calDisplayMode === 'agenda') renderAgendaList(); }
+function toggleCalMonthPanel() { toggleCalMiniDrawer(); }
+</script>
