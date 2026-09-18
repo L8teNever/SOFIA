@@ -1,9 +1,6 @@
 <div class="page" id="page-calendar" style="background:#f9f6fc;">
   <div id="ph-calendar"></div>
 
-  <!-- Monat | Agenda — same chip pattern as homework/timetable -->
-  <div id="cal-chips-slot" class="no-scrollbar page-subbar" style="padding-top:0;padding-bottom:8px;display:flex;gap:8px;overflow-x:auto;flex-shrink:0;"></div>
-
   <div class="cal-main-container no-scrollbar">
     <!-- Month grid (hidden in Agenda / search) -->
     <div class="cal-left-pane">
@@ -25,9 +22,6 @@
           <i data-lucide="x"></i>
         </button>
       </div>
-
-      <!-- Selected-day chip (month view only) -->
-      <div id="cal-day-chip-slot" class="cal-day-chip-slot" style="display:none;"></div>
 
       <div id="cal-events-header"></div>
       <div id="cal-events-list" class="cal-events-list"></div>
@@ -75,22 +69,10 @@
 .cal-back-btn, .cal-nav-btn { width: 38px; height: 38px; }
 .cal-nav-btn { border-radius: 12px; }
 .cal-back-btn i, .cal-nav-btn i { width: 18px; height: 18px; }
-
-/* Flat, background-less icon buttons — the Google Calendar look for
-   everything in the header except prev/next, which keep the app's usual
-   tonal .icon-btn fill so they stay easy to spot as the nav pair. */
-.cal-flat-btn { background: transparent; }
-
-/* Jump-to-today, styled like Google Calendar's dated square icon instead
-   of a text pill — shows today's day-of-month, set once in JS below. */
-.cal-today-icon-btn {
-  width: 38px; height: 38px; border-radius: 12px;
-  border: 1.5px solid rgba(103,80,164,0.35); background: transparent;
-  display: flex; align-items: center; justify-content: center;
-  font-family: inherit; font-weight: 800; font-size: 0.86rem; color: #6750a4;
-  flex-shrink: 0; cursor: pointer; transition: background 0.15s, transform 0.15s;
+.cal-today-btn {
+  padding: 6px 9px; border-radius: 11px; font-size: 0.74rem;
+  font-weight: 700; height: 38px;
 }
-.cal-today-icon-btn:active { background: #e8def8; transform: scale(0.95); }
 @media (min-width: 600px) {
   .cal-header-row { gap: 16px; }
   .cal-nav-row { gap: 8px; }
@@ -98,7 +80,7 @@
   .cal-back-btn i { width: 22px; height: 22px; }
   .cal-nav-btn { width: 44px; height: 44px; border-radius: 14px; }
   .cal-nav-btn i { width: 20px; height: 20px; }
-  .cal-today-icon-btn { width: 44px; height: 44px; border-radius: 14px; font-size: 0.98rem; }
+  .cal-today-btn { padding: 10px 18px; border-radius: 14px; font-size: 0.85rem; height: 44px; }
   #cal-filter-dot { top: 8px !important; right: 8px !important; }
 }
 
@@ -268,30 +250,6 @@
   .cal-search-header-btn { display: flex; }
   .cal-search-bar-mobile { display: none; }
 }
-
-/* ── Selected-day chip ── */
-.cal-day-chip-slot { margin-bottom: 12px; }
-.cal-day-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  background: #eaddff;
-  color: #21005d;
-  border-radius: 20px;
-  padding: 8px 10px 8px 14px;
-  font-weight: 700;
-  font-size: 0.85rem;
-  border: none;
-  font-family: inherit;
-}
-.cal-day-chip-clear {
-  width: 28px; height: 28px; border-radius: 50%;
-  border: none; background: rgba(33,0,93,0.1); color: #21005d;
-  display: inline-flex; align-items: center; justify-content: center;
-  cursor: pointer; padding: 0;
-}
-.cal-day-chip-clear i { width: 14px; height: 14px; }
-.cal-day-chip-clear:active { background: rgba(33,0,93,0.18); }
 
 /* ── List header ── */
 .cal-list-header {
@@ -533,9 +491,12 @@ document.getElementById('ph-calendar').outerHTML = pageHeader({
   className: 'cal-header-row',
   backClassName: 'cal-back-btn',
   titleHtml: `<div style="flex:1;min-width:0;position:relative;">
-      <div id="cal-title-block">
-        <div style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.6;color:#6750a4;" id="cal-year-label"></div>
-        <span class="page-title cal-month-title" style="color:#1c1b1f;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;" id="cal-month-title">Kalender</span>
+      <div id="cal-title-block" onclick="toggleCalMonthPanel()" style="cursor:pointer;display:flex;align-items:center;gap:2px;">
+        <div style="min-width:0;overflow:hidden;">
+          <div style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.6;color:#6750a4;" id="cal-year-label"></div>
+          <span class="page-title cal-month-title" style="color:#1c1b1f;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;" id="cal-month-title">Kalender</span>
+        </div>
+        <i data-lucide="chevron-down" id="cal-title-chevron" style="width:18px;height:18px;flex-shrink:0;opacity:0.5;transition:transform 0.2s ease;margin-top:9px;"></i>
       </div>
       <div id="cal-header-search-wrap" style="display:none;align-items:center;height:100%;">
         <i data-lucide="search" style="width:18px;height:18px;opacity:0.45;flex-shrink:0;margin-right:8px;"></i>
@@ -543,39 +504,36 @@ document.getElementById('ph-calendar').outerHTML = pageHeader({
       </div>
     </div>`,
   trailing: `<div class="cal-nav-row" style="display:flex;align-items:center;flex-shrink:0;">
-      <button type="button" id="cal-viewmode-btn" class="icon-btn cal-nav-btn cal-flat-btn" onclick="toggleCalDisplayMode()" title="Wochenansicht">
+      <button type="button" id="cal-viewmode-btn" class="icon-btn cal-nav-btn" onclick="toggleCalDisplayMode()" title="Wochenansicht">
         <i data-lucide="calendar-days" id="cal-viewmode-icon"></i>
       </button>
-      <button onclick="calNav(-1)" class="icon-btn cal-nav-btn cal-flat-btn" title="Vorheriger Monat" id="cal-nav-prev"><i data-lucide="chevron-left"></i></button>
-      <button onclick="calToday()" class="cal-today-btn cal-today-icon-btn" id="cal-today-btn" title="Zum heutigen Tag springen"></button>
-      <button onclick="calNav(1)" class="icon-btn cal-nav-btn cal-flat-btn" title="Nächster Monat" id="cal-nav-next"><i data-lucide="chevron-right"></i></button>
-      <button type="button" id="cal-header-search-btn" class="icon-btn cal-nav-btn cal-search-header-btn cal-flat-btn" onclick="toggleCalHeaderSearch()" title="Termine durchsuchen">
+      <button onclick="calNav(-1)" class="icon-btn cal-nav-btn" title="Vorheriger Monat" id="cal-nav-prev"><i data-lucide="chevron-left"></i></button>
+      <button onclick="calToday()" class="m3-btn-outline cal-today-btn" title="Zum heutigen Tag springen">Heute</button>
+      <button onclick="calNav(1)" class="icon-btn cal-nav-btn" title="Nächster Monat" id="cal-nav-next"><i data-lucide="chevron-right"></i></button>
+      <button type="button" id="cal-header-search-btn" class="icon-btn cal-nav-btn cal-search-header-btn" onclick="toggleCalHeaderSearch()" title="Termine durchsuchen">
         <i data-lucide="search"></i>
       </button>
-      <button type="button" id="cal-filter-btn" class="icon-btn cal-nav-btn cal-flat-btn" onclick="toggleCalFilterMenu(this)" title="Nach Kategorie filtern" style="position:relative;">
+      <button type="button" id="cal-filter-btn" class="icon-btn cal-nav-btn" onclick="toggleCalFilterMenu(this)" title="Nach Kategorie filtern" style="position:relative;">
         <i data-lucide="filter"></i>
         <span id="cal-filter-dot" style="display:none;position:absolute;top:6px;right:6px;width:8px;height:8px;border-radius:50%;background:#6750a4;border:2px solid #f9f6fc;"></span>
       </button>
     </div>`
 });
-document.getElementById('cal-today-btn').textContent = new Date().getDate();
 document.getElementById('cal-fab-slot').outerHTML = fab({
   onclick: 'openNewEventSheet()', title: 'Neuen Termin erstellen'
 });
-document.getElementById('cal-chips-slot').innerHTML = chipRow({
-  onclick: 'calSetViewChip',
-  idPrefix: 'cal-chip',
-  items: [
-    { value: 'month', label: 'Monat', active: true },
-    { value: 'all', label: 'Agenda', active: false },
-  ],
-});
 
-function calSetViewChip(scope, btn) {
-  document.querySelectorAll('#cal-chips-slot .chip').forEach(c => c.classList.remove('active'));
-  if (btn) btn.classList.add('active');
-  setCalViewScope(scope);
+// Tapping the title toggles the mini month-grid panel open/closed — same
+// job the old permanent Monat/Agenda chip row did, but as an interaction
+// on the title itself (chevron flips to show state), matching how Google
+// Calendar's own header works instead of adding chrome it doesn't have.
+// No-op during week view or an active search, where the title isn't
+// showing a month to toggle a grid for.
+function toggleCalMonthPanel() {
+  if (calDisplayMode !== 'month' || calSearchQuery) return;
+  setCalViewScope(calViewScope === 'month' ? 'all' : 'month');
 }
+
 var calYear = new Date().getFullYear();
 var calMonth = new Date().getMonth();
 var calEvents = [];
@@ -589,11 +547,9 @@ var calCurrentUser = null;
 // Persisted the same way the timetable's Tag/Woche choice is.
 var calViewScope = 'month';
 try { calViewScope = localStorage.getItem('cal_view_scope') === 'all' ? 'all' : 'month'; } catch {}
-(function syncCalChips() {
-  const month = document.getElementById('cal-chip-month');
-  const all = document.getElementById('cal-chip-all');
-  if (month) month.classList.toggle('active', calViewScope === 'month');
-  if (all) all.classList.toggle('active', calViewScope === 'all');
+(function syncCalTitleChevron() {
+  const chevron = document.getElementById('cal-title-chevron');
+  if (chevron) chevron.style.transform = calViewScope === 'all' ? 'rotate(180deg)' : '';
 })();
 
 // 'month' (the existing mini-grid + list) or 'week' (new: an hourly
@@ -833,13 +789,8 @@ async function setCalViewScope(scope) {
   calViewScope = scope;
   try { localStorage.setItem('cal_view_scope', scope); } catch {}
   selectedCalDate = null;
-  const monthChip = document.getElementById('cal-chip-month');
-  const allChip = document.getElementById('cal-chip-all');
-  if (monthChip) monthChip.classList.toggle('active', scope === 'month');
-  if (allChip) allChip.classList.toggle('active', scope === 'all');
-  const chipsSlot = document.getElementById('cal-chips-slot');
-  // Hide view chips while searching — search spans all months anyway.
-  if (chipsSlot) chipsSlot.style.display = calSearchQuery ? 'none' : '';
+  const chevron = document.getElementById('cal-title-chevron');
+  if (chevron) chevron.style.transform = scope === 'all' ? 'rotate(180deg)' : '';
   const dot = document.getElementById('cal-filter-dot');
   if (dot) dot.style.display = (scope === 'all' || activeCategoryFilter !== 'all' || calSearchQuery) ? 'block' : 'none';
   await loadCalEvents();
@@ -978,11 +929,11 @@ async function toggleCalDisplayMode() {
 function renderCal(dir) {
   const leftPane = document.querySelector('.cal-left-pane');
   const navRow = document.querySelector('.cal-nav-row');
-  const chipsSlot = document.getElementById('cal-chips-slot');
   const mainContainer = document.querySelector('.cal-main-container');
   const weekView = document.getElementById('cal-week-view');
   const viewIcon = document.getElementById('cal-viewmode-icon');
   const viewBtn = document.getElementById('cal-viewmode-btn');
+  const chevron = document.getElementById('cal-title-chevron');
 
   if (viewIcon) viewIcon.setAttribute('data-lucide', calDisplayMode === 'week' ? 'layout-grid' : 'calendar-days');
   if (viewBtn) viewBtn.title = calDisplayMode === 'week' ? 'Monatsansicht' : 'Wochenansicht';
@@ -996,7 +947,12 @@ function renderCal(dir) {
 
   if (mainContainer) mainContainer.style.display = showWeek ? 'none' : '';
   if (weekView) weekView.style.display = showWeek ? 'block' : 'none';
-  if (chipsSlot) chipsSlot.style.display = (calSearchQuery || showWeek) ? 'none' : '';
+  // The chevron only makes sense as a toggle for the mini month-grid, so
+  // it (and the pointer cursor inviting a tap) disappears whenever tapping
+  // the title wouldn't do anything.
+  if (chevron) chevron.style.display = (calSearchQuery || showWeek) ? 'none' : '';
+  const titleBlock = document.getElementById('cal-title-block');
+  if (titleBlock) titleBlock.style.cursor = (calSearchQuery || showWeek) ? 'default' : 'pointer';
 
   if (showWeek) {
     const monday = _calMonday(calWeekAnchor);
@@ -1237,7 +1193,6 @@ function renderEventList() {
   const list = document.getElementById('cal-events-list');
   const headerEl = document.getElementById('cal-events-header');
   const emptyEl = document.getElementById('cal-no-events');
-  const dayChipSlot = document.getElementById('cal-day-chip-slot');
   if (!list) return;
 
   let pool;
@@ -1276,25 +1231,6 @@ function renderEventList() {
     const upcoming = [], past = [];
     pool.forEach(e => ((e.end_date || e.date || '').slice(0, 10) < todayStr0 ? past : upcoming).push(e));
     pool = upcoming.concat(past);
-  }
-
-  // Selected-day chip — clear way back to the full month list.
-  if (dayChipSlot) {
-    if (isMonthView && selectedCalDate) {
-      const d = new Date(selectedCalDate + 'T00:00');
-      const label = d.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' });
-      dayChipSlot.style.display = 'block';
-      dayChipSlot.innerHTML = `
-        <div class="cal-day-chip">
-          <span>${label}</span>
-          <button type="button" class="cal-day-chip-clear" onclick="selectDay('${selectedCalDate}')" title="Tagesfilter aufheben">
-            <i data-lucide="x"></i>
-          </button>
-        </div>`;
-    } else {
-      dayChipSlot.style.display = 'none';
-      dayChipSlot.innerHTML = '';
-    }
   }
 
   const headerLabel = calSearchQuery
