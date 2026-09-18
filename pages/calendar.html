@@ -1,47 +1,45 @@
 <div class="page" id="page-calendar" style="background:#f9f6fc;">
-  <!-- Header -->
   <div id="ph-calendar"></div>
 
-  <!-- Main 2-Column Responsive Layout -->
-  <div class="cal-main-container">
-    <!-- Left Column: Modern White Calendar Card -->
+  <!-- Monat | Agenda — same chip pattern as homework/timetable -->
+  <div id="cal-chips-slot" class="no-scrollbar page-subbar" style="padding-top:0;padding-bottom:8px;display:flex;gap:8px;overflow-x:auto;flex-shrink:0;"></div>
+
+  <div class="cal-main-container no-scrollbar">
+    <!-- Month grid (hidden in Agenda / search) -->
     <div class="cal-left-pane">
-      <div class="cal-card">
-        <!-- Weekdays Header -->
+      <div class="m3-card cal-card">
         <div class="cal-weekdays-grid">
           <div>Mo</div><div>Di</div><div>Mi</div><div>Do</div><div>Fr</div><div>Sa</div><div>So</div>
         </div>
         <div id="cal-grid" class="cal-days-grid"></div>
       </div>
+      <div class="cal-swipe-hint" aria-hidden="true">Wischen zum Monatswechsel</div>
     </div>
 
-    <!-- Right Column: Events List -->
+    <!-- Event list / day agenda -->
     <div class="cal-right-pane">
-      <!-- Search — a persistent bar above the list on mobile (the header
-           row is already tight there); tablet/desktop use the header's
-           search icon instead (see .cal-search-header-btn), which is
-           roomier and matches where "Filter" already lives. -->
-      <div class="cal-search-bar-mobile" style="align-items:center;gap:8px;background:#fff;border-radius:14px;padding:2px 6px 2px 14px;box-shadow:0 1px 4px rgba(0,0,0,0.06);margin-bottom:14px;">
-        <i data-lucide="search" style="width:16px;height:16px;opacity:0.45;flex-shrink:0;"></i>
-        <input type="text" id="cal-search-input" placeholder="Termine durchsuchen..." style="flex:1;min-width:0;border:none;outline:none;background:none;font-family:inherit;font-size:0.9rem;padding:11px 0;color:#1c1b1f;" oninput="onCalSearchInput(this.value)">
-        <button type="button" id="cal-search-clear" onclick="clearCalSearch()" style="display:none;background:none;border:none;cursor:pointer;padding:6px;opacity:0.5;flex-shrink:0;"><i data-lucide="x" style="width:16px;height:16px;"></i></button>
+      <div class="cal-search-bar-mobile">
+        <i data-lucide="search" class="cal-search-icon"></i>
+        <input type="text" id="cal-search-input" class="cal-search-input" placeholder="Termine durchsuchen..." oninput="onCalSearchInput(this.value)">
+        <button type="button" id="cal-search-clear" class="cal-search-clear" onclick="clearCalSearch()" style="display:none;" title="Suche löschen">
+          <i data-lucide="x"></i>
+        </button>
       </div>
 
-      <!-- Events List Header / Active Filter Info -->
+      <!-- Selected-day chip (month view only) -->
+      <div id="cal-day-chip-slot" class="cal-day-chip-slot" style="display:none;"></div>
+
       <div id="cal-events-header"></div>
+      <div id="cal-events-list" class="cal-events-list"></div>
 
-      <!-- Events Cards Container -->
-      <div id="cal-events-list"></div>
-
-      <!-- Empty State -->
-      <div id="cal-no-events" style="display:none;" class="cal-empty-card">
-        <div style="width:54px;height:54px;border-radius:18px;background:#ede7f6;color:#6750a4;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;">
-          <i data-lucide="calendar" style="width:28px;height:28px;"></i>
+      <div id="cal-no-events" class="cal-empty-card" style="display:none;">
+        <div class="cal-empty-icon">
+          <i data-lucide="calendar"></i>
         </div>
-        <div style="font-weight:700;font-size:1.05rem;color:#1c1b1f;margin-bottom:4px;" id="cal-empty-title">Keine Termine</div>
-        <div style="font-size:0.85rem;color:#49454f;margin-bottom:16px;" id="cal-empty-sub">Für diesen Zeitraum sind keine Termine eingetragen.</div>
-        <button class="m3-btn-primary" onclick="openNewEventSheet(selectedCalDate)" style="display:inline-flex;align-items:center;gap:6px;">
-          <i data-lucide="plus" style="width:18px;height:18px;"></i>
+        <div class="cal-empty-title" id="cal-empty-title">Keine Termine</div>
+        <div class="cal-empty-sub" id="cal-empty-sub">Für diesen Zeitraum sind keine Termine eingetragen.</div>
+        <button class="m3-btn-primary cal-empty-cta" onclick="openNewEventSheet(selectedCalDate)">
+          <i data-lucide="plus"></i>
           <span>Neuen Termin eintragen</span>
         </button>
       </div>
@@ -67,23 +65,20 @@
   <div id="cal-fab-slot"></div>
 
 <style>
-/* .page-header now supplies background/border/z-index/padding/capping —
-   only the calendar-specific month-title sizing lives here. */
+/* ── Header sizing (page-header supplies layout) ── */
 .cal-month-title { font-size: 1.3rem; }
 @media (min-width: 400px) { .cal-month-title { font-size: 1.45rem; } }
 @media (min-width: 600px) { .cal-month-title { font-size: 1.6rem; } }
 
-/* Header buttons: shrunk (and tightened up) only below 600px so back +
-   title + Heute + prev/next + filter can all still fit in one row on a
-   narrow phone. From tablet up they match every other page's back-btn/
-   icon-btn exactly (48px / 22px icon) instead of staying undersized next
-   to headers elsewhere that never needed the mobile squeeze. */
 .cal-header-row { gap: 6px; }
-.cal-nav-row { gap: 3px; }
+.cal-nav-row { gap: 3px; display: flex; align-items: center; flex-shrink: 0; }
 .cal-back-btn, .cal-nav-btn { width: 38px; height: 38px; }
 .cal-nav-btn { border-radius: 12px; }
 .cal-back-btn i, .cal-nav-btn i { width: 18px; height: 18px; }
-.cal-today-btn { padding: 6px 9px; border-radius: 11px; font-size: 0.74rem; font-weight: 700; height: 38px; }
+.cal-today-btn {
+  padding: 6px 9px; border-radius: 11px; font-size: 0.74rem;
+  font-weight: 700; height: 38px;
+}
 @media (min-width: 600px) {
   .cal-header-row { gap: 16px; }
   .cal-nav-row { gap: 8px; }
@@ -95,25 +90,16 @@
   #cal-filter-dot { top: 8px !important; right: 8px !important; }
 }
 
-/* Layout: calendar card + filters/list, side by side from tablet up —
-   same two-pane pattern as before, just breathes a bit more. */
+/* ── Scroll + two-pane layout ── */
 .cal-main-container {
   display: flex;
   flex-direction: column;
-  gap: 22px;
+  gap: 18px;
   padding: 4px 16px 100px 16px;
   max-width: 1140px;
   margin: 0 auto;
   width: 100%;
   box-sizing: border-box;
-  /* .page (the parent) is overflow:hidden — every page needs its own
-     scroll container, and this one never had one. Barely noticeable with
-     a short list, but with many events (a busy month, or "Alle Termine"
-     showing everything at once) the list just got clipped with no way to
-     reach the rest. min-height:0 is required alongside flex:1 here —
-     without it a flex child defaults to sizing itself to its content
-     instead of respecting the available space, so overflow-y never
-     actually triggers. */
   flex: 1;
   min-height: 0;
   overflow-y: auto;
@@ -131,32 +117,41 @@
     width: 380px;
     flex-shrink: 0;
     position: sticky;
-    top: 16px;
+    top: 12px;
   }
-  .cal-right-pane {
-    flex: 1;
-    min-width: 0;
-  }
+  .cal-right-pane { flex: 1; min-width: 0; }
 }
 @media (min-width: 1024px) {
-  .cal-left-pane {
-    width: 408px;
-  }
+  .cal-left-pane { width: 408px; }
 }
 
+/* ── Month card (elevated M3) ── */
 .cal-card {
-  background: #ffffff;
-  border-radius: 28px;
-  padding: 20px 16px;
+  margin-bottom: 0;
+  border-radius: 24px;
+  padding: 18px 14px 16px;
   box-shadow: 0 2px 12px rgba(103, 80, 164, 0.08), 0 1px 3px rgba(0,0,0,0.04);
   border: 1px solid rgba(103, 80, 164, 0.08);
+}
+.cal-swipe-hint {
+  display: none;
+  text-align: center;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: #6750a4;
+  opacity: 0.45;
+  margin-top: 8px;
+  letter-spacing: 0.02em;
+}
+@media (max-width: 767px) {
+  .cal-swipe-hint { display: block; }
 }
 
 .cal-weekdays-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
   gap: 4px;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 .cal-weekdays-grid div {
   text-align: center;
@@ -172,23 +167,12 @@
   grid-template-columns: repeat(7, 1fr);
   gap: 2px 0;
 }
-/* A quick fade+rise on the whole grid whenever it's rebuilt for a
-   different month (arrows, "Heute") — restarted from JS in
-   renderCalGridOnly() each time, same felt "that changed" beat as the
-   list-card-enter cards elsewhere, just on the grid as one unit rather
-   than per day-cell (31 individually animating cells would look busy). */
 @keyframes cal-grid-enter {
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
 }
 .cal-days-grid.cal-grid-enter { animation: cal-grid-enter 0.22s ease; }
 
-/* Day cell: a plain number by default. "Today" and "selected" borrow
-   Android's own Calendar/Clock convention — a ring for today, a solid
-   filled circle for the selected day — so the meaning is instantly
-   familiar instead of needing a legend. Capped at 44px and centered so
-   it stays a crisp circle instead of stretching into an oval on wide
-   desktop columns. */
 .cal-day {
   position: relative;
   display: flex;
@@ -208,16 +192,9 @@
   background: transparent;
   color: #1c1b1f;
 }
-.cal-day:hover:not(.muted):not(.selected) {
-  background: #f3edf7;
-}
-.cal-day:active:not(.muted) {
-  transform: scale(0.92);
-}
-.cal-day.muted {
-  opacity: 0.28;
-  cursor: default;
-}
+.cal-day:hover:not(.muted):not(.selected) { background: #f3edf7; }
+.cal-day:active:not(.muted) { transform: scale(0.92); }
+.cal-day.muted { opacity: 0.28; cursor: default; }
 .cal-day.today {
   box-shadow: inset 0 0 0 2px #6750a4;
   color: #6750a4;
@@ -229,57 +206,180 @@
   font-weight: 800;
   box-shadow: 0 3px 10px rgba(103, 80, 164, 0.4);
 }
+.cal-day-num { line-height: 1; font-size: 0.85rem; z-index: 1; }
 
-.cal-day-num {
-  line-height: 1;
-  font-size: 0.85rem;
-  z-index: 1;
-}
-
-/* Dots container — the one place category color still shows on the grid;
-   a holiday no longer tints the whole cell, it just gets a dot like every
-   other category, so the day cell has exactly one visual language. */
 .cal-dots-wrap {
   position: absolute;
-  bottom: 6px;
-  left: 0;
-  right: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 2.5px;
-  pointer-events: none;
-  height: 5px;
+  bottom: 6px; left: 0; right: 0;
+  display: flex; align-items: center; justify-content: center;
+  gap: 2.5px; pointer-events: none; height: 5px;
 }
 .cal-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  flex-shrink: 0;
+  width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0;
 }
 .cal-dot-exam { background: #ba1a1a; }
 .cal-dot-holiday { background: #8a5a00; }
 .cal-dot-trip { background: #006d3a; }
 .cal-dot-personal { background: #006399; }
 .cal-dot-other { background: #6750a4; }
-
 .cal-dot-more {
-  font-size: 0.58rem;
-  line-height: 1;
-  font-weight: 800;
+  font-size: 0.58rem; line-height: 1; font-weight: 800; color: #6750a4;
+}
+.cal-day.selected .cal-dot { box-shadow: 0 0 0 1px rgba(255,255,255,0.95); }
+.cal-day.selected .cal-dot-more { color: rgba(255,255,255,0.95); }
+
+/* ── Search (M3 filled tonal) ── */
+.cal-search-bar-mobile {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #ede7f6;
+  border-radius: 28px;
+  padding: 2px 6px 2px 14px;
+  margin-bottom: 14px;
+}
+.cal-search-icon { width: 18px; height: 18px; opacity: 0.5; flex-shrink: 0; color: #6750a4; }
+.cal-search-input {
+  flex: 1; min-width: 0; border: none; outline: none; background: none;
+  font-family: inherit; font-size: 0.92rem; padding: 12px 0; color: #1c1b1f;
+}
+.cal-search-clear {
+  display: none; background: none; border: none; cursor: pointer;
+  padding: 8px; opacity: 0.55; flex-shrink: 0; border-radius: 50%;
+  color: #1c1b1f;
+}
+.cal-search-clear i { width: 16px; height: 16px; }
+.cal-search-clear:active { background: rgba(0,0,0,0.06); }
+.cal-search-header-btn { display: none; }
+@media (min-width: 768px) {
+  .cal-search-header-btn { display: flex; }
+  .cal-search-bar-mobile { display: none; }
+}
+
+/* ── Selected-day chip ── */
+.cal-day-chip-slot { margin-bottom: 12px; }
+.cal-day-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #eaddff;
+  color: #21005d;
+  border-radius: 20px;
+  padding: 8px 10px 8px 14px;
+  font-weight: 700;
+  font-size: 0.85rem;
+  border: none;
+  font-family: inherit;
+}
+.cal-day-chip-clear {
+  width: 28px; height: 28px; border-radius: 50%;
+  border: none; background: rgba(33,0,93,0.1); color: #21005d;
+  display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer; padding: 0;
+}
+.cal-day-chip-clear i { width: 14px; height: 14px; }
+.cal-day-chip-clear:active { background: rgba(33,0,93,0.18); }
+
+/* ── List header ── */
+.cal-list-header {
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.cal-list-header-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
   color: #6750a4;
 }
-/* Selected day is a solid purple circle — dots keep their category color
-   (that's the whole point of the color-coding) but get a thin white ring
-   so they still stand out against the matching-ish purple background. */
-.cal-day.selected .cal-dot {
-  box-shadow: 0 0 0 1px rgba(255,255,255,0.95);
-}
-.cal-day.selected .cal-dot-more {
-  color: rgba(255,255,255,0.95);
+.cal-list-header-count {
+  font-size: 0.75rem;
+  color: #49454f;
+  font-weight: 600;
 }
 
-/* Date Badge in Event Cards */
+/* ── Event cards ── */
+.cal-event-card {
+  margin-bottom: 10px;
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-radius: 20px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+  transition: transform 0.1s ease, box-shadow 0.15s ease;
+  cursor: default;
+}
+.cal-event-card.is-clickable { cursor: pointer; }
+.cal-event-card.is-clickable:active { transform: scale(0.985); }
+.cal-event-card.is-past { opacity: 0.55 !important; }
+.cal-event-body {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+}
+.cal-event-main { flex: 1; min-width: 0; }
+.cal-event-tags {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 5px;
+}
+.cal-event-title {
+  font-weight: 700;
+  font-size: 0.98rem;
+  color: #1c1b1f;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cal-event-meta {
+  font-size: 0.78rem;
+  color: #49454f;
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+.cal-event-meta i { width: 13px; height: 13px; opacity: 0.6; flex-shrink: 0; }
+.cal-event-desc {
+  font-size: 0.78rem;
+  color: #49454f;
+  opacity: 0.75;
+  margin-top: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cal-event-actions {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+.cal-personal-note {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #49454f;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.cal-personal-note i { width: 11px; height: 11px; }
+.cal-subject-badge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 6px;
+  color: #1c1b1f;
+}
+
 .ev-date-badge {
   display: flex;
   flex-direction: column;
@@ -301,22 +401,11 @@
   border-color: #6750a4;
   box-shadow: 0 2px 6px rgba(103, 80, 164, 0.3);
 }
-.ev-date-num {
-  font-size: 1.15rem;
-  font-weight: 800;
-  line-height: 1;
-}
+.ev-date-num { font-size: 1.15rem; font-weight: 800; line-height: 1; }
 .ev-date-wd {
-  font-size: 0.68rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  opacity: 0.75;
-  margin-top: 2px;
-  line-height: 1;
+  font-size: 0.68rem; font-weight: 700; text-transform: uppercase;
+  opacity: 0.75; margin-top: 2px; line-height: 1;
 }
-
-/* Category pill on event cards — one consistent tag style instead of
-   mixing a dot, an uppercase label and separate badge styles. */
 .ev-category-pill {
   font-size: 0.7rem;
   font-weight: 800;
@@ -325,17 +414,7 @@
   white-space: nowrap;
 }
 
-/* Search: a persistent bar above the list on mobile (the header row is
-   already tight there — Heute/prev/next/filter barely fit), but a header
-   icon that expands into the title area on tablet/desktop, where there's
-   room to spare and a permanent bar would look like unused chrome. */
-.cal-search-header-btn { display: none; }
-.cal-search-bar-mobile { display: flex; }
-@media (min-width: 768px) {
-  .cal-search-header-btn { display: flex; }
-  .cal-search-bar-mobile { display: none; }
-}
-
+/* ── Empty state ── */
 .cal-empty-card {
   background: #ffffff;
   border-radius: 24px;
@@ -344,7 +423,6 @@
   border: 1px dashed rgba(103, 80, 164, 0.2);
   margin-top: 10px;
 }
-
 /* Week view */
 #cal-week-view { padding: 4px 16px 100px 16px; max-width: 1140px; margin: 0 auto; width: 100%; box-sizing: border-box; }
 @media (min-width: 768px) { #cal-week-view { padding: 8px 28px 100px 28px; } }
@@ -401,6 +479,39 @@
   content: ''; position: absolute; left: -3px; top: -3px; width: 8px; height: 8px;
   border-radius: 50%; background: #ba1a1a;
 }
+
+/* ── Empty state ── */
+.cal-empty-icon {
+  width: 54px; height: 54px; border-radius: 18px;
+  background: #ede7f6; color: #6750a4;
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto 12px;
+}
+.cal-empty-icon i { width: 28px; height: 28px; }
+.cal-empty-title {
+  font-weight: 700; font-size: 1.05rem; color: #1c1b1f; margin-bottom: 4px;
+}
+.cal-empty-sub {
+  font-size: 0.85rem; color: #49454f; margin-bottom: 16px;
+}
+.cal-empty-cta {
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.cal-empty-cta i { width: 18px; height: 18px; }
+
+/* Filter menu scope segment (kept for parity if opened) */
+.cal-filter-scope {
+  display: flex; gap: 4px; padding: 4px;
+  background: #f3edf7; border-radius: 10px; margin: 2px 6px 8px;
+}
+.cal-filter-scope button {
+  flex: 1; border: none; border-radius: 8px; padding: 7px 4px;
+  font-size: 0.76rem; font-weight: 700; font-family: inherit; cursor: pointer;
+  background: none; opacity: 0.6; color: #1c1b1f;
+}
+.cal-filter-scope button.active {
+  background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.15); opacity: 1;
+}
 </style>
 </div>
 
@@ -437,6 +548,20 @@ document.getElementById('ph-calendar').outerHTML = pageHeader({
 document.getElementById('cal-fab-slot').outerHTML = fab({
   onclick: 'openNewEventSheet()', title: 'Neuen Termin erstellen'
 });
+document.getElementById('cal-chips-slot').innerHTML = chipRow({
+  onclick: 'calSetViewChip',
+  idPrefix: 'cal-chip',
+  items: [
+    { value: 'month', label: 'Monat', active: true },
+    { value: 'all', label: 'Agenda', active: false },
+  ],
+});
+
+function calSetViewChip(scope, btn) {
+  document.querySelectorAll('#cal-chips-slot .chip').forEach(c => c.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  setCalViewScope(scope);
+}
 var calYear = new Date().getFullYear();
 var calMonth = new Date().getMonth();
 var calEvents = [];
@@ -450,6 +575,12 @@ var calCurrentUser = null;
 // Persisted the same way the timetable's Tag/Woche choice is.
 var calViewScope = 'month';
 try { calViewScope = localStorage.getItem('cal_view_scope') === 'all' ? 'all' : 'month'; } catch {}
+(function syncCalChips() {
+  const month = document.getElementById('cal-chip-month');
+  const all = document.getElementById('cal-chip-all');
+  if (month) month.classList.toggle('active', calViewScope === 'month');
+  if (all) all.classList.toggle('active', calViewScope === 'all');
+})();
 
 // 'month' (the existing mini-grid + list) or 'week' (new: an hourly
 // Google Calendar-style time-grid). Independent of calViewScope above —
@@ -533,8 +664,16 @@ async function init_calendar() {
     API.me().catch(() => null),
   ]);
   calCurrentUser = me;
+  // Month view opens on today's day-agenda (Android-style) when the
+  // persisted month is the current one — otherwise keep the month list.
+  if (calViewScope === 'month' && !selectedCalDate) {
+    const t = new Date();
+    if (t.getFullYear() === calYear && t.getMonth() === calMonth) {
+      selectedCalDate = localDateStr(t);
+    }
+  }
   const dot = document.getElementById('cal-filter-dot');
-  if (dot) dot.style.display = calViewScope === 'all' ? 'block' : 'none';
+  if (dot) dot.style.display = (calViewScope === 'all' || activeCategoryFilter !== 'all') ? 'block' : 'none';
   renderCal();
   initCalSwipe();
   startCalPolling();
@@ -680,8 +819,15 @@ async function setCalViewScope(scope) {
   calViewScope = scope;
   try { localStorage.setItem('cal_view_scope', scope); } catch {}
   selectedCalDate = null;
+  const monthChip = document.getElementById('cal-chip-month');
+  const allChip = document.getElementById('cal-chip-all');
+  if (monthChip) monthChip.classList.toggle('active', scope === 'month');
+  if (allChip) allChip.classList.toggle('active', scope === 'all');
+  const chipsSlot = document.getElementById('cal-chips-slot');
+  // Hide view chips while searching — search spans all months anyway.
+  if (chipsSlot) chipsSlot.style.display = calSearchQuery ? 'none' : '';
   const dot = document.getElementById('cal-filter-dot');
-  if (dot) dot.style.display = (scope === 'all' || activeCategoryFilter !== 'all') ? 'block' : 'none';
+  if (dot) dot.style.display = (scope === 'all' || activeCategoryFilter !== 'all' || calSearchQuery) ? 'block' : 'none';
   await loadCalEvents();
   renderCal();
 }
@@ -706,10 +852,11 @@ function toggleCalFilterMenu(btn) {
   const panel = document.createElement('div');
   panel.className = 'm3-dropdown-panel dd-open';
   panel.innerHTML = `
-    <div style="display:flex;gap:4px;padding:4px;background:#f3edf7;border-radius:10px;margin:2px 6px 8px;">
-      <button type="button" data-scope="month" style="flex:1;border:none;border-radius:8px;padding:7px 4px;font-size:0.76rem;font-weight:700;font-family:inherit;cursor:pointer;${calViewScope==='month'?'background:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.15);':'background:none;opacity:0.6;'}">Monat</button>
-      <button type="button" data-scope="all" style="flex:1;border:none;border-radius:8px;padding:7px 4px;font-size:0.76rem;font-weight:700;font-family:inherit;cursor:pointer;${calViewScope==='all'?'background:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.15);':'background:none;opacity:0.6;'}">Alle</button>
+    <div class="cal-filter-scope">
+      <button type="button" data-scope="month" class="${calViewScope==='month'?'active':''}">Monat</button>
+      <button type="button" data-scope="all" class="${calViewScope==='all'?'active':''}">Agenda</button>
     </div>
+    <div style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;opacity:0.5;padding:4px 12px 2px;">Kategorie</div>
     ${CAL_FILTER_OPTIONS.map(o =>
       `<div class="m3-dropdown-opt${o.value === activeCategoryFilter ? ' dd-sel' : ''}" data-value="${o.value}">${o.label}</div>`
     ).join('')}
@@ -817,6 +964,7 @@ async function toggleCalDisplayMode() {
 function renderCal(dir) {
   const leftPane = document.querySelector('.cal-left-pane');
   const navRow = document.querySelector('.cal-nav-row');
+  const chipsSlot = document.getElementById('cal-chips-slot');
   const mainContainer = document.querySelector('.cal-main-container');
   const weekView = document.getElementById('cal-week-view');
   const viewIcon = document.getElementById('cal-viewmode-icon');
@@ -825,7 +973,7 @@ function renderCal(dir) {
   if (viewIcon) viewIcon.setAttribute('data-lucide', calDisplayMode === 'week' ? 'layout-grid' : 'calendar-days');
   if (viewBtn) viewBtn.title = calDisplayMode === 'week' ? 'Monatsansicht' : 'Wochenansicht';
 
-  // A search result list spans however many months match, same as "Alle" —
+  // A search result list spans however many months match, same as Agenda —
   // neither a single month's grid, the week grid, nor stepping through
   // either makes sense while search is active, so all three hide, leaving
   // just the filter/view-mode buttons.
@@ -834,6 +982,7 @@ function renderCal(dir) {
 
   if (mainContainer) mainContainer.style.display = showWeek ? 'none' : '';
   if (weekView) weekView.style.display = showWeek ? 'block' : 'none';
+  if (chipsSlot) chipsSlot.style.display = (calSearchQuery || showWeek) ? 'none' : '';
 
   if (showWeek) {
     const monday = _calMonday(calWeekAnchor);
@@ -851,9 +1000,11 @@ function renderCal(dir) {
 
   if (!showGrid) {
     if (leftPane) leftPane.style.display = 'none';
-    document.getElementById('cal-month-title').textContent = calSearchQuery ? 'Suche' : 'Alle Termine';
-    document.getElementById('cal-year-label').textContent = '';
-    if (navRow) [...navRow.children].forEach(c => { if (c.id !== 'cal-filter-btn' && c.id !== 'cal-viewmode-btn') c.style.display = 'none'; });
+    document.getElementById('cal-month-title').textContent = calSearchQuery ? 'Suche' : 'Agenda';
+    document.getElementById('cal-year-label').textContent = calSearchQuery ? '' : 'Kommende Termine';
+    if (navRow) [...navRow.children].forEach(c => {
+      if (c.id !== 'cal-filter-btn' && c.id !== 'cal-header-search-btn' && c.id !== 'cal-viewmode-btn') c.style.display = 'none';
+    });
   } else {
     if (leftPane) leftPane.style.display = '';
     const months = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
@@ -1069,6 +1220,7 @@ function renderEventList() {
   const list = document.getElementById('cal-events-list');
   const headerEl = document.getElementById('cal-events-header');
   const emptyEl = document.getElementById('cal-no-events');
+  const dayChipSlot = document.getElementById('cal-day-chip-slot');
   if (!list) return;
 
   let pool;
@@ -1078,10 +1230,7 @@ function renderEventList() {
       (e.title || '').toLowerCase().includes(q) || (e.description || '').toLowerCase().includes(q)
     );
   } else if (calViewScope === 'all') {
-    // No month window at all — every event that hasn't fully passed yet
-    // (a multi-day one still counts if its last day is still ahead), across
-    // however many months it spans. There's no day-grid in this mode, so
-    // selectedCalDate never applies here.
+    // Agenda: every event that hasn't fully passed yet.
     const todayStr = localDateStr();
     pool = calEvents.filter(e => (e.end_date || e.date || '').slice(0, 10) >= todayStr);
   } else {
@@ -1093,27 +1242,17 @@ function renderEventList() {
       const end = (e.end_date || s).slice(0, 10);
       return s <= monthEnd && end >= monthStart;
     });
-    // Filter by selected day if active
     if (selectedCalDate) {
       pool = pool.filter(e => eventCoversDate(e, selectedCalDate));
     }
   }
 
-  // Filter by category if not 'all'
   if (activeCategoryFilter !== 'all') {
     pool = pool.filter(e => (e.event_type || 'other') === activeCategoryFilter);
   }
 
-  // Sort chronologically
-  pool.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+  pool.sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.time || '').localeCompare(b.time || ''));
 
-  // Month view (not search, not the "all upcoming" scope — that pool already
-  // excludes past events entirely): push anything already over to the
-  // bottom, keeping each group in its own chronological order, so the
-  // month's remaining/upcoming events aren't buried under old ones just
-  // because the month has more past days than future ones. Rendered greyed
-  // out below (isPast), same opacity:0.55 treatment the timetable's "now
-  // line" already uses for a lesson that's already happened.
   const isMonthView = !calSearchQuery && calViewScope !== 'all';
   if (isMonthView) {
     const todayStr0 = localDateStr();
@@ -1122,21 +1261,36 @@ function renderEventList() {
     pool = upcoming.concat(past);
   }
 
-  // Header above list — same styled row either way, just a different label.
-  // The selected-day one skips repeating the date itself (the collapsed
-  // week strip above already shows it as the filled circle) but keeps the
-  // count, same as the whole-month view does.
+  // Selected-day chip — clear way back to the full month list.
+  if (dayChipSlot) {
+    if (isMonthView && selectedCalDate) {
+      const d = new Date(selectedCalDate + 'T00:00');
+      const label = d.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' });
+      dayChipSlot.style.display = 'block';
+      dayChipSlot.innerHTML = `
+        <div class="cal-day-chip">
+          <span>${label}</span>
+          <button type="button" class="cal-day-chip-clear" onclick="selectDay('${selectedCalDate}')" title="Tagesfilter aufheben">
+            <i data-lucide="x"></i>
+          </button>
+        </div>`;
+    } else {
+      dayChipSlot.style.display = 'none';
+      dayChipSlot.innerHTML = '';
+    }
+  }
+
   const headerLabel = calSearchQuery
     ? 'Suchergebnisse'
     : (calViewScope === 'all'
-        ? (activeCategoryFilter === 'all' ? 'Alle kommenden Termine' : 'Gefilterte kommende Termine')
+        ? (activeCategoryFilter === 'all' ? 'Kommende Termine' : 'Gefilterte Agenda')
         : (selectedCalDate
             ? 'Termine an diesem Tag'
-            : (activeCategoryFilter === 'all' ? 'Alle Termine dieses Monats' : 'Gefilterte Termine')));
+            : (activeCategoryFilter === 'all' ? 'Termine dieses Monats' : 'Gefilterte Termine')));
   headerEl.innerHTML = `
-    <div style="margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;">
-      <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#6750a4;">${headerLabel}</div>
-      <span style="font-size:0.75rem;color:#49454f;font-weight:600;">${pool.length} ${pool.length === 1 ? 'Eintrag' : 'Einträge'}</span>
+    <div class="cal-list-header">
+      <div class="cal-list-header-label">${headerLabel}</div>
+      <span class="cal-list-header-count">${pool.length} ${pool.length === 1 ? 'Eintrag' : 'Einträge'}</span>
     </div>
   `;
 
@@ -1173,6 +1327,7 @@ function renderEventList() {
       const isEvToday = eventCoversDate(e, todayStr);
       const isPastEvent = isMonthView && (e.end_date || e.date || '').slice(0, 10) < todayStr;
       const isMulti = Boolean(e.end_date && e.end_date !== e.date);
+      const canEdit = calCanModifyEvent(e);
 
       const sDate = new Date(e.date + 'T00:00');
       const dayNum = sDate.getDate();
@@ -1187,61 +1342,57 @@ function renderEventList() {
       let typeLabel = 'Sonstiges';
       let typeColor = '#6750a4';
       let typeBg = 'rgba(103, 80, 164, 0.1)';
-
       if (e.event_type === 'exam') {
-        typeLabel = 'Klassenarbeit';
-        typeColor = '#ba1a1a';
-        typeBg = 'rgba(186, 26, 26, 0.1)';
+        typeLabel = 'Klassenarbeit'; typeColor = '#ba1a1a'; typeBg = 'rgba(186, 26, 26, 0.1)';
       } else if (e.event_type === 'holiday') {
-        typeLabel = 'Schulferien';
-        typeColor = '#8a5a00';
-        typeBg = 'rgba(138, 90, 0, 0.1)';
+        typeLabel = 'Schulferien'; typeColor = '#8a5a00'; typeBg = 'rgba(138, 90, 0, 0.1)';
       } else if (e.event_type === 'trip') {
-        typeLabel = 'Ausflug';
-        typeColor = '#006d3a';
-        typeBg = 'rgba(0, 109, 58, 0.1)';
+        typeLabel = 'Ausflug'; typeColor = '#006d3a'; typeBg = 'rgba(0, 109, 58, 0.1)';
       } else if (e.event_type === 'personal') {
-        typeLabel = 'Persönlich';
-        typeColor = '#006399';
-        typeBg = 'rgba(0, 99, 153, 0.1)';
+        typeLabel = 'Persönlich'; typeColor = '#006399'; typeBg = 'rgba(0, 99, 153, 0.1)';
       }
 
       const subObj = e.subject_id ? subMap[e.subject_id] : null;
       const subName = subObj ? (subObj.name || subObj.short_name) : null;
-      const subColor = subObj ? (subObj.color || '#6750a4') : null;
+      const subColor = subObj ? (subObj.color || '#ede7f6') : null;
 
       const personalNote = e.event_type === 'personal'
-        ? `<span style="font-size:0.72rem;font-weight:600;color:#49454f;display:inline-flex;align-items:center;gap:3px;"><i data-lucide="lock" style="width:11px;height:11px;"></i> Nur für dich</span>`
+        ? `<span class="cal-personal-note"><i data-lucide="lock"></i> Nur für dich</span>`
+        : '';
+      const subjectBadge = subName
+        ? `<span class="cal-subject-badge" style="background:${subColor || '#ede7f6'};">${escapeHtml(subName)}</span>`
         : '';
 
-      const subjectBadge = subName
-        ? `<span style="font-size:0.7rem;font-weight:700;background:${subColor || '#ede7f6'};color:#1c1b1f;padding:2px 8px;border-radius:6px;">${escapeHtml(subName)}</span>`
+      const cardClick = canEdit
+        ? `onclick="openEditEventSheet(${e.id})"`
         : '';
+      const clickable = canEdit ? ' is-clickable' : '';
+      const pastCls = isPastEvent ? ' is-past' : '';
 
       return `
-        <div class="m3-card list-card-enter" data-id="${e.id}" style="margin-bottom:10px;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;border-radius:20px;box-shadow:0 1px 4px rgba(0,0,0,0.05);transition:transform 0.1s ease;${isPastEvent ? 'opacity:0.55!important;' : ''}">
-          <div style="display:flex;align-items:center;flex:1;min-width:0;">
+        <div class="m3-card cal-event-card list-card-enter${clickable}${pastCls}" data-id="${e.id}" ${cardClick}>
+          <div class="cal-event-body">
             <div class="ev-date-badge ${isEvToday ? 'is-today' : ''}">
               <span class="ev-date-num">${dayNum}</span>
               <span class="ev-date-wd">${weekday}</span>
             </div>
-            <div style="flex:1;min-width:0;">
-              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:5px;">
+            <div class="cal-event-main">
+              <div class="cal-event-tags">
                 <span class="ev-category-pill" style="background:${typeBg};color:${typeColor};">${typeLabel}</span>
                 ${subjectBadge}
                 ${personalNote}
               </div>
-              <div style="font-weight:700;font-size:0.98rem;color:#1c1b1f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(e.title)}</div>
-              <div style="font-size:0.78rem;color:#49454f;margin-top:2px;display:flex;align-items:center;gap:5px;">
-                <i data-lucide="calendar" style="width:13px;height:13px;opacity:0.6;"></i>
+              <div class="cal-event-title">${escapeHtml(e.title)}</div>
+              <div class="cal-event-meta">
+                <i data-lucide="calendar"></i>
                 <span>${dayLabel}</span>
-                ${e.time ? `<span style="opacity:0.4;">·</span><i data-lucide="clock" style="width:13px;height:13px;opacity:0.6;"></i><span>${e.time} Uhr</span>` : ''}
+                ${e.time ? `<span style="opacity:0.4;">·</span><i data-lucide="clock"></i><span>${e.time} Uhr</span>` : ''}
               </div>
-              ${e.description ? `<div style="font-size:0.78rem;color:#49454f;opacity:0.75;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(e.description)}</div>` : ''}
+              ${e.description ? `<div class="cal-event-desc">${escapeHtml(e.description)}</div>` : ''}
             </div>
           </div>
-          <div style="display:flex;align-items:center;flex-shrink:0;">
-            ${calCanModifyEvent(e) ? moreMenuBtn(`openCalEventMenu(this, ${e.id})`) : ''}
+          <div class="cal-event-actions" onclick="event.stopPropagation()">
+            ${canEdit ? moreMenuBtn(`openCalEventMenu(this, ${e.id})`) : ''}
           </div>
         </div>
       `;
