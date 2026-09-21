@@ -8,8 +8,7 @@
         <div class="cal-mini-weekdays"><div>M</div><div>D</div><div>M</div><div>D</div><div>F</div><div>S</div><div>S</div></div>
         <div id="cal-mini-grid" class="cal-mini-grid"></div>
       </div>
-      <!-- Desktop only: the month's events sit under the small month that
-           opens from the title. Hidden everywhere else. -->
+      <!-- Events under the small month, on phone, tablet and desktop. -->
       <div id="cal-drawer-events" class="cal-drawer-events no-scrollbar">
         <div class="cal-month-events-head">
           <div class="cal-list-header-label">Termine</div>
@@ -29,8 +28,7 @@
           </div>
           <div id="cal-grid" class="cal-days-grid"></div>
         </div>
-        <!-- Tablet only: a small month, and the events take the rest.
-             Phone and desktop use the big grid above. -->
+        <!-- Kept for swipe clones. The month view itself is always the big grid. -->
         <div class="m3-card cal-month-compact" id="cal-month-compact">
           <div class="cal-mini-weekdays cal-compact-weekdays"><div>Mo</div><div>Di</div><div>Mi</div><div>Do</div><div>Fr</div><div>Sa</div><div>So</div></div>
           <div id="cal-compact-grid" class="cal-mini-grid"></div>
@@ -152,7 +150,7 @@
 @media (min-width: 600px)  { .cal-body { padding: 0 28px 24px; } }
 @media (min-width: 760px)  { .cal-body { padding: 0 40px 28px; gap: 16px; } }
 @media (min-width: 1100px) { .cal-body { padding: 0 60px 32px; } }
-@media (min-width: 900px) {
+@media (min-width: 760px) {
   .cal-body.drawer-open { flex-direction: row; align-items: stretch; }
 }
 
@@ -176,22 +174,40 @@
   height: 100%; overflow: hidden; background: #f9f6fc;
 }
 
-/* Mini-month drawer — a plain .m3-card like every other card in the app
-   (white, 28px radius, hairline border, whisper of a shadow). */
+/* The small month opens from the title. Appointments sit under it, on every
+   width. The month itself stays a plain white card; the list scrolls on the
+   page background so it matches the agenda cards. */
 .cal-mini-drawer {
-  flex-shrink: 0; max-height: 46%; overflow: auto;
-  background: #fff; border-radius: 28px; padding: 14px 14px 12px;
-  border: 1px solid rgba(0,0,0,0.04);
-  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  flex-shrink: 0; width: 100%; max-height: 68%;
+  display: flex; flex-direction: column; gap: 12px;
+  background: transparent; border: none; box-shadow: none;
+  padding: 0; overflow-y: auto; min-height: 0;
 }
+.cal-body.drawer-open .cal-mini-drawer { height: 68%; }
 .cal-mini-drawer[hidden] { display: none !important; }
-.cal-drawer-events { display: none; }
-@media (min-width: 900px) {
-  /* Hugs its own content instead of stretching to the stage's full height —
-     stretching left a tall empty white area under the month grid. */
+.cal-mini-drawer-month {
+  flex-shrink: 0; width: 100%; max-width: 400px; align-self: center;
+  background: #fff; border-radius: 28px; padding: 14px 14px 12px;
+  border: 1px solid rgba(0,0,0,0.04); box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+}
+.cal-drawer-events {
+  display: block; flex: 1 1 auto; min-height: 120px; overflow: visible;
+  padding-bottom: 8px;
+}
+@media (min-width: 760px) {
   .cal-body.drawer-open .cal-mini-drawer {
-    width: 304px; align-self: flex-start; max-height: 100%;
+    width: 340px; align-self: stretch; height: auto; max-height: 100%;
   }
+}
+/* A phone on its side is wide enough for the side column but too short for
+   a full mini month plus the list. Shrink the month so the first appointments
+   show underneath it. */
+@media (max-height: 520px) {
+  .cal-mini-drawer-month { padding: 8px 10px 8px; }
+  .cal-month-pills { padding-bottom: 4px; }
+  .cal-month-pill { padding: 4px 10px; }
+  .cal-mini-weekdays { margin-bottom: 2px; }
+  .cal-mini-cell { height: 16px; aspect-ratio: auto; font-size: 0.64rem; }
 }
 .cal-month-pills {
   display: flex; gap: 6px; overflow-x: auto; padding: 2px 0 12px;
@@ -299,11 +315,11 @@
   .cal-day-bar { font-size: 0.68rem; padding: 1px 5px; }
 }
 
-/* Tablet only: the big month grid gives way to a small one, and the
-   month's events take the rest of the view. Phone and desktop keep the
-   big grid; on desktop the events live under the title's small month. */
-.cal-month-compact { display: none; margin: 0; }
-.cal-month-events { display: none; }
+/* The big month grid is the month view on phone, tablet and desktop.
+   The compact month and the side list stay in the markup for the swipe
+   clones, but they are never the view. Events live under the title's
+   small month. */
+.cal-month-compact, #cal-month-events { display: none !important; }
 .cal-month-events-head {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
   padding: 2px 4px 10px;
@@ -315,40 +331,6 @@
 }
 .cal-compact-weekdays { margin-bottom: 8px; }
 .cal-compact-weekdays div { font-size: 0.72rem; }
-@media (min-width: 760px) {
-  #cal-view-month { flex-direction: row; align-items: flex-start; gap: 20px; }
-  #cal-view-month > .cal-card { display: none; }
-  .cal-month-compact {
-    display: block; flex: 0 0 292px; width: 292px;
-    align-self: flex-start; padding: 16px 14px 14px; border-radius: 28px;
-  }
-  .cal-month-events {
-    display: block; flex: 1 1 auto; min-width: 0; min-height: 0;
-    align-self: stretch; overflow-y: auto; padding-bottom: 96px;
-  }
-  .cal-month-events-head {
-    position: sticky; top: 0; z-index: 2; background: #f9f6fc; padding-top: 4px;
-  }
-}
-@media (min-width: 1100px) {
-  #cal-view-month { flex-direction: column; align-items: stretch; gap: 0; }
-  #cal-view-month > .cal-card { display: flex; }
-  .cal-month-compact, #cal-month-events { display: none !important; }
-  .cal-body.drawer-open .cal-mini-drawer {
-    width: 340px; align-self: stretch; max-height: 100%;
-    display: flex; flex-direction: column; gap: 14px;
-    background: transparent; border: none; box-shadow: none;
-    padding: 0; overflow: hidden;
-  }
-  .cal-mini-drawer-month {
-    flex-shrink: 0; background: #fff; border-radius: 28px; padding: 14px 14px 12px;
-    border: 1px solid rgba(0,0,0,0.04); box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-  }
-  .cal-drawer-events {
-    display: block; flex: 1 1 auto; min-height: 0; overflow-y: auto;
-    padding-bottom: 8px;
-  }
-}
 
 /* Day / week time grid — same visual language as the timetable's week
    grid: no gray header band, today's date as a filled pill, hour lines as
@@ -782,9 +764,10 @@ async function calMiniPickMonth(y, m) {
 // you keep using to hop from day to day, so it stays until it's closed
 // again via the chevron next to the month title in the header.
 async function calMiniPickDay(dateStr) {
-  // On desktop the events are sitting right under this small month, so a
-  // day picks its place in that list instead of leaving the month view.
-  if (window.matchMedia('(min-width: 1100px)').matches && calDisplayMode === 'month') {
+  // The month's events sit under this small month, so a day picks its
+  // place in that list instead of leaving the month view. Week and day
+  // headers still use this to jump to that day.
+  if (calDisplayMode === 'month') {
     await calCompactPickDay(dateStr);
     scrollDrawerEvents();
     return;
@@ -1709,9 +1692,9 @@ function onCalSlotClick(e) {
 function renderCalWeekView() { renderCalTimeGrid(calDisplayMode === 'day' ? 1 : 7); }
 function calWeekEventClick(id) { openCalEventDetail(id); }
 
-// Every event that touches the month on screen, grouped by day. On tablet
-// and desktop this list is the month view; the small month only picks a
-// day in it. Not the whole year — that's what the Terminübersicht is for.
+// Every event that touches the month on screen, grouped by day. The list
+// sits under the small month that opens from the title. Not the whole
+// year — that's what the Terminübersicht is for.
 function monthEventListHtml() {
   const monthStart = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-01`;
   const lastDay = new Date(calYear, calMonth + 1, 0).getDate();
@@ -1807,7 +1790,6 @@ function scrollMonthEventsToToday(root) {
   wrap.scrollTop = Math.max(0, top);
 }
 function scrollDrawerEvents() {
-  if (!window.matchMedia('(min-width: 1100px)').matches) return;
   const wrap = document.getElementById('cal-drawer-events');
   const list = document.getElementById('cal-drawer-events-list');
   if (!wrap || !list || wrap.offsetParent === null) return;
