@@ -3,9 +3,20 @@
 
   <div class="cal-body" id="cal-body">
     <aside id="cal-mini-drawer" class="cal-mini-drawer" hidden>
-      <div id="cal-month-pills" class="cal-month-pills"></div>
-      <div class="cal-mini-weekdays"><div>M</div><div>D</div><div>M</div><div>D</div><div>F</div><div>S</div><div>S</div></div>
-      <div id="cal-mini-grid" class="cal-mini-grid"></div>
+      <div class="cal-mini-drawer-month">
+        <div id="cal-month-pills" class="cal-month-pills"></div>
+        <div class="cal-mini-weekdays"><div>M</div><div>D</div><div>M</div><div>D</div><div>F</div><div>S</div><div>S</div></div>
+        <div id="cal-mini-grid" class="cal-mini-grid"></div>
+      </div>
+      <!-- Desktop only: the month's events sit under the small month that
+           opens from the title. Hidden everywhere else. -->
+      <div id="cal-drawer-events" class="cal-drawer-events no-scrollbar">
+        <div class="cal-month-events-head">
+          <div class="cal-list-header-label">Termine</div>
+          <span id="cal-drawer-events-count" class="cal-list-header-count"></span>
+        </div>
+        <div id="cal-drawer-events-list"></div>
+      </div>
     </aside>
 
     <div class="cal-stage" id="cal-stage">
@@ -18,8 +29,8 @@
           </div>
           <div id="cal-grid" class="cal-days-grid"></div>
         </div>
-        <!-- Tablet and desktop only: a small month, and the events take
-             everything beside it. The big grid above is the phone view. -->
+        <!-- Tablet only: a small month, and the events take the rest.
+             Phone and desktop use the big grid above. -->
         <div class="m3-card cal-month-compact" id="cal-month-compact">
           <div class="cal-mini-weekdays cal-compact-weekdays"><div>Mo</div><div>Di</div><div>Mi</div><div>Do</div><div>Fr</div><div>Sa</div><div>So</div></div>
           <div id="cal-compact-grid" class="cal-mini-grid"></div>
@@ -174,6 +185,7 @@
   box-shadow: 0 2px 8px rgba(0,0,0,0.04);
 }
 .cal-mini-drawer[hidden] { display: none !important; }
+.cal-drawer-events { display: none; }
 @media (min-width: 900px) {
   /* Hugs its own content instead of stretching to the stage's full height —
      stretching left a tall empty white area under the month grid. */
@@ -287,9 +299,9 @@
   .cal-day-bar { font-size: 0.68rem; padding: 1px 5px; }
 }
 
-/* From tablet width up the big month grid gives way to a small one, and
-   the month's events take the whole rest of the view. On a phone neither
-   the small month nor the list is shown — the big grid is the month view. */
+/* Tablet only: the big month grid gives way to a small one, and the
+   month's events take the rest of the view. Phone and desktop keep the
+   big grid; on desktop the events live under the title's small month. */
 .cal-month-compact { display: none; margin: 0; }
 .cal-month-events { display: none; }
 .cal-month-events-head {
@@ -316,6 +328,25 @@
   }
   .cal-month-events-head {
     position: sticky; top: 0; z-index: 2; background: #f9f6fc; padding-top: 4px;
+  }
+}
+@media (min-width: 1100px) {
+  #cal-view-month { flex-direction: column; align-items: stretch; gap: 0; }
+  #cal-view-month > .cal-card { display: flex; }
+  .cal-month-compact, #cal-month-events { display: none !important; }
+  .cal-body.drawer-open .cal-mini-drawer {
+    width: 340px; align-self: stretch; max-height: 100%;
+    display: flex; flex-direction: column; gap: 14px;
+    background: transparent; border: none; box-shadow: none;
+    padding: 0; overflow: hidden;
+  }
+  .cal-mini-drawer-month {
+    flex-shrink: 0; background: #fff; border-radius: 28px; padding: 14px 14px 12px;
+    border: 1px solid rgba(0,0,0,0.04); box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  }
+  .cal-drawer-events {
+    display: block; flex: 1 1 auto; min-height: 0; overflow-y: auto;
+    padding-bottom: 8px;
   }
 }
 
@@ -668,6 +699,7 @@ function toggleCalMiniDrawer() {
     drawer.hidden = false;
     if (body) body.classList.add('drawer-open');
     renderCalMiniDrawer();
+    scrollDrawerEvents();
     if (chevron) chevron.style.transform = 'rotate(180deg)';
   } else {
     drawer.hidden = true;
@@ -750,6 +782,13 @@ async function calMiniPickMonth(y, m) {
 // you keep using to hop from day to day, so it stays until it's closed
 // again via the chevron next to the month title in the header.
 async function calMiniPickDay(dateStr) {
+  // On desktop the events are sitting right under this small month, so a
+  // day picks its place in that list instead of leaving the month view.
+  if (window.matchMedia('(min-width: 1100px)').matches && calDisplayMode === 'month') {
+    await calCompactPickDay(dateStr);
+    scrollDrawerEvents();
+    return;
+  }
   const d = new Date(dateStr + 'T00:00');
   calYear = d.getFullYear();
   calMonth = d.getMonth();
@@ -1067,6 +1106,11 @@ function fillSwipePane(pane, dir) {
     paintSwipePane(pane);
   } finally {
     unstashCal(saved);
+  }
+  const viewEl = calSwipeTrack.parentNode;
+  if (viewEl) {
+    copyScroll(viewEl, pane, '#cal-time-scroll');
+    scrollMonthEventsToToday(pane);
   }
 }
 function refreshOpenSwipePane(dir) {
@@ -1557,10 +1601,11 @@ async function calCompactPickDay(dateStr) {
     return;
   }
   renderCompactMonth();
-  document.querySelectorAll('#cal-month-events-list .cal-agenda-group').forEach(g => {
+  document.querySelectorAll('#cal-month-events-list .cal-agenda-group, #cal-drawer-events-list .cal-agenda-group').forEach(g => {
     g.classList.toggle('is-selected', g.dataset.date === dateStr);
   });
   scrollMonthEventsToToday();
+  scrollDrawerEvents();
 }
 
 function renderCalTimeGrid(dayCount, root, opts) {
@@ -1672,12 +1717,7 @@ function calWeekEventClick(id) { openCalEventDetail(id); }
 // Every event that touches the month on screen, grouped by day. On tablet
 // and desktop this list is the month view; the small month only picks a
 // day in it. Not the whole year — that's what the Terminübersicht is for.
-function renderMonthEventList(opts) {
-  const live = !opts;
-  const list = live ? document.getElementById('cal-month-events-list') : opts.list;
-  const countEl = live ? document.getElementById('cal-month-events-count') : opts.countEl;
-  if (!list) return;
-
+function monthEventListHtml() {
   const monthStart = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-01`;
   const lastDay = new Date(calYear, calMonth + 1, 0).getDate();
   const monthEnd = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
@@ -1692,12 +1732,13 @@ function renderMonthEventList(opts) {
   }
   pool.sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.time || '').localeCompare(b.time || ''));
 
-  if (countEl) countEl.textContent = pool.length ? String(pool.length) : '';
   if (!pool.length) {
-    list.innerHTML = `<div class="cal-month-empty">${activeCategoryFilter === 'all'
-      ? 'Keine Termine in diesem Monat'
-      : 'Keine Termine in dieser Kategorie'}</div>`;
-    return;
+    return {
+      count: '',
+      html: `<div class="cal-month-empty">${activeCategoryFilter === 'all'
+        ? 'Keine Termine in diesem Monat'
+        : 'Keine Termine in dieser Kategorie'}</div>`,
+    };
   }
 
   const groups = new Map();
@@ -1709,7 +1750,7 @@ function renderMonthEventList(opts) {
 
   const todayStr = localDateStr();
   const subMap = Object.fromEntries((calSubjects || []).map(s => [s.id, s]));
-  list.innerHTML = [...groups.entries()].map(([dateKey, events]) => {
+  const html = [...groups.entries()].map(([dateKey, events]) => {
     const d = new Date(dateKey + 'T00:00');
     const groupTitle = d.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' });
     const todayPill = dateKey === todayStr ? '<span class="cal-agenda-today-pill">Heute</span>' : '';
@@ -1719,8 +1760,31 @@ function renderMonthEventList(opts) {
       <div class="cal-agenda-group-title">${escapeHtml(groupTitle)}${todayPill}</div>${cards}
     </div>`;
   }).join('');
-
-  if (live) scrollMonthEventsToToday();
+  return { count: String(pool.length), html };
+}
+function paintMonthEventList(list, countEl, built) {
+  if (!list) return;
+  if (countEl) countEl.textContent = built.count;
+  list.innerHTML = built.html;
+}
+function renderMonthEventList(opts) {
+  const built = monthEventListHtml();
+  if (opts) {
+    paintMonthEventList(opts.list, opts.countEl, built);
+    return;
+  }
+  paintMonthEventList(
+    document.getElementById('cal-month-events-list'),
+    document.getElementById('cal-month-events-count'),
+    built
+  );
+  paintMonthEventList(
+    document.getElementById('cal-drawer-events-list'),
+    document.getElementById('cal-drawer-events-count'),
+    built
+  );
+  scrollMonthEventsToToday();
+  scrollDrawerEvents();
 }
 
 // Opens the list on the picked day when one is selected in this month,
@@ -1741,6 +1805,22 @@ function scrollMonthEventsToToday(root) {
     : calYear + '-' + String(calMonth + 1).padStart(2, '0');
   const prefer = (!root && selectedCalDate && selectedCalDate.startsWith(monthKey)) ? selectedCalDate : todayStr;
   if (!monthKey || !prefer.startsWith(monthKey)) { wrap.scrollTop = 0; return; }
+  const target = groups.find(g => (g.dataset.date || '') >= prefer);
+  if (!target) { wrap.scrollTop = 0; return; }
+  const headH = wrap.querySelector('.cal-month-events-head')?.offsetHeight || 0;
+  const top = target.getBoundingClientRect().top - wrap.getBoundingClientRect().top + wrap.scrollTop - headH;
+  wrap.scrollTop = Math.max(0, top);
+}
+function scrollDrawerEvents() {
+  if (!window.matchMedia('(min-width: 1100px)').matches) return;
+  const wrap = document.getElementById('cal-drawer-events');
+  const list = document.getElementById('cal-drawer-events-list');
+  if (!wrap || !list || wrap.offsetParent === null) return;
+  const todayStr = localDateStr();
+  const monthKey = calYear + '-' + String(calMonth + 1).padStart(2, '0');
+  const prefer = (selectedCalDate && selectedCalDate.startsWith(monthKey)) ? selectedCalDate : todayStr;
+  const groups = [...list.querySelectorAll('.cal-agenda-group')];
+  if (!prefer.startsWith(monthKey)) { wrap.scrollTop = 0; return; }
   const target = groups.find(g => (g.dataset.date || '') >= prefer);
   if (!target) { wrap.scrollTop = 0; return; }
   const headH = wrap.querySelector('.cal-month-events-head')?.offsetHeight || 0;
