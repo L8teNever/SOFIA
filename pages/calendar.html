@@ -107,11 +107,11 @@
   content: ''; position: absolute; top: -3px; left: 3px; right: 3px;
   height: 2px; background: currentColor; border-radius: 1px;
 }
-/* On a phone the jump-to-today control lives in the view menu, so the
-   header keeps the title readable. Tablet and desktop keep the button. */
-#cal-today-btn { display: none; }
+/* On a phone, Heute and Suche live in the view menu so the title stays
+   readable. Tablet and desktop keep both buttons in the header. */
+#cal-today-btn, #cal-header-search-btn { display: none; }
 @media (min-width: 760px) {
-  #cal-today-btn { display: flex; }
+  #cal-today-btn, #cal-header-search-btn { display: flex; }
 }
 .cal-period-nav { display: none; }
 @media (min-width: 600px) {
@@ -774,6 +774,7 @@ function toggleCalViewPicker(btn) {
     </div>`
   ).join('') + (onPhone
     ? `<div class="m3-dropdown-opt" data-today="1"><span class="cal-today-icon" style="width:18px;height:18px;font-size:9px;margin-right:10px;">${new Date().getDate()}</span>Heute</div>`
+      + `<div class="m3-dropdown-opt" data-search="1"><i data-lucide="search" style="width:16px;height:16px;margin-right:10px;flex-shrink:0;"></i>Suchen</div>`
     : '');
   document.body.appendChild(panel);
   calViewPickerEl = panel;
@@ -797,6 +798,10 @@ function toggleCalViewPicker(btn) {
   panel.querySelector('[data-today]')?.addEventListener('click', () => {
     closeCalViewPicker();
     calToday();
+  });
+  panel.querySelector('[data-search]')?.addEventListener('click', () => {
+    closeCalViewPicker();
+    toggleCalHeaderSearch(true);
   });
   setTimeout(() => document.addEventListener('click', onCalViewPickerOutside), 0);
 }
