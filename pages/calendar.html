@@ -18,8 +18,8 @@
           </div>
           <div id="cal-grid" class="cal-days-grid"></div>
         </div>
-        <!-- The month's events, beside the grid once there's room and below
-             it on a phone. Same cards as the agenda, scoped to this month. -->
+        <!-- The month's events beside the grid, tablet and desktop only.
+             On a phone the grid keeps the whole view; the list is hidden. -->
         <aside id="cal-month-events" class="cal-month-events no-scrollbar">
           <div class="cal-month-events-head">
             <div class="cal-list-header-label">Termine</div>
@@ -266,12 +266,9 @@
   .cal-day-bar { font-size: 0.68rem; padding: 1px 5px; }
 }
 
-/* Month view carries its own event list. On a phone the grid keeps most of
-   the screen and the list follows underneath (the view scrolls); from
-   tablet up the list takes the space beside the grid. */
-#cal-view-month { gap: 14px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
-#cal-view-month .cal-card { flex: 1 0 auto; min-height: min(520px, 64vh); }
-.cal-month-events { flex: 0 0 auto; min-width: 0; padding-bottom: 96px; }
+/* The month's event list only exists from tablet width up, beside the grid.
+   On a phone the month view is the grid alone, filling the view as before. */
+.cal-month-events { display: none; }
 .cal-month-events-head {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
   padding: 2px 4px 10px;
@@ -282,11 +279,11 @@
   color: #49454f; font-size: 0.88rem; font-weight: 600;
 }
 @media (min-width: 760px) {
-  #cal-view-month { flex-direction: row; align-items: stretch; overflow: hidden; gap: 16px; }
-  #cal-view-month .cal-card { flex: 1 1 420px; min-height: 0; min-width: 0; }
+  #cal-view-month { flex-direction: row; align-items: stretch; gap: 16px; }
+  #cal-view-month .cal-card { flex: 1 1 420px; min-width: 0; }
   .cal-month-events {
-    flex: 0 1 360px; width: 360px; min-width: 260px;
-    align-self: stretch; overflow-y: auto; padding-bottom: 96px;
+    display: block; flex: 0 1 360px; width: 360px; min-width: 260px;
+    align-self: stretch; min-height: 0; overflow-y: auto; padding-bottom: 96px;
   }
   .cal-month-events-head {
     position: sticky; top: 0; z-index: 2; background: #f9f6fc; padding-top: 4px;
@@ -1351,10 +1348,8 @@ function renderMonthEventList() {
   scrollMonthEventsToToday();
 }
 
-// On a wide screen the list has its own scroller, so it can open on today
-// without pushing the month grid out of sight. On a phone the list sits
-// below the grid in the same scroller, and jumping to today would hide the
-// grid the view was opened for — so there it stays at the top.
+// The list has its own scroller from tablet width up, so it can open on
+// today without moving the month grid. Below that the list is not shown.
 function scrollMonthEventsToToday() {
   if (!window.matchMedia('(min-width: 760px)').matches) return;
   const wrap = document.getElementById('cal-month-events');
