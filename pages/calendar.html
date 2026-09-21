@@ -18,8 +18,12 @@
           </div>
           <div id="cal-grid" class="cal-days-grid"></div>
         </div>
-        <!-- The month's events beside the grid, tablet and desktop only.
-             On a phone the grid keeps the whole view; the list is hidden. -->
+        <!-- Tablet and desktop only: a small month, and the events take
+             everything beside it. The big grid above is the phone view. -->
+        <div class="m3-card cal-month-compact" id="cal-month-compact">
+          <div class="cal-mini-weekdays cal-compact-weekdays"><div>Mo</div><div>Di</div><div>Mi</div><div>Do</div><div>Fr</div><div>Sa</div><div>So</div></div>
+          <div id="cal-compact-grid" class="cal-mini-grid"></div>
+        </div>
         <aside id="cal-month-events" class="cal-month-events no-scrollbar">
           <div class="cal-month-events-head">
             <div class="cal-list-header-label">Termine</div>
@@ -266,8 +270,10 @@
   .cal-day-bar { font-size: 0.68rem; padding: 1px 5px; }
 }
 
-/* The month's event list only exists from tablet width up, beside the grid.
-   On a phone the month view is the grid alone, filling the view as before. */
+/* From tablet width up the big month grid gives way to a small one, and
+   the month's events take the whole rest of the view. On a phone neither
+   the small month nor the list is shown — the big grid is the month view. */
+.cal-month-compact { display: none; margin: 0; }
 .cal-month-events { display: none; }
 .cal-month-events-head {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
@@ -278,12 +284,18 @@
   border: 1px dashed rgba(103, 80, 164, 0.22);
   color: #49454f; font-size: 0.88rem; font-weight: 600;
 }
+.cal-compact-weekdays { margin-bottom: 8px; }
+.cal-compact-weekdays div { font-size: 0.72rem; }
 @media (min-width: 760px) {
-  #cal-view-month { flex-direction: row; align-items: stretch; gap: 16px; }
-  #cal-view-month .cal-card { flex: 1 1 420px; min-width: 0; }
+  #cal-view-month { flex-direction: row; align-items: flex-start; gap: 20px; }
+  #cal-view-month > .cal-card { display: none; }
+  .cal-month-compact {
+    display: block; flex: 0 0 292px; width: 292px;
+    align-self: flex-start; padding: 16px 14px 14px; border-radius: 28px;
+  }
   .cal-month-events {
-    display: block; flex: 0 1 360px; width: 360px; min-width: 260px;
-    align-self: stretch; min-height: 0; overflow-y: auto; padding-bottom: 96px;
+    display: block; flex: 1 1 auto; min-width: 0; min-height: 0;
+    align-self: stretch; overflow-y: auto; padding-bottom: 96px;
   }
   .cal-month-events-head {
     position: sticky; top: 0; z-index: 2; background: #f9f6fc; padding-top: 4px;
@@ -409,6 +421,7 @@
   letter-spacing: -0.01em;
 }
 .cal-agenda-group { margin-bottom: 16px; }
+.cal-agenda-group.is-selected .cal-agenda-group-title { color: #21005d; }
 .cal-agenda-group-title {
   font-size: 0.72rem; font-weight: 700; color: #6750a4; margin: 0 0 8px 4px;
   text-transform: uppercase; letter-spacing: 0.1em;
@@ -1108,6 +1121,7 @@ function renderCal(dir) {
 
   if (calDisplayMode === 'month') {
     renderCalGridOnly(true, dir);
+    renderCompactMonth();
     renderMonthEventList();
   }
   if (calDisplayMode === 'week' || calDisplayMode === 'day') renderCalTimeGrid(calDisplayMode === 'day' ? 1 : 7);
@@ -1189,6 +1203,59 @@ function _buildCalGrid(grid) {
     };
     grid.appendChild(el);
   }
+}
+
+// The small month next to the event list. A day in it picks that day in
+// the list instead of leaving the month view; a day from the neighbouring
+// month turns the page.
+function renderCompactMonth() {
+  const grid = document.getElementById('cal-compact-grid');
+  if (!grid) return;
+  const first = new Date(calYear, calMonth, 1);
+  const startDay = (first.getDay() + 6) % 7;
+  const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+  const prevDays = new Date(calYear, calMonth, 0).getDate();
+  const todayStr = localDateStr();
+  const weeks = Math.ceil((startDay + daysInMonth) / 7);
+  let html = '';
+  for (let i = 0; i < weeks * 7; i++) {
+    let dateObj, inMonth = true;
+    if (i < startDay) {
+      dateObj = new Date(calYear, calMonth - 1, prevDays - startDay + i + 1);
+      inMonth = false;
+    } else if (i >= startDay + daysInMonth) {
+      dateObj = new Date(calYear, calMonth + 1, i - (startDay + daysInMonth) + 1);
+      inMonth = false;
+    } else {
+      dateObj = new Date(calYear, calMonth, i - startDay + 1);
+    }
+    const ds = localDateStr(dateObj);
+    const has = inMonth && calEvents.some(e =>
+      eventCoversDate(e, ds) &&
+      (activeCategoryFilter === 'all' || (e.event_type || 'other') === activeCategoryFilter)
+    );
+    let cls = 'cal-mini-cell';
+    if (!inMonth) cls += ' muted';
+    if (ds === todayStr) cls += ' today';
+    else if (inMonth && ds === selectedCalDate) cls += ' selected';
+    html += `<button type="button" class="${cls}" onclick="calCompactPickDay('${ds}')">${dateObj.getDate()}${has ? '<span class="cal-mini-dot"></span>' : ''}</button>`;
+  }
+  grid.innerHTML = html;
+}
+
+async function calCompactPickDay(dateStr) {
+  const d = new Date(dateStr + 'T00:00');
+  selectedCalDate = dateStr;
+  calWeekAnchor = d;
+  if (d.getFullYear() !== calYear || d.getMonth() !== calMonth) {
+    await setCalDisplayMode('month', { anchor: d });
+    return;
+  }
+  renderCompactMonth();
+  document.querySelectorAll('#cal-month-events-list .cal-agenda-group').forEach(g => {
+    g.classList.toggle('is-selected', g.dataset.date === dateStr);
+  });
+  scrollMonthEventsToToday();
 }
 
 function renderCalTimeGrid(dayCount) {
@@ -1296,9 +1363,9 @@ function onCalSlotClick(e) {
 function renderCalWeekView() { renderCalTimeGrid(calDisplayMode === 'day' ? 1 : 7); }
 function calWeekEventClick(id) { openCalEventDetail(id); }
 
-// The list beside (or, on a phone, under) the month grid: every event that
-// touches the month on screen, grouped by day. Not the whole year — that's
-// what the Terminübersicht is for.
+// Every event that touches the month on screen, grouped by day. On tablet
+// and desktop this list is the month view; the small month only picks a
+// day in it. Not the whole year — that's what the Terminübersicht is for.
 function renderMonthEventList() {
   const list = document.getElementById('cal-month-events-list');
   const countEl = document.getElementById('cal-month-events-count');
@@ -1339,8 +1406,9 @@ function renderMonthEventList() {
     const d = new Date(dateKey + 'T00:00');
     const groupTitle = d.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' });
     const todayPill = dateKey === todayStr ? '<span class="cal-agenda-today-pill">Heute</span>' : '';
+    const picked = dateKey === selectedCalDate ? ' is-selected' : '';
     const cards = events.map(e => renderCalEventCard(e, { todayStr, subMap, isPast: (e.end_date || e.date || '').slice(0, 10) < todayStr })).join('');
-    return `<div class="cal-agenda-group" data-date="${dateKey}">
+    return `<div class="cal-agenda-group${picked}" data-date="${dateKey}">
       <div class="cal-agenda-group-title">${escapeHtml(groupTitle)}${todayPill}</div>${cards}
     </div>`;
   }).join('');
@@ -1348,8 +1416,9 @@ function renderMonthEventList() {
   scrollMonthEventsToToday();
 }
 
-// The list has its own scroller from tablet width up, so it can open on
-// today without moving the month grid. Below that the list is not shown.
+// Opens the list on the picked day when one is selected in this month,
+// otherwise on today. A picked day with no events of its own lands on the
+// next day that has some.
 function scrollMonthEventsToToday() {
   if (!window.matchMedia('(min-width: 760px)').matches) return;
   const wrap = document.getElementById('cal-month-events');
@@ -1357,9 +1426,10 @@ function scrollMonthEventsToToday() {
   if (!wrap || !list) return;
   const todayStr = localDateStr();
   const monthKey = calYear + '-' + String(calMonth + 1).padStart(2, '0');
-  if (!todayStr.startsWith(monthKey)) { wrap.scrollTop = 0; return; }
+  const prefer = (selectedCalDate && selectedCalDate.startsWith(monthKey)) ? selectedCalDate : todayStr;
+  if (!prefer.startsWith(monthKey)) { wrap.scrollTop = 0; return; }
   const groups = [...list.querySelectorAll('.cal-agenda-group')];
-  const target = groups.find(g => (g.dataset.date || '') >= todayStr);
+  const target = groups.find(g => (g.dataset.date || '') >= prefer);
   if (!target) { wrap.scrollTop = 0; return; }
   const headH = wrap.querySelector('.cal-month-events-head')?.offsetHeight || 0;
   const top = target.getBoundingClientRect().top - wrap.getBoundingClientRect().top + wrap.scrollTop - headH;
