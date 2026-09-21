@@ -1,1 +1,39 @@
-PLACEHOLDER
+name: Restore calendar layout once
+
+on:
+  push:
+    paths:
+      - .github/workflows/restore-calendar-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 1
+      - name: Apply the month-layout patch
+        run: |
+          set -euo pipefail
+          python3 << 'PY'
+          import base64, pathlib, hashlib, subprocess
+          parts = sorted(pathlib.Path('.github/calpatch').glob('part*.txt'))
+          blob_b64 = ''.join(p.read_text().strip() for p in parts)
+          pathlib.Path('/tmp/cal.patch').write_bytes(base64.b64decode(blob_b64))
+          subprocess.check_call(['git', 'apply', '/tmp/cal.patch'])
+          data = pathlib.Path('pages/calendar.html').read_bytes()
+          header = ("blob %d\0" % len(data)).encode()
+          digest = hashlib.sha1(header + data).hexdigest()
+          print('blob', digest, 'size', len(data))
+          if digest != 'd485c5d02987917775d9e442b0bf88f3240008c7' or len(data) != 99213:
+              raise SystemExit('hash mismatch')
+          PY
+          git config user.name "L8teNever"
+          git config user.email "144357086+L8teNever@users.noreply.github.com"
+          git add pages/calendar.html
+          git commit -m "fix(calendar): big month on tablet and desktop, events under the small month"
+          git push
