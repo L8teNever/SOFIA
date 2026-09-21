@@ -5,7 +5,7 @@
     <aside id="cal-mini-drawer" class="cal-mini-drawer" hidden>
       <div class="cal-mini-drawer-month">
         <div id="cal-month-pills" class="cal-month-pills"></div>
-        <div class="cal-mini-weekdays"><div>M</div><div>D</div><div>M</div><div>D</div><div>F</div><div>S</div><div>S</div></div>
+        <div class="cal-mini-weekdays"><div>M</div><div>D</div><div>M</div><div>D</div><div>F</div><div>D</div><div>F</div><div>S</div><div>S</div></div>
         <div id="cal-mini-grid" class="cal-mini-grid"></div>
       </div>
       <!-- Desktop only: the month's events sit under the small month that
@@ -1106,11 +1106,6 @@ function fillSwipePane(pane, dir) {
     paintSwipePane(pane);
   } finally {
     unstashCal(saved);
-  }
-  const viewEl = calSwipeTrack.parentNode;
-  if (viewEl) {
-    copyScroll(viewEl, pane, '#cal-time-scroll');
-    scrollMonthEventsToToday(pane);
   }
 }
 function refreshOpenSwipePane(dir) {
