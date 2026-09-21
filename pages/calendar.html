@@ -157,13 +157,12 @@
    the event list) stays native because the browser may still pan on Y. */
 #cal-view-month, #cal-view-time { position: relative; touch-action: pan-y; }
 .cal-swipe-track {
-  position: absolute; top: 0; bottom: 0; left: 0; width: 300%;
+  position: absolute; top: 0; bottom: 0; left: 0;
   display: flex; z-index: 6; pointer-events: none; background: #f9f6fc;
   will-change: transform;
 }
 .cal-swipe-track > .cal-swipe-pane {
-  width: 33.333333%; height: 100%; flex: 0 0 33.333333%;
-  overflow: hidden; background: #f9f6fc;
+  height: 100%; overflow: hidden; background: #f9f6fc;
 }
 
 /* Mini-month drawer — a plain .m3-card like every other card in the app
@@ -1110,12 +1109,27 @@ function syncSwipeScroll(viewEl, current) {
     else scrollMonthEventsToToday(pane);
   });
 }
+function calSwipeGap(viewEl) {
+  // Each resting page already sits inside the body's side padding. Between
+  // two pages that padding has to exist twice, otherwise the cards touch.
+  const body = viewEl.closest('.cal-body');
+  if (!body) return 40;
+  const cs = getComputedStyle(body);
+  const gap = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+  return gap > 0 ? gap : 40;
+}
 function buildSwipeTrack(viewEl) {
   const width = viewEl.clientWidth;
   if (!width) return null;
+  const gap = calSwipeGap(viewEl);
+  const stride = width + gap;
   const prev = makeSwipePane(viewEl, -1);
   const current = makeSwipePane(viewEl, 0);
   const next = makeSwipePane(viewEl, 1);
+  [prev, current, next].forEach(pane => {
+    pane.style.width = width + 'px';
+    pane.style.flex = '0 0 ' + width + 'px';
+  });
   const track = document.createElement('div');
   track.className = 'cal-swipe-track';
   track.append(prev, current, next);
@@ -1123,8 +1137,11 @@ function buildSwipeTrack(viewEl) {
   track._next = next;
   track._current = current;
   track._width = width;
+  track._stride = stride;
+  track.style.gap = gap + 'px';
+  track.style.width = (width * 3 + gap * 2) + 'px';
   track.style.transition = 'none';
-  track.style.transform = `translate3d(${-width}px,0,0)`;
+  track.style.transform = `translate3d(${-stride}px,0,0)`;
   viewEl.appendChild(track);
   syncSwipeScroll(viewEl, current);
   if (window.lucide) lucide.createIcons();
@@ -1133,7 +1150,7 @@ function buildSwipeTrack(viewEl) {
 }
 function setSwipeX(track, dx) {
   track.style.transition = 'none';
-  track.style.transform = `translate3d(${-track._width + dx}px,0,0)`;
+  track.style.transform = `translate3d(${-track._stride + dx}px,0,0)`;
 }
 function animateSwipeTo(track, x, ms) {
   return new Promise(resolve => {
@@ -1194,8 +1211,8 @@ function initCalSwipe() {
       }
       if (e.cancelable) e.preventDefault();
       const now = performance.now();
-      const width = track._width;
-      dx = Math.max(-width, Math.min(width, dx));
+      const stride = track._stride;
+      dx = Math.max(-stride, Math.min(stride, dx));
       velocity = (dx - lastDx) / Math.max(1, now - lastT);
       lastDx = dx;
       lastT = now;
@@ -1204,10 +1221,10 @@ function initCalSwipe() {
 
     const finish = async (commit) => {
       if (!track) { reset(); return; }
-      const width = track._width;
+      const stride = track._stride;
       const dir = dx < 0 ? 1 : -1;
-      const target = commit ? (dir === 1 ? -2 * width : 0) : -width;
-      const remaining = Math.abs(target - (-width + dx));
+      const target = commit ? (dir === 1 ? -2 * stride : 0) : -stride;
+      const remaining = Math.abs(target - (-stride + dx));
       const ms = Math.max(160, Math.min(320, remaining * 0.45));
       const held = track;
       reset();
