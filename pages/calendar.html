@@ -1,2 +1,263 @@
 <div class="page" id="page-calendar" style="background:#f9f6fc;">
-PLACEHOLDER_WILL_FAIL_IF_SENT
+  <div id="ph-calendar"></div>
+
+  <div class="cal-body" id="cal-body">
+    <aside id="cal-mini-drawer" class="cal-mini-drawer" hidden>
+      <div id="cal-month-pills" class="cal-month-pills"></div>
+      <div class="cal-mini-weekdays"><div>M</div><div>D</div><div>M</div><div>D</div><div>F</div><div>S</div><div>S</div></div>
+      <div id="cal-mini-grid" class="cal-mini-grid"></div>
+    </aside>
+
+    <div class="cal-stage" id="cal-stage">
+      <div id="cal-search-dropdown" class="cal-search-dropdown" hidden></div>
+
+      <section id="cal-view-month" class="cal-view">
+        <div class="m3-card cal-card">
+          <div class="cal-weekdays-grid">
+            <div>Mo</div><div>Di</div><div>Mi</div><div>Do</div><div>Fr</div><div>Sa</div><div>So</div>
+          </div>
+          <div id="cal-grid" class="cal-days-grid"></div>
+        </div>
+        <!-- Tablet and desktop only: a small month, and the events take
+             everything beside it. The big grid above is the phone view. -->
+        <div class="m3-card cal-month-compact" id="cal-month-compact">
+          <div class="cal-mini-weekdays cal-compact-weekdays"><div>Mo</div><div>Di</div><div>Mi</div><div>Do</div><div>Fr</div><div>Sa</div><div>So</div></div>
+          <div id="cal-compact-grid" class="cal-mini-grid"></div>
+        </div>
+        <aside id="cal-month-events" class="cal-month-events no-scrollbar">
+          <div class="cal-month-events-head">
+            <div class="cal-list-header-label">Termine</div>
+            <span id="cal-month-events-count" class="cal-list-header-count"></span>
+          </div>
+          <div id="cal-month-events-list"></div>
+        </aside>
+      </section>
+
+      <section id="cal-view-time" class="cal-view" hidden>
+        <div class="m3-card cal-time-card" id="cal-time-card">
+          <!-- One scroll box for header + hours, so the day columns stay
+               aligned with their headings no matter how wide the
+               scrollbar is or how far down the hours are scrolled. -->
+          <div id="cal-time-scroll" class="cal-time-scroll">
+            <div class="cal-time-sticky">
+              <div class="cal-time-row">
+                <div class="cal-time-gutter"></div>
+                <div id="cal-time-header-cols" class="cal-time-colgrid"></div>
+              </div>
+              <div id="cal-time-allday" class="cal-time-row cal-time-allday" hidden>
+                <div class="cal-time-gutter cal-time-allday-label">ganztägig</div>
+                <div id="cal-time-allday-cols" class="cal-time-colgrid"></div>
+              </div>
+            </div>
+            <div class="cal-time-row cal-time-body">
+              <div id="cal-time-hours" class="cal-time-hours"></div>
+              <div id="cal-time-cols" class="cal-time-colgrid cal-time-cols"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="cal-view-agenda" class="cal-view cal-agenda-wrap no-scrollbar" hidden>
+        <div id="cal-events-header"></div>
+        <div id="cal-events-list" class="cal-events-list"></div>
+        <div id="cal-no-events" class="cal-empty-card" style="display:none;">
+          <div class="cal-empty-icon"><i data-lucide="calendar"></i></div>
+          <div class="cal-empty-title" id="cal-empty-title">Keine Termine</div>
+          <div class="cal-empty-sub" id="cal-empty-sub">Für diesen Zeitraum sind keine Termine eingetragen.</div>
+          <button class="m3-btn-primary cal-empty-cta" onclick="openNewEventSheet(selectedCalDate)">
+            <i data-lucide="plus"></i>
+            <span>Neuen Termin eintragen</span>
+          </button>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <div id="cal-fab-slot"></div>
+
+<style>
+.cal-header-row { gap: 8px; }
+.cal-nav-row { gap: 4px; display: flex; align-items: center; flex-shrink: 0; }
+/* Same tonal icon buttons the rest of the app uses, just scaled down on
+   phones — the header carries four of them next to the month title. */
+.cal-back-btn, .cal-nav-btn { width: 40px; height: 40px; border-radius: 16px; }
+.cal-back-btn i, .cal-nav-btn i { width: 18px; height: 18px; }
+.cal-title-btn {
+  display: flex; align-items: center; gap: 4px; min-width: 0;
+  background: none; border: none; padding: 4px 8px 4px 2px; margin: 0;
+  cursor: pointer; font-family: inherit; color: inherit; border-radius: 16px;
+}
+.cal-title-btn:hover { background: rgba(103,80,164,0.06); }
+.cal-title-btn:active { background: #e8def8; }
+.cal-title-btn:disabled { cursor: default; }
+.cal-title-btn:disabled:hover, .cal-title-btn:disabled:active { background: none; }
+.cal-month-title {
+  font-size: 1.28rem; font-weight: 800; color: #1c1b1f;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  letter-spacing: -0.01em; line-height: 1.15;
+}
+#cal-title-chevron { width: 20px; height: 20px; flex-shrink: 0; opacity: 0.55; transition: transform 0.2s ease; }
+.cal-today-icon {
+  width: 22px; height: 22px; border: 2px solid currentColor; border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 800; line-height: 1; position: relative;
+  padding-top: 1px; color: #6750a4;
+}
+.cal-today-icon::before {
+  content: ''; position: absolute; top: -3px; left: 3px; right: 3px;
+  height: 2px; background: currentColor; border-radius: 1px;
+}
+/* On a phone the jump-to-today control lives in the view menu, so the
+   header keeps the title readable. Tablet and desktop keep the button. */
+#cal-today-btn { display: none; }
+@media (min-width: 760px) {
+  #cal-today-btn { display: flex; }
+}
+.cal-period-nav { display: none; }
+@media (min-width: 600px) {
+  .cal-header-row { gap: 12px; }
+  .cal-nav-row { gap: 6px; }
+  .cal-back-btn, .cal-nav-btn { width: 48px; height: 48px; border-radius: 20px; }
+  .cal-back-btn i, .cal-nav-btn i { width: 22px; height: 22px; }
+  .cal-month-title { font-size: 1.55rem; }
+  .cal-today-icon { width: 24px; height: 24px; font-size: 11px; }
+  #cal-filter-dot { top: 8px !important; right: 8px !important; }
+}
+@media (min-width: 900px) {
+  .cal-period-nav { display: flex; }
+  /* Matches .page-title once there's room for it beside the nav row. */
+  .cal-month-title { font-size: 1.75rem; }
+}
+
+/* Capped and padded with the same values as .page-header above it, so the
+   calendar's left/right edges line up with the back button instead of
+   running out to a wide window's own corners like they used to. */
+.cal-body {
+  flex: 1; min-height: 0; width: 100%; max-width: 960px; margin: 0 auto;
+  box-sizing: border-box;
+  display: flex; flex-direction: column;
+  overflow: hidden; padding: 0 20px 20px; gap: 12px;
+}
+@media (min-width: 600px)  { .cal-body { padding: 0 28px 24px; } }
+@media (min-width: 760px)  { .cal-body { padding: 0 40px 28px; gap: 16px; } }
+@media (min-width: 1100px) { .cal-body { padding: 0 60px 32px; } }
+@media (min-width: 900px) {
+  .cal-body.drawer-open { flex-direction: row; align-items: stretch; }
+}
+
+.cal-stage {
+  flex: 1; min-height: 0; display: flex; flex-direction: column;
+  position: relative; overflow: hidden;
+}
+.cal-view {
+  flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden;
+}
+.cal-view[hidden] { display: none !important; }
+/* Horizontal paging follows the finger. Vertical scrolling (the hour grid,
+   the event list) stays native because the browser may still pan on Y. */
+#cal-view-month, #cal-view-time { position: relative; touch-action: pan-y; }
+.cal-swipe-track {
+  position: absolute; top: 0; bottom: 0; left: 0; width: 300%;
+  display: flex; z-index: 6; pointer-events: none; background: #f9f6fc;
+  will-change: transform;
+}
+.cal-swipe-track > .cal-swipe-pane {
+  width: 33.333333%; height: 100%; flex: 0 0 33.333333%;
+  overflow: hidden; background: #f9f6fc;
+}
+
+/* Mini-month drawer — a plain .m3-card like every other card in the app
+   (white, 28px radius, hairline border, whisper of a shadow). */
+.cal-mini-drawer {
+  flex-shrink: 0; max-height: 46%; overflow: auto;
+  background: #fff; border-radius: 28px; padding: 14px 14px 12px;
+  border: 1px solid rgba(0,0,0,0.04);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+}
+.cal-mini-drawer[hidden] { display: none !important; }
+@media (min-width: 900px) {
+  /* Hugs its own content instead of stretching to the stage's full height —
+     stretching left a tall empty white area under the month grid. */
+  .cal-body.drawer-open .cal-mini-drawer {
+    width: 304px; align-self: flex-start; max-height: 100%;
+  }
+}
+.cal-month-pills {
+  display: flex; gap: 6px; overflow-x: auto; padding: 2px 0 12px;
+  -webkit-overflow-scrolling: touch; scrollbar-width: none;
+}
+.cal-month-pills::-webkit-scrollbar { display: none; }
+.cal-month-pill {
+  flex-shrink: 0; border: 1px solid rgba(0,0,0,0.05); border-radius: 12px;
+  padding: 8px 14px; font-family: inherit; font-size: 0.8rem; font-weight: 500;
+  cursor: pointer; background: #f3edf7; color: #1c1b1f; white-space: nowrap;
+}
+.cal-month-pill.active { background: #21005d; color: #fff; border-color: transparent; font-weight: 700; }
+.cal-mini-weekdays {
+  display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; margin-bottom: 6px;
+}
+.cal-mini-weekdays div {
+  text-align: center; font-size: 0.66rem; font-weight: 700; color: #79747e;
+}
+.cal-mini-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+.cal-mini-cell {
+  aspect-ratio: 1; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; border-radius: 50%; cursor: pointer; position: relative;
+  font-size: 0.8rem; font-weight: 600; color: #1c1b1f; background: transparent;
+  border: 1.5px solid transparent; font-family: inherit; padding: 0;
+  transition: background 0.12s ease;
+}
+.cal-mini-cell:hover:not(.muted):not(.today):not(.selected) { background: #f3edf7; }
+.cal-mini-cell.muted { color: #cac4d0; }
+.cal-mini-cell.today { background: #6750a4; color: #fff; font-weight: 700; }
+.cal-mini-cell.selected:not(.today) { border-color: #6750a4; color: #6750a4; font-weight: 700; }
+.cal-mini-dot {
+  width: 4px; height: 4px; border-radius: 50%; background: #6750a4;
+  position: absolute; bottom: 4px;
+}
+.cal-mini-cell.today .cal-mini-dot { background: #fff; }
+
+/* Search dropdown */
+.cal-search-dropdown {
+  position: absolute; left: 0; right: 0; top: 0; z-index: 40;
+  background: #fff; border-radius: 16px;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.14), 0 2px 8px rgba(103,80,164,0.12);
+  border: 1px solid rgba(103,80,164,0.1);
+  max-height: min(60vh, 420px); overflow-y: auto; padding: 6px;
+}
+.cal-search-hit {
+  display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+  border-radius: 12px; cursor: pointer; border: none; background: none;
+  width: 100%; text-align: left; font-family: inherit; color: #1c1b1f;
+}
+.cal-search-hit:hover, .cal-search-hit:active { background: #f3edf7; }
+.cal-search-hit-title { font-weight: 700; font-size: 0.92rem; }
+.cal-search-hit-meta { font-size: 0.75rem; color: #49454f; margin-top: 2px; }
+.cal-search-empty { padding: 18px 12px; text-align: center; font-size: 0.85rem; color: #49454f; }
+
+/* Month grid */
+.cal-card {
+  flex: 1; min-height: 0; margin: 0; border-radius: 28px; padding: 14px 10px 10px;
+  display: flex; flex-direction: column;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  border: 1px solid rgba(0,0,0,0.04);
+}
+.cal-weekdays-grid {
+  display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; margin-bottom: 6px; flex-shrink: 0;
+}
+.cal-weekdays-grid div {
+  text-align: center; font-size: 0.72rem; font-weight: 700;
+  color: #79747e; padding: 2px 0 6px;
+}
+.cal-days-grid {
+  flex: 1; min-height: 0;
+  display: grid; grid-template-columns: repeat(7, 1fr);
+  grid-template-rows: repeat(var(--cal-rows, 6), minmax(0, 1fr));
+  gap: 2px;
+}
+.cal-day {
+  position: relative; display: flex; flex-direction: column; align-items: stretch;
+  min-height: 0; padding: 3px 2px 2px; border-radius: 10px;
+  cursor: pointer; transition: background 0.15s ease; user-select: none;
+  background: transparent; color: #1c1b1f; overflow: hidden;
+}
