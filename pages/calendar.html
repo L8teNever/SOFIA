@@ -316,6 +316,20 @@
   font-size: 0.56rem; font-weight: 700; line-height: 1.45;
   padding: 0 3px; border-radius: 3px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer;
+  display: flex; align-items: center; gap: 3px;
+}
+.cal-day-bar-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.cal-bar-clip { flex-shrink: 0; width: 9px; height: 9px; opacity: 0.95; }
+.cal-card-files {
+  display: flex; align-items: center; gap: 6px; margin-top: 8px; flex-wrap: wrap;
+}
+.cal-card-thumb {
+  width: 44px; height: 44px; object-fit: cover; border-radius: 10px;
+  background: #ede7f6; display: block;
+}
+.cal-card-filecount {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 0.75rem; font-weight: 700; color: #49454f;
 }
 .cal-day-more { font-size: 0.52rem; font-weight: 700; opacity: 0.55; padding: 0 3px; }
 @media (min-width: 600px) {
@@ -604,23 +618,26 @@ var calYear = new Date().getFullYear();
 var calMonth = new Date().getMonth();
 var calEvents = [];
 var calSubjects = [];
-var selectedCalDate = null;
+var calDisplayMode = 'month';
 var activeCategoryFilter = 'all';
-var calCurrentUser = null;
+var selectedCalDate = null;
+(function restoreCalPrefs() {
+  try {
+    const saved = localStorage.getItem('cal_display_mode');
+    if (CAL_VIEW_MODES.some(m => m.id === saved)) calDisplayMode = saved;
+    const filter = localStorage.getItem('cal_category_filter');
+    if (filter && ['all', 'exam', 'holiday', 'trip', 'personal', 'other'].includes(filter)) {
+      activeCategoryFilter = filter;
+    }
+  } catch {}
+})();
 var calWeekAnchor = new Date();
 var calMiniOpen = false;
 var calMiniYear = calYear;
 var calMiniMonth = calMonth;
 var calPendingFiles = [];
 var calUploading = false;
-
-var calDisplayMode = 'month';
-(function restoreCalMode() {
-  try {
-    const saved = localStorage.getItem('cal_display_mode');
-    if (CAL_VIEW_MODES.some(m => m.id === saved)) calDisplayMode = saved;
-  } catch {}
-})();
+var calCurrentUser = null;
 
 var calSearchQuery = '';
 var calSearchPool = [];
@@ -629,6 +646,39 @@ let calHeaderSearchOpen = false;
 let calViewPickerEl = null;
 let calFilterMenuEl = null;
 let calPollInterval = null;
+
+function calHasFiles(ev) {
+  return Array.isArray(ev.attachments) && ev.attachments.length > 0;
+}
+function calClipIcon() {
+  return `<svg class="cal-bar-clip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>`;
+}
+function calCardFilesRow(e) {
+  const atts = e.attachments || [];
+  if (!atts.length) return '';
+  const thumbs = atts.filter(a => a.type === 'image').slice(0, 3).map(a =>
+    `<img class="cal-card-thumb" src="${escapeHtml(a.url)}" alt="">`
+  ).join('');
+  return `<div class="cal-card-files">${thumbs}<span class="cal-card-filecount"><i data-lucide="paperclip"></i>${atts.length}</span></div>`;
+}
+function paintCalModeChrome() {
+  const monthEl = document.getElementById('cal-view-month');
+  const timeEl = document.getElementById('cal-view-time');
+  const agendaEl = document.getElementById('cal-view-agenda');
+  if (monthEl) monthEl.hidden = calDisplayMode !== 'month';
+  if (timeEl) timeEl.hidden = !(calDisplayMode === 'week' || calDisplayMode === 'day');
+  if (agendaEl) agendaEl.hidden = calDisplayMode !== 'agenda';
+  const calBody = document.getElementById('cal-body');
+  if (calBody) calBody.dataset.calMode = calDisplayMode;
+  const modeMeta = CAL_VIEW_MODES.find(m => m.id === calDisplayMode);
+  const viewIcon = document.getElementById('cal-viewmode-icon');
+  const viewBtn = document.getElementById('cal-viewmode-btn');
+  if (modeMeta && viewIcon) viewIcon.setAttribute('data-lucide', modeMeta.icon);
+  if (modeMeta && viewBtn) viewBtn.title = 'Ansicht: ' + modeMeta.label;
+  const dot = document.getElementById('cal-filter-dot');
+  if (dot) dot.style.display = activeCategoryFilter === 'all' ? 'none' : 'block';
+}
+paintCalModeChrome();
 
 function calEventColors(ev) {
   return { bg: CAL_TYPE_SOLID[ev.event_type] || CAL_TYPE_SOLID.other, color: '#ffffff' };
@@ -802,7 +852,7 @@ async function calMiniPickDay(dateStr) {
   selectedCalDate = dateStr;
   calMiniYear = calYear;
   calMiniMonth = calMonth;
-  await setCalDisplayMode('day', { skipReload: false, anchor: d });
+  await setCalDisplayMode('day', { skipReload: false, anchor: d, persist: false });
 }
 
 function toggleCalViewPicker(btn) {
@@ -863,7 +913,9 @@ async function setCalDisplayMode(mode, opts = {}) {
   if (!CAL_VIEW_MODES.some(m => m.id === mode)) return;
   const prev = calDisplayMode;
   calDisplayMode = mode;
-  try { localStorage.setItem('cal_display_mode', mode); } catch {}
+  if (opts.persist !== false) {
+    try { localStorage.setItem('cal_display_mode', mode); } catch {}
+  }
 
   if (opts.anchor) calWeekAnchor = opts.anchor;
   else if (mode === 'day' || mode === 'week') {
@@ -938,7 +990,7 @@ async function onCalSearchHit(id) {
     calYear = d.getFullYear();
     calMonth = d.getMonth();
     selectedCalDate = ev.date.slice(0, 10);
-    if (calDisplayMode === 'month') await setCalDisplayMode('agenda');
+    if (calDisplayMode === 'month') await setCalDisplayMode('agenda', { persist: false });
     else { await loadCalEvents(); renderCal(); }
   }
   openCalEventDetail(id, pool);
@@ -974,6 +1026,7 @@ function toggleCalHeaderSearch(force) {
 }
 
 async function init_calendar() {
+  paintCalModeChrome();
   syncCalTodayBtn();
   const [, , me] = await Promise.all([
     loadCalEvents(),
@@ -1334,6 +1387,7 @@ async function loadCalEvents() {
 
 function setCalCategoryFilter(cat) {
   activeCategoryFilter = cat;
+  try { localStorage.setItem('cal_category_filter', cat); } catch {}
   const dot = document.getElementById('cal-filter-dot');
   if (dot) dot.style.display = cat === 'all' ? 'none' : 'block';
   renderCal();
@@ -1545,7 +1599,8 @@ function _buildCalGrid(grid) {
       const maxBars = 3;
       const barTags = covering.slice(0, maxBars).map(ev => {
         const { bg, color } = calEventColors(ev);
-        return `<div class="cal-day-bar" style="background:${bg};color:${color};" title="${escapeHtml(ev.title)}" onclick="event.stopPropagation();openCalEventDetail(${ev.id})">${escapeHtml(ev.title)}</div>`;
+        const clip = calHasFiles(ev) ? calClipIcon() : '';
+        return `<div class="cal-day-bar" style="background:${bg};color:${color};" title="${escapeHtml(ev.title)}" onclick="event.stopPropagation();openCalEventDetail(${ev.id})">${clip}<span class="cal-day-bar-title">${escapeHtml(ev.title)}</span></div>`;
       }).join('');
       const moreTag = covering.length > maxBars
         ? `<div class="cal-day-more">+${covering.length - maxBars} weitere</div>` : '';
@@ -1557,7 +1612,7 @@ function _buildCalGrid(grid) {
       calWeekAnchor = new Date(dateStr + 'T00:00');
       calYear = calWeekAnchor.getFullYear();
       calMonth = calWeekAnchor.getMonth();
-      setCalDisplayMode('day');
+      setCalDisplayMode('day', { persist: false });
     };
     grid.appendChild(el);
   }
@@ -1973,6 +2028,7 @@ function renderCalEventCard(e, { todayStr, subMap, isPast }) {
             ${(e.attachments || []).length ? `<span style="opacity:0.4;">·</span><i data-lucide="paperclip"></i><span>${e.attachments.length}</span>` : ''}
           </div>
           ${e.description ? `<div class="cal-event-desc">${escapeHtml(e.description)}</div>` : ''}
+          ${calCardFilesRow(e)}
         </div>
       </div>
       <div class="cal-event-actions" onclick="event.stopPropagation()">
@@ -2389,7 +2445,7 @@ async function doDelEvent(eventId) {
 function selectDay(dateStr) {
   selectedCalDate = dateStr;
   calWeekAnchor = new Date(dateStr + 'T00:00');
-  setCalDisplayMode('day');
+  setCalDisplayMode('day', { persist: false });
 }
 function toggleCalDisplayMode() { toggleCalViewPicker(document.getElementById('cal-viewmode-btn')); }
 function renderEventList() { if (calDisplayMode === 'agenda') renderAgendaList(); }
