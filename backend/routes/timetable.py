@@ -42,22 +42,71 @@ def _strip_server(url: str) -> str:
         url = url.split("/")[0]
     return url
 
-def _names_from_period(p, data_key: str) -> tuple[list, list]:
-    """Read subject/teacher/room names off a period without using webuntis'
-    ListResult.filter(id=[...])[0] path.
+_PERIOD_LIST_METHOD = {"su": "subjects", "te": "teachers", "ro": "rooms"}
 
-    That filter raises IndexError as soon as Untis mentions an id that is
-    not in the cached master list (new subject, substitution, exam, a
-    deleted room). The period payload itself usually already carries
-    `name` / `longname`, so we prefer that and never let one bad lesson
-    take down the whole timetable."""
+
+def _period_items(p, data_key: str) -> list:
     raw = getattr(p, "_data", None) or {}
+    items = raw.get(data_key) or []
+    out = []
+    for item in items:
+        if isinstance(item, dict):
+            out.append(item)
+        elif isinstance(item, int):
+            out.append({"id": item})
+    return out
+
+
+def _session_master_list(p, data_key: str):
+    sess = getattr(p, "_session", None)
+    method = _PERIOD_LIST_METHOD.get(data_key)
+    if not sess or not method:
+        return None
+    try:
+        return getattr(sess, method)(from_cache=True)
+    except Exception:
+        return None
+
+
+def _lookup_master_names(collection, item_id) -> tuple[str, str]:
+    """Resolve one id against the Untis master list.
+
+    Must pass a scalar id, never a list: webuntis ListResult.filter(id=[...])
+    does matches[0] and IndexError's when that id is missing."""
+    if collection is None or item_id is None:
+        return "", ""
+    try:
+        matches = collection.filter(id=item_id)
+        if not matches:
+            return "", ""
+        obj = matches[0]
+        short = (getattr(obj, "name", None) or "").strip()
+        long_name = (getattr(obj, "long_name", None) or short).strip()
+        return short, long_name
+    except Exception:
+        return "", ""
+
+
+def _item_names(item: dict, collection) -> tuple[str, str]:
+    short = (item.get("name") or "").strip()
+    long_name = (item.get("longname") or item.get("longName") or short).strip()
+    if short:
+        return short, long_name or short
+    return _lookup_master_names(collection, item.get("id"))
+
+
+def _names_from_period(p, data_key: str) -> tuple[list, list]:
+    """Subject/teacher/room names for a period.
+
+    Prefer names already on the period payload. If Untis only sent ids (the
+    usual timetable() payload), look each id up in the session cache one by
+    one so a single unknown substitution id cannot blank the whole plan."""
     shorts, longs = [], []
-    for item in raw.get(data_key) or []:
-        if not isinstance(item, dict):
-            continue
-        short = (item.get("name") or "").strip()
-        long_name = (item.get("longname") or short).strip()
+    collection = None
+    for item in _period_items(p, data_key):
+        if collection is None and not (item.get("name") or "").strip():
+            collection = _session_master_list(p, data_key)
+        short, long_name = _item_names(item, collection)
         if short:
             shorts.append(short)
         if long_name:
@@ -66,11 +115,19 @@ def _names_from_period(p, data_key: str) -> tuple[list, list]:
 
 
 def _orig_name_from_period(p, data_key: str) -> str | None:
-    for item in (getattr(p, "_data", None) or {}).get(data_key) or []:
-        if isinstance(item, dict):
-            name = (item.get("orgname") or "").strip()
-            if name:
-                return name
+    collection = None
+    for item in _period_items(p, data_key):
+        name = (item.get("orgname") or item.get("orgName") or "").strip()
+        if name:
+            return name
+        orgid = item.get("orgid", item.get("orgId"))
+        if orgid is None:
+            continue
+        if collection is None:
+            collection = _session_master_list(p, data_key)
+        short, _ = _lookup_master_names(collection, orgid)
+        if short:
+            return short
     return None
 
 
