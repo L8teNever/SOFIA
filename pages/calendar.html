@@ -176,7 +176,8 @@
 
 /* The title opens this drawer. In the month view it is only the appointment
    list — the big grid is already the month. Week and day still get the small
-   month above that list, because they have no month of their own. */
+   month, and on tablet and desktop the appointments sit under it. A phone
+   only gets the small month there. */
 .cal-mini-drawer {
   flex-shrink: 0; width: 100%; max-height: 68%;
   display: flex; flex-direction: column; gap: 12px;
@@ -194,6 +195,14 @@
 .cal-drawer-events {
   display: block; flex: 1 1 auto; min-height: 120px; overflow: visible;
   padding-bottom: 8px;
+}
+@media (max-width: 759px) {
+  .cal-body[data-cal-mode="week"] .cal-drawer-events,
+  .cal-body[data-cal-mode="day"] .cal-drawer-events { display: none; }
+  .cal-body.drawer-open[data-cal-mode="week"] .cal-mini-drawer,
+  .cal-body.drawer-open[data-cal-mode="day"] .cal-mini-drawer {
+    height: auto; max-height: 68%;
+  }
 }
 @media (min-width: 760px) {
   .cal-body.drawer-open .cal-mini-drawer {
@@ -1460,7 +1469,10 @@ function renderCal(dir) {
     renderCompactMonth();
     renderMonthEventList();
   }
-  if (calDisplayMode === 'week' || calDisplayMode === 'day') renderCalTimeGrid(calDisplayMode === 'day' ? 1 : 7);
+  if (calDisplayMode === 'week' || calDisplayMode === 'day') {
+    renderCalTimeGrid(calDisplayMode === 'day' ? 1 : 7);
+    renderMonthEventList();
+  }
   if (calDisplayMode === 'agenda') renderAgendaList();
   if (calMiniOpen) renderCalMiniDrawer();
   if (window.lucide) lucide.createIcons();
@@ -1701,18 +1713,33 @@ function onCalSlotClick(e) {
 function renderCalWeekView() { renderCalTimeGrid(calDisplayMode === 'day' ? 1 : 7); }
 function calWeekEventClick(id) { openCalEventDetail(id); }
 
-// Every event that touches the month on screen, grouped by day. The list
-// sits under the small month that opens from the title. Not the whole
-// year — that's what the Terminübersicht is for.
-function monthEventListHtml() {
+// The month list is every event that touches the month on screen. The week
+// list is only the week on screen. Grouped by day. Not the whole year —
+// that's what the Terminübersicht is for.
+function drawerListBounds() {
+  if (calDisplayMode === 'week') {
+    const monday = _calMonday(calWeekAnchor);
+    return {
+      start: localDateStr(monday),
+      end: localDateStr(_calAddDays(monday, 6)),
+      emptyAll: 'Keine Termine in dieser Woche',
+    };
+  }
   const monthStart = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-01`;
   const lastDay = new Date(calYear, calMonth + 1, 0).getDate();
-  const monthEnd = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+  return {
+    start: monthStart,
+    end: `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`,
+    emptyAll: 'Keine Termine in diesem Monat',
+  };
+}
+function monthEventListHtml() {
+  const bounds = drawerListBounds();
 
   let pool = calEvents.filter(e => {
     const s = (e.date || '').slice(0, 10);
     const end = (e.end_date || s).slice(0, 10);
-    return s <= monthEnd && end >= monthStart;
+    return s <= bounds.end && end >= bounds.start;
   });
   if (activeCategoryFilter !== 'all') {
     pool = pool.filter(e => (e.event_type || 'other') === activeCategoryFilter);
@@ -1723,14 +1750,15 @@ function monthEventListHtml() {
     return {
       count: '',
       html: `<div class="cal-month-empty">${activeCategoryFilter === 'all'
-        ? 'Keine Termine in diesem Monat'
+        ? bounds.emptyAll
         : 'Keine Termine in dieser Kategorie'}</div>`,
     };
   }
 
   const groups = new Map();
   pool.forEach(e => {
-    const key = (e.date || '').slice(0, 10);
+    let key = (e.date || '').slice(0, 10);
+    if (key < bounds.start) key = bounds.start;
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(e);
   });
@@ -1802,11 +1830,12 @@ function scrollDrawerEvents() {
   const wrap = document.getElementById('cal-drawer-events');
   const list = document.getElementById('cal-drawer-events-list');
   if (!wrap || !list || wrap.offsetParent === null) return;
+  const bounds = drawerListBounds();
   const todayStr = localDateStr();
-  const monthKey = calYear + '-' + String(calMonth + 1).padStart(2, '0');
-  const prefer = (selectedCalDate && selectedCalDate.startsWith(monthKey)) ? selectedCalDate : todayStr;
+  let prefer = bounds.start;
+  if (selectedCalDate && selectedCalDate >= bounds.start && selectedCalDate <= bounds.end) prefer = selectedCalDate;
+  else if (todayStr >= bounds.start && todayStr <= bounds.end) prefer = todayStr;
   const groups = [...list.querySelectorAll('.cal-agenda-group')];
-  if (!prefer.startsWith(monthKey)) { wrap.scrollTop = 0; return; }
   const target = groups.find(g => (g.dataset.date || '') >= prefer);
   if (!target) { wrap.scrollTop = 0; return; }
   const headH = wrap.querySelector('.cal-month-events-head')?.offsetHeight || 0;
