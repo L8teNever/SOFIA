@@ -1,4 +1,4 @@
-name: apply meal swipe once
+name: remove mealplan patch helpers
 
 on:
   push:
@@ -9,31 +9,19 @@ permissions:
   contents: write
 
 jobs:
-  apply:
+  cleanup:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
-      - name: apply mealplan swipe patch
+      - name: remove patch helpers
         run: |
           set -euo pipefail
-          cat .github/mealpatch/part*.txt | tr -d '\n' | base64 -d > /tmp/meal.patch
-          git apply --check /tmp/meal.patch
-          git apply /tmp/meal.patch
-          python3 - <<'PY'
-          import hashlib
-          path = "pages/mealplan.html"
-          data = open(path, "rb").read()
-          got = hashlib.sha1(f"blob {len(data)}\0".encode() + data).hexdigest()
-          sha, size = "bb27ea7ac0acb52a69ab4f44e2907bbdadcce604", 29585
-          if got != sha or len(data) != size:
-              raise SystemExit(f"mismatch {got} {len(data)}")
-          print("blob checks ok")
-          PY
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add pages/mealplan.html
-          git commit -m "feat(mealplan): swipe between days and open on today"
+          git rm -r .github/mealpatch
+          git rm .github/workflows/meal-swipe-once.yml
+          git commit -m "chore: remove mealplan patch helpers"
           git push origin HEAD:main
