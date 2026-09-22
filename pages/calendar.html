@@ -8,7 +8,7 @@
         <div class="cal-mini-weekdays"><div>M</div><div>D</div><div>M</div><div>D</div><div>F</div><div>S</div><div>S</div></div>
         <div id="cal-mini-grid" class="cal-mini-grid"></div>
       </div>
-      <!-- Events under the small month, on phone, tablet and desktop. -->
+      <!-- In the month view this list is the whole drawer. Week and day keep the small month above it. -->
       <div id="cal-drawer-events" class="cal-drawer-events no-scrollbar">
         <div class="cal-month-events-head">
           <div class="cal-list-header-label">Termine</div>
@@ -174,9 +174,9 @@
   height: 100%; overflow: hidden; background: #f9f6fc;
 }
 
-/* The small month opens from the title. Appointments sit under it, on every
-   width. The month itself stays a plain white card; the list scrolls on the
-   page background so it matches the agenda cards. */
+/* The title opens this drawer. In the month view it is only the appointment
+   list — the big grid is already the month. Week and day still get the small
+   month above that list, because they have no month of their own. */
 .cal-mini-drawer {
   flex-shrink: 0; width: 100%; max-height: 68%;
   display: flex; flex-direction: column; gap: 12px;
@@ -190,6 +190,7 @@
   background: #fff; border-radius: 28px; padding: 14px 14px 12px;
   border: 1px solid rgba(0,0,0,0.04); box-shadow: 0 2px 8px rgba(0,0,0,0.04);
 }
+.cal-body[data-cal-mode="month"] .cal-mini-drawer-month { display: none; }
 .cal-drawer-events {
   display: block; flex: 1 1 auto; min-height: 120px; overflow: visible;
   padding-bottom: 8px;
@@ -679,7 +680,10 @@ function toggleCalMiniDrawer() {
     calMiniYear = calYear;
     calMiniMonth = calMonth;
     drawer.hidden = false;
-    if (body) body.classList.add('drawer-open');
+    if (body) {
+      body.dataset.calMode = calDisplayMode;
+      body.classList.add('drawer-open');
+    }
     renderCalMiniDrawer();
     scrollDrawerEvents();
     if (chevron) chevron.style.transform = 'rotate(180deg)';
@@ -1437,7 +1441,12 @@ function renderCal(dir) {
   const titleEl = document.getElementById('cal-month-title');
   if (titleEl) titleEl.textContent = isAgenda ? 'Alle Termine' : CAL_MONTHS[calMonth] + ' ' + calYear;
   const titleBtn = document.getElementById('cal-title-block');
-  if (titleBtn) titleBtn.disabled = isAgenda;
+  if (titleBtn) {
+    titleBtn.disabled = isAgenda;
+    titleBtn.title = calDisplayMode === 'month' ? 'Termine' : 'Monatsübersicht';
+  }
+  const calBody = document.getElementById('cal-body');
+  if (calBody) calBody.dataset.calMode = calDisplayMode;
   const chevron = document.getElementById('cal-title-chevron');
   if (chevron) chevron.style.display = isAgenda ? 'none' : '';
   document.querySelectorAll('.cal-period-nav').forEach(btn => {
