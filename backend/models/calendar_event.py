@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Boolean, Enum
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Boolean, Enum, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from backend.database import Base
@@ -24,6 +24,7 @@ class CalendarEvent(Base):
     subject_id = Column(Integer, ForeignKey("subjects.id"), nullable=True)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    attachments = Column(JSON, default=list)  # [{"url","type","name"}]
 
     class_group = relationship("ClassGroup", back_populates="calendar_events")
     subject = relationship("Subject", back_populates="calendar_events")

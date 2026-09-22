@@ -95,6 +95,8 @@ async def _migrate_columns(conn):
         await conn.execute(text("ALTER TABLE calendar_events ADD COLUMN end_date TEXT"))
     if "description" not in existing_cal:
         await conn.execute(text("ALTER TABLE calendar_events ADD COLUMN description TEXT"))
+    if "attachments" not in existing_cal:
+        await conn.execute(text("ALTER TABLE calendar_events ADD COLUMN attachments JSON DEFAULT '[]'"))
 
     result_gr = await conn.execute(text("PRAGMA table_info(grades)"))
     existing_gr = {row[1] for row in result_gr.fetchall()}

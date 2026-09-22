@@ -59,6 +59,7 @@ const API = {
   events:        (month)  => API.get('/calendar/' + (month ? `?month=${month}` : '')),
   createEvent:   (d)      => API.post('/calendar/', d),
   updateEvent:   (id, d)  => API.put(`/calendar/${id}`, d),
+  uploadEventFile: (form) => API.upload('/calendar/upload', form),
   deleteEvent:   (id)     => API.delete(`/calendar/${id}`),
 
   holidayStates: ()       => API.get('/calendar/holidays/states'),
