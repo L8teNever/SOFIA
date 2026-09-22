@@ -1,0 +1,44 @@
+name: Apply agent patch
+on:
+  push:
+    paths:
+      - '.github/agent-patch/**'
+      - '.github/workflows/apply-agent-patch.yml'
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply patch and assert hashes
+        env:
+          WANT_PY: c4424a2c8522faa47b6bfc5dc692276315c59127
+          WANT_PY_SIZE: "17580"
+          WANT_HTML: fe0dcd198572c66c62d3864d79ad075bf961eb66
+          WANT_HTML_SIZE: "33627"
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import glob, base64, subprocess, pathlib, os, sys
+          parts = sorted(glob.glob('.github/agent-patch/part-*.b64'))
+          if not parts:
+              sys.exit('no patch parts')
+          data = b''.join(base64.b64decode(pathlib.Path(p).read_text().strip()) for p in parts)
+          pathlib.Path('/tmp/patch.diff').write_bytes(data)
+          subprocess.check_call(['git', 'apply', '/tmp/patch.diff'])
+          def check(path, want_sha, want_size):
+              sha = subprocess.check_output(['git', 'hash-object', path], text=True).strip()
+              size = pathlib.Path(path).stat().st_size
+              assert sha == want_sha, f'{path} sha {sha} != {want_sha}'
+              assert size == int(want_size), f'{path} size {size} != {want_size}'
+              print('ok', path, sha, size)
+          check('backend/routes/timetable.py', os.environ['WANT_PY'], os.environ['WANT_PY_SIZE'])
+          check('pages/timetable.html', os.environ['WANT_HTML'], os.environ['WANT_HTML_SIZE'])
+          PY
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git add backend/routes/timetable.py pages/timetable.html
+          git commit -m "fix(timetable): don't crash Untis on missing subject/teacher ids"
+          git push
