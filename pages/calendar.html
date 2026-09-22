@@ -2019,10 +2019,10 @@ function openCalEventDetail(eventId, pool) {
     ${calDetailAttachments(ev)}
     ${canEdit ? `
       <div class="cal-detail-actions">
-        <button class="m3-btn-primary" style="flex:1;" onclick="closeSheet();openEditEventSheet(${ev.id})">
+        <button class="m3-btn-primary" style="flex:1;" onclick="openEditEventSheet(${ev.id})">
           <i data-lucide="pencil" style="width:16px;height:16px;"></i> Bearbeiten
         </button>
-        <button class="m3-btn-outline" style="flex:1;color:#ba1a1a;border-color:rgba(186,26,26,0.35);" onclick="closeSheet();confirmDelEvent(${ev.id})">
+        <button class="m3-btn-outline" style="flex:1;color:#ba1a1a;border-color:rgba(186,26,26,0.35);" onclick="closeSheet(true);confirmDelEvent(${ev.id})">
           <i data-lucide="trash-2" style="width:16px;height:16px;"></i> Löschen
         </button>
       </div>` : ''}
