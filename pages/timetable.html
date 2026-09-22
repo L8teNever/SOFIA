@@ -152,7 +152,8 @@ async function init_timetable() {
     }
     if (data.error) {
       document.getElementById('tt-error').style.display = 'block';
-      document.getElementById('tt-error').textContent = 'Fehler: ' + data.error;
+      document.getElementById('tt-error').textContent =
+        'Untis hat den Stundenplan gerade nicht vollständig geliefert. Bitte gleich nochmal öffnen.';
       return;
     }
     ttLessons = [...(data.this_week?.lessons||[]), ...(data.next_week?.lessons||[])];

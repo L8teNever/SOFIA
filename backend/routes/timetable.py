@@ -42,12 +42,46 @@ def _strip_server(url: str) -> str:
         url = url.split("/")[0]
     return url
 
+def _names_from_period(p, data_key: str) -> tuple[list, list]:
+    """Read subject/teacher/room names off a period without using webuntis'
+    ListResult.filter(id=[...])[0] path.
+
+    That filter raises IndexError as soon as Untis mentions an id that is
+    not in the cached master list (new subject, substitution, exam, a
+    deleted room). The period payload itself usually already carries
+    `name` / `longname`, so we prefer that and never let one bad lesson
+    take down the whole timetable."""
+    raw = getattr(p, "_data", None) or {}
+    shorts, longs = [], []
+    for item in raw.get(data_key) or []:
+        if not isinstance(item, dict):
+            continue
+        short = (item.get("name") or "").strip()
+        long_name = (item.get("longname") or short).strip()
+        if short:
+            shorts.append(short)
+        if long_name:
+            longs.append(long_name)
+    return shorts, longs
+
+
+def _orig_name_from_period(p, data_key: str) -> str | None:
+    for item in (getattr(p, "_data", None) or {}).get(data_key) or []:
+        if isinstance(item, dict):
+            name = (item.get("orgname") or "").strip()
+            if name:
+                return name
+    return None
+
+
 def _period_to_dict(p) -> dict:
-    subjects      = [s.name for s in p.subjects]  if p.subjects  else []
-    long_subjects = [(getattr(s, 'long_name', None) or s.name) for s in p.subjects] if p.subjects else []
-    teachers      = [t.name for t in p.teachers]  if p.teachers  else []
-    rooms         = [r.name for r in p.rooms]      if p.rooms     else []
-    code          = getattr(p, 'code', None)
+    subjects, long_subjects = _names_from_period(p, "su")
+    teachers, _ = _names_from_period(p, "te")
+    rooms, _ = _names_from_period(p, "ro")
+    try:
+        code = getattr(p, "code", None)
+    except Exception:
+        code = (getattr(p, "_data", None) or {}).get("code")
     room          = rooms[0]    if rooms    else ""
     teacher       = teachers[0] if teachers else ""
 
@@ -60,18 +94,12 @@ def _period_to_dict(p) -> dict:
     original_room = None
     original_teacher = None
     if code == "irregular":
-        try:
-            orig_rooms = [r.name for r in p.original_rooms]
-            if orig_rooms and orig_rooms[0] != room:
-                original_room = orig_rooms[0]
-        except Exception:
-            pass
-        try:
-            orig_teachers = [t.name for t in p.original_teachers]
-            if orig_teachers and orig_teachers[0] != teacher:
-                original_teacher = orig_teachers[0]
-        except Exception:
-            pass
+        orig_room = _orig_name_from_period(p, "ro")
+        if orig_room and orig_room != room:
+            original_room = orig_room
+        orig_teacher = _orig_name_from_period(p, "te")
+        if orig_teacher and orig_teacher != teacher:
+            original_teacher = orig_teacher
 
     # WebUntis's own human-readable substitution note (e.g. "Vertreten
     # durch Hr. Müller", "Raumtausch mit 9b") — only populated when fetched
@@ -82,10 +110,22 @@ def _period_to_dict(p) -> dict:
     except Exception:
         subst_text = ""
 
+    start = getattr(p, "start", None)
+    end = getattr(p, "end", None)
+    raw = getattr(p, "_data", None) or {}
+    if start is not None and end is not None:
+        date_str = start.strftime("%Y%m%d")
+        start_time = int(start.strftime("%H%M"))
+        end_time = int(end.strftime("%H%M"))
+    else:
+        date_str = str(raw.get("date") or "")
+        start_time = int(raw.get("startTime") or 0)
+        end_time = int(raw.get("endTime") or 0)
+
     return {
-        "date":              p.start.strftime("%Y%m%d"),
-        "startTime":         int(p.start.strftime("%H%M")),
-        "endTime":           int(p.end.strftime("%H%M")),
+        "date":              date_str,
+        "startTime":         start_time,
+        "endTime":           end_time,
         "subject":           long_subjects[0] if long_subjects else (subjects[0] if subjects else ""),
         "subject_short":     subjects[0] if subjects else "",
         "teacher":           teacher,
@@ -96,6 +136,18 @@ def _period_to_dict(p) -> dict:
         "original_teacher":  original_teacher,
         "subst_text":        subst_text or None,
     }
+
+
+def _periods_to_lessons(periods) -> list:
+    lessons = []
+    for p in periods:
+        try:
+            lessons.append(_period_to_dict(p))
+        except Exception:
+            logger.warning("Skipping Untis period that could not be parsed", exc_info=True)
+    lessons.sort(key=lambda x: (x["date"], x["startTime"]))
+    return lessons
+
 
 def _fetch_holidays(sess) -> list:
     """Fetches the school's official holiday periods (e.g. "Ferien") so they
@@ -130,19 +182,17 @@ def _fetch_two_weeks(server: str, school: str, username: str, password: str,
             try:
                 periods = list(sess.my_timetable(start=start, end=end))
                 if periods:
-                    return sorted([_period_to_dict(p) for p in periods],
-                                   key=lambda x: (x["date"], x["startTime"]))
+                    return _periods_to_lessons(periods)
             except Exception:
-                pass
-            klassen = list(sess.klassen())
+                logger.debug("my_timetable unavailable, falling back to class timetable", exc_info=True)
+            klassen = list(sess.klassen() or [])
             if not klassen:
                 return []
-            matched = [k for k in klassen if k.name.lower() == class_name.lower()]
+            matched = [k for k in klassen if getattr(k, "name", "").lower() == class_name.lower()]
             if not matched:
                 matched = [klassen[0]]
             periods = list(sess.timetable_extended(klasse=matched[0], start=start, end=end))
-            return sorted([_period_to_dict(p) for p in periods],
-                          key=lambda x: (x["date"], x["startTime"]))
+            return _periods_to_lessons(periods)
 
         this_lessons = fetch_week(this_monday, this_monday + timedelta(days=4))
         next_lessons = fetch_week(next_monday, next_monday + timedelta(days=4))
@@ -170,19 +220,17 @@ def _fetch_range(server: str, school: str, username: str, password: str,
         try:
             periods = list(sess.my_timetable(start=start, end=end))
             if periods:
-                return sorted([_period_to_dict(p) for p in periods],
-                               key=lambda x: (x["date"], x["startTime"]))
+                return _periods_to_lessons(periods)
         except Exception:
-            pass
-        klassen = list(sess.klassen())
+            logger.debug("my_timetable unavailable, falling back to class timetable", exc_info=True)
+        klassen = list(sess.klassen() or [])
         if not klassen:
             return []
-        matched = [k for k in klassen if k.name.lower() == class_name.lower()]
+        matched = [k for k in klassen if getattr(k, "name", "").lower() == class_name.lower()]
         if not matched:
             matched = [klassen[0]]
         periods = list(sess.timetable(klasse=matched[0], start=start, end=end))
-        return sorted([_period_to_dict(p) for p in periods],
-                      key=lambda x: (x["date"], x["startTime"]))
+        return _periods_to_lessons(periods)
     finally:
         try:
             sess.logout()
@@ -302,6 +350,7 @@ async def get_timetable(db: AsyncSession = Depends(get_db), current_user: User =
             "holidays": holidays,
         }
     except Exception as e:
+        logger.exception("Untis timetable fetch failed for class %s", cls.id)
         return {"configured": True, "error": str(e)}
 
 
