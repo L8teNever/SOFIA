@@ -1,4 +1,4 @@
-name: apply sheet edit once
+name: remove sheet patch helpers
 
 on:
   push:
@@ -9,34 +9,19 @@ permissions:
   contents: write
 
 jobs:
-  apply:
+  cleanup:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
-      - name: apply sheet edit patch
+      - name: remove patch helpers
         run: |
           set -euo pipefail
-          cat .github/sheetpatch/part*.txt | tr -d '\n' | base64 -d > /tmp/sheet.patch
-          git apply --check /tmp/sheet.patch
-          git apply /tmp/sheet.patch
-          python3 - <<'PY'
-          import hashlib
-          expected = {
-              "pages/calendar.html": ("816a3842374d46e9b0fe8fb7cbae80bf999c267c", 105099),
-              "static/js/app.js": ("b98ae7a5bf99c23454053d3ef5ec31f0bb19c157", 74803),
-          }
-          for path, (sha, size) in expected.items():
-              data = open(path, "rb").read()
-              got = hashlib.sha1(f"blob {len(data)}\0".encode() + data).hexdigest()
-              if got != sha or len(data) != size:
-                  raise SystemExit(f"mismatch {path}: {got} {len(data)}")
-          print("blob checks ok")
-          PY
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add pages/calendar.html static/js/app.js
-          git commit -m "fix(calendar): keep the edit sheet open after Bearbeiten"
+          git rm -r .github/sheetpatch
+          git rm .github/workflows/sheet-edit-once.yml
+          git commit -m "chore: remove sheet patch helpers"
           git push origin HEAD:main
