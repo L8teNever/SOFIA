@@ -1,4 +1,4 @@
-name: apply event files once
+name: remove calendar patch helpers
 
 on:
   push:
@@ -9,38 +9,19 @@ permissions:
   contents: write
 
 jobs:
-  apply:
+  cleanup:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
-      - name: apply calendar file patch
+      - name: remove patch helpers
         run: |
           set -euo pipefail
-          cat .github/calpatch/part*.txt | tr -d '\n' | base64 -d > /tmp/files.patch
-          git apply --check /tmp/files.patch
-          git apply /tmp/files.patch
-          python3 - <<'PY'
-          import hashlib
-          expected = {
-              "pages/calendar.html": ("d87ea918e6afd5bd827e68d9f75c395742347616", 105108),
-              "backend/routes/calendar.py": ("b92621b25dd8cd794c69f824fd419f32686e7127", 12825),
-              "backend/schemas.py": ("efd06bb0fceac909774d673c03d2e232d551135f", 12585),
-              "backend/models/calendar_event.py": ("4307f98809d16c4433458643dd263e5990a5272e", 1422),
-              "backend/database.py": ("365eb56f6be15f0593604936b505cf8f22e0c58e", 11742),
-              "static/js/api.js": ("c5ec5f28b85b68d4067950532ba267bbb8919d4d", 9027),
-          }
-          for path, (sha, size) in expected.items():
-              data = open(path, "rb").read()
-              got = hashlib.sha1(f"blob {len(data)}\0".encode() + data).hexdigest()
-              if got != sha or len(data) != size:
-                  raise SystemExit(f"mismatch {path}: {got} {len(data)}")
-          print("blob checks ok")
-          PY
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add pages/calendar.html backend/routes/calendar.py backend/schemas.py backend/models/calendar_event.py backend/database.py static/js/api.js
-          git commit -m "feat(calendar): attach files to events"
+          git rm -r .github/calpatch
+          git rm .github/workflows/event-files-once.yml
+          git commit -m "chore: remove calendar patch helpers"
           git push origin HEAD:main
