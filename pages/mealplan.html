@@ -22,7 +22,9 @@
 
     <!-- Meal Content -->
     <div id="meal-content" style="display:none;">
-      <div id="meal-days-list"></div>
+      <div id="meal-day-stage">
+        <div id="meal-day-pane"></div>
+      </div>
 
       <div class="section-label" style="margin-top:20px;">Original-Aushang</div>
       <div class="m3-card" style="padding:14px 16px;">
@@ -101,6 +103,12 @@
     padding-top: 12px;
     margin-top: 12px;
   }
+  /* The day follows the finger. Vertical scrolling stays with the page. */
+  #meal-day-stage { position: relative; touch-action: pan-y; overflow: hidden; }
+  .meal-swipe-track {
+    position: absolute; top: 0; left: 0; display: flex; z-index: 2;
+    pointer-events: none; background: #f0faf3; will-change: transform;
+  }
   </style>
 </div>
 
@@ -128,8 +136,6 @@ document.getElementById('meal-day-chips').innerHTML = chipRow({
   onclick: 'mealFilter',
   idPrefix: 'meal-chip',
   items: [
-    { value: 'all', label: 'Ganze Woche' },
-    { value: 'today', label: 'Heute', active: true },
     { value: '1', label: 'Mo' },
     { value: '2', label: 'Di' },
     { value: '3', label: 'Mi' },
@@ -140,8 +146,11 @@ document.getElementById('meal-day-chips').innerHTML = chipRow({
 let mealPlan = null;
 let mealCanDelete = false;
 let mealCanEdit = false; // correcting a day's text — upload stays open to everyone, editing is admin-only
-let mealActiveFilter = 'today';
+let mealDays = [];
+let mealDayIndex = 0;
+let mealActiveDate = null;
 let mealPollInterval = null;
+let mealSwipeBusy = false;
 
 const MEAL_CATEGORY_CONFIG = {
   'hauptgericht': { label: 'Hauptgericht',         icon: 'utensils',  bg: 'rgba(26,115,232,0.1)', color: '#1a73e8' },
@@ -264,37 +273,254 @@ function mealFormatDate(iso) {
   };
 }
 
-function mealFilter(mode, btn) {
-  mealActiveFilter = mode;
-  document.querySelectorAll('#meal-day-chips .chip').forEach(c => c.classList.remove('active'));
-  if (btn) btn.classList.add('active');
-
-  const cards = document.querySelectorAll('.meal-day-card');
-  cards.forEach(card => {
-    if (mode === 'all') {
-      card.style.display = 'block';
-    } else if (mode === 'today') {
-      card.style.display = card.classList.contains('is-today') ? 'block' : 'none';
-    } else {
-      const dow = card.getAttribute('data-dow');
-      card.style.display = (dow === String(mode)) ? 'block' : 'none';
-    }
-  });
-
-  if (mode === 'today') {
-    const todayCard = document.querySelector('.meal-day-card.is-today');
-    if (!todayCard && cards.length > 0) {
-      showToast('Heute ist Wochenende / kein Plan für heute');
-      cards.forEach(c => c.style.display = 'block');
-    }
+function mealShortDish(raw) {
+  if (!raw) return '';
+  const lines = raw.split('\n').map(l => l.trim()).filter(Boolean)
+    .filter(l => !/^(?:diabetiker|schonkost|vital):/i.test(l));
+  if (!lines.length) return '';
+  for (const l of lines) {
+    const m = l.match(/^(?:hauptgericht|menü|menü 1):\s*(.*)/i);
+    if (m && m[1]) return m[1];
   }
+  return lines[0].replace(/^[^:]+:\s*/, '');
+}
+
+function mealCardHtml(d) {
+  const { weekday, dayNum, monthName, dow } = mealFormatDate(d.date);
+  const isToday = d.date === localDateStr();
+  return `
+    <div class="m3-card meal-day-card ${isToday ? 'is-today' : ''}" data-dow="${dow}" data-date="${d.date}">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span style="font-size:1.15rem;font-weight:700;color:#1c1b1f;">${weekday}</span>
+          <span style="font-size:0.85rem;opacity:0.5;font-weight:500;">${dayNum}. ${monthName}</span>
+          ${isToday ? '<span style="background:#c4eed0;color:#072711;font-size:0.72rem;font-weight:700;padding:3px 9px;border-radius:10px;">Heute</span>' : ''}
+        </div>
+        ${mealCanEdit ? `<button class="icon-btn" style="width:34px;height:34px;border-radius:50%;" onclick="editMealDay(${d.id})" title="Bearbeiten">
+          <i data-lucide="pencil" style="width:14px;height:14px;"></i>
+        </button>` : ''}
+      </div>
+      <div class="meal-card-courses">
+        ${formatMealDayHtml(d.meal)}
+      </div>
+      ${d.edited ? '<div style="font-size:0.68rem;opacity:0.45;margin-top:12px;font-weight:600;">✓ Manuell angepasst</div>' : ''}
+    </div>
+  `;
+}
+
+function mealPickIndex(days) {
+  if (mealActiveDate) {
+    const kept = days.findIndex(d => d.date === mealActiveDate);
+    if (kept >= 0) return kept;
+  }
+  const today = localDateStr();
+  const exact = days.findIndex(d => d.date === today);
+  if (exact >= 0) return exact;
+  const upcoming = days.findIndex(d => d.date >= today);
+  return upcoming >= 0 ? upcoming : days.length - 1;
+}
+
+function mealSyncChips() {
+  const day = mealDays[mealDayIndex];
+  const dow = day ? String(new Date(day.date + 'T00:00').getDay()) : '';
+  document.querySelectorAll('#meal-day-chips .chip').forEach(c => {
+    const value = c.id.replace('meal-chip-', '');
+    const has = mealDays.some(d => String(new Date(d.date + 'T00:00').getDay()) === value);
+    c.classList.toggle('active', value === dow);
+    c.style.opacity = has ? '' : '0.4';
+  });
+}
+
+function paintMealDay(el, index) {
+  if (!el) return;
+  const day = mealDays[index];
+  el.innerHTML = day ? mealCardHtml(day) : '';
+}
+
+function paintMealSubtitle() {
+  const sub = document.getElementById('meal-header-sub');
+  const day = mealDays[mealDayIndex];
+  if (!sub || !day) return;
+  const dish = mealShortDish(day.meal);
+  const { weekday } = mealFormatDate(day.date);
+  const label = day.date === localDateStr() ? 'Heute' : weekday;
+  sub.textContent = dish ? (label + ': ' + dish) : (label + ' steht nichts im Plan');
+}
+
+function mealShowDay(index) {
+  if (!mealDays.length) return;
+  mealDayIndex = Math.max(0, Math.min(mealDays.length - 1, index));
+  mealActiveDate = mealDays[mealDayIndex].date;
+  mealSyncChips();
+  paintMealDay(document.getElementById('meal-day-pane'), mealDayIndex);
+  paintMealSubtitle();
+  if (window.lucide) lucide.createIcons();
+}
+
+function mealFilter(mode) {
+  const i = mealDays.findIndex(d => String(new Date(d.date + 'T00:00').getDay()) === String(mode));
+  if (i < 0) {
+    showToast('Für diesen Tag steht nichts im Plan');
+    mealSyncChips();
+    return;
+  }
+  mealShowDay(i);
 }
 
 async function init_mealplan() {
   const me = await API.me().catch(() => null);
   mealCanDelete = !!(me && (me.role === 'admin' || me.role === 'super_admin'));
   mealCanEdit = mealCanDelete;
+  initMealSwipe();
   await refreshMealPlan();
+}
+
+function mealCanShift(dir) {
+  const next = mealDayIndex + dir;
+  return next >= 0 && next < mealDays.length;
+}
+
+function mealSwipeGap(stage) {
+  const scroll = stage.closest('.page-scroll-1col');
+  if (!scroll) return 40;
+  const cs = getComputedStyle(scroll);
+  const pad = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+  const inner = stage.closest('.page-inner');
+  const extra = scroll.clientWidth - pad - (inner ? inner.clientWidth : stage.clientWidth);
+  return pad + Math.max(0, extra);
+}
+
+function teardownMealSwipe(track) {
+  if (track && track.parentNode) track.remove();
+}
+
+function buildMealSwipeTrack(stage) {
+  const width = stage.clientWidth;
+  if (!width) return null;
+  const gap = mealSwipeGap(stage);
+  const stride = width + gap;
+  const pane = (index) => {
+    const el = document.createElement('div');
+    el.style.width = width + 'px';
+    el.style.flex = '0 0 ' + width + 'px';
+    if (index >= 0 && index < mealDays.length) paintMealDay(el, index);
+    return el;
+  };
+  const track = document.createElement('div');
+  track.className = 'meal-swipe-track';
+  track.append(pane(mealDayIndex - 1), pane(mealDayIndex), pane(mealDayIndex + 1));
+  track._width = width;
+  track._stride = stride;
+  track.style.gap = gap + 'px';
+  track.style.width = (width * 3 + gap * 2) + 'px';
+  track.style.height = stage.offsetHeight + 'px';
+  track.style.transition = 'none';
+  track.style.transform = 'translate3d(' + (-stride) + 'px,0,0)';
+  stage.appendChild(track);
+  if (window.lucide) lucide.createIcons();
+  return track;
+}
+
+function animateMealSwipeTo(track, x, ms) {
+  return new Promise(resolve => {
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      track.removeEventListener('transitionend', onEnd);
+      resolve();
+    };
+    const onEnd = (e) => { if (e.target === track && e.propertyName === 'transform') finish(); };
+    track.addEventListener('transitionend', onEnd);
+    track.style.transition = 'transform ' + ms + 'ms cubic-bezier(0.22, 0.8, 0.28, 1)';
+    track.style.transform = 'translate3d(' + x + 'px,0,0)';
+    setTimeout(finish, ms + 60);
+  });
+}
+
+function initMealSwipe() {
+  const el = document.getElementById('meal-day-stage');
+  if (!el || el._mealSwipe) return;
+  el._mealSwipe = true;
+  let tracking = false, horizontal = false, startX = 0, startY = 0, dx = 0, visualDx = 0;
+  let lastDx = 0, lastT = 0, velocity = 0, track = null;
+  const reset = () => { tracking = false; horizontal = false; track = null; };
+
+  el.addEventListener('pointerdown', (e) => {
+    if (mealSwipeBusy || !mealDays.length) return;
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    if (e.pointerType === 'touch' && e.clientX < 16) return;
+    tracking = true;
+    horizontal = false;
+    startX = e.clientX;
+    startY = e.clientY;
+    dx = 0; visualDx = 0; lastDx = 0; velocity = 0; lastT = performance.now();
+    track = null;
+  });
+
+  el.addEventListener('pointermove', (e) => {
+    if (!tracking || mealSwipeBusy) return;
+    dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+    if (!horizontal) {
+      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+      if (Math.abs(dy) > Math.abs(dx)) { reset(); return; }
+      horizontal = true;
+      track = buildMealSwipeTrack(el);
+      if (!track) { reset(); return; }
+      el.setPointerCapture(e.pointerId);
+    }
+    if (e.cancelable) e.preventDefault();
+    const now = performance.now();
+    velocity = (dx - lastDx) / Math.max(1, now - lastT);
+    lastDx = dx;
+    lastT = now;
+    const dir = dx < 0 ? 1 : -1;
+    const stride = track._stride;
+    visualDx = mealCanShift(dir)
+      ? Math.max(-stride, Math.min(stride, dx))
+      : Math.max(-72, Math.min(72, dx * 0.32));
+    track.style.transition = 'none';
+    track.style.transform = 'translate3d(' + (-stride + visualDx) + 'px,0,0)';
+  });
+
+  const finish = async (commit) => {
+    if (!track) { reset(); return; }
+    const stride = track._stride;
+    const dir = dx < 0 ? 1 : -1;
+    const go = commit && mealCanShift(dir) && dx !== 0;
+    const target = go ? (dir === 1 ? -2 * stride : 0) : -stride;
+    const remaining = Math.abs(target - (-stride + visualDx));
+    const ms = Math.max(160, Math.min(320, remaining * 0.45));
+    const held = track;
+    reset();
+    mealSwipeBusy = true;
+    await animateMealSwipeTo(held, target, ms);
+    if (go) mealShowDay(mealDayIndex + dir);
+    teardownMealSwipe(held);
+    mealSwipeBusy = false;
+  };
+
+  el.addEventListener('click', (e) => {
+    if (!el._suppressClick) return;
+    el._suppressClick = false;
+    e.preventDefault();
+    e.stopPropagation();
+  }, true);
+
+  el.addEventListener('pointerup', () => {
+    if (!tracking || !horizontal) { reset(); return; }
+    el._suppressClick = true;
+    const width = track ? track._width : el.clientWidth;
+    const flung = Math.abs(velocity) > 0.4 && Math.sign(velocity) === Math.sign(dx || velocity);
+    const commit = Math.abs(dx) > Math.min(width * 0.28, 96) || (flung && Math.abs(dx) > 28);
+    finish(commit && dx !== 0);
+  });
+
+  el.addEventListener('pointercancel', () => {
+    if (horizontal && track) finish(false);
+    else reset();
+  });
 }
 
 async function refreshMealPlan() {
@@ -345,7 +571,6 @@ function stopMealStatusPolling() {
 }
 
 function renderMealPlan(res) {
-  const today = localDateStr();
   const sub = document.getElementById('meal-header-sub');
   const deleteBtn = document.getElementById('meal-delete-btn');
   const dayOfWeek = new Date().getDay();
@@ -359,12 +584,15 @@ function renderMealPlan(res) {
         })
         .sort((a, b) => a.date.localeCompare(b.date))
     : [];
+  mealDays = days;
 
   if (!mealPlan || !days.length) {
+    mealActiveDate = null;
     document.getElementById('meal-empty').style.display = 'block';
     document.getElementById('meal-content').style.display = 'none';
     if (sub) sub.textContent = isWeekend ? 'Wochenende – Noch kein Plan für nächste Woche' : 'Kein Plan für diese Woche vorhanden';
     if (deleteBtn) deleteBtn.style.display = 'none';
+    mealSyncChips();
     return;
   }
 
@@ -372,53 +600,9 @@ function renderMealPlan(res) {
   document.getElementById('meal-content').style.display = 'block';
   if (deleteBtn) deleteBtn.style.display = mealCanDelete ? 'flex' : 'none';
 
-  const todayMeal = (res && res.today && res.today.meal) || null;
-  if (sub) {
-    if (isWeekend) {
-      sub.textContent = 'Wochenende – kein Mensa-Betrieb';
-    } else if (!todayMeal) {
-      sub.textContent = 'Heute kein Essen im Plan eingetragen';
-    } else {
-      const lines = todayMeal.split('\n').map(l => l.trim()).filter(Boolean);
-      let found = null;
-      for (const l of lines) {
-        const m = l.match(/^(?:hauptgericht|menü|menü 1):\s*(.*)/i);
-        if (m) { found = m[1]; break; }
-      }
-      sub.textContent = 'Heute: ' + (found || (lines[0] ? lines[0].replace(/^[^:]+:\s*/, '') : todayMeal));
-    }
-  }
-
-  document.getElementById('meal-days-list').innerHTML = days.map(d => {
-    const { weekday, dayNum, monthName, dow } = mealFormatDate(d.date);
-    const isToday = (d.date === today);
-
-    return `
-      <div class="m3-card meal-day-card ${isToday ? 'is-today' : ''}" data-dow="${dow}" data-date="${d.date}">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
-          <div style="display:flex;align-items:center;gap:10px;">
-            <span style="font-size:1.15rem;font-weight:700;color:#1c1b1f;">${weekday}</span>
-            <span style="font-size:0.85rem;opacity:0.5;font-weight:500;">${dayNum}. ${monthName}</span>
-            ${isToday ? '<span style="background:#c4eed0;color:#072711;font-size:0.72rem;font-weight:700;padding:3px 9px;border-radius:10px;">Heute</span>' : ''}
-          </div>
-          ${mealCanEdit ? `<button class="icon-btn" style="width:34px;height:34px;border-radius:50%;" onclick="editMealDay(${d.id})" title="Bearbeiten">
-            <i data-lucide="pencil" style="width:14px;height:14px;"></i>
-          </button>` : ''}
-        </div>
-        <div class="meal-card-courses">
-          ${formatMealDayHtml(d.meal)}
-        </div>
-        ${d.edited ? '<div style="font-size:0.68rem;opacity:0.45;margin-top:12px;font-weight:600;">✓ Manuell angepasst</div>' : ''}
-      </div>
-    `;
-  }).join('');
-
   document.getElementById('meal-image').src = mealPlan.image_url;
-
-  // Re-apply active day filter
-  mealFilter(mealActiveFilter, document.querySelector(`#meal-day-chips .chip.active`));
-
-  if (window.lucide) lucide.createIcons();
+  if (!(mealActiveDate && days.some(d => d.date === mealActiveDate))) mealActiveDate = null;
+  mealShowDay(mealPickIndex(days));
 }
 
 function deleteMealPlanConfirm() {
