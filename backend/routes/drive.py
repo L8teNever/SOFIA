@@ -477,7 +477,7 @@ async def pretty_preview_drive_file(subject: str, topic: str, filename: str, db:
     df = await _find_by_path(db, current_user, subject, topic, filename)
     return await preview_drive_file(df.id, db, current_user)
 
-@public_router.get("/{subject}/{topic}/{filename}", response_class=HTMLResponse)
+@public_router.get("/{subject}/{topic}/{filename}")
 async def pretty_view_drive_file(subject: str, topic: str, filename: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     df = await _find_by_path(db, current_user, subject, topic, filename)
-    return await view_drive_file(df.id, db, current_user)
+    return await preview_drive_file(df.id, db, current_user)
