@@ -16,52 +16,64 @@
        regardless of the list view's scroll state, no global body/html
        style changes needed. Hidden by default; shown by
        openNotesBoardCanvas(). Ported near-verbatim from sofianotes'
-       frontend/app.js/index.html (C:\tmp\sofianotes-explore) — same
-       element ids so the ported drawing/gesture logic needs no renaming,
-       only the M3 restyle below and the WS URL/factory-wrapping changes
-       described in the script block. -->
+       frontend/app.js/index.html/style.css (C:\tmp\sofianotes-explore) —
+       same element ids AND the same visual design (emoji toolbar icons,
+       same colors/pill chrome), not a SOFIA M3 reskin, per the original
+       request that the board keep the design it already had. The only
+       addition is the small back/title bar at top, styled to match the
+       original's own status-pill look — nothing in the standalone app
+       needed one since it had no other pages to return to. -->
   <div id="notes-canvas-view" style="display:none;">
     <canvas id="board"></canvas>
     <div id="eraser-cursor"></div>
 
     <div id="nb-canvas-header">
-      <button class="icon-btn" id="nb-canvas-back" onclick="closeNotesCanvasView()" title="Zurück zur Liste">
-        <i data-lucide="arrow-left" style="width:20px;height:20px;"></i>
-      </button>
+      <button id="nb-canvas-back" onclick="closeNotesCanvasView()" title="Zurück zur Liste">←</button>
       <div id="nb-canvas-title-wrap">
         <div id="nb-canvas-title">Board</div>
-        <div id="status"><span class="dot"></span><span id="status-text">Verbinde…</span></div>
       </div>
     </div>
 
+    <div id="status"><span class="dot"></span><span id="status-text">Verbinde…</span></div>
     <div id="zoom-indicator">100%</div>
 
     <div id="toolbar">
-      <button id="undo-btn" class="tool-btn" title="Rückgängig (Strg/Cmd+Z)"><i data-lucide="undo-2"></i></button>
-      <button id="redo-btn" class="tool-btn" title="Wiederholen (Strg/Cmd+Shift+Z)"><i data-lucide="redo-2"></i></button>
+      <button id="undo-btn" class="tool-btn" title="Rückgängig (Strg/Cmd+Z)">↩️</button>
+      <button id="redo-btn" class="tool-btn" title="Wiederholen (Strg/Cmd+Shift+Z)">↪️</button>
       <div class="divider"></div>
-      <button class="tool-btn active" data-tool="pen" title="Stift"><i data-lucide="pen"></i></button>
-      <button class="tool-btn" data-tool="marker" title="Textmarker"><i data-lucide="highlighter"></i></button>
-      <button class="tool-btn" data-tool="eraser" title="Radiergummi"><i data-lucide="eraser"></i></button>
-      <button class="tool-btn" data-tool="select" title="Auswahl (Lasso) — markieren &amp; verschieben"><i data-lucide="lasso"></i></button>
+      <button class="tool-btn active" data-tool="pen" title="Stift">✏️</button>
+      <button class="tool-btn" data-tool="marker" title="Textmarker">🖍️</button>
+      <button class="tool-btn" data-tool="eraser" title="Radiergummi">🧹</button>
+      <button class="tool-btn" data-tool="select" title="Auswahl (Lasso) — markieren &amp; verschieben">👆</button>
       <div class="divider"></div>
-      <button id="shape-toggle" class="tool-btn active" title="Formen-Erkennung (Kreis/Rechteck/Dreieck/Linie beim Halten erkennen)"><i data-lucide="shapes"></i></button>
-      <button id="finger-draw-toggle" class="tool-btn" title="Mit dem Finger zeichnen erlauben (sonst nur Stift/Maus, Finger = Navigation)"><i data-lucide="hand"></i></button>
+      <button id="shape-toggle" class="tool-btn active" title="Formen-Erkennung (Kreis/Rechteck/Dreieck/Linie beim Halten erkennen)">🔷</button>
+      <button id="finger-draw-toggle" class="tool-btn" title="Mit dem Finger zeichnen erlauben (sonst nur Stift/Maus, Finger = Navigation)">🖐️</button>
       <div class="divider"></div>
-      <button class="swatch active" style="background:#1c1b1f" data-color="#1c1b1f"></button>
-      <button class="swatch" style="background:#ba1a1a" data-color="#ba1a1a"></button>
-      <button class="swatch" style="background:#006399" data-color="#006399"></button>
-      <button class="swatch" style="background:#006d3a" data-color="#006d3a"></button>
-      <button class="swatch" style="background:#8a5a00" data-color="#8a5a00"></button>
+      <button class="swatch active" style="background:#1c1c1e" data-color="#1c1c1e"></button>
+      <button class="swatch" style="background:#e63946" data-color="#e63946"></button>
+      <button class="swatch" style="background:#2a6f97" data-color="#2a6f97"></button>
+      <button class="swatch" style="background:#2a9d59" data-color="#2a9d59"></button>
+      <button class="swatch" style="background:#f4a300" data-color="#f4a300"></button>
       <div class="divider"></div>
       <input type="range" id="size-slider" min="1" max="40" value="4">
     </div>
   </div>
 
 <style>
+/* Below matches sofianotes' own style.css values as closely as this
+   overlay context allows (z-index raised above the rest of the app,
+   #status/#zoom-indicator nudged down a little to clear the safe-area
+   the original didn't have to share with anything else) — same accent
+   blue, same toolbar-bg/border, same sizes, not a SOFIA-purple reskin. */
 #notes-canvas-view {
+  --toolbar-bg: rgba(255, 255, 255, 0.92);
+  --toolbar-border: #d8d8dc;
+  --accent: #3b6fe0;
+  --text: #1c1c1e;
   position: fixed; inset: 0; z-index: 500; background: #ece9e3;
   overflow: hidden; touch-action: none;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color: var(--text);
 }
 #board { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
 #eraser-cursor {
@@ -70,50 +82,56 @@
   transform: translate(-50%,-50%); display: none; z-index: 550;
 }
 #nb-canvas-header {
-  position: fixed; top: max(10px, env(safe-area-inset-top)); left: 10px; right: 10px;
+  position: fixed; top: max(10px, env(safe-area-inset-top)); left: max(10px, env(safe-area-inset-left));
   display: flex; align-items: center; gap: 10px; z-index: 560;
 }
-#nb-canvas-back.icon-btn { width: 40px; height: 40px; border-radius: 14px; flex-shrink: 0; box-shadow: 0 1px 4px rgba(0,0,0,0.12); }
-#nb-canvas-back i { width: 18px; height: 18px; }
+#nb-canvas-back {
+  width: 36px; height: 36px; border-radius: 50%; border: none; cursor: pointer;
+  background: var(--toolbar-bg); border: 1px solid var(--toolbar-border);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08); font-size: 18px; line-height: 1;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: var(--text);
+}
 #nb-canvas-title-wrap {
-  background: rgba(255,255,255,0.92); backdrop-filter: blur(10px);
-  border-radius: 14px; padding: 6px 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.1);
-  display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1;
+  background: var(--toolbar-bg); border: 1px solid var(--toolbar-border);
+  border-radius: 20px; padding: 5px 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  max-width: 50vw;
 }
-#nb-canvas-title { font-weight: 700; font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; }
-#status { display: flex; align-items: center; gap: 5px; font-size: 0.68rem; font-weight: 700; opacity: 0.65; flex-shrink: 0; }
-#status .dot { width: 7px; height: 7px; border-radius: 50%; background: #ba1a1a; flex-shrink: 0; }
-#status.connected .dot { background: #2a9d59; }
-#zoom-indicator {
-  position: fixed; left: max(10px, env(safe-area-inset-left)); bottom: max(14px, env(safe-area-inset-bottom));
-  padding: 5px 10px; border-radius: 20px; font-size: 0.7rem; font-weight: 700;
-  background: rgba(255,255,255,0.92); backdrop-filter: blur(10px); box-shadow: 0 1px 4px rgba(0,0,0,0.1); z-index: 560;
+#nb-canvas-title { font-weight: 600; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#status {
+  position: fixed; top: max(10px, env(safe-area-inset-top)); right: max(10px, env(safe-area-inset-right));
+  padding: 5px 10px; border-radius: 20px; font-size: 12px; font-weight: 600;
+  background: var(--toolbar-bg); border: 1px solid var(--toolbar-border);
+  display: flex; align-items: center; gap: 6px; z-index: 560; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
 }
+#status .dot { width: 8px; height: 8px; border-radius: 50%; background: #c0392b; }
+#status.connected .dot { background: #2ecc71; }
 #toolbar {
   position: fixed; left: 50%; bottom: max(14px, env(safe-area-inset-bottom)); transform: translateX(-50%);
-  display: flex; align-items: center; gap: 6px; padding: 8px 10px;
-  background: rgba(255,255,255,0.92); backdrop-filter: blur(10px);
-  border-radius: 20px; box-shadow: 0 4px 18px rgba(0,0,0,0.14); z-index: 560;
+  display: flex; align-items: center; gap: 10px; padding: 8px 12px;
+  background: var(--toolbar-bg); border: 1px solid var(--toolbar-border); border-radius: 18px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.14); z-index: 560; backdrop-filter: blur(10px);
   max-width: calc(100vw - 20px); overflow-x: auto;
 }
 .tool-btn {
-  width: 38px; height: 38px; border-radius: 12px; border: none; background: transparent;
-  display: flex; align-items: center; justify-content: center; cursor: pointer;
-  flex: 0 0 auto; color: #1c1b1f; transition: background 0.15s, color 0.15s;
+  width: 40px; height: 40px; border-radius: 12px; border: none; background: transparent;
+  font-size: 20px; display: flex; align-items: center; justify-content: center;
+  cursor: pointer; flex: 0 0 auto; color: var(--text);
 }
-.tool-btn i { width: 18px; height: 18px; }
-.tool-btn.active { background: #6750a4; color: #fff; }
+.tool-btn.active { background: var(--accent); color: white; }
 .tool-btn:disabled { opacity: 0.32; cursor: default; }
-.swatch {
-  width: 24px; height: 24px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; flex: 0 0 auto;
+.swatch { width: 26px; height: 26px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; flex: 0 0 auto; }
+.swatch.active { border-color: var(--accent); box-shadow: 0 0 0 2px white inset; }
+#size-slider { width: 90px; flex: 0 0 auto; }
+.divider { width: 1px; height: 26px; background: var(--toolbar-border); flex: 0 0 auto; }
+#zoom-indicator {
+  position: fixed; left: max(10px, env(safe-area-inset-left)); bottom: max(14px, env(safe-area-inset-bottom));
+  padding: 5px 10px; border-radius: 20px; font-size: 12px; font-weight: 600;
+  background: var(--toolbar-bg); border: 1px solid var(--toolbar-border); z-index: 560;
 }
-.swatch.active { border-color: #6750a4; box-shadow: 0 0 0 2px #fff inset; }
-#size-slider { width: 80px; flex: 0 0 auto; accent-color: #6750a4; }
-.divider { width: 1px; height: 24px; background: rgba(0,0,0,0.12); flex: 0 0 auto; }
 .presence-label {
-  position: absolute; pointer-events: none; transform: translate(-50%,-100%);
-  padding: 2px 7px; border-radius: 10px; font-size: 0.68rem; font-weight: 700;
-  color: #fff; white-space: nowrap; z-index: 540; box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+  position: absolute; pointer-events: none; transform: translate(-50%, -100%);
+  padding: 2px 7px; border-radius: 10px; font-size: 11px; font-weight: 600;
+  color: white; white-space: nowrap; z-index: 540; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
 .notes-row {
