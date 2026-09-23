@@ -325,3 +325,34 @@
 }
 </style>
 </div>
+
+<script src="/static/js/notes-list.js"></script>
+<script>
+async function ensureWhiteboardEngine() {
+  if (typeof createWhiteboardEngine === 'function') return;
+  const parts = await Promise.all([
+    fetch('/static/js/notes-wb-0.js').then((r) => { if (!r.ok) throw new Error('wb0'); return r.text(); }),
+    fetch('/static/js/notes-wb-1.js').then((r) => { if (!r.ok) throw new Error('wb1'); return r.text(); }),
+  ]);
+  const s = document.createElement('script');
+  s.textContent = parts.join('');
+  document.head.appendChild(s);
+}
+function init_notes() {
+  const impl = window.__init_notes_impl;
+  if (impl) return impl();
+  return new Promise((resolve, reject) => {
+    const t = setInterval(() => {
+      if (window.__init_notes_impl) { clearInterval(t); resolve(window.__init_notes_impl()); }
+    }, 20);
+    setTimeout(() => { clearInterval(t); reject(new Error('notes list')); }, 8000);
+  });
+}
+const _openWait = function(id) {
+  return ensureWhiteboardEngine().then(() => openNotesBoardCanvas(id)).catch(() => showToast('Tafel konnte nicht geladen werden'));
+};
+window.openNotesBoardCanvas = async function(id) {
+  await ensureWhiteboardEngine();
+  if (window.__openNotesBoardCanvasImpl) return window.__openNotesBoardCanvasImpl(id);
+};
+</script>
