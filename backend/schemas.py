@@ -222,6 +222,35 @@ class DriveTopicCreate(BaseModel):
 class DriveTopicRename(BaseModel):
     name: str
 
+# Notes (whiteboard boards) — subject_id/topic use the exact same loose
+# convention as DriveFile, so a board and a Drive file land in the same
+# folder purely by matching values, no sync needed between the two.
+class NotesBoardOut(BaseModel):
+    id: int
+    class_id: int
+    owner_id: int
+    owner_name: Optional[str] = None
+    subject_id: Optional[int]
+    subject_name: Optional[str] = None
+    topic: Optional[str]
+    title: str
+    is_public: bool
+    created_at: datetime
+    updated_at: datetime
+    class Config: from_attributes = True
+
+class NotesBoardCreate(BaseModel):
+    title: str
+    subject_id: Optional[int] = None
+    topic: Optional[str] = None
+    is_public: bool = False
+
+class NotesBoardUpdate(BaseModel):
+    title: Optional[str] = None
+    subject_id: Optional[int] = None
+    topic: Optional[str] = None
+    is_public: Optional[bool] = None
+
 # Chat
 class ChatParticipantOut(BaseModel):
     user_id: int

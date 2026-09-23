@@ -42,7 +42,7 @@ async def init_db():
         subject_weighting, audit_log, manual_timetable_entry, drive_file, drive_topic,
         google_account, google_sync_map, user_email_alias,
         chat_conversation, chat_participant, chat_message, chat_poll_option, chat_poll_vote,
-        chat_message_reaction
+        chat_message_reaction, notes_board, notes_stroke
     )
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -112,6 +112,11 @@ async def _migrate_columns(conn):
     existing_df = {row[1] for row in result_df.fetchall()}
     if "is_lecture_notes" not in existing_df:
         await conn.execute(text("ALTER TABLE drive_files ADD COLUMN is_lecture_notes BOOLEAN DEFAULT 0"))
+    if "is_public" not in existing_df:
+        # Default 1 backfills every existing row to public so nothing already
+        # shared with the class disappears — new uploads explicitly pass
+        # is_public=False at the route level going forward (private by default).
+        await conn.execute(text("ALTER TABLE drive_files ADD COLUMN is_public BOOLEAN DEFAULT 1"))
 
     result_cp = await conn.execute(text("PRAGMA table_info(chat_participants)"))
     existing_cp = {row[1] for row in result_cp.fetchall()}

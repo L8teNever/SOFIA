@@ -19,6 +19,10 @@ class DriveFile(Base):
     # AND in a subject's "Aufschriebe" group, rather than needing a whole
     # multi-topic model for one specific cross-cutting category.
     is_lecture_notes = Column(Boolean, default=False, nullable=False)
+    # DB-level default is True (see backend/database.py's migration — existing
+    # files stay visible to the whole class on upgrade); new uploads pass
+    # False explicitly at the route level, so newly-created rows start private.
+    is_public = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     uploader = relationship("User")

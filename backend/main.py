@@ -7,7 +7,7 @@ from backend.database import init_db
 from backend.config import settings
 from backend.auth import get_current_user
 from backend.models.user import User
-from backend.routes import auth_routes, users, classes, subjects, calendar, homework, grades, files, vapid, admin, timetable, mealplan, notifications, drive, google_sync, chat
+from backend.routes import auth_routes, users, classes, subjects, calendar, homework, grades, files, vapid, admin, timetable, mealplan, notifications, drive, google_sync, chat, notes
 from backend.services.rate_limiter import RateLimiterMiddleware
 from backend.services.notification_scheduler import start_notification_scheduler
 from backend.version import get_version_info
@@ -36,7 +36,7 @@ app = FastAPI(title="Sofia", lifespan=lifespan)
 app.add_middleware(RateLimiterMiddleware)
 
 # API routes
-for r in [auth_routes, users, classes, subjects, calendar, homework, grades, files, vapid, admin, timetable, mealplan, notifications, drive, google_sync, chat]:
+for r in [auth_routes, users, classes, subjects, calendar, homework, grades, files, vapid, admin, timetable, mealplan, notifications, drive, google_sync, chat, notes]:
     app.include_router(r.router)
 app.include_router(drive.public_router)
 
