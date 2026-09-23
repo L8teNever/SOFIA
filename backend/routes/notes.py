@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_, delete
 from backend.database import get_db, AsyncSessionLocal
@@ -11,10 +11,38 @@ from backend.models.user import User
 from backend.schemas import NotesBoardOut, NotesBoardCreate, NotesBoardUpdate
 from backend.services.notes_connection_manager import NotesConnectionManager
 from typing import List, Optional
-import json
+import json, os, uuid, re, base64
 
 router = APIRouter(prefix="/api/v1/notes", tags=["notes"])
 manager = NotesConnectionManager()
+
+_NOTES_MEDIA_DIR = os.path.join("uploads", "notes-media")
+_NOTES_MEDIA_MAX = 3_500_000
+_JPEG_DATA_URI = re.compile(r"^data:image/(jpeg|jpg);base64,(.+)$", re.I | re.S)
+_UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
+
+
+def _pack_points(points, extra=None):
+    if extra:
+        return json.dumps({"pts": points, "extra": extra})
+    return json.dumps(points)
+
+
+def _unpack_points(raw):
+    data = json.loads(raw) if isinstance(raw, str) else raw
+    if isinstance(data, dict) and "pts" in data:
+        return data.get("pts") or [], data.get("extra")
+    if isinstance(data, list):
+        return data, None
+    return [], None
+
+
+def _stroke_payload(row: NotesStroke) -> dict:
+    pts, extra = _unpack_points(row.points)
+    out = {"id": row.id, "tool": row.tool, "color": row.color, "size": row.size, "points": pts}
+    if extra:
+        out["extra"] = extra
+    return out
 
 # Duplicated from drive.py's private helper of the same name rather than
 # shared across files — this codebase already accepts this kind of small
@@ -153,6 +181,33 @@ async def delete_notes_board(board_id: int, db: AsyncSession = Depends(get_db), 
     await db.commit()
     return {"ok": True}
 
+@router.post("/media")
+async def upload_notes_media(request: Request, current_user: User = Depends(get_current_user)):
+    body = await request.json()
+    raw = str(body.get("image") or "")
+    match = _JPEG_DATA_URI.match(raw.strip())
+    if not match:
+        raise HTTPException(400, "jpeg_data_uri")
+    try:
+        blob = base64.b64decode(match.group(2), validate=False)
+    except Exception:
+        raise HTTPException(400, "jpeg_data_uri")
+    if not blob or len(blob) > _NOTES_MEDIA_MAX or blob[:2] != b"\xff\xd8":
+        raise HTTPException(400, "too_large" if blob and len(blob) > _NOTES_MEDIA_MAX else "jpeg_data_uri")
+    want_id = str(body.get("id") or "")
+    if want_id:
+        if not _UUID_RE.match(want_id):
+            raise HTTPException(400, "id")
+        media_id = want_id
+    else:
+        media_id = str(uuid.uuid4())
+    os.makedirs(_NOTES_MEDIA_DIR, exist_ok=True)
+    path = os.path.join(_NOTES_MEDIA_DIR, f"{media_id}.jpg")
+    with open(path, "wb") as f:
+        f.write(blob)
+    return {"id": media_id, "url": f"/uploads/notes-media/{media_id}.jpg"}
+
+
 def _board_visible(board: NotesBoard, user: User) -> bool:
     return board.is_public or board.owner_id == user.id or user.role in ("admin", "super_admin")
 
@@ -160,7 +215,7 @@ def _board_visible(board: NotesBoard, user: User) -> bool:
 # a single multiplexed endpoint, no boardId needs threading into individual
 # messages — only into the URL and the connection-manager's broadcast scope.
 # Message protocol below is an unchanged port of sofianotes' own (see
-# C:\tmp\sofianotes-explore\backend\app\main.py) plus a ping/pong keepalive
+# C:\\tmp\\sofianotes-explore\\backend\\app\\main.py) plus a ping/pong keepalive
 # it didn't have, cheap insurance against a Cloudflare Tunnel idle timeout.
 @router.websocket("/ws/{board_id}")
 async def notes_ws(websocket: WebSocket, board_id: int):
@@ -199,10 +254,7 @@ async def notes_ws(websocket: WebSocket, board_id: int):
         result = await db.execute(
             select(NotesStroke).where(NotesStroke.board_id == board_id).order_by(NotesStroke.created_at)
         )
-        strokes = [
-            {"id": s.id, "tool": s.tool, "color": s.color, "size": s.size, "points": json.loads(s.points)}
-            for s in result.scalars().all()
-        ]
+        strokes = [_stroke_payload(s) for s in result.scalars().all()]
     await websocket.send_json({"type": "init", "clientId": client.id, "color": client.color, "strokes": strokes})
     await manager.broadcast(board_id, {
         "type": "presence_join", "id": client.id, "color": client.color,
@@ -228,15 +280,21 @@ async def notes_ws(websocket: WebSocket, board_id: int):
                 stroke_id = msg.get("strokeId")
                 if not stroke_id:
                     continue
+                extra = msg.get("extra") if isinstance(msg.get("extra"), dict) else None
                 client.in_progress[stroke_id] = {
                     "id": stroke_id, "tool": msg.get("tool", "pen"), "color": msg.get("color", "#000000"),
                     "size": msg.get("size", 4), "points": list(msg.get("points", [])),
                 }
+                if extra:
+                    client.in_progress[stroke_id]["extra"] = extra
                 entry = client.in_progress[stroke_id]
-                await manager.broadcast(board_id, {
+                payload = {
                     "type": "stroke_start", "id": client.id, "strokeId": stroke_id,
                     "tool": entry["tool"], "color": entry["color"], "size": entry["size"], "points": entry["points"],
-                }, exclude=websocket)
+                }
+                if extra:
+                    payload["extra"] = extra
+                await manager.broadcast(board_id, payload, exclude=websocket)
 
             elif msg_type == "stroke_points":
                 stroke_id = msg.get("strokeId")
@@ -251,11 +309,15 @@ async def notes_ws(websocket: WebSocket, board_id: int):
             elif msg_type == "stroke_end":
                 stroke_id = msg.get("strokeId")
                 entry = client.in_progress.pop(stroke_id, None)
+                extra = msg.get("extra") if isinstance(msg.get("extra"), dict) else (entry.get("extra") if entry else None)
+                if entry is not None and extra is not None:
+                    entry["extra"] = extra
                 if entry is not None and len(entry["points"]) >= 1:
                     async with AsyncSessionLocal() as db:
                         await db.merge(NotesStroke(
                             id=entry["id"], board_id=board_id, tool=entry["tool"],
-                            color=entry["color"], size=entry["size"], points=json.dumps(entry["points"]),
+                            color=entry["color"], size=entry["size"],
+                            points=_pack_points(entry["points"], entry.get("extra")),
                         ))
                         await db.commit()
                 await manager.broadcast(board_id, {"type": "stroke_end", "id": client.id, "strokeId": stroke_id}, exclude=websocket)
@@ -264,20 +326,27 @@ async def notes_ws(websocket: WebSocket, board_id: int):
                 stroke_id = msg.get("strokeId")
                 entry = client.in_progress.get(stroke_id)
                 new_points = msg.get("points", [])
+                extra = msg.get("extra") if isinstance(msg.get("extra"), dict) else None
                 if entry is not None:
                     entry["points"] = new_points
-                await manager.broadcast(board_id, {
+                    if extra is not None:
+                        entry["extra"] = extra
+                payload = {
                     "type": "stroke_replace", "id": client.id, "strokeId": stroke_id, "points": new_points,
-                }, exclude=websocket)
+                }
+                if extra is not None:
+                    payload["extra"] = extra
+                await manager.broadcast(board_id, payload, exclude=websocket)
 
             elif msg_type == "stroke_move":
                 stroke = msg.get("stroke")
                 if stroke and stroke.get("id"):
+                    extra = stroke.get("extra") if isinstance(stroke.get("extra"), dict) else None
                     async with AsyncSessionLocal() as db:
                         await db.merge(NotesStroke(
                             id=stroke["id"], board_id=board_id, tool=stroke.get("tool", "pen"),
                             color=stroke.get("color", "#000000"), size=stroke.get("size", 4),
-                            points=json.dumps(stroke.get("points", [])),
+                            points=_pack_points(stroke.get("points", []), extra),
                         ))
                         await db.commit()
                     await manager.broadcast(board_id, {"type": "stroke_move", "id": client.id, "stroke": stroke}, exclude=websocket)
