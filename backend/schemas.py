@@ -214,12 +214,16 @@ class DriveFileOut(BaseModel):
     file_size: int
     mime_type: Optional[str]
     is_lecture_notes: bool = False
+    is_public: bool = True
     created_at: datetime
     class Config: from_attributes = True
 
 class DriveFileUpdate(BaseModel):
     subject_id: Optional[int] = None
     topic: Optional[str] = None
+
+class DriveVisibilityUpdate(BaseModel):
+    is_public: bool
 
 class DriveTextUpdate(BaseModel):
     content: str

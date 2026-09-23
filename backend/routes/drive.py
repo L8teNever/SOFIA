@@ -6,9 +6,10 @@ from backend.database import get_db
 from backend.auth import get_current_user
 from backend.models.drive_file import DriveFile
 from backend.models.drive_topic import DriveTopic
+from backend.models.notes_board import NotesBoard
 from backend.models.subject import Subject
 from backend.models.user import User
-from backend.schemas import DriveFileOut, DriveFileUpdate, DriveTextUpdate, DriveTopicOut, DriveTopicCreate, DriveTopicRename
+from backend.schemas import DriveFileOut, DriveFileUpdate, DriveTextUpdate, DriveTopicOut, DriveTopicCreate, DriveTopicRename, DriveVisibilityUpdate
 from backend.config import settings
 from backend.services.virus_scanner import scan_file
 from backend.services.compression import compress_lossless
@@ -121,6 +122,7 @@ async def _serialize(db: AsyncSession, files: List[DriveFile]) -> List[dict]:
             "file_size": f.file_size,
             "mime_type": f.mime_type,
             "is_lecture_notes": f.is_lecture_notes,
+            "is_public": f.is_public,
             "created_at": f.created_at,
         })
     return out
@@ -129,8 +131,11 @@ async def _serialize(db: AsyncSession, files: List[DriveFile]) -> List[dict]:
 async def list_drive_files(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     if not current_user.class_id:
         return []
+    clauses = [DriveFile.class_id == current_user.class_id]
+    if current_user.role not in ("admin", "super_admin"):
+        clauses.append(or_(DriveFile.is_public == True, DriveFile.uploader_id == current_user.id))  # noqa: E712
     result = await db.execute(
-        select(DriveFile).where(DriveFile.class_id == current_user.class_id).order_by(DriveFile.created_at.desc())
+        select(DriveFile).where(*clauses).order_by(DriveFile.created_at.desc())
     )
     return await _serialize(db, list(result.scalars().all()))
 
@@ -140,6 +145,7 @@ async def upload_drive_file(
     file: UploadFile = File(...),
     subject_id: str = Form(""),
     topic: str = Form(""),
+    is_public: str = Form("false"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -177,6 +183,7 @@ async def upload_drive_file(
         subject_id=resolved_subject_id,
         topic=resolved_topic,
         is_lecture_notes=False,
+        is_public=is_public.strip().lower() in ("1", "true", "on"),
         uploader_id=current_user.id,
         filename=filename,
         original_name=original_name,
@@ -316,6 +323,16 @@ async def update_drive_file(file_id: int, data: DriveFileUpdate, db: AsyncSessio
 
     return (await _serialize(db, [df]))[0]
 
+@router.patch("/{file_id}/visibility", response_model=DriveFileOut)
+async def update_drive_file_visibility(file_id: int, data: DriveVisibilityUpdate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    df = await _get_visible(db, file_id, current_user)
+    if df.uploader_id != current_user.id and current_user.role not in ("admin", "super_admin"):
+        raise HTTPException(403)
+    df.is_public = data.is_public
+    await db.commit()
+    await db.refresh(df)
+    return (await _serialize(db, [df]))[0]
+
 # --- Topic folders ---
 
 @router.get("/topics", response_model=List[DriveTopicOut])
@@ -324,9 +341,10 @@ async def list_drive_topics(subject_id: int, db: AsyncSession = Depends(get_db),
         DriveTopic.class_id == current_user.class_id, DriveTopic.subject_id == subject_id
     ).order_by(DriveTopic.name))
     topics = list(result.scalars().all())
-    counts_res = await db.execute(select(DriveFile).where(
-        DriveFile.class_id == current_user.class_id, DriveFile.subject_id == subject_id
-    ))
+    count_clauses = [DriveFile.class_id == current_user.class_id, DriveFile.subject_id == subject_id]
+    if current_user.role not in ("admin", "super_admin"):
+        count_clauses.append(or_(DriveFile.is_public == True, DriveFile.uploader_id == current_user.id))  # noqa: E712
+    counts_res = await db.execute(select(DriveFile).where(*count_clauses))
     counts: dict[str, int] = {}
     for f in counts_res.scalars().all():
         if f.topic:
@@ -366,6 +384,15 @@ async def rename_drive_topic(topic_id: int, data: DriveTopicRename, db: AsyncSes
         f.topic = new_name
         file_count += 1
 
+    # NotesBoard.topic is a loose string paralleling DriveFile.topic (not
+    # an FK to drive_topics) — a board that was "in" this folder needs the
+    # same rewrite, or it silently drops out of the folder it belonged to.
+    boards_result = await db.execute(select(NotesBoard).where(
+        NotesBoard.class_id == current_user.class_id, NotesBoard.subject_id == topic.subject_id, NotesBoard.topic == old_name
+    ))
+    for b in boards_result.scalars().all():
+        b.topic = new_name
+
     await db.commit()
     await db.refresh(topic)
     return {"id": topic.id, "class_id": topic.class_id, "subject_id": topic.subject_id, "name": topic.name, "file_count": file_count}
@@ -392,6 +419,14 @@ async def delete_drive_topic(topic_id: int, db: AsyncSession = Depends(get_db), 
     ))
     for f in files_result.scalars().all():
         f.topic = None
+
+    # Same un-filing for any NotesBoard that was in this folder (see the
+    # matching comment in rename_drive_topic above).
+    boards_result = await db.execute(select(NotesBoard).where(
+        NotesBoard.class_id == current_user.class_id, NotesBoard.subject_id == topic.subject_id, NotesBoard.topic == topic.name
+    ))
+    for b in boards_result.scalars().all():
+        b.topic = None
 
     await db.delete(topic)
     await db.commit()
@@ -426,6 +461,8 @@ async def _get_visible(db: AsyncSession, file_id: int, current_user: User) -> Dr
     result = await db.execute(select(DriveFile).where(DriveFile.id == file_id))
     df = result.scalar_one_or_none()
     if not df or df.class_id != current_user.class_id:
+        raise HTTPException(404)
+    if not df.is_public and df.uploader_id != current_user.id and current_user.role not in ("admin", "super_admin"):
         raise HTTPException(404)
     return df
 
@@ -464,6 +501,8 @@ async def _find_by_path(db: AsyncSession, current_user: User, subject: str, topi
     ))
     df = result.scalar_one_or_none()
     if not df:
+        raise HTTPException(404)
+    if not df.is_public and df.uploader_id != current_user.id and current_user.role not in ("admin", "super_admin"):
         raise HTTPException(404)
     return df
 

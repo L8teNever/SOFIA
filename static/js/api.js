@@ -94,6 +94,7 @@ const API = {
   driveFiles:      ()       => API.get('/drive/'),
   uploadDriveFile: (form)   => API.upload('/drive/upload', form),
   updateDriveFile: (id, d)  => API.put(`/drive/${id}`, d),
+  updateDriveFileVisibility: (id, isPublic) => API.patch(`/drive/${id}/visibility`, { is_public: isPublic }),
   driveFileText:   (id)     => API.get(`/drive/${id}/text`),
   updateDriveFileText: (id, d) => API.put(`/drive/${id}/text`, d),
   deleteDriveFile: (id)     => API.delete(`/drive/${id}`),
