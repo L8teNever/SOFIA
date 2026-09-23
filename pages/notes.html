@@ -154,6 +154,17 @@ async function init_notes() {
     API.subjects().catch(() => []),
   ]);
   renderNotesList();
+
+  // Deep-link from Drive (openNotesBoardFromDrive) or a page reload on
+  // /notes/{id} — open straight into that board's canvas instead of the list.
+  if (window.__notesOpenBoardId) {
+    const id = window.__notesOpenBoardId;
+    window.__notesOpenBoardId = null;
+    openNotesBoardCanvas(id);
+    return;
+  }
+  const pathMatch = location.pathname.match(/^\/notes\/(\d+)/);
+  if (pathMatch) openNotesBoardCanvas(parseInt(pathMatch[1]));
 }
 
 function renderNotesList() {

@@ -126,7 +126,7 @@ document.getElementById('drive-fab-slot').outerHTML = fab({
   title: 'Datei hochladen', id: 'drive-fab'
 });
 
-let driveFiles = [], driveSubjects = [];
+let driveFiles = [], driveSubjects = [], driveBoards = [];
 let driveMode = 'folders';
 let driveSelectedSubjectId = null;
 let driveSearchQuery = '';
@@ -176,11 +176,19 @@ function driveRelTime(iso) {
 }
 
 async function init_drive() {
-  [driveFiles, driveSubjects] = await Promise.all([
+  [driveFiles, driveSubjects, driveBoards] = await Promise.all([
     API.driveFiles().catch(() => []),
     API.subjects().catch(() => []),
+    // Tafel-Boards mit Fach/Ordner — private Scratch-Boards ohne Fach
+    // kommen hier serverseitig (scope=class) schon gar nicht mit.
+    API.notesBoards('class').catch(() => []),
   ]);
   renderDrive();
+}
+
+function openNotesBoardFromDrive(id) {
+  window.__notesOpenBoardId = id;
+  openPage('notes');
 }
 
 function setDriveMode(mode, btn) {
@@ -322,6 +330,7 @@ function renderDriveTopicGroups(topicNames, topicMap, subjectId) {
   return topicNames.map(name => {
     const g = topicMap[name];
     const list = g.files.sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+    const boards = (g.boards || []).sort((a,b) => new Date(b.updated_at) - new Date(a.updated_at));
     return `<div class="drive-topic-group">
       <div class="drive-topic-label">
         <i data-lucide="folder" style="width:12px;height:12px;"></i>${escapeHtml(name)}
@@ -329,7 +338,7 @@ function renderDriveTopicGroups(topicNames, topicMap, subjectId) {
           <i data-lucide="pencil" style="width:12px;height:12px;"></i>
         </button>` : ''}
       </div>
-      ${list.length ? renderDriveFileList(list, false) : `<div style="opacity:0.4;font-size:0.82rem;padding:6px 4px 14px;">Leerer Ordner</div>`}
+      ${(list.length || boards.length) ? renderDriveBoardList(boards) + renderDriveFileList(list, false) : `<div style="opacity:0.4;font-size:0.82rem;padding:6px 4px 14px;">Leerer Ordner</div>`}
     </div>`;
   }).join('');
 }
@@ -339,6 +348,10 @@ function renderDriveSubjectFolder(id) {
   const files = isUnsorted
     ? driveFiles.filter(f => !f.subject_id)
     : driveFiles.filter(f => f.subject_id === id);
+  // Boards always carry a subject_id once they show up here at all (a
+  // scratch board with none never comes back from the scope=class fetch),
+  // so there's no "unsorted boards" case to handle.
+  const boards = isUnsorted ? [] : driveBoards.filter(b => b.subject_id === id);
 
   const header = !isUnsorted ? `<div style="display:flex;justify-content:flex-end;margin-bottom:14px;">
     <button class="icon-btn" onclick="openCreateTopicSheet(${id})" style="width:36px;height:36px;flex-shrink:0;" title="Neuer Ordner">
@@ -353,25 +366,35 @@ function renderDriveSubjectFolder(id) {
 
   const knownTopics = driveTopicsCache[id] || [];
   const topicMap = {};
-  knownTopics.forEach(t => { topicMap[t.name] = { files: [], topicId: t.id }; });
+  knownTopics.forEach(t => { topicMap[t.name] = { files: [], boards: [], topicId: t.id }; });
   const untagged = [];
   files.forEach(f => {
     if (f.topic) {
-      if (!topicMap[f.topic]) topicMap[f.topic] = { files: [], topicId: null };
+      if (!topicMap[f.topic]) topicMap[f.topic] = { files: [], boards: [], topicId: null };
       topicMap[f.topic].files.push(f);
     } else {
       untagged.push(f);
     }
   });
+  const untaggedBoards = [];
+  boards.forEach(b => {
+    if (b.topic) {
+      if (!topicMap[b.topic]) topicMap[b.topic] = { files: [], boards: [], topicId: null };
+      topicMap[b.topic].boards.push(b);
+    } else {
+      untaggedBoards.push(b);
+    }
+  });
 
   const topicNames = Object.keys(topicMap).sort((a,b) => a.localeCompare(b));
-  if (!topicNames.length && !untagged.length) {
+  if (!topicNames.length && !untagged.length && !untaggedBoards.length) {
     return header + emptyState({ icon:'folder-open', title:'Noch keine Dateien in diesem Ordner', subtitle:'Tippe unten rechts, um Dateien hochzuladen.', hidden:false });
   }
 
   const otherGroups = renderDriveTopicGroups(topicNames, topicMap, id);
-  const untaggedGroup = untagged.length ? `<div class="drive-topic-group">
+  const untaggedGroup = (untagged.length || untaggedBoards.length) ? `<div class="drive-topic-group">
     ${topicNames.length ? `<div class="drive-topic-label"><i data-lucide="files" style="width:12px;height:12px;"></i>Dateien</div>` : ''}
+    ${renderDriveBoardList(untaggedBoards.sort((a,b) => new Date(b.updated_at) - new Date(a.updated_at)))}
     ${renderDriveFileList(untagged.sort((a,b) => new Date(b.created_at) - new Date(a.created_at)), false)}
   </div>` : '';
 
@@ -512,6 +535,28 @@ function renderDriveFileList(files, showTag) {
     </div>`;
   }).join('');
   return html;
+}
+
+// Boards are references, not files — no preview/download, tapping one
+// opens it directly in Tafel instead (see openNotesBoardFromDrive).
+function renderDriveBoardList(boards) {
+  if (!boards.length) return '';
+  return boards.map(b => `
+    <div class="drive-file-card" onclick="openNotesBoardFromDrive(${b.id})" style="cursor:pointer;">
+      <div style="display:flex;align-items:center;gap:12px;min-width:0;flex:1;">
+        <div class="icon-box" style="width:40px;height:40px;background:${driveColorFor(b.id)};border-radius:12px;flex-shrink:0;">
+          <i data-lucide="layout-dashboard" style="width:18px;height:18px;color:#442b7a;"></i>
+        </div>
+        <div style="min-width:0;flex:1;">
+          <div style="font-weight:600;font-size:0.88rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:4px;">
+            ${!b.is_public ? '<i data-lucide="lock" style="width:12px;height:12px;opacity:0.5;flex-shrink:0;" title="Nur für dich sichtbar"></i>' : ''}
+            <span style="overflow:hidden;text-overflow:ellipsis;">${escapeHtml(b.title)}</span>
+          </div>
+          <div style="font-size:0.72rem;opacity:0.55;">Board · ${escapeHtml(b.owner_name||'?')} · ${driveRelTime(b.updated_at)}</div>
+        </div>
+      </div>
+      <span style="background:#f3edf7;border-radius:12px;width:40px;height:40px;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#442b7a;font-size:0.65rem;font-weight:700;">Tafel</span>
+    </div>`).join('');
 }
 
 function openDriveFileActions(fileId) {
