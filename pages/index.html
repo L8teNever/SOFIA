@@ -173,6 +173,23 @@
       </div>
     </div>
 
+    <!-- Tafel: third short-bar tile, same shape as Drive/Share on mobile
+         (a live whiteboard's dashboard content is just as minimal — an
+         icon and a short label) so it doesn't disturb the six full
+         squares' even count above, which is what keeps Drive+Share paired
+         with each other instead of a full square on mobile's 2-column
+         grid (see the .w-mobile-half comment in base.css). Sits alone in
+         the last row on mobile — a harmless empty gap, not a shape clash. -->
+    <div class="widget w-square w-mobile-half" style="background:#d7e3d0;color:#1a2e17;" onclick="openPage('notes',this)" data-page="notes">
+      <div class="icon-box" style="width:48px;height:48px;background:rgba(26,46,23,0.1);">
+        <i data-lucide="layout-dashboard" style="width:24px;height:24px;"></i>
+      </div>
+      <div style="overflow:hidden;min-width:0;">
+        <div style="font-size:1.1rem;font-weight:700;">Tafel</div>
+        <div style="font-size:0.72rem;opacity:0.6;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;">Boards</div>
+      </div>
+    </div>
+
   </div>
 </div>
 
