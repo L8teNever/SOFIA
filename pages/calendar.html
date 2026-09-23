@@ -1,488 +1,560 @@
 <div class="page" id="page-calendar" style="background:#f9f6fc;">
   <div id="ph-calendar"></div>
 
-  <div class="cal-main-container no-scrollbar">
-    <!-- Month grid (hidden in Agenda / search) -->
-    <div class="cal-left-pane">
-      <div class="m3-card cal-card">
-        <div class="cal-weekdays-grid">
-          <div>Mo</div><div>Di</div><div>Mi</div><div>Do</div><div>Fr</div><div>Sa</div><div>So</div>
+  <div class="cal-body" id="cal-body">
+    <aside id="cal-mini-drawer" class="cal-mini-drawer" hidden>
+      <div class="cal-mini-drawer-month">
+        <div id="cal-month-pills" class="cal-month-pills"></div>
+        <div class="cal-mini-weekdays"><div>M</div><div>D</div><div>M</div><div>D</div><div>F</div><div>S</div><div>S</div></div>
+        <div id="cal-mini-grid" class="cal-mini-grid"></div>
+      </div>
+      <!-- In the month view this list is the whole drawer. Week and day keep the small month above it. -->
+      <div id="cal-drawer-events" class="cal-drawer-events no-scrollbar">
+        <div class="cal-month-events-head">
+          <div class="cal-list-header-label">Termine</div>
+          <span id="cal-drawer-events-count" class="cal-list-header-count"></span>
         </div>
-        <div id="cal-grid" class="cal-days-grid"></div>
+        <div id="cal-drawer-events-list"></div>
       </div>
-      <div class="cal-swipe-hint" aria-hidden="true">Wischen zum Monatswechsel</div>
-    </div>
+    </aside>
 
-    <!-- Event list / day agenda -->
-    <div class="cal-right-pane">
-      <div class="cal-search-bar-mobile">
-        <i data-lucide="search" class="cal-search-icon"></i>
-        <input type="text" id="cal-search-input" class="cal-search-input" placeholder="Termine durchsuchen..." oninput="onCalSearchInput(this.value)">
-        <button type="button" id="cal-search-clear" class="cal-search-clear" onclick="clearCalSearch()" style="display:none;" title="Suche löschen">
-          <i data-lucide="x"></i>
-        </button>
-      </div>
+    <div class="cal-stage" id="cal-stage">
+      <div id="cal-search-dropdown" class="cal-search-dropdown" hidden></div>
 
-      <div id="cal-events-header"></div>
-      <div id="cal-events-list" class="cal-events-list"></div>
-
-      <div id="cal-no-events" class="cal-empty-card" style="display:none;">
-        <div class="cal-empty-icon">
-          <i data-lucide="calendar"></i>
+      <section id="cal-view-month" class="cal-view">
+        <div class="m3-card cal-card">
+          <div class="cal-weekdays-grid">
+            <div>Mo</div><div>Di</div><div>Mi</div><div>Do</div><div>Fr</div><div>Sa</div><div>So</div>
+          </div>
+          <div id="cal-grid" class="cal-days-grid"></div>
         </div>
-        <div class="cal-empty-title" id="cal-empty-title">Keine Termine</div>
-        <div class="cal-empty-sub" id="cal-empty-sub">Für diesen Zeitraum sind keine Termine eingetragen.</div>
-        <button class="m3-btn-primary cal-empty-cta" onclick="openNewEventSheet(selectedCalDate)">
-          <i data-lucide="plus"></i>
-          <span>Neuen Termin eintragen</span>
-        </button>
-      </div>
+        <!-- Kept for swipe clones. The month view itself is always the big grid. -->
+        <div class="m3-card cal-month-compact" id="cal-month-compact">
+          <div class="cal-mini-weekdays cal-compact-weekdays"><div>Mo</div><div>Di</div><div>Mi</div><div>Do</div><div>Fr</div><div>Sa</div><div>So</div></div>
+          <div id="cal-compact-grid" class="cal-mini-grid"></div>
+        </div>
+        <aside id="cal-month-events" class="cal-month-events no-scrollbar">
+          <div class="cal-month-events-head">
+            <div class="cal-list-header-label">Termine</div>
+            <span id="cal-month-events-count" class="cal-list-header-count"></span>
+          </div>
+          <div id="cal-month-events-list"></div>
+        </aside>
+      </section>
+
+      <section id="cal-view-time" class="cal-view" hidden>
+        <div class="m3-card cal-time-card" id="cal-time-card">
+          <!-- One scroll box for header + hours, so the day columns stay
+               aligned with their headings no matter how wide the
+               scrollbar is or how far down the hours are scrolled. -->
+          <div id="cal-time-scroll" class="cal-time-scroll">
+            <div class="cal-time-sticky">
+              <div class="cal-time-row">
+                <div class="cal-time-gutter"></div>
+                <div id="cal-time-header-cols" class="cal-time-colgrid"></div>
+              </div>
+              <div id="cal-time-allday" class="cal-time-row cal-time-allday" hidden>
+                <div class="cal-time-gutter cal-time-allday-label">ganztägig</div>
+                <div id="cal-time-allday-cols" class="cal-time-colgrid"></div>
+              </div>
+            </div>
+            <div class="cal-time-row cal-time-body">
+              <div id="cal-time-hours" class="cal-time-hours"></div>
+              <div id="cal-time-cols" class="cal-time-colgrid cal-time-cols"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="cal-view-agenda" class="cal-view cal-agenda-wrap no-scrollbar" hidden>
+        <div id="cal-events-header"></div>
+        <div id="cal-events-list" class="cal-events-list"></div>
+        <div id="cal-no-events" class="cal-empty-card" style="display:none;">
+          <div class="cal-empty-icon"><i data-lucide="calendar"></i></div>
+          <div class="cal-empty-title" id="cal-empty-title">Keine Termine</div>
+          <div class="cal-empty-sub" id="cal-empty-sub">Für diesen Zeitraum sind keine Termine eingetragen.</div>
+          <button class="m3-btn-primary cal-empty-cta" onclick="openNewEventSheet(selectedCalDate)">
+            <i data-lucide="plus"></i>
+            <span>Neuen Termin eintragen</span>
+          </button>
+        </div>
+      </section>
     </div>
   </div>
 
-  <!-- Week View — hourly time-grid, Google Calendar-style. Hidden by
-       default; toggled with .cal-main-container via calDisplayMode. Reuses
-       the exact block-positioning approach the Timetable page's week view
-       already uses (top/height in px from minutes-since-grid-start), so
-       the two grids behave identically even though they're separate
-       implementations (Timetable's lessons have real start/end times;
-       calendar events only have an optional single time, see
-       CAL_WEEK_EVENT_DURATION_MIN). -->
-  <div id="cal-week-view" style="display:none;">
-    <div class="cal-week-scroll">
-      <div class="cal-week-allday-row" id="cal-week-allday-row"></div>
-      <div id="cal-week-grid" class="cal-week-grid"></div>
-    </div>
-  </div>
-
-  <!-- Floating Action Button -->
   <div id="cal-fab-slot"></div>
 
 <style>
-/* ── Header sizing (page-header supplies layout) ── */
-.cal-month-title { font-size: 1.3rem; }
-@media (min-width: 400px) { .cal-month-title { font-size: 1.45rem; } }
-@media (min-width: 600px) { .cal-month-title { font-size: 1.6rem; } }
-
-.cal-header-row { gap: 6px; }
-.cal-nav-row { gap: 3px; display: flex; align-items: center; flex-shrink: 0; }
-.cal-back-btn, .cal-nav-btn { width: 38px; height: 38px; }
-.cal-nav-btn { border-radius: 12px; }
+.cal-header-row { gap: 8px; }
+.cal-nav-row { gap: 4px; display: flex; align-items: center; flex-shrink: 0; }
+/* Same tonal icon buttons the rest of the app uses, just scaled down on
+   phones — the header carries four of them next to the month title. */
+.cal-back-btn, .cal-nav-btn { width: 40px; height: 40px; border-radius: 16px; }
 .cal-back-btn i, .cal-nav-btn i { width: 18px; height: 18px; }
-.cal-today-btn {
-  padding: 6px 9px; border-radius: 11px; font-size: 0.74rem;
-  font-weight: 700; height: 38px;
+.cal-title-btn {
+  display: flex; align-items: center; gap: 4px; min-width: 0;
+  background: none; border: none; padding: 4px 8px 4px 2px; margin: 0;
+  cursor: pointer; font-family: inherit; color: inherit; border-radius: 16px;
 }
+.cal-title-btn:hover { background: rgba(103,80,164,0.06); }
+.cal-title-btn:active { background: #e8def8; }
+.cal-title-btn:disabled { cursor: default; }
+.cal-title-btn:disabled:hover, .cal-title-btn:disabled:active { background: none; }
+.cal-month-title {
+  font-size: 1.28rem; font-weight: 800; color: #1c1b1f;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  letter-spacing: -0.01em; line-height: 1.15;
+}
+#cal-title-chevron { width: 20px; height: 20px; flex-shrink: 0; opacity: 0.55; transition: transform 0.2s ease; }
+.cal-today-icon {
+  width: 22px; height: 22px; border: 2px solid currentColor; border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 800; line-height: 1; position: relative;
+  padding-top: 1px; color: #6750a4;
+}
+.cal-today-icon::before {
+  content: ''; position: absolute; top: -3px; left: 3px; right: 3px;
+  height: 2px; background: currentColor; border-radius: 1px;
+}
+/* On a phone, Heute and Suche live in the view menu so the title stays
+   readable. Tablet and desktop keep both buttons in the header. */
+#cal-today-btn, #cal-header-search-btn { display: none; }
+@media (min-width: 760px) {
+  #cal-today-btn, #cal-header-search-btn { display: flex; }
+}
+.cal-period-nav { display: none; }
 @media (min-width: 600px) {
-  .cal-header-row { gap: 16px; }
-  .cal-nav-row { gap: 8px; }
-  .cal-back-btn { width: 48px; height: 48px; }
-  .cal-back-btn i { width: 22px; height: 22px; }
-  .cal-nav-btn { width: 44px; height: 44px; border-radius: 14px; }
-  .cal-nav-btn i { width: 20px; height: 20px; }
-  .cal-today-btn { padding: 10px 18px; border-radius: 14px; font-size: 0.85rem; height: 44px; }
+  .cal-header-row { gap: 12px; }
+  .cal-nav-row { gap: 6px; }
+  .cal-back-btn, .cal-nav-btn { width: 48px; height: 48px; border-radius: 20px; }
+  .cal-back-btn i, .cal-nav-btn i { width: 22px; height: 22px; }
+  .cal-month-title { font-size: 1.55rem; }
+  .cal-today-icon { width: 24px; height: 24px; font-size: 11px; }
   #cal-filter-dot { top: 8px !important; right: 8px !important; }
 }
+@media (min-width: 900px) {
+  .cal-period-nav { display: flex; }
+  /* Matches .page-title once there's room for it beside the nav row. */
+  .cal-month-title { font-size: 1.75rem; }
+}
 
-/* ── Scroll + two-pane layout ── */
-.cal-main-container {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-  padding: 4px 16px 100px 16px;
-  max-width: 1140px;
-  margin: 0 auto;
-  width: 100%;
+/* Capped and padded with the same values as .page-header above it, so the
+   calendar's left/right edges line up with the back button instead of
+   running out to a wide window's own corners like they used to. */
+.cal-body {
+  flex: 1; min-height: 0; width: 100%; max-width: 960px; margin: 0 auto;
   box-sizing: border-box;
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
+  display: flex; flex-direction: column;
+  overflow: hidden; padding: 0 20px 20px; gap: 12px;
 }
-@media (min-width: 768px) {
-  .cal-main-container {
-    flex-direction: row;
-    align-items: flex-start;
-    gap: 28px;
-    padding: 8px 28px 100px 28px;
-  }
-  .cal-left-pane {
-    width: 380px;
-    flex-shrink: 0;
-    position: sticky;
-    top: 12px;
-  }
-  .cal-right-pane { flex: 1; min-width: 0; }
-}
-@media (min-width: 1024px) {
-  .cal-left-pane { width: 408px; }
+@media (min-width: 600px)  { .cal-body { padding: 0 28px 24px; } }
+@media (min-width: 760px)  { .cal-body { padding: 0 40px 28px; gap: 16px; } }
+@media (min-width: 1100px) { .cal-body { padding: 0 60px 32px; } }
+@media (min-width: 760px) {
+  .cal-body.drawer-open { flex-direction: row; align-items: stretch; }
 }
 
-/* ── Month card (elevated M3) ── */
+.cal-stage {
+  flex: 1; min-height: 0; display: flex; flex-direction: column;
+  position: relative; overflow: hidden;
+}
+.cal-view {
+  flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden;
+}
+.cal-view[hidden] { display: none !important; }
+/* Horizontal paging follows the finger. Vertical scrolling (the hour grid,
+   the event list) stays native because the browser may still pan on Y. */
+#cal-view-month, #cal-view-time { position: relative; touch-action: pan-y; }
+.cal-swipe-track {
+  position: absolute; top: 0; bottom: 0; left: 0;
+  display: flex; z-index: 6; pointer-events: none; background: #f9f6fc;
+  will-change: transform;
+}
+.cal-swipe-track > .cal-swipe-pane {
+  height: 100%; overflow: hidden; background: #f9f6fc;
+}
+
+/* The title opens this drawer. In the month view it is only the appointment
+   list — the big grid is already the month. Week and day still get the small
+   month, and on tablet and desktop the appointments sit under it. A phone
+   only gets the small month there. */
+.cal-mini-drawer {
+  flex-shrink: 0; width: 100%; max-height: 68%;
+  display: flex; flex-direction: column; gap: 12px;
+  background: transparent; border: none; box-shadow: none;
+  padding: 0; overflow-y: auto; min-height: 0;
+}
+.cal-body.drawer-open .cal-mini-drawer { height: 68%; }
+.cal-mini-drawer[hidden] { display: none !important; }
+.cal-mini-drawer-month {
+  flex-shrink: 0; width: 100%; max-width: 400px; align-self: center;
+  background: #fff; border-radius: 28px; padding: 14px 14px 12px;
+  border: 1px solid rgba(0,0,0,0.04); box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+}
+.cal-body[data-cal-mode="month"] .cal-mini-drawer-month { display: none; }
+.cal-drawer-events {
+  display: block; flex: 1 1 auto; min-height: 120px; overflow: visible;
+  padding-bottom: 8px;
+}
+@media (max-width: 759px) {
+  .cal-body[data-cal-mode="week"] .cal-drawer-events,
+  .cal-body[data-cal-mode="day"] .cal-drawer-events { display: none; }
+  .cal-body.drawer-open[data-cal-mode="week"] .cal-mini-drawer,
+  .cal-body.drawer-open[data-cal-mode="day"] .cal-mini-drawer {
+    height: auto; max-height: 68%;
+  }
+}
+@media (min-width: 760px) {
+  .cal-body.drawer-open .cal-mini-drawer {
+    width: 340px; align-self: stretch; height: auto; max-height: 100%;
+  }
+}
+/* A phone on its side is wide enough for the side column but too short for
+   a full mini month plus the list. Shrink the month so the first appointments
+   show underneath it. */
+@media (max-height: 520px) {
+  .cal-mini-drawer-month { padding: 8px 10px 8px; }
+  .cal-month-pills { padding-bottom: 4px; }
+  .cal-month-pill { padding: 4px 10px; }
+  .cal-mini-weekdays { margin-bottom: 2px; }
+  .cal-mini-cell { height: 16px; aspect-ratio: auto; font-size: 0.64rem; }
+}
+.cal-month-pills {
+  display: flex; gap: 6px; overflow-x: auto; padding: 2px 0 12px;
+  -webkit-overflow-scrolling: touch; scrollbar-width: none;
+}
+.cal-month-pills::-webkit-scrollbar { display: none; }
+.cal-month-pill {
+  flex-shrink: 0; border: 1px solid rgba(0,0,0,0.05); border-radius: 12px;
+  padding: 8px 14px; font-family: inherit; font-size: 0.8rem; font-weight: 500;
+  cursor: pointer; background: #f3edf7; color: #1c1b1f; white-space: nowrap;
+}
+.cal-month-pill.active { background: #21005d; color: #fff; border-color: transparent; font-weight: 700; }
+.cal-mini-weekdays {
+  display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; margin-bottom: 6px;
+}
+.cal-mini-weekdays div {
+  text-align: center; font-size: 0.66rem; font-weight: 700; color: #79747e;
+}
+.cal-mini-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+.cal-mini-cell {
+  aspect-ratio: 1; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; border-radius: 50%; cursor: pointer; position: relative;
+  font-size: 0.8rem; font-weight: 600; color: #1c1b1f; background: transparent;
+  border: 1.5px solid transparent; font-family: inherit; padding: 0;
+  transition: background 0.12s ease;
+}
+.cal-mini-cell:hover:not(.muted):not(.today):not(.selected) { background: #f3edf7; }
+.cal-mini-cell.muted { color: #cac4d0; }
+.cal-mini-cell.today { background: #6750a4; color: #fff; font-weight: 700; }
+.cal-mini-cell.selected:not(.today) { border-color: #6750a4; color: #6750a4; font-weight: 700; }
+.cal-mini-dot {
+  width: 4px; height: 4px; border-radius: 50%; background: #6750a4;
+  position: absolute; bottom: 4px;
+}
+.cal-mini-cell.today .cal-mini-dot { background: #fff; }
+
+/* Search dropdown */
+.cal-search-dropdown {
+  position: absolute; left: 0; right: 0; top: 0; z-index: 40;
+  background: #fff; border-radius: 16px;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.14), 0 2px 8px rgba(103,80,164,0.12);
+  border: 1px solid rgba(103,80,164,0.1);
+  max-height: min(60vh, 420px); overflow-y: auto; padding: 6px;
+}
+.cal-search-hit {
+  display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+  border-radius: 12px; cursor: pointer; border: none; background: none;
+  width: 100%; text-align: left; font-family: inherit; color: #1c1b1f;
+}
+.cal-search-hit:hover, .cal-search-hit:active { background: #f3edf7; }
+.cal-search-hit-title { font-weight: 700; font-size: 0.92rem; }
+.cal-search-hit-meta { font-size: 0.75rem; color: #49454f; margin-top: 2px; }
+.cal-search-empty { padding: 18px 12px; text-align: center; font-size: 0.85rem; color: #49454f; }
+
+/* Month grid */
 .cal-card {
-  margin-bottom: 0;
-  border-radius: 24px;
-  padding: 18px 14px 16px;
-  box-shadow: 0 2px 12px rgba(103, 80, 164, 0.08), 0 1px 3px rgba(0,0,0,0.04);
-  border: 1px solid rgba(103, 80, 164, 0.08);
+  flex: 1; min-height: 0; margin: 0; border-radius: 28px; padding: 14px 10px 10px;
+  display: flex; flex-direction: column;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  border: 1px solid rgba(0,0,0,0.04);
 }
-.cal-swipe-hint {
-  display: none;
-  text-align: center;
-  font-size: 0.68rem;
-  font-weight: 600;
-  color: #6750a4;
-  opacity: 0.45;
-  margin-top: 8px;
-  letter-spacing: 0.02em;
-}
-@media (max-width: 767px) {
-  .cal-swipe-hint { display: block; }
-}
-
 .cal-weekdays-grid {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 4px;
-  margin-bottom: 8px;
+  display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; margin-bottom: 6px; flex-shrink: 0;
 }
 .cal-weekdays-grid div {
-  text-align: center;
-  font-size: 0.72rem;
-  font-weight: 800;
-  color: #6750a4;
-  opacity: 0.55;
-  padding: 4px 0;
+  text-align: center; font-size: 0.72rem; font-weight: 700;
+  color: #79747e; padding: 2px 0 6px;
 }
-
 .cal-days-grid {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 3px;
+  flex: 1; min-height: 0;
+  display: grid; grid-template-columns: repeat(7, 1fr);
+  grid-template-rows: repeat(var(--cal-rows, 6), minmax(0, 1fr));
+  gap: 2px;
 }
-@keyframes cal-grid-enter {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-.cal-days-grid.cal-grid-enter { animation: cal-grid-enter 0.22s ease; }
-
-/* Rectangular cell holding real event bars, Google Calendar month-grid
-   style — replaces the old circular date-picker cell with dot indicators,
-   since a dot can't carry a title and forced a separate day-agenda list
-   to be the only place to actually read what's on a given day. */
 .cal-day {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  width: 100%;
-  min-height: 64px;
-  padding: 3px 2px 2px;
-  border-radius: 10px;
-  cursor: pointer;
-  transition: background 0.15s ease;
-  user-select: none;
-  background: transparent;
-  color: #1c1b1f;
-  box-sizing: border-box;
-  overflow: hidden;
+  position: relative; display: flex; flex-direction: column; align-items: stretch;
+  min-height: 0; padding: 3px 2px 2px; border-radius: 10px;
+  cursor: pointer; transition: background 0.15s ease; user-select: none;
+  background: transparent; color: #1c1b1f; overflow: hidden;
 }
 .cal-day:hover:not(.muted):not(.selected) { background: #f3edf7; }
 .cal-day:active:not(.muted) { background: #e8def8; }
-.cal-day.muted { opacity: 0.4; }
+.cal-day.muted { opacity: 0.38; }
 .cal-day.selected { background: #ede7f6; }
-
 .cal-day-num {
-  align-self: flex-start;
-  line-height: 1; font-size: 0.74rem; font-weight: 700;
+  align-self: flex-start; line-height: 1; font-size: 0.74rem; font-weight: 700;
   width: 20px; height: 20px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0; margin-bottom: 2px; z-index: 1;
+  flex-shrink: 0; margin-bottom: 2px;
 }
 .cal-day.today .cal-day-num { background: #6750a4; color: #fff; font-weight: 800; }
 .cal-day.selected .cal-day-num { box-shadow: inset 0 0 0 2px #6750a4; color: #6750a4; font-weight: 800; }
 .cal-day.selected.today .cal-day-num { background: #6750a4; color: #fff; box-shadow: none; }
-
-.cal-day-bars { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.cal-day-bars { display: flex; flex-direction: column; gap: 2px; min-width: 0; overflow: hidden; }
 .cal-day-bar {
-  font-size: 0.56rem; font-weight: 700; line-height: 1.5;
+  font-size: 0.56rem; font-weight: 700; line-height: 1.45;
   padding: 0 3px; border-radius: 3px;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer;
+  display: flex; align-items: center; gap: 3px;
 }
-.cal-day-more { font-size: 0.52rem; font-weight: 700; opacity: 0.55; padding: 0 3px; margin-top: 1px; }
-
-@media (min-width: 400px) {
-  .cal-day-bar { font-size: 0.6rem; }
-  .cal-day-more { font-size: 0.56rem; }
+.cal-day-bar-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.cal-bar-clip { flex-shrink: 0; width: 9px; height: 9px; opacity: 0.95; }
+.cal-card-files {
+  display: flex; align-items: center; gap: 6px; margin-top: 8px; flex-wrap: wrap;
 }
+.cal-card-thumb {
+  width: 44px; height: 44px; object-fit: cover; border-radius: 10px;
+  background: #ede7f6; display: block;
+}
+.cal-card-filecount {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 0.75rem; font-weight: 700; color: #49454f;
+}
+.cal-day-more { font-size: 0.52rem; font-weight: 700; opacity: 0.55; padding: 0 3px; }
 @media (min-width: 600px) {
-  .cal-day { min-height: 92px; padding: 5px 4px 4px; border-radius: 12px; }
-  .cal-day-num { width: 26px; height: 26px; font-size: 0.85rem; margin-bottom: 4px; }
-  .cal-day-bar { font-size: 0.68rem; padding: 1px 5px; line-height: 1.6; }
-  .cal-day-more { font-size: 0.62rem; }
+  .cal-card { padding: 18px 14px 12px; }
+  .cal-day { padding: 5px 4px 4px; border-radius: 12px; }
+  .cal-day-num { width: 26px; height: 26px; font-size: 0.85rem; margin-bottom: 3px; }
+  .cal-day-bar { font-size: 0.68rem; padding: 1px 5px; }
 }
 
-/* ── Search (M3 filled tonal) ── */
-.cal-search-bar-mobile {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: #ede7f6;
-  border-radius: 28px;
-  padding: 2px 6px 2px 14px;
-  margin-bottom: 14px;
+/* The big month grid is the month view on phone, tablet and desktop.
+   The compact month and the side list stay in the markup for the swipe
+   clones, but they are never the view. Events live under the title's
+   small month. */
+.cal-month-compact, #cal-month-events { display: none !important; }
+.cal-month-events-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 2px 4px 10px;
 }
-.cal-search-icon { width: 18px; height: 18px; opacity: 0.5; flex-shrink: 0; color: #6750a4; }
-.cal-search-input {
-  flex: 1; min-width: 0; border: none; outline: none; background: none;
-  font-family: inherit; font-size: 0.92rem; padding: 12px 0; color: #1c1b1f;
+.cal-month-empty {
+  background: #fff; border-radius: 20px; padding: 28px 16px; text-align: center;
+  border: 1px dashed rgba(103, 80, 164, 0.22);
+  color: #49454f; font-size: 0.88rem; font-weight: 600;
 }
-.cal-search-clear {
-  display: none; background: none; border: none; cursor: pointer;
-  padding: 8px; opacity: 0.55; flex-shrink: 0; border-radius: 50%;
-  color: #1c1b1f;
+.cal-compact-weekdays { margin-bottom: 8px; }
+.cal-compact-weekdays div { font-size: 0.72rem; }
+
+/* Day / week time grid — same visual language as the timetable's week
+   grid: no gray header band, today's date as a filled pill, hour lines as
+   hairlines, and the accent-red "now" line. */
+.cal-time-card {
+  flex: 1; min-height: 0; display: flex; flex-direction: column;
+  background: #fff; border-radius: 28px; overflow: hidden;
+  padding: 0; margin: 0;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  border: 1px solid rgba(0,0,0,0.04);
+  --cal-hour-h: 48px;
+  --cal-gutter: 46px;
+  --cal-days: 7;
 }
-.cal-search-clear i { width: 16px; height: 16px; }
-.cal-search-clear:active { background: rgba(0,0,0,0.06); }
-.cal-search-header-btn { display: none; }
-@media (min-width: 768px) {
-  .cal-search-header-btn { display: flex; }
-  .cal-search-bar-mobile { display: none; }
+@media (min-width: 760px) {
+  .cal-time-card { --cal-hour-h: 56px; --cal-gutter: 54px; }
+}
+.cal-time-scroll {
+  flex: 1; min-height: 0; overflow: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.cal-time-row { display: flex; }
+/* Own display rule beats the UA's [hidden] one, so the all-day strip needs
+   this to actually disappear on a week without all-day events. */
+.cal-time-row[hidden] { display: none !important; }
+.cal-time-gutter { width: var(--cal-gutter); flex-shrink: 0; }
+.cal-time-colgrid {
+  flex: 1; min-width: 0; display: grid;
+  grid-template-columns: repeat(var(--cal-days), minmax(0, 1fr));
+}
+.cal-time-sticky {
+  position: sticky; top: 0; z-index: 4; background: #fff;
+  box-shadow: 0 1px 0 rgba(0,0,0,0.07);
+}
+.cal-time-day-head {
+  text-align: center; padding: 12px 2px 10px; cursor: pointer;
+  background: none; border: none; font-family: inherit;
+}
+.cal-time-day-head .wd {
+  font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.06em; color: #79747e;
+}
+.cal-time-day-head .num {
+  margin-top: 5px; width: 30px; height: 30px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 0.95rem; font-weight: 600; color: #1c1b1f;
+}
+.cal-time-day-head:hover .num { background: #f3edf7; }
+.cal-time-day-head.is-today .wd { color: #6750a4; }
+.cal-time-day-head.is-today .num { background: #6750a4; color: #fff; font-weight: 700; }
+.cal-time-allday {
+  padding: 2px 0 6px; max-height: 86px; overflow-y: auto;
+  border-top: 1px solid rgba(0,0,0,0.06);
+}
+/* Sized to actually fit the hour gutter — uppercase + letter-spacing made
+   "ganztägig" wider than the 46px it has to live in, so it got cut off. */
+.cal-time-allday-label {
+  font-size: 0.56rem; font-weight: 700; color: #79747e;
+  display: flex; align-items: flex-start; justify-content: flex-end;
+  padding: 7px 7px 0 2px; overflow: hidden;
+}
+.cal-allday-cell { min-width: 0; padding: 4px 3px 0; display: flex; flex-direction: column; gap: 3px; }
+.cal-allday-chip {
+  font-size: 0.68rem; font-weight: 600; padding: 4px 8px; border-radius: 8px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; color: #fff;
+}
+.cal-time-hours {
+  width: var(--cal-gutter); flex-shrink: 0; position: relative;
+}
+.cal-time-hour-label {
+  height: var(--cal-hour-h); text-align: right; padding-right: 10px;
+  font-size: 0.68rem; font-weight: 500; color: #79747e;
+  transform: translateY(-0.55em);
+}
+.cal-time-cols { position: relative; }
+.cal-time-col {
+  position: relative; border-left: 1px solid rgba(0,0,0,0.05);
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent calc(var(--cal-hour-h) - 1px),
+    rgba(0,0,0,0.055) calc(var(--cal-hour-h) - 1px),
+    rgba(0,0,0,0.055) var(--cal-hour-h)
+  );
+}
+.cal-time-col:first-child { border-left: none; }
+.cal-time-col.is-today { background-color: rgba(103,80,164,0.035); }
+.cal-time-block {
+  position: absolute; left: 3px; right: 3px; border-radius: 10px; padding: 5px 7px;
+  overflow: hidden; cursor: pointer; font-size: 0.72rem; font-weight: 600; line-height: 1.25;
+  color: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+.cal-time-block-time { font-size: 0.62rem; font-weight: 500; opacity: 0.85; display: block; }
+.cal-now-line {
+  position: absolute; left: 0; right: 0; height: 2px; background: #b3261e; z-index: 5; pointer-events: none;
+}
+.cal-now-line::before {
+  content: ''; position: absolute; left: -3px; top: -3px; width: 8px; height: 8px;
+  border-radius: 50%; background: #b3261e;
 }
 
-/* ── List header ── */
+/* Agenda */
+.cal-agenda-wrap { overflow-y: auto; padding: 0 2px 96px; -webkit-overflow-scrolling: touch; }
 .cal-list-header {
-  margin-bottom: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+  margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; gap: 10px;
 }
 .cal-list-header-label {
-  font-size: 0.75rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: #6750a4;
+  font-size: 0.72rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.12em; color: #6750a4;
 }
-.cal-list-header-count {
-  font-size: 0.75rem;
-  color: #49454f;
-  font-weight: 600;
+.cal-list-header-count { font-size: 0.75rem; color: #49454f; font-weight: 600; }
+/* Month heading — the one signpost in a list that now spans the whole
+   school year, so it stays pinned while you scroll through its events. */
+.cal-agenda-month {
+  position: sticky; top: 0; z-index: 2;
+  background: #f9f6fc; padding: 10px 4px 8px;
+  font-size: 0.82rem; font-weight: 800; color: #21005d;
+  letter-spacing: -0.01em;
 }
-
-/* ── Event cards ── */
+.cal-agenda-group { margin-bottom: 16px; }
+.cal-agenda-group.is-selected .cal-agenda-group-title { color: #21005d; }
+.cal-agenda-group-title {
+  font-size: 0.72rem; font-weight: 700; color: #6750a4; margin: 0 0 8px 4px;
+  text-transform: uppercase; letter-spacing: 0.1em;
+  display: flex; align-items: center; gap: 8px;
+}
+.cal-agenda-today-pill {
+  background: #6750a4; color: #fff; border-radius: 8px;
+  padding: 2px 8px; font-size: 0.64rem; font-weight: 700; letter-spacing: 0.06em;
+}
 .cal-event-card {
-  margin-bottom: 10px;
-  padding: 14px 16px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  border-radius: 20px;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.05);
-  transition: transform 0.1s ease, box-shadow 0.15s ease;
-  cursor: default;
+  margin-bottom: 10px; padding: 14px 16px; display: flex; align-items: center;
+  justify-content: space-between; gap: 12px; border-radius: 20px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.05); cursor: pointer;
 }
-.cal-event-card.is-clickable { cursor: pointer; }
-.cal-event-card.is-clickable:active { transform: scale(0.985); }
+.cal-event-card:active { transform: scale(0.985); }
 .cal-event-card.is-past { opacity: 0.55 !important; }
-.cal-event-body {
-  display: flex;
-  align-items: center;
-  flex: 1;
-  min-width: 0;
-}
+.cal-event-body { display: flex; align-items: center; flex: 1; min-width: 0; }
 .cal-event-main { flex: 1; min-width: 0; }
-.cal-event-tags {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-  margin-bottom: 5px;
-}
+.cal-event-tags { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 5px; }
 .cal-event-title {
-  font-weight: 700;
-  font-size: 0.98rem;
-  color: #1c1b1f;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-weight: 700; font-size: 0.98rem; color: #1c1b1f;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .cal-event-meta {
-  font-size: 0.78rem;
-  color: #49454f;
-  margin-top: 2px;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  flex-wrap: wrap;
+  font-size: 0.78rem; color: #49454f; margin-top: 2px;
+  display: flex; align-items: center; gap: 5px; flex-wrap: wrap;
 }
 .cal-event-meta i { width: 13px; height: 13px; opacity: 0.6; flex-shrink: 0; }
+.cal-att-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 4px; }
+.cal-att-grid a { display: block; border-radius: 12px; overflow: hidden; background: #f3edf7; }
+.cal-att-grid img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; }
+.cal-att-row {
+  display: flex; align-items: center; gap: 10px; margin-top: 8px;
+  background: #f5f3f9; border-radius: 12px; padding: 8px 10px; text-decoration: none; color: inherit;
+}
+.cal-att-row span { flex: 1; min-width: 0; font-size: 0.82rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cal-event-desc {
-  font-size: 0.78rem;
-  color: #49454f;
-  opacity: 0.75;
-  margin-top: 4px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-size: 0.78rem; color: #49454f; opacity: 0.75; margin-top: 4px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.cal-event-actions {
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
-}
+.cal-event-actions { display: flex; align-items: center; flex-shrink: 0; }
 .cal-personal-note {
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: #49454f;
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
+  font-size: 0.72rem; font-weight: 600; color: #49454f;
+  display: inline-flex; align-items: center; gap: 3px;
 }
 .cal-personal-note i { width: 11px; height: 11px; }
-.cal-subject-badge {
-  font-size: 0.7rem;
-  font-weight: 700;
-  padding: 2px 8px;
-  border-radius: 6px;
-  color: #1c1b1f;
-}
-
+.cal-subject-badge { font-size: 0.7rem; font-weight: 700; padding: 2px 8px; border-radius: 6px; color: #1c1b1f; }
 .ev-date-badge {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 48px;
-  border-radius: 14px;
-  background: #f3edf7;
-  color: #21005d;
-  margin-right: 14px;
-  flex-shrink: 0;
-  border: 1px solid rgba(103, 80, 164, 0.1);
-  transition: all 0.15s ease;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  width: 44px; height: 48px; border-radius: 14px; background: #f3edf7; color: #21005d;
+  margin-right: 14px; flex-shrink: 0; border: 1px solid rgba(103, 80, 164, 0.1);
 }
 .ev-date-badge.is-today {
-  background: #6750a4;
-  color: #ffffff;
-  border-color: #6750a4;
+  background: #6750a4; color: #ffffff; border-color: #6750a4;
   box-shadow: 0 2px 6px rgba(103, 80, 164, 0.3);
 }
 .ev-date-num { font-size: 1.15rem; font-weight: 800; line-height: 1; }
-.ev-date-wd {
-  font-size: 0.68rem; font-weight: 700; text-transform: uppercase;
-  opacity: 0.75; margin-top: 2px; line-height: 1;
-}
-.ev-category-pill {
-  font-size: 0.7rem;
-  font-weight: 800;
-  padding: 3px 9px;
-  border-radius: 8px;
-  white-space: nowrap;
-}
+.ev-date-wd { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; opacity: 0.75; margin-top: 2px; line-height: 1; }
+.ev-category-pill { font-size: 0.7rem; font-weight: 800; padding: 3px 9px; border-radius: 8px; white-space: nowrap; }
 
-/* ── Empty state ── */
 .cal-empty-card {
-  background: #ffffff;
-  border-radius: 24px;
-  padding: 36px 20px;
-  text-align: center;
-  border: 1px dashed rgba(103, 80, 164, 0.2);
-  margin-top: 10px;
+  background: #ffffff; border-radius: 24px; padding: 36px 20px; text-align: center;
+  border: 1px dashed rgba(103, 80, 164, 0.2); margin-top: 10px;
 }
-/* Week view */
-#cal-week-view { padding: 4px 16px 100px 16px; max-width: 1140px; margin: 0 auto; width: 100%; box-sizing: border-box; }
-@media (min-width: 768px) { #cal-week-view { padding: 8px 28px 100px 28px; } }
-
-/* All-day row shares the exact same column template and min-width as the
-   grid below, and lives inside the same scroll container (see the HTML) —
-   otherwise on mobile the grid scrolls horizontally with wide columns
-   while this row stays squeezed to the viewport width, misaligning the
-   two and truncating chip text far more aggressively than the grid ever
-   needs to. */
-.cal-week-allday-row {
-  display: grid;
-  grid-template-columns: 34px repeat(7, minmax(74px, 1fr));
-  gap: 3px;
-  min-width: 560px;
-  margin-bottom: 6px;
-}
-.cal-week-allday-row:empty { display: none; margin-bottom: 0; }
-.cal-week-allday-chip {
-  font-size: 0.68rem; font-weight: 700; padding: 4px 6px; border-radius: 7px;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer;
-}
-
-.cal-week-scroll {
-  background: #ffffff;
-  border-radius: 24px;
-  box-shadow: 0 2px 12px rgba(103, 80, 164, 0.08), 0 1px 3px rgba(0,0,0,0.04);
-  border: 1px solid rgba(103, 80, 164, 0.08);
-  padding: 10px 6px;
-  overflow-x: auto;
-}
-.cal-week-grid {
-  display: grid;
-  grid-template-columns: 34px repeat(7, minmax(74px, 1fr));
-  gap: 3px;
-  min-width: 560px;
-}
-.cal-week-day-header {
-  text-align: center; font-size: 0.68rem; font-weight: 700; padding: 6px 2px 8px;
-  border-radius: 10px; color: #21005d; opacity: 0.6;
-}
-.cal-week-day-header.is-today { background: #6750a4; color: #fff; opacity: 1; }
-.cal-week-hour-label { position: absolute; right: 3px; font-size: 0.58rem; opacity: 0.4; color: #21005d; }
-.cal-week-hourline { position: absolute; left: 0; right: 0; height: 1px; background: rgba(103,80,164,0.1); }
-.cal-week-day-col { position: relative; border-radius: 8px; }
-.cal-week-day-col.is-today { background: rgba(103,80,164,0.04); }
-.cal-week-event-block {
-  position: absolute; left: 1px; right: 1px; border-radius: 7px; padding: 3px 5px;
-  overflow: hidden; cursor: pointer; font-size: 0.64rem; font-weight: 700; line-height: 1.25;
-}
-.cal-week-event-time { font-size: 0.56rem; font-weight: 600; opacity: 0.7; display: block; }
-.cal-week-now-line { position: absolute; left: 0; right: 0; height: 2px; background: #ba1a1a; z-index: 5; }
-.cal-week-now-line::before {
-  content: ''; position: absolute; left: -3px; top: -3px; width: 8px; height: 8px;
-  border-radius: 50%; background: #ba1a1a;
-}
-
-/* ── Empty state ── */
 .cal-empty-icon {
-  width: 54px; height: 54px; border-radius: 18px;
-  background: #ede7f6; color: #6750a4;
-  display: flex; align-items: center; justify-content: center;
-  margin: 0 auto 12px;
+  width: 54px; height: 54px; border-radius: 18px; background: #ede7f6; color: #6750a4;
+  display: flex; align-items: center; justify-content: center; margin: 0 auto 12px;
 }
 .cal-empty-icon i { width: 28px; height: 28px; }
-.cal-empty-title {
-  font-weight: 700; font-size: 1.05rem; color: #1c1b1f; margin-bottom: 4px;
-}
-.cal-empty-sub {
-  font-size: 0.85rem; color: #49454f; margin-bottom: 16px;
-}
-.cal-empty-cta {
-  display: inline-flex; align-items: center; gap: 6px;
-}
+.cal-empty-title { font-weight: 700; font-size: 1.05rem; color: #1c1b1f; margin-bottom: 4px; }
+.cal-empty-sub { font-size: 0.85rem; color: #49454f; margin-bottom: 16px; }
+.cal-empty-cta { display: inline-flex; align-items: center; gap: 6px; }
 .cal-empty-cta i { width: 18px; height: 18px; }
 
-/* Filter menu scope segment (kept for parity if opened) */
-.cal-filter-scope {
-  display: flex; gap: 4px; padding: 4px;
-  background: #f3edf7; border-radius: 10px; margin: 2px 6px 8px;
+.cal-detail-row {
+  display: flex; align-items: flex-start; gap: 12px; margin-bottom: 14px; color: #1c1b1f;
 }
-.cal-filter-scope button {
-  flex: 1; border: none; border-radius: 8px; padding: 7px 4px;
-  font-size: 0.76rem; font-weight: 700; font-family: inherit; cursor: pointer;
-  background: none; opacity: 0.6; color: #1c1b1f;
-}
-.cal-filter-scope button.active {
-  background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.15); opacity: 1;
-}
+.cal-detail-row i { width: 18px; height: 18px; color: #6750a4; flex-shrink: 0; margin-top: 2px; }
+.cal-detail-actions { display: flex; gap: 8px; margin-top: 8px; }
 </style>
 </div>
 
@@ -490,27 +562,29 @@
 document.getElementById('ph-calendar').outerHTML = pageHeader({
   className: 'cal-header-row',
   backClassName: 'cal-back-btn',
-  titleHtml: `<div style="flex:1;min-width:0;position:relative;">
-      <div id="cal-title-block" onclick="toggleCalMonthPanel()" style="cursor:pointer;display:flex;align-items:center;gap:2px;">
-        <div style="min-width:0;overflow:hidden;">
-          <div style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.6;color:#6750a4;" id="cal-year-label"></div>
-          <span class="page-title cal-month-title" style="color:#1c1b1f;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;" id="cal-month-title">Kalender</span>
-        </div>
-        <i data-lucide="chevron-down" id="cal-title-chevron" style="width:18px;height:18px;flex-shrink:0;opacity:0.5;transition:transform 0.2s ease;margin-top:9px;"></i>
-      </div>
-      <div id="cal-header-search-wrap" style="display:none;align-items:center;height:100%;">
+  titleHtml: `<div style="flex:1;min-width:0;">
+      <button type="button" id="cal-title-block" class="cal-title-btn" onclick="toggleCalMiniDrawer()" title="Monatsübersicht">
+        <span class="page-title cal-month-title" id="cal-month-title">Kalender</span>
+        <i data-lucide="chevron-down" id="cal-title-chevron"></i>
+      </button>
+      <div id="cal-header-search-wrap" style="display:none;align-items:center;height:100%;width:100%;">
         <i data-lucide="search" style="width:18px;height:18px;opacity:0.45;flex-shrink:0;margin-right:8px;"></i>
-        <input type="text" id="cal-header-search-input" placeholder="Termine durchsuchen..." style="flex:1;min-width:0;border:none;outline:none;background:none;font-family:inherit;font-size:1.05rem;font-weight:700;color:#1c1b1f;" oninput="onCalSearchInput(this.value)">
+        <input type="text" id="cal-header-search-input" placeholder="Termine durchsuchen..." autocomplete="off"
+          style="flex:1;min-width:0;border:none;outline:none;background:none;font-family:inherit;font-size:1.05rem;font-weight:700;color:#1c1b1f;"
+          oninput="onCalSearchInput(this.value)" onkeydown="if(event.key==='Escape')toggleCalHeaderSearch(false)">
+        <button type="button" class="icon-btn cal-nav-btn" onclick="toggleCalHeaderSearch(false)" title="Suche schließen" style="flex-shrink:0;">
+          <i data-lucide="x"></i>
+        </button>
       </div>
     </div>`,
-  trailing: `<div class="cal-nav-row" style="display:flex;align-items:center;flex-shrink:0;">
-      <button type="button" id="cal-viewmode-btn" class="icon-btn cal-nav-btn" onclick="toggleCalDisplayMode()" title="Wochenansicht">
-        <i data-lucide="calendar-days" id="cal-viewmode-icon"></i>
+  trailing: `<div class="cal-nav-row">
+      <button onclick="calNav(-1)" class="icon-btn cal-nav-btn cal-period-nav" title="Zurück" id="cal-nav-prev"><i data-lucide="chevron-left"></i></button>
+      <button onclick="calToday()" class="icon-btn cal-nav-btn" title="Heute" id="cal-today-btn"><span class="cal-today-icon" id="cal-today-num"></span></button>
+      <button onclick="calNav(1)" class="icon-btn cal-nav-btn cal-period-nav" title="Weiter" id="cal-nav-next"><i data-lucide="chevron-right"></i></button>
+      <button type="button" id="cal-viewmode-btn" class="icon-btn cal-nav-btn" onclick="toggleCalViewPicker(this)" title="Ansicht">
+        <i data-lucide="layout-grid" id="cal-viewmode-icon"></i>
       </button>
-      <button onclick="calNav(-1)" class="icon-btn cal-nav-btn" title="Vorheriger Monat" id="cal-nav-prev"><i data-lucide="chevron-left"></i></button>
-      <button onclick="calToday()" class="m3-btn-outline cal-today-btn" title="Zum heutigen Tag springen">Heute</button>
-      <button onclick="calNav(1)" class="icon-btn cal-nav-btn" title="Nächster Monat" id="cal-nav-next"><i data-lucide="chevron-right"></i></button>
-      <button type="button" id="cal-header-search-btn" class="icon-btn cal-nav-btn cal-search-header-btn" onclick="toggleCalHeaderSearch()" title="Termine durchsuchen">
+      <button type="button" id="cal-header-search-btn" class="icon-btn cal-nav-btn" onclick="toggleCalHeaderSearch()" title="Termine durchsuchen">
         <i data-lucide="search"></i>
       </button>
       <button type="button" id="cal-filter-btn" class="icon-btn cal-nav-btn" onclick="toggleCalFilterMenu(this)" title="Nach Kategorie filtern" style="position:relative;">
@@ -523,211 +597,102 @@ document.getElementById('cal-fab-slot').outerHTML = fab({
   onclick: 'openNewEventSheet()', title: 'Neuen Termin erstellen'
 });
 
-// Tapping the title toggles the mini month-grid panel open/closed — same
-// job the old permanent Monat/Agenda chip row did, but as an interaction
-// on the title itself (chevron flips to show state), matching how Google
-// Calendar's own header works instead of adding chrome it doesn't have.
-// No-op during week view or an active search, where the title isn't
-// showing a month to toggle a grid for.
-function toggleCalMonthPanel() {
-  if (calDisplayMode !== 'month' || calSearchQuery) return;
-  setCalViewScope(calViewScope === 'month' ? 'all' : 'month');
-}
+const CAL_MONTHS = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+const CAL_MONTHS_PILL = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
+const CAL_WEEKDAY_SHORT = ['Mo','Di','Mi','Do','Fr','Sa','So'];
+const CAL_VIEW_MODES = [
+  { id: 'agenda', label: 'Terminübersicht', icon: 'list' },
+  { id: 'day',    label: 'Tag',             icon: 'calendar-range' },
+  { id: 'week',   label: 'Woche',           icon: 'calendar-days' },
+  { id: 'month',  label: 'Monat',           icon: 'layout-grid' },
+];
+const CAL_TYPE_SOLID = { exam: '#ba1a1a', holiday: '#8a5a00', trip: '#006d3a', personal: '#006399', other: '#6750a4' };
+const CAL_TYPE_LABEL = { exam: 'Klassenarbeit', holiday: 'Schulferien', trip: 'Ausflug', personal: 'Persönlich', other: 'Sonstiges' };
+const CAL_TYPE_BG = {
+  exam: 'rgba(186, 26, 26, 0.1)', holiday: 'rgba(138, 90, 0, 0.1)',
+  trip: 'rgba(0, 109, 58, 0.1)', personal: 'rgba(0, 99, 153, 0.1)', other: 'rgba(103, 80, 164, 0.1)'
+};
+const CAL_WEEK_EVENT_DURATION_MIN = 60;
 
 var calYear = new Date().getFullYear();
 var calMonth = new Date().getMonth();
 var calEvents = [];
 var calSubjects = [];
-var selectedCalDate = null;
-var activeCategoryFilter = 'all';
-var calCurrentUser = null;
-// 'month' (default: only the selected month, day-grid shown) or 'all'
-// (every upcoming event across every month, no day-grid — a single
-// month's grid doesn't mean anything once the list spans all of them).
-// Persisted the same way the timetable's Tag/Woche choice is.
-var calViewScope = 'month';
-try { calViewScope = localStorage.getItem('cal_view_scope') === 'all' ? 'all' : 'month'; } catch {}
-(function syncCalTitleChevron() {
-  const chevron = document.getElementById('cal-title-chevron');
-  if (chevron) chevron.style.transform = calViewScope === 'all' ? 'rotate(180deg)' : '';
-})();
-
-// 'month' (the existing mini-grid + list) or 'week' (new: an hourly
-// Google Calendar-style time-grid). Independent of calViewScope above —
-// that's about how much the LIST spans, this is a whole different layout.
-// Persisted the same way.
 var calDisplayMode = 'month';
-try { calDisplayMode = localStorage.getItem('cal_display_mode') === 'week' ? 'week' : 'month'; } catch {}
-// Any date within the week currently shown — Monday of its week is
-// derived from this each render rather than stored directly, same as
-// calYear/calMonth representing "the month" without a specific day.
+var activeCategoryFilter = 'all';
+var selectedCalDate = null;
+(function restoreCalPrefs() {
+  try {
+    const saved = localStorage.getItem('cal_display_mode');
+    if (CAL_VIEW_MODES.some(m => m.id === saved)) calDisplayMode = saved;
+    const filter = localStorage.getItem('cal_category_filter');
+    if (filter && ['all', 'exam', 'holiday', 'trip', 'personal', 'other'].includes(filter)) {
+      activeCategoryFilter = filter;
+    }
+  } catch {}
+})();
 var calWeekAnchor = new Date();
+var calMiniOpen = false;
+var calMiniYear = calYear;
+var calMiniMonth = calMonth;
+var calPendingFiles = [];
+var calUploading = false;
+var calCurrentUser = null;
 
-// Search matches title/description across every event regardless of
-// month, scope, or whether it's already past — a search is a "find it
-// no matter where/when" tool, not scoped to whatever's currently on
-// screen. calSearchPool is fetched fresh each time a search starts so
-// it can't go stale, independent of calEvents (which stays whatever the
-// month/all toggle last loaded, so clearing the search returns to
-// exactly that view without needing to reload it).
 var calSearchQuery = '';
 var calSearchPool = [];
 var calSearchDebounce = null;
-
-async function onCalSearchInput(value) {
-  const q = value.trim();
-  const clearBtn = document.getElementById('cal-search-clear');
-  if (clearBtn) clearBtn.style.display = q ? 'flex' : 'none';
-  // Keep both entry points (mobile bar, desktop header) in sync regardless
-  // of which one the user is actually typing in — matters if the window
-  // gets resized across the breakpoint mid-search.
-  const mobileInput = document.getElementById('cal-search-input');
-  const headerInput = document.getElementById('cal-header-search-input');
-  if (mobileInput && mobileInput.value !== value) mobileInput.value = value;
-  if (headerInput && headerInput.value !== value) headerInput.value = value;
-
-  const startingSearch = q && !calSearchQuery;
-  calSearchQuery = q;
-  clearTimeout(calSearchDebounce);
-
-  if (startingSearch) {
-    calSearchPool = await API.events().catch(() => []);
-  }
-  calSearchDebounce = setTimeout(renderCal, startingSearch ? 0 : 150);
-}
-
-function clearCalSearch() {
-  calSearchQuery = '';
-  const input = document.getElementById('cal-search-input');
-  const headerInput = document.getElementById('cal-header-search-input');
-  const clearBtn = document.getElementById('cal-search-clear');
-  if (input) input.value = '';
-  if (headerInput) headerInput.value = '';
-  if (clearBtn) clearBtn.style.display = 'none';
-  renderCal();
-}
-
-// Tablet/desktop only (see .cal-search-header-btn) — expands the title
-// area into a search input instead of a permanent bar, since there's
-// room to spare there and a permanent bar would look like unused chrome.
 let calHeaderSearchOpen = false;
-function toggleCalHeaderSearch() {
-  calHeaderSearchOpen = !calHeaderSearchOpen;
-  const titleBlock = document.getElementById('cal-title-block');
-  const searchWrap = document.getElementById('cal-header-search-wrap');
-  const input = document.getElementById('cal-header-search-input');
-  if (calHeaderSearchOpen) {
-    if (titleBlock) titleBlock.style.display = 'none';
-    if (searchWrap) searchWrap.style.display = 'flex';
-    if (input) { input.value = calSearchQuery; input.focus(); }
-  } else {
-    if (titleBlock) titleBlock.style.display = 'block';
-    if (searchWrap) searchWrap.style.display = 'none';
-    if (calSearchQuery) clearCalSearch();
-  }
-}
-
-async function init_calendar() {
-  const [, , me] = await Promise.all([
-    loadCalEvents(),
-    loadCalSubjects(),
-    API.me().catch(() => null),
-  ]);
-  calCurrentUser = me;
-  // Month view opens on today's day-agenda (Android-style) when the
-  // persisted month is the current one — otherwise keep the month list.
-  if (calViewScope === 'month' && !selectedCalDate) {
-    const t = new Date();
-    if (t.getFullYear() === calYear && t.getMonth() === calMonth) {
-      selectedCalDate = localDateStr(t);
-    }
-  }
-  const dot = document.getElementById('cal-filter-dot');
-  if (dot) dot.style.display = (calViewScope === 'all' || activeCategoryFilter !== 'all') ? 'block' : 'none';
-  renderCal();
-  initCalSwipe();
-  startCalPolling();
-}
-
+let calViewPickerEl = null;
+let calFilterMenuEl = null;
 let calPollInterval = null;
 
-// Same rationale as homework's polling: the calendar is shared with the
-// whole class, and a classmate (or an admin importing school holidays)
-// adding an event while this page is already open otherwise only shows
-// up the next time it's reopened. There's no websocket/push channel for
-// this, so a quiet background poll is the low-risk way to make that show
-// up reasonably soon instead. Self-stops once this page's own elements
-// are gone, and skips while the tab/app isn't visible.
-function startCalPolling() {
-  if (calPollInterval) clearInterval(calPollInterval);
-  calPollInterval = setInterval(async () => {
-    if (!document.getElementById('cal-grid')) { clearInterval(calPollInterval); calPollInterval = null; return; }
-    if (document.hidden) return;
-    let fresh;
-    if (calViewScope === 'all') {
-      fresh = await API.events().catch(() => null);
-    } else if (calDisplayMode === 'week') {
-      const months = _calMonthsForWeek(calWeekAnchor);
-      const results = await Promise.all([...months].map(m => API.events(m).catch(() => []))).catch(() => null);
-      if (results) { const merged = new Map(); results.flat().forEach(e => merged.set(e.id, e)); fresh = [...merged.values()]; }
-    } else {
-      fresh = await API.events(calYear + '-' + String(calMonth + 1).padStart(2, '0')).catch(() => null);
-    }
-    if (!fresh || !document.getElementById('cal-grid')) return;
-    if (JSON.stringify(fresh) !== JSON.stringify(calEvents)) {
-      calEvents = fresh;
-      if (calDisplayMode === 'week') renderCalWeekView();
-      else if (calViewScope !== 'all') renderCalGridOnly(false); // no month-change entrance animation for a quiet background sync
-      renderEventList();
-    }
-  }, 15000);
+function calHasFiles(ev) {
+  return Array.isArray(ev.attachments) && ev.attachments.length > 0;
 }
-
-// Swipe left/right on the month card to step months, same direction
-// convention as every native calendar app — left = forward, right = back.
-// Deliberately requires a mostly-horizontal drag well past a small
-// threshold, so a vertical scroll or tapping a day cell doesn't
-// accidentally flip the month underneath the user.
-function initCalSwipe() {
-  const card = document.querySelector('.cal-card');
-  if (!card) return;
-  let startX = null, startY = null;
-  card.addEventListener('touchstart', (e) => {
-    startX = e.touches[0].clientX;
-    startY = e.touches[0].clientY;
-  }, { passive: true });
-  card.addEventListener('touchend', (e) => {
-    if (startX == null) return;
-    const dx = e.changedTouches[0].clientX - startX;
-    const dy = e.changedTouches[0].clientY - startY;
-    startX = null;
-    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) {
-      calNav(dx < 0 ? 1 : -1);
-    }
-  }, { passive: true });
+function calClipIcon() {
+  return `<svg class="cal-bar-clip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>`;
 }
-
-// Matches the backend's rule exactly: a "personal" event is private to its
-// creator (only they can even see it, per the class-wide visibility query),
-// so it stays creator-only to edit/delete too. Every other event is
-// already visible to the whole class, and any class member can now edit
-// or delete it — not just the creator or an admin.
-function calCanModifyEvent(ev) {
-  if (!calCurrentUser) return false;
-  if (ev.event_type === 'personal') return ev.created_by === calCurrentUser.id;
-  return true;
+function calCardFilesRow(e) {
+  const atts = e.attachments || [];
+  if (!atts.length) return '';
+  const thumbs = atts.filter(a => a.type === 'image').slice(0, 3).map(a =>
+    `<img class="cal-card-thumb" src="${escapeHtml(a.url)}" alt="">`
+  ).join('');
+  return `<div class="cal-card-files">${thumbs}<span class="cal-card-filecount"><i data-lucide="paperclip"></i>${atts.length}</span></div>`;
 }
-
-async function loadCalSubjects() {
-  try {
-    calSubjects = await API.subjects();
-  } catch {
-    calSubjects = [];
-  }
+function paintCalModeChrome() {
+  const monthEl = document.getElementById('cal-view-month');
+  const timeEl = document.getElementById('cal-view-time');
+  const agendaEl = document.getElementById('cal-view-agenda');
+  if (monthEl) monthEl.hidden = calDisplayMode !== 'month';
+  if (timeEl) timeEl.hidden = !(calDisplayMode === 'week' || calDisplayMode === 'day');
+  if (agendaEl) agendaEl.hidden = calDisplayMode !== 'agenda';
+  const calBody = document.getElementById('cal-body');
+  if (calBody) calBody.dataset.calMode = calDisplayMode;
+  const modeMeta = CAL_VIEW_MODES.find(m => m.id === calDisplayMode);
+  const viewIcon = document.getElementById('cal-viewmode-icon');
+  const viewBtn = document.getElementById('cal-viewmode-btn');
+  if (modeMeta && viewIcon) viewIcon.setAttribute('data-lucide', modeMeta.icon);
+  if (modeMeta && viewBtn) viewBtn.title = 'Ansicht: ' + modeMeta.label;
+  const dot = document.getElementById('cal-filter-dot');
+  if (dot) dot.style.display = activeCategoryFilter === 'all' ? 'none' : 'block';
 }
+paintCalModeChrome();
 
+function calEventColors(ev) {
+  return { bg: CAL_TYPE_SOLID[ev.event_type] || CAL_TYPE_SOLID.other, color: '#ffffff' };
+}
+function calTypeMeta(ev) {
+  const t = ev.event_type || 'other';
+  return {
+    label: CAL_TYPE_LABEL[t] || CAL_TYPE_LABEL.other,
+    color: CAL_TYPE_SOLID[t] || CAL_TYPE_SOLID.other,
+    bg: CAL_TYPE_BG[t] || CAL_TYPE_BG.other,
+  };
+}
 function _calMonday(d) {
-  const day = (d.getDay() + 6) % 7; // 0=Mo ... 6=So
+  const day = (d.getDay() + 6) % 7;
   const r = new Date(d);
   r.setDate(r.getDate() - day);
   r.setHours(0, 0, 0, 0);
@@ -738,62 +703,693 @@ function _calToMin(hhmm) {
   const parts = (hhmm || '0:0').split(':').map(Number);
   return parts[0] * 60 + (parts[1] || 0);
 }
-
-// The month(s) a given week's events could fall under — usually one, but a
-// week straddling a month boundary needs both fetched and merged, since
-// the events API is scoped to a single calendar month.
+function _calMonthsForRange(start, end) {
+  const set = new Set();
+  const cur = new Date(start.getFullYear(), start.getMonth(), 1);
+  const last = new Date(end.getFullYear(), end.getMonth(), 1);
+  while (cur <= last) {
+    set.add(cur.getFullYear() + '-' + String(cur.getMonth() + 1).padStart(2, '0'));
+    cur.setMonth(cur.getMonth() + 1);
+  }
+  return set;
+}
 function _calMonthsForWeek(anchor) {
   const monday = _calMonday(anchor);
-  const sunday = _calAddDays(monday, 6);
-  return new Set([
-    monday.getFullYear() + '-' + String(monday.getMonth() + 1).padStart(2, '0'),
-    sunday.getFullYear() + '-' + String(sunday.getMonth() + 1).padStart(2, '0'),
-  ]);
+  return _calMonthsForRange(monday, _calAddDays(monday, 6));
 }
-
-async function loadCalEvents() {
-  try {
-    if (calViewScope === 'all') {
-      calEvents = await API.events(); // no month param -> every event for the class
-    } else if (calDisplayMode === 'week') {
-      const months = _calMonthsForWeek(calWeekAnchor);
-      const results = await Promise.all([...months].map(m => API.events(m).catch(() => [])));
-      const merged = new Map();
-      results.flat().forEach(e => merged.set(e.id, e));
-      calEvents = [...merged.values()];
-    } else {
-      const m = String(calMonth + 1).padStart(2, '0');
-      calEvents = await API.events(calYear + '-' + m);
-    }
-  } catch {
-    calEvents = [];
-  }
-}
-
 function eventCoversDate(ev, dateStr) {
   const start = ev.date ? ev.date.slice(0, 10) : '';
   const end = ev.end_date ? ev.end_date.slice(0, 10) : start;
   return dateStr >= start && dateStr <= end;
 }
+function calCanModifyEvent(ev) {
+  if (!calCurrentUser) return false;
+  if (ev.event_type === 'personal') return ev.created_by === calCurrentUser.id;
+  return true;
+}
+function calHourPx() {
+  const card = document.querySelector('.cal-time-card');
+  if (!card) return 48;
+  const v = parseFloat(getComputedStyle(card).getPropertyValue('--cal-hour-h'));
+  return Number.isFinite(v) && v > 0 ? v : 48;
+}
+function syncCalTodayBtn() {
+  const el = document.getElementById('cal-today-num');
+  if (el) el.textContent = String(new Date().getDate());
+}
+
+function toggleCalMiniDrawer() {
+  if (calHeaderSearchOpen) return;
+  calMiniOpen = !calMiniOpen;
+  const drawer = document.getElementById('cal-mini-drawer');
+  const body = document.getElementById('cal-body');
+  const chevron = document.getElementById('cal-title-chevron');
+  if (!drawer) return;
+  if (calMiniOpen) {
+    calMiniYear = calYear;
+    calMiniMonth = calMonth;
+    drawer.hidden = false;
+    if (body) {
+      body.dataset.calMode = calDisplayMode;
+      body.classList.add('drawer-open');
+    }
+    renderCalMiniDrawer();
+    scrollDrawerEvents();
+    if (chevron) chevron.style.transform = 'rotate(180deg)';
+  } else {
+    drawer.hidden = true;
+    if (body) body.classList.remove('drawer-open');
+    if (chevron) chevron.style.transform = '';
+  }
+}
+function closeCalMiniDrawer() {
+  if (!calMiniOpen) return;
+  calMiniOpen = false;
+  const drawer = document.getElementById('cal-mini-drawer');
+  const body = document.getElementById('cal-body');
+  const chevron = document.getElementById('cal-title-chevron');
+  if (drawer) drawer.hidden = true;
+  if (body) body.classList.remove('drawer-open');
+  if (chevron) chevron.style.transform = '';
+}
+function renderCalMiniDrawer() {
+  const pills = document.getElementById('cal-month-pills');
+  const grid = document.getElementById('cal-mini-grid');
+  if (!pills || !grid) return;
+
+  let html = '';
+  for (let i = -2; i <= 6; i++) {
+    const d = new Date(calMiniYear, calMiniMonth + i, 1);
+    const active = i === 0;
+    const label = (d.getMonth() === 0 && i !== 0)
+      ? String(d.getFullYear())
+      : CAL_MONTHS_PILL[d.getMonth()];
+    html += `<button type="button" class="cal-month-pill${active ? ' active' : ''}" onclick="calMiniPickMonth(${d.getFullYear()},${d.getMonth()})">${label}</button>`;
+  }
+  pills.innerHTML = html;
+  const activePill = pills.querySelector('.active');
+  if (activePill) activePill.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'auto' });
+
+  const first = new Date(calMiniYear, calMiniMonth, 1);
+  const startDay = (first.getDay() + 6) % 7;
+  const daysInMonth = new Date(calMiniYear, calMiniMonth + 1, 0).getDate();
+  const prevDays = new Date(calMiniYear, calMiniMonth, 0).getDate();
+  const todayStr = localDateStr();
+  const sel = selectedCalDate || localDateStr(calWeekAnchor);
+
+  let cells = '';
+  for (let i = startDay - 1; i >= 0; i--) {
+    const d = prevDays - i;
+    const pm = calMiniMonth === 0 ? 11 : calMiniMonth - 1;
+    const py = calMiniMonth === 0 ? calMiniYear - 1 : calMiniYear;
+    const ds = py + '-' + String(pm + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+    cells += `<button type="button" class="cal-mini-cell muted" onclick="calMiniPickDay('${ds}')">${d}</button>`;
+  }
+  for (let d = 1; d <= daysInMonth; d++) {
+    const ds = calMiniYear + '-' + String(calMiniMonth + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+    const has = calEvents.some(e => eventCoversDate(e, ds) && (activeCategoryFilter === 'all' || (e.event_type || 'other') === activeCategoryFilter));
+    let cls = 'cal-mini-cell';
+    if (ds === todayStr) cls += ' today';
+    else if (ds === sel) cls += ' selected';
+    cells += `<button type="button" class="${cls}" onclick="calMiniPickDay('${ds}')">${d}${has ? '<span class="cal-mini-dot"></span>' : ''}</button>`;
+  }
+  const totalSoFar = startDay + daysInMonth;
+  const rem = (7 - (totalSoFar % 7)) % 7;
+  for (let d = 1; d <= rem; d++) {
+    const nm = calMiniMonth === 11 ? 0 : calMiniMonth + 1;
+    const ny = calMiniMonth === 11 ? calMiniYear + 1 : calMiniYear;
+    const ds = ny + '-' + String(nm + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+    cells += `<button type="button" class="cal-mini-cell muted" onclick="calMiniPickDay('${ds}')">${d}</button>`;
+  }
+  grid.innerHTML = cells;
+}
+async function calMiniPickMonth(y, m) {
+  calMiniYear = y;
+  calMiniMonth = m;
+  calYear = y;
+  calMonth = m;
+  calWeekAnchor = new Date(y, m, Math.min(calWeekAnchor.getDate(), 28));
+  await loadCalEvents();
+  renderCalMiniDrawer();
+  renderCal();
+}
+// Picking a day deliberately leaves the drawer open — it's a date picker
+// you keep using to hop from day to day, so it stays until it's closed
+// again via the chevron next to the month title in the header.
+async function calMiniPickDay(dateStr) {
+  // The month's events sit under this small month, so a day picks its
+  // place in that list instead of leaving the month view. Week and day
+  // headers still use this to jump to that day.
+  if (calDisplayMode === 'month') {
+    await calCompactPickDay(dateStr);
+    scrollDrawerEvents();
+    return;
+  }
+  const d = new Date(dateStr + 'T00:00');
+  calYear = d.getFullYear();
+  calMonth = d.getMonth();
+  calWeekAnchor = d;
+  selectedCalDate = dateStr;
+  calMiniYear = calYear;
+  calMiniMonth = calMonth;
+  await setCalDisplayMode('day', { skipReload: false, anchor: d, persist: false });
+}
+
+function toggleCalViewPicker(btn) {
+  if (calViewPickerEl) { closeCalViewPicker(); return; }
+  closeCalFilterMenu();
+  const panel = document.createElement('div');
+  panel.className = 'm3-dropdown-panel dd-open';
+  panel.style.maxHeight = '320px';
+  const onPhone = window.matchMedia('(max-width: 759px)').matches;
+  panel.innerHTML = CAL_VIEW_MODES.map(m =>
+    `<div class="m3-dropdown-opt${m.id === calDisplayMode ? ' dd-sel' : ''}" data-mode="${m.id}">
+      <i data-lucide="${m.icon}" style="width:16px;height:16px;margin-right:10px;flex-shrink:0;"></i>${m.label}
+    </div>`
+  ).join('') + (onPhone
+    ? `<div class="m3-dropdown-opt" data-today="1"><span class="cal-today-icon" style="width:18px;height:18px;font-size:9px;margin-right:10px;">${new Date().getDate()}</span>Heute</div>`
+      + `<div class="m3-dropdown-opt" data-search="1"><i data-lucide="search" style="width:16px;height:16px;margin-right:10px;flex-shrink:0;"></i>Suchen</div>`
+    : '');
+  document.body.appendChild(panel);
+  calViewPickerEl = panel;
+  if (window.lucide) {
+    try { lucide.createIcons({ root: panel }); }
+    catch { lucide.createIcons(); }
+  }
+
+  const r = btn.getBoundingClientRect();
+  panel.style.minWidth = '220px';
+  panel.style.left = 'auto';
+  panel.style.right = Math.max(8, window.innerWidth - r.right) + 'px';
+  panel.style.top = (r.bottom + 6) + 'px';
+
+  panel.querySelectorAll('[data-mode]').forEach(opt => {
+    opt.addEventListener('click', () => {
+      setCalDisplayMode(opt.dataset.mode);
+      closeCalViewPicker();
+    });
+  });
+  panel.querySelector('[data-today]')?.addEventListener('click', () => {
+    closeCalViewPicker();
+    calToday();
+  });
+  panel.querySelector('[data-search]')?.addEventListener('click', () => {
+    closeCalViewPicker();
+    toggleCalHeaderSearch(true);
+  });
+  setTimeout(() => document.addEventListener('click', onCalViewPickerOutside), 0);
+}
+function onCalViewPickerOutside(e) {
+  if (calViewPickerEl && !calViewPickerEl.contains(e.target) && !e.target.closest('#cal-viewmode-btn')) {
+    closeCalViewPicker();
+  }
+}
+function closeCalViewPicker() {
+  if (calViewPickerEl) { calViewPickerEl.remove(); calViewPickerEl = null; }
+  document.removeEventListener('click', onCalViewPickerOutside);
+}
+
+async function setCalDisplayMode(mode, opts = {}) {
+  if (!CAL_VIEW_MODES.some(m => m.id === mode)) return;
+  const prev = calDisplayMode;
+  calDisplayMode = mode;
+  if (opts.persist !== false) {
+    try { localStorage.setItem('cal_display_mode', mode); } catch {}
+  }
+
+  if (opts.anchor) calWeekAnchor = opts.anchor;
+  else if (mode === 'day' || mode === 'week') {
+    if (selectedCalDate) calWeekAnchor = new Date(selectedCalDate + 'T00:00');
+    else if (prev === 'month') calWeekAnchor = new Date(calYear, calMonth, Math.min(new Date().getDate(), new Date(calYear, calMonth + 1, 0).getDate()));
+  }
+  if (mode === 'month' || mode === 'agenda') {
+    calYear = calWeekAnchor.getFullYear();
+    calMonth = calWeekAnchor.getMonth();
+  }
+  if (mode === 'day') selectedCalDate = localDateStr(calWeekAnchor);
+  // The agenda isn't bound to a single month, so a month picker beside it
+  // has nothing left to pick — it closes itself on the way in.
+  if (mode === 'agenda') closeCalMiniDrawer();
+
+  if (!opts.skipReload) await loadCalEvents();
+  renderCal();
+}
+
+async function onCalSearchInput(value) {
+  const q = value.trim();
+  const startingSearch = q && !calSearchQuery;
+  calSearchQuery = q;
+  clearTimeout(calSearchDebounce);
+  if (startingSearch) {
+    calSearchPool = await API.events().catch(() => []);
+  }
+  calSearchDebounce = setTimeout(() => renderCalSearchDropdown(), startingSearch ? 0 : 120);
+}
+function renderCalSearchDropdown() {
+  const dd = document.getElementById('cal-search-dropdown');
+  if (!dd) return;
+  if (!calSearchQuery) {
+    dd.hidden = true;
+    dd.innerHTML = '';
+    return;
+  }
+  const q = calSearchQuery.toLowerCase();
+  let hits = calSearchPool.filter(e =>
+    (e.title || '').toLowerCase().includes(q) || (e.description || '').toLowerCase().includes(q)
+  );
+  if (activeCategoryFilter !== 'all') {
+    hits = hits.filter(e => (e.event_type || 'other') === activeCategoryFilter);
+  }
+  hits.sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.time || '').localeCompare(b.time || ''));
+  hits = hits.slice(0, 12);
+
+  if (!hits.length) {
+    dd.innerHTML = `<div class="cal-search-empty">Kein Termin passt zu „${escapeHtml(calSearchQuery)}“.</div>`;
+  } else {
+    dd.innerHTML = hits.map(e => {
+      const d = e.date ? new Date(e.date + 'T00:00').toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'short' }) : '';
+      const meta = [d, e.time ? e.time + ' Uhr' : null].filter(Boolean).join(' · ');
+      return `<button type="button" class="cal-search-hit" onclick="onCalSearchHit(${e.id})">
+        <div style="width:8px;height:8px;border-radius:50%;background:${calEventColors(e).bg};flex-shrink:0;"></div>
+        <div style="min-width:0;flex:1;">
+          <div class="cal-search-hit-title">${escapeHtml(e.title)}</div>
+          <div class="cal-search-hit-meta">${escapeHtml(meta)}</div>
+        </div>
+      </button>`;
+    }).join('');
+  }
+  dd.hidden = false;
+}
+async function onCalSearchHit(id) {
+  const pool = calSearchPool.length ? calSearchPool : calEvents;
+  const ev = pool.find(e => e.id === id);
+  toggleCalHeaderSearch(false);
+  if (ev && ev.date) {
+    const d = new Date(ev.date.slice(0, 10) + 'T00:00');
+    calWeekAnchor = d;
+    calYear = d.getFullYear();
+    calMonth = d.getMonth();
+    selectedCalDate = ev.date.slice(0, 10);
+    if (calDisplayMode === 'month') await setCalDisplayMode('agenda', { persist: false });
+    else { await loadCalEvents(); renderCal(); }
+  }
+  openCalEventDetail(id, pool);
+}
+function clearCalSearch() {
+  calSearchQuery = '';
+  const input = document.getElementById('cal-header-search-input');
+  if (input) input.value = '';
+  const dd = document.getElementById('cal-search-dropdown');
+  if (dd) { dd.hidden = true; dd.innerHTML = ''; }
+}
+function toggleCalHeaderSearch(force) {
+  calHeaderSearchOpen = typeof force === 'boolean' ? force : !calHeaderSearchOpen;
+  const titleBlock = document.getElementById('cal-title-block');
+  const searchWrap = document.getElementById('cal-header-search-wrap');
+  const input = document.getElementById('cal-header-search-input');
+  const searchBtn = document.getElementById('cal-header-search-btn');
+  closeCalMiniDrawer();
+  closeCalViewPicker();
+  if (calHeaderSearchOpen) {
+    if (titleBlock) titleBlock.style.display = 'none';
+    if (searchWrap) searchWrap.style.display = 'flex';
+    if (searchBtn) searchBtn.style.display = 'none';
+    if (input) { input.value = calSearchQuery; input.focus(); }
+    if (calSearchQuery) renderCalSearchDropdown();
+  } else {
+    if (titleBlock) titleBlock.style.display = 'flex';
+    if (searchWrap) searchWrap.style.display = 'none';
+    if (searchBtn) searchBtn.style.display = '';
+    clearCalSearch();
+  }
+  if (window.lucide) lucide.createIcons();
+}
+
+async function init_calendar() {
+  paintCalModeChrome();
+  syncCalTodayBtn();
+  const [, , me] = await Promise.all([
+    loadCalEvents(),
+    loadCalSubjects(),
+    API.me().catch(() => null),
+  ]);
+  calCurrentUser = me;
+  if (!selectedCalDate) {
+    const t = new Date();
+    if (calDisplayMode === 'day' || (t.getFullYear() === calYear && t.getMonth() === calMonth)) {
+      selectedCalDate = localDateStr(t);
+      calWeekAnchor = t;
+    }
+  }
+  const dot = document.getElementById('cal-filter-dot');
+  if (dot) dot.style.display = activeCategoryFilter !== 'all' ? 'block' : 'none';
+  renderCal();
+  initCalSwipe();
+  startCalPolling();
+}
+
+function startCalPolling() {
+  if (calPollInterval) clearInterval(calPollInterval);
+  calPollInterval = setInterval(async () => {
+    if (!document.getElementById('page-calendar')) { clearInterval(calPollInterval); calPollInterval = null; return; }
+    if (document.hidden) return;
+    let fresh;
+    try { fresh = await _fetchCalEventsForMode(); }
+    catch { return; }
+    if (!fresh || !document.getElementById('page-calendar')) return;
+    if (JSON.stringify(fresh) !== JSON.stringify(calEvents)) {
+      calEvents = fresh;
+      renderCal();
+    }
+  }, 15000);
+}
+
+// Month keys already fetched, so a swipe can draw the neighbouring period
+// immediately instead of waiting on the network. null means a request is
+// already in flight. Cleared after an edit so a neighbour isn't stale.
+const calPeriodCache = new Map();
+let calSwipeBusy = false;
+let calSwipeTrack = null;
+
+function calMonthKey(y, m) {
+  return y + '-' + String(m + 1).padStart(2, '0');
+}
+function stashCal() {
+  return {
+    calYear, calMonth,
+    calWeekAnchor: new Date(calWeekAnchor.getTime()),
+    calEvents, selectedCalDate,
+  };
+}
+function unstashCal(s) {
+  calYear = s.calYear;
+  calMonth = s.calMonth;
+  calWeekAnchor = s.calWeekAnchor;
+  calEvents = s.calEvents;
+  selectedCalDate = s.selectedCalDate;
+}
+function monthKeysForCurrentMode() {
+  if (calDisplayMode === 'week') return [..._calMonthsForWeek(calWeekAnchor)];
+  if (calDisplayMode === 'day') return [localDateStr(calWeekAnchor).slice(0, 7)];
+  return [calMonthKey(calYear, calMonth)];
+}
+function cachedEventsForCurrentMode() {
+  const merged = new Map();
+  let any = false;
+  monthKeysForCurrentMode().forEach(key => {
+    const list = calPeriodCache.get(key);
+    if (!Array.isArray(list)) return;
+    any = true;
+    list.forEach(e => merged.set(e.id, e));
+  });
+  return any ? [...merged.values()] : [];
+}
+function shiftCalBy(dir) {
+  if (calDisplayMode === 'week') {
+    calWeekAnchor = _calAddDays(calWeekAnchor, dir * 7);
+  } else if (calDisplayMode === 'day') {
+    calWeekAnchor = _calAddDays(calWeekAnchor, dir);
+    selectedCalDate = localDateStr(calWeekAnchor);
+  } else {
+    calMonth += dir;
+    if (calMonth < 0) { calMonth = 11; calYear--; }
+    if (calMonth > 11) { calMonth = 0; calYear++; }
+    calWeekAnchor = new Date(calYear, calMonth, Math.min(calWeekAnchor.getDate(), 28));
+    selectedCalDate = null;
+  }
+  if (calDisplayMode === 'week' || calDisplayMode === 'day') {
+    calYear = calWeekAnchor.getFullYear();
+    calMonth = calWeekAnchor.getMonth();
+  }
+  calEvents = cachedEventsForCurrentMode();
+}
+function neighborKeySets() {
+  const saved = stashCal();
+  const sets = [-1, 1].map(dir => {
+    shiftCalBy(dir);
+    const keys = monthKeysForCurrentMode();
+    unstashCal(saved);
+    return { dir, keys };
+  });
+  return sets;
+}
+function prefetchCalNeighbors() {
+  if (calDisplayMode === 'agenda') return;
+  neighborKeySets().forEach(({ dir, keys }) => {
+    keys.forEach(key => {
+      if (Array.isArray(calPeriodCache.get(key)) || calPeriodCache.get(key) === null) return;
+      calPeriodCache.set(key, null);
+      API.events(key).then(list => {
+        calPeriodCache.set(key, list || []);
+        refreshOpenSwipePane(dir);
+      }).catch(() => { if (calPeriodCache.get(key) === null) calPeriodCache.delete(key); });
+    });
+  });
+}
+function paintSwipePane(pane) {
+  if (calDisplayMode === 'month') {
+    const grid = pane.querySelector('#cal-grid');
+    if (grid) { grid.innerHTML = ''; _buildCalGrid(grid); }
+    const compact = pane.querySelector('#cal-compact-grid');
+    if (compact) renderCompactMonth(compact);
+    const list = pane.querySelector('#cal-month-events-list');
+    if (list) renderMonthEventList({ list, countEl: pane.querySelector('#cal-month-events-count') });
+  } else if (calDisplayMode === 'week' || calDisplayMode === 'day') {
+    renderCalTimeGrid(calDisplayMode === 'day' ? 1 : 7, pane, { preserveScroll: true });
+  }
+}
+function fillSwipePane(pane, dir) {
+  const saved = stashCal();
+  try {
+    shiftCalBy(dir);
+    paintSwipePane(pane);
+  } finally {
+    unstashCal(saved);
+  }
+}
+function refreshOpenSwipePane(dir) {
+  if (!calSwipeTrack || !calSwipeTrack.isConnected) return;
+  const pane = dir < 0 ? calSwipeTrack._prev : calSwipeTrack._next;
+  if (!pane) return;
+  fillSwipePane(pane, dir);
+  const viewEl = calSwipeTrack.parentNode;
+  if (viewEl) {
+    copyScroll(viewEl, pane, '#cal-time-scroll');
+    scrollMonthEventsToToday(pane);
+  }
+}
+function copyScroll(fromRoot, toRoot, sel) {
+  const a = fromRoot.querySelector(sel);
+  const b = toRoot.querySelector(sel);
+  if (a && b) b.scrollTop = a.scrollTop;
+}
+function makeSwipePane(viewEl, dir) {
+  const pane = viewEl.cloneNode(true);
+  pane.querySelectorAll('.cal-swipe-track').forEach(n => n.remove());
+  pane.classList.add('cal-swipe-pane');
+  // The id stays. Tablet and desktop layout (small month, hidden big grid)
+  // is keyed off #cal-view-month, and a clone without it would fall back to
+  // the phone layout while the finger is down. The live node is earlier in
+  // the tree, so getElementById still finds it.
+  pane.hidden = false;
+  if (dir !== 0) fillSwipePane(pane, dir);
+  return pane;
+}
+function syncSwipeScroll(viewEl, current) {
+  // Scroll offsets don't survive cloneNode, and they don't stick until the
+  // pane has a real height. Hours stay where the finger left them; the
+  // current month list does too. Neighbour lists open on today.
+  viewEl.offsetHeight;
+  [current.previousElementSibling, current, current.nextElementSibling].forEach(pane => {
+    if (!pane) return;
+    copyScroll(viewEl, pane, '#cal-time-scroll');
+    if (pane === current) copyScroll(viewEl, pane, '#cal-month-events');
+    else scrollMonthEventsToToday(pane);
+  });
+}
+function calSwipeGap(viewEl) {
+  // Each resting page already sits inside the body's side padding. Between
+  // two pages that padding has to exist twice, otherwise the cards touch.
+  const body = viewEl.closest('.cal-body');
+  if (!body) return 40;
+  const cs = getComputedStyle(body);
+  const gap = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+  return gap > 0 ? gap : 40;
+}
+function buildSwipeTrack(viewEl) {
+  const width = viewEl.clientWidth;
+  if (!width) return null;
+  const gap = calSwipeGap(viewEl);
+  const stride = width + gap;
+  const prev = makeSwipePane(viewEl, -1);
+  const current = makeSwipePane(viewEl, 0);
+  const next = makeSwipePane(viewEl, 1);
+  [prev, current, next].forEach(pane => {
+    pane.style.width = width + 'px';
+    pane.style.flex = '0 0 ' + width + 'px';
+  });
+  const track = document.createElement('div');
+  track.className = 'cal-swipe-track';
+  track.append(prev, current, next);
+  track._prev = prev;
+  track._next = next;
+  track._current = current;
+  track._width = width;
+  track._stride = stride;
+  track.style.gap = gap + 'px';
+  track.style.width = (width * 3 + gap * 2) + 'px';
+  track.style.transition = 'none';
+  track.style.transform = `translate3d(${-stride}px,0,0)`;
+  viewEl.appendChild(track);
+  syncSwipeScroll(viewEl, current);
+  if (window.lucide) lucide.createIcons();
+  calSwipeTrack = track;
+  return track;
+}
+function setSwipeX(track, dx) {
+  track.style.transition = 'none';
+  track.style.transform = `translate3d(${-track._stride + dx}px,0,0)`;
+}
+function animateSwipeTo(track, x, ms) {
+  return new Promise(resolve => {
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      track.removeEventListener('transitionend', onEnd);
+      resolve();
+    };
+    const onEnd = (e) => { if (e.target === track && e.propertyName === 'transform') finish(); };
+    track.addEventListener('transitionend', onEnd);
+    track.style.transition = `transform ${ms}ms cubic-bezier(0.22, 0.8, 0.28, 1)`;
+    track.style.transform = `translate3d(${x}px,0,0)`;
+    setTimeout(finish, ms + 60);
+  });
+}
+function teardownSwipe(track) {
+  if (track && track.parentNode) track.remove();
+  if (calSwipeTrack === track) calSwipeTrack = null;
+}
+
+function initCalSwipe() {
+  [document.getElementById('cal-view-month'), document.getElementById('cal-view-time')].filter(Boolean).forEach(el => {
+    if (el._calSwipe) return;
+    el._calSwipe = true;
+    let tracking = false, horizontal = false, startX = 0, startY = 0, dx = 0;
+    let lastDx = 0, lastT = 0, velocity = 0, track = null;
+
+    const reset = () => { tracking = false; horizontal = false; track = null; };
+
+    el.addEventListener('touchstart', (e) => {
+      if (calSwipeBusy || calDisplayMode === 'agenda' || e.touches.length !== 1) return;
+      const x = e.touches[0].clientX;
+      if (x < 16) return;
+      tracking = true;
+      horizontal = false;
+      startX = x;
+      startY = e.touches[0].clientY;
+      dx = 0; lastDx = 0; velocity = 0; lastT = performance.now();
+      track = null;
+      prefetchCalNeighbors();
+    }, { passive: true });
+
+    el.addEventListener('touchmove', (e) => {
+      if (!tracking) return;
+      const x = e.touches[0].clientX;
+      const y = e.touches[0].clientY;
+      dx = x - startX;
+      const dy = y - startY;
+      if (!horizontal) {
+        if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+        // A vertical drag belongs to the hour grid or the event list.
+        if (Math.abs(dy) > Math.abs(dx)) { reset(); return; }
+        horizontal = true;
+        track = buildSwipeTrack(el);
+        if (!track) { reset(); return; }
+      }
+      if (e.cancelable) e.preventDefault();
+      const now = performance.now();
+      const stride = track._stride;
+      dx = Math.max(-stride, Math.min(stride, dx));
+      velocity = (dx - lastDx) / Math.max(1, now - lastT);
+      lastDx = dx;
+      lastT = now;
+      setSwipeX(track, dx);
+    }, { passive: false });
+
+    const finish = async (commit) => {
+      if (!track) { reset(); return; }
+      const stride = track._stride;
+      const dir = dx < 0 ? 1 : -1;
+      const target = commit ? (dir === 1 ? -2 * stride : 0) : -stride;
+      const remaining = Math.abs(target - (-stride + dx));
+      const ms = Math.max(160, Math.min(320, remaining * 0.45));
+      const held = track;
+      reset();
+      calSwipeBusy = true;
+      const nav = commit ? navigatePeriod(dir, { fromSwipe: true }) : null;
+      await animateSwipeTo(held, target, ms);
+      if (nav) await nav;
+      teardownSwipe(held);
+      calSwipeBusy = false;
+    };
+
+    el.addEventListener('touchend', () => {
+      if (!tracking || !horizontal) { reset(); return; }
+      const width = track ? track._width : el.clientWidth;
+      const flung = Math.abs(velocity) > 0.4 && Math.sign(velocity) === Math.sign(dx || velocity);
+      const commit = Math.abs(dx) > Math.min(width * 0.28, 96) || (flung && Math.abs(dx) > 28);
+      finish(commit && dx !== 0);
+    }, { passive: true });
+
+    el.addEventListener('touchcancel', () => {
+      if (horizontal && track) finish(false);
+      else reset();
+    }, { passive: true });
+  });
+}
+
+async function loadCalSubjects() {
+  try { calSubjects = await API.subjects(); }
+  catch { calSubjects = []; }
+}
+
+async function _fetchCalEventsForMode() {
+  // Always refreshes the months on screen and remembers them, so the next
+  // swipe can paint that period from memory while the finger is still down.
+  const fetchMonth = async (key) => {
+    const list = await API.events(key).catch(() => []);
+    calPeriodCache.set(key, list);
+    return list;
+  };
+  // Agenda lists the whole calendar, so it asks for every event instead of
+  // a single month like the date-bound views do.
+  if (calDisplayMode === 'agenda') return await API.events();
+  if (calDisplayMode === 'week') {
+    const months = _calMonthsForWeek(calWeekAnchor);
+    const results = await Promise.all([...months].map(m => fetchMonth(m)));
+    const merged = new Map();
+    results.flat().forEach(e => merged.set(e.id, e));
+    return [...merged.values()];
+  }
+  if (calDisplayMode === 'day') {
+    const ds = localDateStr(calWeekAnchor);
+    return await fetchMonth(ds.slice(0, 7));
+  }
+  return await fetchMonth(calMonthKey(calYear, calMonth));
+}
+
+async function loadCalEvents() {
+  try { calEvents = await _fetchCalEventsForMode(); }
+  catch { calEvents = []; }
+  prefetchCalNeighbors();
+}
 
 function setCalCategoryFilter(cat) {
   activeCategoryFilter = cat;
+  try { localStorage.setItem('cal_category_filter', cat); } catch {}
   const dot = document.getElementById('cal-filter-dot');
-  if (dot) dot.style.display = (cat === 'all' && calViewScope === 'month' && !calSearchQuery) ? 'none' : 'block';
-  if (calViewScope !== 'all' && !calSearchQuery) renderCalGridOnly();
-  renderEventList();
-}
-
-async function setCalViewScope(scope) {
-  if (scope === calViewScope) return;
-  calViewScope = scope;
-  try { localStorage.setItem('cal_view_scope', scope); } catch {}
-  selectedCalDate = null;
-  const chevron = document.getElementById('cal-title-chevron');
-  if (chevron) chevron.style.transform = scope === 'all' ? 'rotate(180deg)' : '';
-  const dot = document.getElementById('cal-filter-dot');
-  if (dot) dot.style.display = (scope === 'all' || activeCategoryFilter !== 'all' || calSearchQuery) ? 'block' : 'none';
-  await loadCalEvents();
+  if (dot) dot.style.display = cat === 'all' ? 'none' : 'block';
   renderCal();
 }
 
@@ -805,22 +1401,14 @@ const CAL_FILTER_OPTIONS = [
   { value: 'personal', label: 'Persönlich' },
   { value: 'other', label: 'Sonstige' },
 ];
-let calFilterMenuEl = null;
 
-// A plain icon button in the header opens this instead of a labelled
-// dropdown — reuses the app's .m3-dropdown-panel look (same portal-to-body
-// positioning trick) so it still matches every other dropdown, just
-// without a permanently-visible text trigger taking up header space.
 function toggleCalFilterMenu(btn) {
   if (calFilterMenuEl) { closeCalFilterMenu(); return; }
-
+  closeCalViewPicker();
   const panel = document.createElement('div');
   panel.className = 'm3-dropdown-panel dd-open';
+  panel.style.maxHeight = '360px';
   panel.innerHTML = `
-    <div class="cal-filter-scope">
-      <button type="button" data-scope="month" class="${calViewScope==='month'?'active':''}">Monat</button>
-      <button type="button" data-scope="all" class="${calViewScope==='all'?'active':''}">Agenda</button>
-    </div>
     <div style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;opacity:0.5;padding:4px 12px 2px;">Kategorie</div>
     ${CAL_FILTER_OPTIONS.map(o =>
       `<div class="m3-dropdown-opt${o.value === activeCategoryFilter ? ' dd-sel' : ''}" data-value="${o.value}">${o.label}</div>`
@@ -828,55 +1416,27 @@ function toggleCalFilterMenu(btn) {
   `;
   document.body.appendChild(panel);
   calFilterMenuEl = panel;
-
-  panel.querySelectorAll('[data-scope]').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      setCalViewScope(btn.dataset.scope);
-      closeCalFilterMenu();
-    });
-  });
-
   const r = btn.getBoundingClientRect();
   panel.style.minWidth = '190px';
   panel.style.left = 'auto';
-  panel.style.right = (window.innerWidth - r.right) + 'px';
-  const spaceBelow = window.innerHeight - r.bottom - 8;
-  if (spaceBelow >= 220 || spaceBelow >= r.top) {
-    panel.style.top = (r.bottom + 6) + 'px';
-  } else {
-    panel.style.bottom = (window.innerHeight - r.top + 6) + 'px';
-  }
-
+  panel.style.right = Math.max(8, window.innerWidth - r.right) + 'px';
+  panel.style.top = (r.bottom + 6) + 'px';
   panel.querySelectorAll('.m3-dropdown-opt').forEach(opt => {
     opt.addEventListener('click', () => {
       setCalCategoryFilter(opt.dataset.value);
       closeCalFilterMenu();
     });
   });
-
   setTimeout(() => document.addEventListener('click', onCalFilterMenuOutsideClick), 0);
 }
-
 function onCalFilterMenuOutsideClick(e) {
   if (calFilterMenuEl && !calFilterMenuEl.contains(e.target) && !e.target.closest('#cal-filter-btn')) {
     closeCalFilterMenu();
   }
 }
-
 function closeCalFilterMenu() {
   if (calFilterMenuEl) { calFilterMenuEl.remove(); calFilterMenuEl = null; }
   document.removeEventListener('click', onCalFilterMenuOutsideClick);
-}
-
-function selectDay(dateStr) {
-  if (selectedCalDate === dateStr) {
-    selectedCalDate = null; // Toggle off if clicked again
-  } else {
-    selectedCalDate = dateStr;
-  }
-  renderCalGridOnly();
-  renderEventList();
 }
 
 async function calToday() {
@@ -885,236 +1445,266 @@ async function calToday() {
   calMonth = today.getMonth();
   calWeekAnchor = today;
   selectedCalDate = localDateStr(today);
+  syncCalTodayBtn();
+  if (calDisplayMode === 'agenda') { scrollAgendaToToday('smooth'); return; }
   await loadCalEvents();
   renderCal();
+  if (calMiniOpen) {
+    calMiniYear = calYear;
+    calMiniMonth = calMonth;
+    renderCalMiniDrawer();
+  }
 }
+async function goToToday() { return calToday(); }
 
 async function calNav(dir) {
-  if (calDisplayMode === 'week') { await calWeekNav(dir); return; }
-  calMonth += dir;
-  if (calMonth < 0) { calMonth = 11; calYear--; }
-  if (calMonth > 11) { calMonth = 0; calYear++; }
-  selectedCalDate = null;
-  await loadCalEvents();
-  renderCal(dir);
+  return navigatePeriod(dir);
 }
-
-async function calWeekNav(dir) {
-  calWeekAnchor = _calAddDays(calWeekAnchor, dir * 7);
-  await loadCalEvents();
-  renderCal(dir);
-}
-
-// Switches between the existing month-grid+list layout and the new
-// Google Calendar-style hourly week grid. 'all' (every upcoming event,
-// no day-grid at all) has no meaning for a specific week, so entering
-// week mode quietly drops back to 'month' scope first.
-async function toggleCalDisplayMode() {
-  calDisplayMode = calDisplayMode === 'week' ? 'month' : 'week';
-  try { localStorage.setItem('cal_display_mode', calDisplayMode); } catch {}
+async function navigatePeriod(dir, opts = {}) {
+  if (calDisplayMode === 'agenda') return;
+  const timeScroll = document.getElementById('cal-time-scroll');
+  const keptHour = opts.fromSwipe && timeScroll ? timeScroll.scrollTop : null;
   if (calDisplayMode === 'week') {
-    if (calViewScope === 'all') {
-      calViewScope = 'month';
-      try { localStorage.setItem('cal_view_scope', 'month'); } catch {}
-    }
-    calWeekAnchor = selectedCalDate ? new Date(selectedCalDate + 'T00:00') : new Date();
-  } else {
+    calWeekAnchor = _calAddDays(calWeekAnchor, dir * 7);
     calYear = calWeekAnchor.getFullYear();
     calMonth = calWeekAnchor.getMonth();
+  } else if (calDisplayMode === 'day') {
+    calWeekAnchor = _calAddDays(calWeekAnchor, dir);
+    calYear = calWeekAnchor.getFullYear();
+    calMonth = calWeekAnchor.getMonth();
+    selectedCalDate = localDateStr(calWeekAnchor);
+  } else {
+    calMonth += dir;
+    if (calMonth < 0) { calMonth = 11; calYear--; }
+    if (calMonth > 11) { calMonth = 0; calYear++; }
+    calWeekAnchor = new Date(calYear, calMonth, Math.min(calWeekAnchor.getDate(), 28));
+    if (calDisplayMode === 'month') selectedCalDate = null;
   }
   await loadCalEvents();
-  renderCal();
+  renderCal(opts.fromSwipe ? 0 : dir);
+  if (keptHour != null) {
+    const sc = document.getElementById('cal-time-scroll');
+    if (sc) sc.scrollTop = keptHour;
+  }
+  if (calMiniOpen) {
+    calMiniYear = calYear;
+    calMiniMonth = calMonth;
+    renderCalMiniDrawer();
+  }
 }
 
 function renderCal(dir) {
-  const leftPane = document.querySelector('.cal-left-pane');
-  const navRow = document.querySelector('.cal-nav-row');
-  const mainContainer = document.querySelector('.cal-main-container');
-  const weekView = document.getElementById('cal-week-view');
+  syncCalTodayBtn();
+  const modeMeta = CAL_VIEW_MODES.find(m => m.id === calDisplayMode) || CAL_VIEW_MODES[3];
   const viewIcon = document.getElementById('cal-viewmode-icon');
   const viewBtn = document.getElementById('cal-viewmode-btn');
+  if (viewIcon) viewIcon.setAttribute('data-lucide', modeMeta.icon);
+  if (viewBtn) viewBtn.title = 'Ansicht: ' + modeMeta.label;
+
+  const monthEl = document.getElementById('cal-view-month');
+  const timeEl = document.getElementById('cal-view-time');
+  const agendaEl = document.getElementById('cal-view-agenda');
+  if (monthEl) monthEl.hidden = calDisplayMode !== 'month';
+  if (timeEl) timeEl.hidden = !(calDisplayMode === 'week' || calDisplayMode === 'day');
+  if (agendaEl) agendaEl.hidden = calDisplayMode !== 'agenda';
+
+  // Agenda shows every month at once, so a single month in the title (and
+  // the month picker + prev/next that go with it) would be a lie there.
+  const isAgenda = calDisplayMode === 'agenda';
+  const titleEl = document.getElementById('cal-month-title');
+  if (titleEl) titleEl.textContent = isAgenda ? 'Alle Termine' : CAL_MONTHS[calMonth] + ' ' + calYear;
+  const titleBtn = document.getElementById('cal-title-block');
+  if (titleBtn) {
+    titleBtn.disabled = isAgenda;
+    titleBtn.title = calDisplayMode === 'month' ? 'Termine' : 'Monatsübersicht';
+  }
+  const calBody = document.getElementById('cal-body');
+  if (calBody) calBody.dataset.calMode = calDisplayMode;
   const chevron = document.getElementById('cal-title-chevron');
+  if (chevron) chevron.style.display = isAgenda ? 'none' : '';
+  document.querySelectorAll('.cal-period-nav').forEach(btn => {
+    btn.style.display = isAgenda ? 'none' : '';
+  });
 
-  if (viewIcon) viewIcon.setAttribute('data-lucide', calDisplayMode === 'week' ? 'layout-grid' : 'calendar-days');
-  if (viewBtn) viewBtn.title = calDisplayMode === 'week' ? 'Monatsansicht' : 'Wochenansicht';
-
-  // A search result list spans however many months match, same as Agenda —
-  // neither a single month's grid, the week grid, nor stepping through
-  // either makes sense while search is active, so all three hide, leaving
-  // just the filter/view-mode buttons.
-  const showWeek = calDisplayMode === 'week' && !calSearchQuery;
-  const showGrid = !showWeek && calViewScope === 'month' && !calSearchQuery;
-
-  if (mainContainer) mainContainer.style.display = showWeek ? 'none' : '';
-  if (weekView) weekView.style.display = showWeek ? 'block' : 'none';
-  // The chevron only makes sense as a toggle for the mini month-grid, so
-  // it (and the pointer cursor inviting a tap) disappears whenever tapping
-  // the title wouldn't do anything.
-  if (chevron) chevron.style.display = (calSearchQuery || showWeek) ? 'none' : '';
-  const titleBlock = document.getElementById('cal-title-block');
-  if (titleBlock) titleBlock.style.cursor = (calSearchQuery || showWeek) ? 'default' : 'pointer';
-
-  if (showWeek) {
-    const monday = _calMonday(calWeekAnchor);
-    const sunday = _calAddDays(monday, 6);
-    const MONTHS_SHORT = ['Jan.','Feb.','März','Apr.','Mai','Juni','Juli','Aug.','Sept.','Okt.','Nov.','Dez.'];
-    document.getElementById('cal-month-title').textContent = monday.getMonth() === sunday.getMonth()
-      ? `${monday.getDate()}. – ${sunday.getDate()}. ${MONTHS_SHORT[monday.getMonth()]}`
-      : `${monday.getDate()}. ${MONTHS_SHORT[monday.getMonth()]} – ${sunday.getDate()}. ${MONTHS_SHORT[sunday.getMonth()]}`;
-    document.getElementById('cal-year-label').textContent = String(sunday.getFullYear());
-    if (navRow) [...navRow.children].forEach(c => { c.style.display = ''; });
-    renderCalWeekView();
-    if (window.lucide) lucide.createIcons();
-    return;
+  if (calDisplayMode === 'month') {
+    // dir 0 is a finger swipe: the track is already sliding, so the grid
+    // underneath must not fade in on its own.
+    renderCalGridOnly(dir == null, dir);
+    renderCompactMonth();
+    renderMonthEventList();
   }
-
-  if (!showGrid) {
-    if (leftPane) leftPane.style.display = 'none';
-    document.getElementById('cal-month-title').textContent = calSearchQuery ? 'Suche' : 'Agenda';
-    document.getElementById('cal-year-label').textContent = calSearchQuery ? '' : 'Kommende Termine';
-    if (navRow) [...navRow.children].forEach(c => {
-      if (c.id !== 'cal-filter-btn' && c.id !== 'cal-header-search-btn' && c.id !== 'cal-viewmode-btn') c.style.display = 'none';
-    });
-  } else {
-    if (leftPane) leftPane.style.display = '';
-    const months = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
-    document.getElementById('cal-month-title').textContent = months[calMonth];
-    document.getElementById('cal-year-label').textContent = String(calYear);
-    if (navRow) [...navRow.children].forEach(c => { c.style.display = ''; });
-    renderCalGridOnly(true, dir);
+  if (calDisplayMode === 'week' || calDisplayMode === 'day') {
+    renderCalTimeGrid(calDisplayMode === 'day' ? 1 : 7);
+    renderMonthEventList();
   }
-  renderEventList();
+  if (calDisplayMode === 'agenda') renderAgendaList();
+  if (calMiniOpen) renderCalMiniDrawer();
+  if (window.lucide) lucide.createIcons();
 }
 
-// animate: only for an actual month change (arrows, "Heute") — day-select
-// and category-filter re-renders call this without it, since fading the
-// whole grid on every single day tap would feel busier than helpful.
 function renderCalGridOnly(animate, dir) {
   const grid = document.getElementById('cal-grid');
   if (!grid) return;
-
   const build = () => { grid.innerHTML = ''; _buildCalGrid(grid); };
-
-  // A real month change (arrows, swipe) gets a directional slide — old
-  // month exits the way you navigated, new one enters from the other side.
-  // "Heute" and other non-directional refreshes (day-select, filter,
-  // background sync, after creating/editing something) keep the simpler
-  // fade+lift, or no animation at all for the quiet ones.
   if (dir) { slideNav(grid, dir, build); return; }
   if (animate) {
-    grid.classList.remove('cal-grid-enter');
-    void grid.offsetWidth;
-    grid.classList.add('cal-grid-enter');
+    grid.style.opacity = '0';
+    requestAnimationFrame(() => { grid.style.transition = 'opacity 0.18s ease'; grid.style.opacity = '1'; });
   }
   build();
 }
 
 function _buildCalGrid(grid) {
   const first = new Date(calYear, calMonth, 1);
-  const startDay = (first.getDay() + 6) % 7; // 0=Mo ... 6=So
+  const startDay = (first.getDay() + 6) % 7;
   const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
   const prevDays = new Date(calYear, calMonth, 0).getDate();
   const todayStr = localDateStr();
+  // Only as many weeks as the month actually touches — a fixed six rows
+  // left months like this one with a whole trailing row of nothing but
+  // greyed-out next-month days, and made every cell shorter for it.
+  const weeks = Math.ceil((startDay + daysInMonth) / 7);
+  const totalSlots = weeks * 7;
+  grid.style.setProperty('--cal-rows', String(weeks));
 
-  // Leading days from previous month
-  for (let i = startDay - 1; i >= 0; i--) {
-    const d = document.createElement('div');
-    d.className = 'cal-day muted';
-    d.innerHTML = `<span class="cal-day-num">${prevDays - i}</span>`;
-    grid.appendChild(d);
-  }
-
-  // Days of current month
-  for (let d = 1; d <= daysInMonth; d++) {
-    const dateStr = calYear + '-' + String(calMonth + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
-    // Same category filter as the events list below — a dot for an event
-    // that's currently filtered out would be showing something the list
-    // doesn't, so it disappears here too instead of just staying visible.
-    const covering = calEvents.filter(e =>
+  for (let i = 0; i < totalSlots; i++) {
+    let dateObj;
+    let inMonth = true;
+    if (i < startDay) {
+      dateObj = new Date(calYear, calMonth - 1, prevDays - startDay + i + 1);
+      inMonth = false;
+    } else if (i >= startDay + daysInMonth) {
+      dateObj = new Date(calYear, calMonth + 1, i - (startDay + daysInMonth) + 1);
+      inMonth = false;
+    } else {
+      dateObj = new Date(calYear, calMonth, i - startDay + 1);
+    }
+    const dateStr = localDateStr(dateObj);
+    const covering = inMonth ? calEvents.filter(e =>
       eventCoversDate(e, dateStr) &&
       (activeCategoryFilter === 'all' || (e.event_type || 'other') === activeCategoryFilter)
-    );
-    const hasEvent = covering.length > 0;
+    ) : [];
     const isToday = dateStr === todayStr;
     const isSelected = selectedCalDate === dateStr;
 
     const el = document.createElement('div');
     let cls = 'cal-day';
+    if (!inMonth) cls += ' muted';
     if (isToday) cls += ' today';
-    if (isSelected) cls += ' selected';
-
+    if (isSelected && inMonth) cls += ' selected';
     el.className = cls;
 
     let barsHtml = '';
-    if (hasEvent) {
-      // Real colored event bars in the cell itself, Google Calendar's
-      // month-grid look — enough of the title to recognize the event
-      // without opening the day, instead of an unlabeled dot.
-      const maxBars = 2;
-      const barsToShow = covering.slice(0, maxBars);
-      const barTags = barsToShow.map(ev => {
+    if (covering.length) {
+      const maxBars = 3;
+      const barTags = covering.slice(0, maxBars).map(ev => {
         const { bg, color } = calEventColors(ev);
-        return `<div class="cal-day-bar" style="background:${bg};color:${color};" title="${escapeHtml(ev.title)}" onclick="event.stopPropagation();calWeekEventClick(${ev.id})">${escapeHtml(ev.title)}</div>`;
+        const clip = calHasFiles(ev) ? calClipIcon() : '';
+        return `<div class="cal-day-bar" style="background:${bg};color:${color};" title="${escapeHtml(ev.title)}" onclick="event.stopPropagation();openCalEventDetail(${ev.id})">${clip}<span class="cal-day-bar-title">${escapeHtml(ev.title)}</span></div>`;
       }).join('');
-
-      let moreTag = '';
-      if (covering.length > maxBars) {
-        moreTag = `<div class="cal-day-more">+${covering.length - maxBars} weitere</div>`;
-      }
+      const moreTag = covering.length > maxBars
+        ? `<div class="cal-day-more">+${covering.length - maxBars} weitere</div>` : '';
       barsHtml = `<div class="cal-day-bars">${barTags}${moreTag}</div>`;
     }
-
-    el.innerHTML = `<span class="cal-day-num">${d}</span>${barsHtml}`;
-    el.onclick = () => selectDay(dateStr);
+    el.innerHTML = `<span class="cal-day-num">${dateObj.getDate()}</span>${barsHtml}`;
+    el.onclick = () => {
+      selectedCalDate = dateStr;
+      calWeekAnchor = new Date(dateStr + 'T00:00');
+      calYear = calWeekAnchor.getFullYear();
+      calMonth = calWeekAnchor.getMonth();
+      setCalDisplayMode('day', { persist: false });
+    };
     grid.appendChild(el);
   }
-
 }
 
-// --- Week view (hourly time-grid) ---
-
-const CAL_WEEK_PX_PER_MIN = 1.4;
-const CAL_WEEK_MIN_BLOCK_H = 30;
-// Calendar events only ever have a single optional time, never a duration
-// (unlike Timetable's lessons, which have real start/end times) — this is
-// purely a rendering assumption for how tall a timed event's block looks,
-// it isn't stored or sent anywhere.
-const CAL_WEEK_EVENT_DURATION_MIN = 60;
-const CAL_WEEKDAY_SHORT = ['Mo','Di','Mi','Do','Fr','Sa','So'];
-const CAL_TYPE_SOLID = { exam: '#ba1a1a', holiday: '#8a5a00', trip: '#006d3a', personal: '#006399', other: '#6750a4' };
-
-function calEventColors(ev) {
-  return { bg: CAL_TYPE_SOLID[ev.event_type] || CAL_TYPE_SOLID.other, color: '#ffffff' };
-}
-
-// Long-press-menu style click target for a week-view event: same
-// permission check the list's edit/delete menu already uses (personal
-// events are creator-only, everything else is open to the whole class) —
-// a read-only user gets a quick toast instead of a dead click.
-function calWeekEventClick(id) {
-  const ev = calEvents.find(e => e.id === id);
-  if (!ev) return;
-  if (calCanModifyEvent(ev)) openEditEventSheet(id);
-  else showToast(ev.title + (ev.time ? ' · ' + ev.time + ' Uhr' : ''));
-}
-
-function renderCalWeekView() {
-  const grid = document.getElementById('cal-week-grid');
-  const alldayRow = document.getElementById('cal-week-allday-row');
+// The small month next to the event list. A day in it picks that day in
+// the list instead of leaving the month view; a day from the neighbouring
+// month turns the page.
+function renderCompactMonth(target) {
+  const grid = target || document.getElementById('cal-compact-grid');
   if (!grid) return;
+  const first = new Date(calYear, calMonth, 1);
+  const startDay = (first.getDay() + 6) % 7;
+  const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+  const prevDays = new Date(calYear, calMonth, 0).getDate();
+  const todayStr = localDateStr();
+  const weeks = Math.ceil((startDay + daysInMonth) / 7);
+  let html = '';
+  for (let i = 0; i < weeks * 7; i++) {
+    let dateObj, inMonth = true;
+    if (i < startDay) {
+      dateObj = new Date(calYear, calMonth - 1, prevDays - startDay + i + 1);
+      inMonth = false;
+    } else if (i >= startDay + daysInMonth) {
+      dateObj = new Date(calYear, calMonth + 1, i - (startDay + daysInMonth) + 1);
+      inMonth = false;
+    } else {
+      dateObj = new Date(calYear, calMonth, i - startDay + 1);
+    }
+    const ds = localDateStr(dateObj);
+    const has = inMonth && calEvents.some(e =>
+      eventCoversDate(e, ds) &&
+      (activeCategoryFilter === 'all' || (e.event_type || 'other') === activeCategoryFilter)
+    );
+    let cls = 'cal-mini-cell';
+    if (!inMonth) cls += ' muted';
+    if (ds === todayStr) cls += ' today';
+    else if (inMonth && ds === selectedCalDate) cls += ' selected';
+    html += `<button type="button" class="${cls}" onclick="calCompactPickDay('${ds}')">${dateObj.getDate()}${has ? '<span class="cal-mini-dot"></span>' : ''}</button>`;
+  }
+  grid.innerHTML = html;
+}
 
-  const monday = _calMonday(calWeekAnchor);
-  const days = Array.from({ length: 7 }, (_, i) => _calAddDays(monday, i));
+async function calCompactPickDay(dateStr) {
+  const d = new Date(dateStr + 'T00:00');
+  selectedCalDate = dateStr;
+  calWeekAnchor = d;
+  if (d.getFullYear() !== calYear || d.getMonth() !== calMonth) {
+    await setCalDisplayMode('month', { anchor: d });
+    return;
+  }
+  renderCompactMonth();
+  document.querySelectorAll('#cal-month-events-list .cal-agenda-group, #cal-drawer-events-list .cal-agenda-group').forEach(g => {
+    g.classList.toggle('is-selected', g.dataset.date === dateStr);
+  });
+  scrollMonthEventsToToday();
+  scrollDrawerEvents();
+}
+
+function renderCalTimeGrid(dayCount, root, opts) {
+  const $ = (id) => (root || document).querySelector('#' + id);
+  const headerCols = $('cal-time-header-cols');
+  const alldayWrap = $('cal-time-allday');
+  const alldayCols = $('cal-time-allday-cols');
+  const hoursEl = $('cal-time-hours');
+  const colsEl = $('cal-time-cols');
+  const scrollEl = $('cal-time-scroll');
+  if (!headerCols || !colsEl || !hoursEl) return;
+
+  const hourH = calHourPx();
+  const days = dayCount === 1
+    ? [new Date(calWeekAnchor.getFullYear(), calWeekAnchor.getMonth(), calWeekAnchor.getDate())]
+    : Array.from({ length: 7 }, (_, i) => _calAddDays(_calMonday(calWeekAnchor), i));
   const dayStrs = days.map(d => localDateStr(d));
   const todayStr = localDateStr();
 
-  // Split each day's covering events into "timed" (gets a positioned block
-  // in the hourly grid) vs "all-day" (no time at all, or spans multiple
-  // days) — the same split Google Calendar's own all-day row above the
-  // grid uses. Keyed per-day so a multi-day event's chip correctly repeats
-  // across every day it covers instead of only appearing once.
+  // One variable drives the column count of the heading row, the all-day
+  // row and the hour grid at once, so the three can't fall out of sync.
+  const card = $('cal-time-card');
+  if (card) card.style.setProperty('--cal-days', String(dayCount));
+
+  headerCols.innerHTML = days.map((d, i) => {
+    const isToday = dayStrs[i] === todayStr;
+    const wd = CAL_WEEKDAY_SHORT[(d.getDay() + 6) % 7];
+    return `<button type="button" class="cal-time-day-head${isToday ? ' is-today' : ''}" onclick="calMiniPickDay('${dayStrs[i]}')">
+      <div class="wd">${wd}</div>
+      <div class="num">${d.getDate()}</div>
+    </button>`;
+  }).join('');
+
   const timedByDay = dayStrs.map(() => []);
-  const alldayEvents = new Map();
+  const alldayByDay = dayStrs.map(() => []);
   days.forEach((d, i) => {
     const ds = dayStrs[i];
     calEvents.forEach(ev => {
@@ -1122,237 +1712,329 @@ function renderCalWeekView() {
       if (activeCategoryFilter !== 'all' && (ev.event_type || 'other') !== activeCategoryFilter) return;
       const isMulti = Boolean(ev.end_date && ev.end_date !== ev.date);
       if (ev.time && !isMulti) timedByDay[i].push(ev);
-      else alldayEvents.set(ev.id + '-' + ds, ev);
+      else alldayByDay[i].push(ev);
     });
   });
 
-  alldayRow.innerHTML = alldayEvents.size ? '<div></div>' + days.map((d, i) => {
-    const ds = dayStrs[i];
-    return [...alldayEvents.values()].filter(ev => eventCoversDate(ev, ds)).map(ev => {
-      const { bg, color } = calEventColors(ev);
-      return `<div class="cal-week-allday-chip" style="background:${bg};color:${color};" onclick="calWeekEventClick(${ev.id})" title="${escapeHtml(ev.title)}">${escapeHtml(ev.title)}</div>`;
+  const hasAllday = alldayByDay.some(list => list.length);
+  if (alldayWrap && alldayCols) {
+    alldayWrap.hidden = !hasAllday;
+    alldayCols.innerHTML = days.map((d, i) => {
+      const chips = alldayByDay[i].map(ev => {
+        const { bg } = calEventColors(ev);
+        return `<div class="cal-allday-chip" style="background:${bg};" onclick="openCalEventDetail(${ev.id})" title="${escapeHtml(ev.title)}">${escapeHtml(ev.title)}</div>`;
+      }).join('');
+      return `<div class="cal-allday-cell">${chips}</div>`;
     }).join('');
-  }).join('') : '';
-
-  // Time range: like Timetable's week view, derive from what's actually
-  // scheduled this week (rounded out to whole hours), falling back to a
-  // sensible default range when there's nothing timed at all.
-  const allTimed = timedByDay.flat();
-  let minStart = allTimed.length ? Math.min(...allTimed.map(e => _calToMin(e.time))) : 8 * 60;
-  let maxEnd = allTimed.length ? Math.max(...allTimed.map(e => _calToMin(e.time) + CAL_WEEK_EVENT_DURATION_MIN)) : 16 * 60;
-  minStart = Math.floor(minStart / 60) * 60;
-  maxEnd = Math.max(Math.ceil(maxEnd / 60) * 60, minStart + 60);
-  const gridHeight = (maxEnd - minStart) * CAL_WEEK_PX_PER_MIN;
-
-  let hourLines = '';
-  for (let m = minStart; m <= maxEnd; m += 60) {
-    hourLines += `<div class="cal-week-hourline" style="top:${(m - minStart) * CAL_WEEK_PX_PER_MIN}px;"></div>`;
   }
 
-  let axisHtml = `<div style="position:relative;height:${gridHeight}px;">`;
-  for (let m = minStart; m <= maxEnd; m += 60) {
-    axisHtml += `<div class="cal-week-hour-label" style="top:${(m - minStart) * CAL_WEEK_PX_PER_MIN - 6}px;">${Math.floor(m / 60)}</div>`;
-  }
-  axisHtml += '</div>';
-
-  const headerHtml = '<div></div>' + days.map((d, i) => {
-    const isToday = dayStrs[i] === todayStr;
-    return `<div class="cal-week-day-header${isToday ? ' is-today' : ''}">${CAL_WEEKDAY_SHORT[i]} ${d.getDate()}.</div>`;
-  }).join('');
+  hoursEl.innerHTML = Array.from({ length: 24 }, (_, h) =>
+    `<div class="cal-time-hour-label">${h === 0 ? '' : String(h).padStart(2, '0') + ':00'}</div>`
+  ).join('');
+  hoursEl.style.height = (24 * hourH) + 'px';
 
   const now = new Date();
   const nowMin = now.getHours() * 60 + now.getMinutes();
 
-  const colsHtml = days.map((d, i) => {
+  colsEl.style.height = (24 * hourH) + 'px';
+  colsEl.innerHTML = days.map((d, i) => {
     const ds = dayStrs[i];
     const isToday = ds === todayStr;
     const blocks = timedByDay[i].map(ev => {
-      const top = (_calToMin(ev.time) - minStart) * CAL_WEEK_PX_PER_MIN;
-      const height = Math.max(CAL_WEEK_EVENT_DURATION_MIN * CAL_WEEK_PX_PER_MIN, CAL_WEEK_MIN_BLOCK_H);
-      const { bg, color } = calEventColors(ev);
-      return `<div class="cal-week-event-block" style="top:${top}px;height:${height}px;background:${bg};color:${color};" onclick="event.stopPropagation();calWeekEventClick(${ev.id})">`
-        + `<span>${escapeHtml(ev.title)}</span>`
-        + `<span class="cal-week-event-time">${ev.time} Uhr</span>`
-        + `</div>`;
+      const start = _calToMin(ev.time);
+      const top = (start / 60) * hourH;
+      const height = Math.max((CAL_WEEK_EVENT_DURATION_MIN / 60) * hourH, 28);
+      const { bg } = calEventColors(ev);
+      return `<div class="cal-time-block" style="top:${top}px;height:${height - 2}px;background:${bg};" onclick="event.stopPropagation();openCalEventDetail(${ev.id})">
+        <span>${escapeHtml(ev.title)}</span>
+        <span class="cal-time-block-time">${ev.time} Uhr</span>
+      </div>`;
     }).join('');
-    let nowLine = '';
-    if (isToday && nowMin >= minStart && nowMin <= maxEnd) {
-      nowLine = `<div class="cal-week-now-line" style="top:${(nowMin - minStart) * CAL_WEEK_PX_PER_MIN}px;"></div>`;
-    }
-    // Clicking empty space in a day column starts a new event pre-filled
-    // with that date — event blocks stop the click from bubbling here via
-    // stopPropagation above, so this only fires on a genuinely empty tap.
-    return `<div class="cal-week-day-col${isToday ? ' is-today' : ''}" style="height:${gridHeight}px;" onclick="openNewEventSheet('${ds}')">${hourLines}${blocks}${nowLine}</div>`;
+    const nowLine = (isToday)
+      ? `<div class="cal-now-line" style="top:${(nowMin / 60) * hourH}px;"></div>` : '';
+    return `<div class="cal-time-col${isToday ? ' is-today' : ''}" data-date="${ds}" onclick="onCalSlotClick(event)">${blocks}${nowLine}</div>`;
   }).join('');
 
-  grid.innerHTML = headerHtml + axisHtml + colsHtml;
-  if (window.lucide) lucide.createIcons();
+  if (scrollEl && !(opts && opts.preserveScroll)) {
+    const targetHour = isTodayInView(dayStrs, todayStr) ? Math.max(0, now.getHours() - 1) : 7;
+    scrollEl.scrollTop = targetHour * hourH;
+  }
+}
+function isTodayInView(dayStrs, todayStr) {
+  return dayStrs.includes(todayStr);
+}
+function onCalSlotClick(e) {
+  const col = e.currentTarget;
+  const ds = col.dataset.date;
+  const hourH = calHourPx();
+  const rel = Math.max(0, e.clientY - col.getBoundingClientRect().top);
+  let minutes = Math.round((rel / hourH) * 60 / 15) * 15;
+  minutes = Math.max(0, Math.min(23 * 60 + 45, minutes));
+  const hh = String(Math.floor(minutes / 60)).padStart(2, '0');
+  const mm = String(minutes % 60).padStart(2, '0');
+  openNewEventSheet(ds, hh + ':' + mm);
 }
 
-function renderEventList() {
+function renderCalWeekView() { renderCalTimeGrid(calDisplayMode === 'day' ? 1 : 7); }
+function calWeekEventClick(id) { openCalEventDetail(id); }
+
+// The month list is every event that touches the month on screen. The week
+// list is only the week on screen. Grouped by day. Not the whole year —
+// that's what the Terminübersicht is for.
+function drawerListBounds() {
+  if (calDisplayMode === 'week') {
+    const monday = _calMonday(calWeekAnchor);
+    return {
+      start: localDateStr(monday),
+      end: localDateStr(_calAddDays(monday, 6)),
+      emptyAll: 'Keine Termine in dieser Woche',
+    };
+  }
+  const monthStart = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-01`;
+  const lastDay = new Date(calYear, calMonth + 1, 0).getDate();
+  return {
+    start: monthStart,
+    end: `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`,
+    emptyAll: 'Keine Termine in diesem Monat',
+  };
+}
+function monthEventListHtml() {
+  const bounds = drawerListBounds();
+
+  let pool = calEvents.filter(e => {
+    const s = (e.date || '').slice(0, 10);
+    const end = (e.end_date || s).slice(0, 10);
+    return s <= bounds.end && end >= bounds.start;
+  });
+  if (activeCategoryFilter !== 'all') {
+    pool = pool.filter(e => (e.event_type || 'other') === activeCategoryFilter);
+  }
+  pool.sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.time || '').localeCompare(b.time || ''));
+
+  if (!pool.length) {
+    return {
+      count: '',
+      html: `<div class="cal-month-empty">${activeCategoryFilter === 'all'
+        ? bounds.emptyAll
+        : 'Keine Termine in dieser Kategorie'}</div>`,
+    };
+  }
+
+  const groups = new Map();
+  pool.forEach(e => {
+    let key = (e.date || '').slice(0, 10);
+    if (key < bounds.start) key = bounds.start;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(e);
+  });
+
+  const todayStr = localDateStr();
+  const subMap = Object.fromEntries((calSubjects || []).map(s => [s.id, s]));
+  const html = [...groups.entries()].map(([dateKey, events]) => {
+    const d = new Date(dateKey + 'T00:00');
+    const groupTitle = d.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' });
+    const todayPill = dateKey === todayStr ? '<span class="cal-agenda-today-pill">Heute</span>' : '';
+    const picked = dateKey === selectedCalDate ? ' is-selected' : '';
+    const cards = events.map(e => renderCalEventCard(e, { todayStr, subMap, isPast: (e.end_date || e.date || '').slice(0, 10) < todayStr })).join('');
+    return `<div class="cal-agenda-group${picked}" data-date="${dateKey}">
+      <div class="cal-agenda-group-title">${escapeHtml(groupTitle)}${todayPill}</div>${cards}
+    </div>`;
+  }).join('');
+  return { count: String(pool.length), html };
+}
+function paintMonthEventList(list, countEl, built) {
+  if (!list) return;
+  if (countEl) countEl.textContent = built.count;
+  list.innerHTML = built.html;
+}
+function renderMonthEventList(opts) {
+  const built = monthEventListHtml();
+  if (opts) {
+    paintMonthEventList(opts.list, opts.countEl, built);
+    return;
+  }
+  paintMonthEventList(
+    document.getElementById('cal-month-events-list'),
+    document.getElementById('cal-month-events-count'),
+    built
+  );
+  paintMonthEventList(
+    document.getElementById('cal-drawer-events-list'),
+    document.getElementById('cal-drawer-events-count'),
+    built
+  );
+  scrollMonthEventsToToday();
+  scrollDrawerEvents();
+}
+
+// Opens the list on the picked day when one is selected in this month,
+// otherwise on today. A picked day with no events of its own lands on the
+// next day that has some.
+function scrollMonthEventsToToday(root) {
+  if (!window.matchMedia('(min-width: 760px)').matches) return;
+  const scope = root || document;
+  const wrap = scope.querySelector('#cal-month-events');
+  const list = scope.querySelector('#cal-month-events-list');
+  if (!wrap || !list) return;
+  const todayStr = localDateStr();
+  const groups = [...list.querySelectorAll('.cal-agenda-group')];
+  // A neighbour pane is painted while the live month is still current, so
+  // its month comes from the dates it actually rendered.
+  const monthKey = root
+    ? (groups[0]?.dataset.date || '').slice(0, 7)
+    : calYear + '-' + String(calMonth + 1).padStart(2, '0');
+  const prefer = (!root && selectedCalDate && selectedCalDate.startsWith(monthKey)) ? selectedCalDate : todayStr;
+  if (!monthKey || !prefer.startsWith(monthKey)) { wrap.scrollTop = 0; return; }
+  const target = groups.find(g => (g.dataset.date || '') >= prefer);
+  if (!target) { wrap.scrollTop = 0; return; }
+  const headH = wrap.querySelector('.cal-month-events-head')?.offsetHeight || 0;
+  const top = target.getBoundingClientRect().top - wrap.getBoundingClientRect().top + wrap.scrollTop - headH;
+  wrap.scrollTop = Math.max(0, top);
+}
+function scrollDrawerEvents() {
+  const wrap = document.getElementById('cal-drawer-events');
+  const list = document.getElementById('cal-drawer-events-list');
+  if (!wrap || !list || wrap.offsetParent === null) return;
+  const bounds = drawerListBounds();
+  const todayStr = localDateStr();
+  let prefer = bounds.start;
+  if (selectedCalDate && selectedCalDate >= bounds.start && selectedCalDate <= bounds.end) prefer = selectedCalDate;
+  else if (todayStr >= bounds.start && todayStr <= bounds.end) prefer = todayStr;
+  const groups = [...list.querySelectorAll('.cal-agenda-group')];
+  const target = groups.find(g => (g.dataset.date || '') >= prefer);
+  if (!target) { wrap.scrollTop = 0; return; }
+  const headH = wrap.querySelector('.cal-month-events-head')?.offsetHeight || 0;
+  const top = target.getBoundingClientRect().top - wrap.getBoundingClientRect().top + wrap.scrollTop - headH;
+  wrap.scrollTop = Math.max(0, top);
+}
+
+// The agenda deliberately isn't limited to the month the other views are
+// showing — it's the one place to see every event the class has, so it
+// lists all of them (grouped by day, under a pinned month heading) and
+// opens scrolled to today instead of at the very first entry.
+function renderAgendaList() {
   const list = document.getElementById('cal-events-list');
   const headerEl = document.getElementById('cal-events-header');
   const emptyEl = document.getElementById('cal-no-events');
   if (!list) return;
 
-  let pool;
-  if (calSearchQuery) {
-    const q = calSearchQuery.toLowerCase();
-    pool = calSearchPool.filter(e =>
-      (e.title || '').toLowerCase().includes(q) || (e.description || '').toLowerCase().includes(q)
-    );
-  } else if (calViewScope === 'all') {
-    // Agenda: every event that hasn't fully passed yet.
-    const todayStr = localDateStr();
-    pool = calEvents.filter(e => (e.end_date || e.date || '').slice(0, 10) >= todayStr);
-  } else {
-    const monthStart = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-01`;
-    const lastDay = new Date(calYear, calMonth + 1, 0).getDate();
-    const monthEnd = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
-    pool = calEvents.filter(e => {
-      const s = (e.date || '').slice(0, 10);
-      const end = (e.end_date || s).slice(0, 10);
-      return s <= monthEnd && end >= monthStart;
-    });
-    if (selectedCalDate) {
-      pool = pool.filter(e => eventCoversDate(e, selectedCalDate));
-    }
-  }
-
+  let pool = calEvents.slice();
   if (activeCategoryFilter !== 'all') {
     pool = pool.filter(e => (e.event_type || 'other') === activeCategoryFilter);
   }
-
   pool.sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.time || '').localeCompare(b.time || ''));
 
-  const isMonthView = !calSearchQuery && calViewScope !== 'all';
-  if (isMonthView) {
-    const todayStr0 = localDateStr();
-    const upcoming = [], past = [];
-    pool.forEach(e => ((e.end_date || e.date || '').slice(0, 10) < todayStr0 ? past : upcoming).push(e));
-    pool = upcoming.concat(past);
-  }
-
-  const headerLabel = calSearchQuery
-    ? 'Suchergebnisse'
-    : (calViewScope === 'all'
-        ? (activeCategoryFilter === 'all' ? 'Kommende Termine' : 'Gefilterte Agenda')
-        : (selectedCalDate
-            ? 'Termine an diesem Tag'
-            : (activeCategoryFilter === 'all' ? 'Termine dieses Monats' : 'Gefilterte Termine')));
   headerEl.innerHTML = `
     <div class="cal-list-header">
-      <div class="cal-list-header-label">${headerLabel}</div>
+      <div class="cal-list-header-label">Alle Termine</div>
       <span class="cal-list-header-count">${pool.length} ${pool.length === 1 ? 'Eintrag' : 'Einträge'}</span>
-    </div>
-  `;
+    </div>`;
 
-  if (pool.length === 0) {
+  if (!pool.length) {
     list.innerHTML = '';
     emptyEl.style.display = 'block';
-    const emptyTitle = document.getElementById('cal-empty-title');
-    const emptySub = document.getElementById('cal-empty-sub');
-    if (calSearchQuery) {
-      emptyTitle.textContent = 'Nichts gefunden';
-      emptySub.textContent = `Kein Termin passt zu „${calSearchQuery}".`;
-    } else if (calViewScope === 'all') {
-      emptyTitle.textContent = 'Keine kommenden Termine';
-      emptySub.textContent = activeCategoryFilter === 'all'
-        ? 'Es stehen aktuell keine Termine an.'
-        : 'Keine kommenden Termine in dieser Kategorie.';
-    } else if (selectedCalDate) {
-      const d = new Date(selectedCalDate + 'T00:00');
-      const f = d.toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'short' });
-      emptyTitle.textContent = `Keine Termine am ${f}`;
-      emptySub.textContent = `Für diesen Tag ist bisher noch nichts eingetragen.`;
-    } else {
-      emptyTitle.textContent = 'Keine Termine gefunden';
-      emptySub.textContent = activeCategoryFilter === 'all'
-        ? 'In diesem Monat stehen keine Termine an.'
-        : 'Keine Termine in dieser Kategorie vorhanden.';
-    }
-  } else {
-    emptyEl.style.display = 'none';
-    const subMap = Object.fromEntries((calSubjects || []).map(s => [s.id, s]));
-    const todayStr = localDateStr();
-
-    list.innerHTML = pool.map(e => {
-      const isEvToday = eventCoversDate(e, todayStr);
-      const isPastEvent = isMonthView && (e.end_date || e.date || '').slice(0, 10) < todayStr;
-      const isMulti = Boolean(e.end_date && e.end_date !== e.date);
-      const canEdit = calCanModifyEvent(e);
-
-      const sDate = new Date(e.date + 'T00:00');
-      const dayNum = sDate.getDate();
-      const weekday = sDate.toLocaleDateString('de-DE', { weekday: 'short' });
-
-      let dayLabel = sDate.toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'short' });
-      if (isMulti) {
-        const eDate = new Date(e.end_date + 'T00:00');
-        dayLabel = `${sDate.toLocaleDateString('de-DE', { day: 'numeric', month: 'short' })} – ${eDate.toLocaleDateString('de-DE', { day: 'numeric', month: 'short' })}`;
-      }
-
-      let typeLabel = 'Sonstiges';
-      let typeColor = '#6750a4';
-      let typeBg = 'rgba(103, 80, 164, 0.1)';
-      if (e.event_type === 'exam') {
-        typeLabel = 'Klassenarbeit'; typeColor = '#ba1a1a'; typeBg = 'rgba(186, 26, 26, 0.1)';
-      } else if (e.event_type === 'holiday') {
-        typeLabel = 'Schulferien'; typeColor = '#8a5a00'; typeBg = 'rgba(138, 90, 0, 0.1)';
-      } else if (e.event_type === 'trip') {
-        typeLabel = 'Ausflug'; typeColor = '#006d3a'; typeBg = 'rgba(0, 109, 58, 0.1)';
-      } else if (e.event_type === 'personal') {
-        typeLabel = 'Persönlich'; typeColor = '#006399'; typeBg = 'rgba(0, 99, 153, 0.1)';
-      }
-
-      const subObj = e.subject_id ? subMap[e.subject_id] : null;
-      const subName = subObj ? (subObj.name || subObj.short_name) : null;
-      const subColor = subObj ? (subObj.color || '#ede7f6') : null;
-
-      const personalNote = e.event_type === 'personal'
-        ? `<span class="cal-personal-note"><i data-lucide="lock"></i> Nur für dich</span>`
-        : '';
-      const subjectBadge = subName
-        ? `<span class="cal-subject-badge" style="background:${subColor || '#ede7f6'};">${escapeHtml(subName)}</span>`
-        : '';
-
-      const cardClick = canEdit
-        ? `onclick="openEditEventSheet(${e.id})"`
-        : '';
-      const clickable = canEdit ? ' is-clickable' : '';
-      const pastCls = isPastEvent ? ' is-past' : '';
-
-      return `
-        <div class="m3-card cal-event-card list-card-enter${clickable}${pastCls}" data-id="${e.id}" ${cardClick}>
-          <div class="cal-event-body">
-            <div class="ev-date-badge ${isEvToday ? 'is-today' : ''}">
-              <span class="ev-date-num">${dayNum}</span>
-              <span class="ev-date-wd">${weekday}</span>
-            </div>
-            <div class="cal-event-main">
-              <div class="cal-event-tags">
-                <span class="ev-category-pill" style="background:${typeBg};color:${typeColor};">${typeLabel}</span>
-                ${subjectBadge}
-                ${personalNote}
-              </div>
-              <div class="cal-event-title">${escapeHtml(e.title)}</div>
-              <div class="cal-event-meta">
-                <i data-lucide="calendar"></i>
-                <span>${dayLabel}</span>
-                ${e.time ? `<span style="opacity:0.4;">·</span><i data-lucide="clock"></i><span>${e.time} Uhr</span>` : ''}
-              </div>
-              ${e.description ? `<div class="cal-event-desc">${escapeHtml(e.description)}</div>` : ''}
-            </div>
-          </div>
-          <div class="cal-event-actions" onclick="event.stopPropagation()">
-            ${canEdit ? moreMenuBtn(`openCalEventMenu(this, ${e.id})`) : ''}
-          </div>
-        </div>
-      `;
-    }).join('');
+    document.getElementById('cal-empty-title').textContent = 'Keine Termine';
+    document.getElementById('cal-empty-sub').textContent = activeCategoryFilter === 'all'
+      ? 'Es sind noch keine Termine eingetragen.'
+      : 'Keine Termine in dieser Kategorie vorhanden.';
+    return;
   }
+  emptyEl.style.display = 'none';
 
-  if (window.lucide) lucide.createIcons();
+  const groups = new Map();
+  pool.forEach(e => {
+    const key = (e.date || '').slice(0, 10);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(e);
+  });
+
+  const todayStr = localDateStr();
+  const subMap = Object.fromEntries((calSubjects || []).map(s => [s.id, s]));
+
+  let lastMonthKey = '';
+  list.innerHTML = [...groups.entries()].map(([dateKey, events]) => {
+    const d = new Date(dateKey + 'T00:00');
+    const monthKey = dateKey.slice(0, 7);
+    const monthHead = monthKey === lastMonthKey
+      ? ''
+      : `<div class="cal-agenda-month">${CAL_MONTHS[d.getMonth()]} ${d.getFullYear()}</div>`;
+    lastMonthKey = monthKey;
+    const groupTitle = d.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' });
+    const todayPill = dateKey === todayStr ? '<span class="cal-agenda-today-pill">Heute</span>' : '';
+    const cards = events.map(e => renderCalEventCard(e, { todayStr, subMap, isPast: (e.end_date || e.date || '').slice(0, 10) < todayStr })).join('');
+    return `${monthHead}<div class="cal-agenda-group" data-date="${dateKey}">
+      <div class="cal-agenda-group-title">${escapeHtml(groupTitle)}${todayPill}</div>${cards}
+    </div>`;
+  }).join('');
+
+  scrollAgendaToToday();
+}
+
+// Puts the first group that hasn't happened yet at the top of the list —
+// with every event of the year in here, starting at last September's first
+// entry would mean scrolling past months of history to find this week.
+function scrollAgendaToToday(behavior = 'auto') {
+  const wrap = document.getElementById('cal-view-agenda');
+  const list = document.getElementById('cal-events-list');
+  if (!wrap || !list) return;
+  const todayStr = localDateStr();
+  const groups = [...list.querySelectorAll('.cal-agenda-group')];
+  const target = groups.find(g => (g.dataset.date || '') >= todayStr) || groups[groups.length - 1];
+  if (!target) return;
+  // Leave room for the pinned month heading, which would otherwise sit on
+  // top of the very day the scroll was supposed to bring into view.
+  const stickyH = list.querySelector('.cal-agenda-month')?.offsetHeight || 0;
+  const top = target.getBoundingClientRect().top - wrap.getBoundingClientRect().top + wrap.scrollTop - stickyH;
+  wrap.scrollTo({ top: Math.max(0, top), behavior });
+}
+
+function renderCalEventCard(e, { todayStr, subMap, isPast }) {
+  const isEvToday = eventCoversDate(e, todayStr);
+  const isMulti = Boolean(e.end_date && e.end_date !== e.date);
+  const canEdit = calCanModifyEvent(e);
+  const sDate = new Date(e.date + 'T00:00');
+  const dayNum = sDate.getDate();
+  const weekday = sDate.toLocaleDateString('de-DE', { weekday: 'short' });
+  let dayLabel = sDate.toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'short' });
+  if (isMulti) {
+    const eDate = new Date(e.end_date + 'T00:00');
+    dayLabel = `${sDate.toLocaleDateString('de-DE', { day: 'numeric', month: 'short' })} – ${eDate.toLocaleDateString('de-DE', { day: 'numeric', month: 'short' })}`;
+  }
+  const meta = calTypeMeta(e);
+  const subObj = e.subject_id ? subMap[e.subject_id] : null;
+  const subName = subObj ? (subObj.name || subObj.short_name) : null;
+  const subColor = subObj ? (subObj.color || '#ede7f6') : null;
+  const personalNote = e.event_type === 'personal'
+    ? `<span class="cal-personal-note"><i data-lucide="lock"></i> Nur für dich</span>` : '';
+  const subjectBadge = subName
+    ? `<span class="cal-subject-badge" style="background:${subColor || '#ede7f6'};">${escapeHtml(subName)}</span>` : '';
+
+  return `
+    <div class="m3-card cal-event-card list-card-enter${isPast ? ' is-past' : ''}" data-id="${e.id}" onclick="openCalEventDetail(${e.id})">
+      <div class="cal-event-body">
+        <div class="ev-date-badge ${isEvToday ? 'is-today' : ''}">
+          <span class="ev-date-num">${dayNum}</span>
+          <span class="ev-date-wd">${weekday}</span>
+        </div>
+        <div class="cal-event-main">
+          <div class="cal-event-tags">
+            <span class="ev-category-pill" style="background:${meta.bg};color:${meta.color};">${meta.label}</span>
+            ${subjectBadge}${personalNote}
+          </div>
+          <div class="cal-event-title">${escapeHtml(e.title)}</div>
+          <div class="cal-event-meta">
+            <i data-lucide="calendar"></i><span>${dayLabel}</span>
+            ${e.time ? `<span style="opacity:0.4;">·</span><i data-lucide="clock"></i><span>${e.time} Uhr</span>` : ''}
+            ${(e.attachments || []).length ? `<span style="opacity:0.4;">·</span><i data-lucide="paperclip"></i><span>${e.attachments.length}</span>` : ''}
+          </div>
+          ${e.description ? `<div class="cal-event-desc">${escapeHtml(e.description)}</div>` : ''}
+          ${calCardFilesRow(e)}
+        </div>
+      </div>
+      <div class="cal-event-actions" onclick="event.stopPropagation()">
+        ${canEdit ? moreMenuBtn(`openCalEventMenu(this, ${e.id})`) : ''}
+      </div>
+    </div>`;
 }
 
 function openCalEventMenu(btn, eventId) {
@@ -1362,29 +2044,65 @@ function openCalEventMenu(btn, eventId) {
   ]);
 }
 
+function openCalEventDetail(eventId, pool) {
+  const src = pool || calEvents;
+  let ev = src.find(x => x.id === eventId);
+  if (!ev && calSearchPool.length) ev = calSearchPool.find(x => x.id === eventId);
+  if (!ev) { showToast('Termin nicht gefunden'); return; }
+
+  const meta = calTypeMeta(ev);
+  const canEdit = calCanModifyEvent(ev);
+  const sDate = new Date(ev.date + 'T00:00');
+  let when = sDate.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  if (ev.end_date && ev.end_date !== ev.date) {
+    const eDate = new Date(ev.end_date + 'T00:00');
+    when = sDate.toLocaleDateString('de-DE', { day: 'numeric', month: 'short' })
+      + ' – ' + eDate.toLocaleDateString('de-DE', { day: 'numeric', month: 'short', year: 'numeric' });
+  }
+  const subMap = Object.fromEntries((calSubjects || []).map(s => [s.id, s]));
+  const subObj = ev.subject_id ? subMap[ev.subject_id] : null;
+
+  openSheet(`
+    <div class="sheet-title" style="font-size:1.25rem;font-weight:800;color:#1c1b1f;margin-bottom:6px;">${escapeHtml(ev.title)}</div>
+    <div style="margin-bottom:16px;">
+      <span class="ev-category-pill" style="background:${meta.bg};color:${meta.color};">${meta.label}</span>
+      ${ev.event_type === 'personal' ? `<span class="cal-personal-note" style="margin-left:8px;"><i data-lucide="lock"></i> Nur für dich</span>` : ''}
+    </div>
+    <div class="cal-detail-row"><i data-lucide="calendar"></i><div>${escapeHtml(when)}</div></div>
+    ${ev.time ? `<div class="cal-detail-row"><i data-lucide="clock"></i><div>${escapeHtml(ev.time)} Uhr</div></div>` : ''}
+    ${subObj ? `<div class="cal-detail-row"><i data-lucide="book-open"></i><div>${escapeHtml(subObj.name || subObj.short_name || '')}</div></div>` : ''}
+    ${ev.description ? `<div class="cal-detail-row"><i data-lucide="align-left"></i><div style="white-space:pre-wrap;line-height:1.45;">${escapeHtml(ev.description)}</div></div>` : ''}
+    ${calDetailAttachments(ev)}
+    ${canEdit ? `
+      <div class="cal-detail-actions">
+        <button class="m3-btn-primary" style="flex:1;" onclick="openEditEventSheet(${ev.id})">
+          <i data-lucide="pencil" style="width:16px;height:16px;"></i> Bearbeiten
+        </button>
+        <button class="m3-btn-outline" style="flex:1;color:#ba1a1a;border-color:rgba(186,26,26,0.35);" onclick="closeSheet(true);confirmDelEvent(${ev.id})">
+          <i data-lucide="trash-2" style="width:16px;height:16px;"></i> Löschen
+        </button>
+      </div>` : ''}
+  `);
+}
+
 function setEventRangeMode(isRange) {
   const btnSingle = document.getElementById('ev-mode-single');
   const btnRange = document.getElementById('ev-mode-range');
   const wrap = document.getElementById('ev-end-date-wrap');
   const startLbl = document.getElementById('ev-start-label');
-
   if (btnSingle) btnSingle.classList.toggle('active', !isRange);
   if (btnRange) btnRange.classList.toggle('active', isRange);
   if (startLbl) startLbl.textContent = isRange ? 'Startdatum (Ab):' : 'Datum:';
-
   if (wrap) {
     wrap.style.display = isRange ? 'block' : 'none';
     if (isRange) {
       const startVal = document.getElementById('ev-date')?.value;
       const endInput = document.getElementById('ev-end-date');
-      if (startVal && endInput && (!endInput.value || endInput.value < startVal)) {
-        endInput.value = startVal;
-      }
+      if (startVal && endInput && (!endInput.value || endInput.value < startVal)) endInput.value = startVal;
       if (typeof enhanceDateTimeInputs === 'function') enhanceDateTimeInputs(wrap);
     }
   }
 }
-
 function toggleEventTime() {
   const btn = document.getElementById('ev-time-toggle');
   const wrap = document.getElementById('ev-time-wrap');
@@ -1394,11 +2112,6 @@ function toggleEventTime() {
     if (typeof enhanceDateTimeInputs === 'function') enhanceDateTimeInputs(wrap);
   }
 }
-
-// Dauer/Kategorie/Uhrzeit start collapsed behind "Weitere Optionen" so the
-// sheet opens with just title + date instead of every field at once — they
-// were already enhanced (dropdowns, date/time inputs) when the sheet itself
-// opened, hidden or not, so revealing the wrapper here is enough.
 function toggleEventMore() {
   const wrap = document.getElementById('ev-more-wrap');
   const toggleWrap = document.getElementById('ev-more-toggle-wrap');
@@ -1406,34 +2119,101 @@ function toggleEventMore() {
   if (toggleWrap) toggleWrap.style.display = 'none';
 }
 
-async function openNewEventSheet(defaultDate) {
+function calAttachmentFields() {
+  return `
+    <div class="m3-field">
+      <label class="m3-field-label">Dateien:</label>
+      <label class="m3-btn-tonal" style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;border-radius:14px;padding:12px;">
+        <i data-lucide="paperclip" style="width:18px;height:18px;"></i> Dateien hinzufügen
+        <input type="file" id="ev-file-input" multiple style="display:none;" onchange="calFilesSelected(this)">
+      </label>
+      <div id="ev-file-preview"></div>
+    </div>`;
+}
+function calDetailAttachments(ev) {
+  const atts = ev.attachments || [];
+  if (!atts.length) return '';
+  const images = atts.filter(a => a.type === 'image');
+  const files = atts.filter(a => a.type !== 'image');
+  const gallery = images.length
+    ? `<div class="cal-att-grid">${images.map(a => `<a href="${escapeHtml(a.url)}" target="_blank" rel="noopener"><img src="${escapeHtml(a.url)}" alt="${escapeHtml(a.name || 'Bild')}"></a>`).join('')}</div>`
+    : '';
+  const rows = files.map(a => `
+    <a class="cal-att-row" href="${escapeHtml(a.url)}" target="_blank" rel="noopener">
+      <i data-lucide="file" style="width:18px;height:18px;color:#6750a4;flex-shrink:0;"></i>
+      <span>${escapeHtml(a.name || 'Datei')}</span>
+    </a>`).join('');
+  return `<div class="cal-detail-row" style="align-items:flex-start;"><i data-lucide="paperclip"></i><div style="flex:1;min-width:0;"><div style="font-weight:700;margin-bottom:4px;">Dateien</div>${gallery}${rows}</div></div>`;
+}
+async function calFilesSelected(inputEl) {
+  const files = Array.from(inputEl.files || []);
+  inputEl.value = '';
+  if (!files.length) return;
+  const preview = document.getElementById('ev-file-preview');
+  if (preview) preview.innerHTML = '<div style="font-size:0.8rem;color:#49454f;margin-top:8px;">Dateien werden hochgeladen…</div>';
+  calUploading = true;
+  try {
+    for (const file of files) {
+      const form = new FormData();
+      form.append('file', file);
+      calPendingFiles.push(await API.uploadEventFile(form));
+    }
+  } catch {
+    showToast('Upload fehlgeschlagen');
+  } finally {
+    calUploading = false;
+    renderCalFilePreview();
+  }
+}
+function renderCalFilePreview() {
+  const preview = document.getElementById('ev-file-preview');
+  if (!preview) return;
+  if (!calPendingFiles.length) { preview.innerHTML = ''; return; }
+  preview.innerHTML = calPendingFiles.map((f, idx) => {
+    const isImg = f.type === 'image';
+    return `
+      <div class="cal-att-row">
+        ${isImg
+          ? `<img src="${escapeHtml(f.url)}" alt="" style="width:38px;height:38px;border-radius:8px;object-fit:cover;flex-shrink:0;">`
+          : `<i data-lucide="file" style="width:18px;height:18px;color:#6750a4;flex-shrink:0;"></i>`}
+        <span>${escapeHtml(f.name || 'Datei')}</span>
+        <button type="button" onclick="removeCalFile(${idx})" style="background:rgba(0,0,0,0.06);border:none;border-radius:8px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+          <i data-lucide="x" style="width:14px;height:14px;"></i>
+        </button>
+      </div>`;
+  }).join('');
+  if (window.lucide) lucide.createIcons();
+}
+function removeCalFile(idx) {
+  calPendingFiles.splice(idx, 1);
+  renderCalFilePreview();
+}
+
+async function openNewEventSheet(defaultDate, defaultTime) {
   await loadCalSubjects();
-  const today = defaultDate || selectedCalDate || localDateStr();
+  const today = defaultDate || selectedCalDate || localDateStr(calWeekAnchor) || localDateStr();
+  const hasTime = Boolean(defaultTime);
   const subOpts = (calSubjects || []).map(s => `<option value="${s.id}">${escapeHtml(s.name || s.short_name || '')}</option>`).join('');
 
   openSheet(`
     <div class="sheet-title" style="font-size:1.25rem;font-weight:800;color:#1c1b1f;margin-bottom:16px;">Neuer Termin</div>
-
     <div class="m3-field">
       <label class="m3-field-label">Titel des Termins:</label>
       <input class="m3-input" id="ev-title" placeholder="z. B. Mathearbeit, Schulausflug, Zahnarzt...">
     </div>
-
     <div class="m3-field">
       <label class="m3-field-label">Beschreibung (optional):</label>
       <textarea class="m3-input" id="ev-description" rows="3" placeholder="Weitere Details zum Termin..." style="resize:none;height:auto;font-family:inherit;line-height:1.4;"></textarea>
     </div>
-
+    ${calAttachmentFields()}
     <div class="m3-field" id="ev-start-date-wrap">
       <label id="ev-start-label" class="m3-field-label">Datum:</label>
       <input class="m3-input" id="ev-date" type="date" value="${today}">
     </div>
-
     <div id="ev-end-date-wrap" class="m3-field" style="display:none;">
       <label class="m3-field-label">Enddatum (Bis einschließlich):</label>
       <input class="m3-input" id="ev-end-date" type="date" value="${today}">
     </div>
-
     <div class="m3-field">
       <label class="m3-field-label">Kategorie:</label>
       <select class="m3-select" id="ev-type">
@@ -1444,7 +2224,6 @@ async function openNewEventSheet(defaultDate) {
         <option value="personal">Persönlich (nur für dich sichtbar)</option>
       </select>
     </div>
-
     <div id="ev-subject-row" class="m3-field" style="display:none;">
       <label class="m3-field-label">Fach für die Klassenarbeit:</label>
       <select class="m3-select" id="ev-subject">
@@ -1452,53 +2231,44 @@ async function openNewEventSheet(defaultDate) {
         ${subOpts}
       </select>
     </div>
-
-    <!-- Dauer and Uhrzeit default to Einzelner Tag / ohne Uhrzeit for most
-         events, so they stay collapsed behind one toggle instead of
-         showing at once — Kategorie moved out of here since it's a
-         primary field, not a secondary one. -->
-    <div class="m3-field" id="ev-more-toggle-wrap">
+    <div class="m3-field" id="ev-more-toggle-wrap" style="display:${hasTime ? 'none' : 'block'};">
       <button type="button" id="ev-more-toggle" class="m3-inline-toggle m3-more-toggle" onclick="toggleEventMore()">
         <span style="display:flex;align-items:center;gap:6px;"><i data-lucide="sliders-horizontal" style="width:16px;height:16px;"></i> Weitere Optionen</span>
         <i data-lucide="chevron-down" style="width:16px;height:16px;"></i>
       </button>
     </div>
-
-    <div id="ev-more-wrap" style="display:none;">
+    <div id="ev-more-wrap" style="display:${hasTime ? 'block' : 'none'};">
       <div class="m3-field">
         <label class="m3-field-label">Dauer:</label>
         <div class="ev-segmented-wrap">
           <button type="button" id="ev-mode-single" class="ev-seg-btn active" onclick="setEventRangeMode(false)">
-            <i data-lucide="calendar" style="width:16px;height:16px;"></i>
-            <span>Einzelner Tag</span>
+            <i data-lucide="calendar" style="width:16px;height:16px;"></i><span>Einzelner Tag</span>
           </button>
           <button type="button" id="ev-mode-range" class="ev-seg-btn" onclick="setEventRangeMode(true)">
-            <i data-lucide="calendar-range" style="width:16px;height:16px;"></i>
-            <span>Zeitraum (mehrere Tage)</span>
+            <i data-lucide="calendar-range" style="width:16px;height:16px;"></i><span>Zeitraum (mehrere Tage)</span>
           </button>
         </div>
       </div>
-
       <div class="m3-field">
-        <button type="button" id="ev-time-toggle" class="m3-inline-toggle" onclick="toggleEventTime()">
+        <button type="button" id="ev-time-toggle" class="m3-inline-toggle" style="display:${hasTime ? 'none' : 'flex'};" onclick="toggleEventTime()">
           <i data-lucide="clock" style="width:16px;height:16px;"></i> + Uhrzeit hinzufügen (optional)
         </button>
-        <div id="ev-time-wrap" style="display:none;margin-top:6px;">
+        <div id="ev-time-wrap" style="display:${hasTime ? 'block' : 'none'};margin-top:6px;">
           <label class="m3-field-label">Uhrzeit:</label>
-          <input class="m3-input" id="ev-time" type="time" placeholder="Uhrzeit (optional)">
+          <input class="m3-input" id="ev-time" type="time" placeholder="Uhrzeit (optional)" value="${defaultTime || ''}">
         </div>
       </div>
     </div>
-
     ${sheetActions({ saveAction: 'saveEvent()' })}
   `);
+  calPendingFiles = [];
+  renderCalFilePreview();
 
   const typeEl = document.getElementById('ev-type');
   const subRow = document.getElementById('ev-subject-row');
   if (typeEl && subRow) {
     typeEl.addEventListener('change', () => {
-      const isExam = typeEl.value === 'exam';
-      subRow.style.display = isExam ? 'block' : 'none';
+      subRow.style.display = typeEl.value === 'exam' ? 'block' : 'none';
     });
   }
 }
@@ -1507,21 +2277,20 @@ async function saveEvent() {
   const title = document.getElementById('ev-title').value.trim();
   const date = document.getElementById('ev-date').value;
   if (!title || !date) { showToast('Titel und Datum erforderlich'); return; }
-
   const description = document.getElementById('ev-description').value.trim() || null;
   const isRange = document.getElementById('ev-mode-range')?.classList.contains('active');
   const endVal = document.getElementById('ev-end-date')?.value;
   const end_date = isRange && endVal && endVal >= date ? endVal : (isRange && endVal ? date : null);
-
   const event_type = document.getElementById('ev-type').value;
   const subEl = document.getElementById('ev-subject');
   const subject_id = (event_type === 'exam' && subEl && subEl.value) ? parseInt(subEl.value, 10) : null;
   const timeEl = document.getElementById('ev-time');
   const time = (timeEl && timeEl.value) ? timeEl.value : null;
-
   try {
-    await API.createEvent({ title, description, date, end_date, time, event_type, subject_id });
+    if (calUploading) { showToast('Dateien werden noch hochgeladen'); return; }
+    await API.createEvent({ title, description, date, end_date, time, event_type, subject_id, attachments: calPendingFiles.slice() });
     closeSheet();
+    calPeriodCache.clear();
     await loadCalEvents();
     renderCal();
     showToast('Termin gespeichert');
@@ -1531,7 +2300,8 @@ async function saveEvent() {
 }
 
 async function openEditEventSheet(eventId) {
-  const ev = calEvents.find(x => x.id === eventId);
+  let ev = calEvents.find(x => x.id === eventId);
+  if (!ev && calSearchPool.length) ev = calSearchPool.find(x => x.id === eventId);
   if (!ev) { showToast('Termin nicht gefunden'); return; }
 
   await loadCalSubjects();
@@ -1540,7 +2310,6 @@ async function openEditEventSheet(eventId) {
     const sel = s.id === ev.subject_id ? 'selected' : '';
     return `<option value="${s.id}" ${sel}>${escapeHtml(s.name || s.short_name || '')}</option>`;
   }).join('');
-
   const typeOpts = [
     { value: 'other', label: 'Sonstiges' },
     { value: 'exam', label: 'Klassenarbeit' },
@@ -1548,74 +2317,56 @@ async function openEditEventSheet(eventId) {
     { value: 'holiday', label: 'Ferien' },
     { value: 'personal', label: 'Persönlich (nur für dich sichtbar)' }
   ].map(t => `<option value="${t.value}" ${t.value === ev.event_type ? 'selected' : ''}>${t.label}</option>`).join('');
-
   const hasTime = Boolean(ev.time);
-  // Expand "Weitere Optionen" upfront whenever the event already uses one of
-  // the fields hidden behind it — otherwise editing would silently hide an
-  // already-set range/time instead of just defaulting to it. Kategorie
-  // isn't part of this anymore since it's always shown now.
   const hasMore = isRange || hasTime;
 
   openSheet(`
     <div class="sheet-title" style="font-size:1.25rem;font-weight:800;color:#1c1b1f;margin-bottom:16px;">Termin bearbeiten</div>
-
     <div class="m3-field">
       <label class="m3-field-label">Titel des Termins:</label>
       <input class="m3-input" id="ev-title" placeholder="Titel" value="${escapeHtml(ev.title)}">
     </div>
-
     <div class="m3-field">
       <label class="m3-field-label">Beschreibung (optional):</label>
       <textarea class="m3-input" id="ev-description" rows="3" placeholder="Weitere Details zum Termin..." style="resize:none;height:auto;font-family:inherit;line-height:1.4;">${escapeHtml(ev.description || '')}</textarea>
     </div>
-
+    ${calAttachmentFields()}
     <div class="m3-field" id="ev-start-date-wrap">
       <label id="ev-start-label" class="m3-field-label">${isRange ? 'Startdatum (Ab):' : 'Datum:'}</label>
       <input class="m3-input" id="ev-date" type="date" value="${ev.date}">
     </div>
-
     <div id="ev-end-date-wrap" class="m3-field" style="display:${isRange ? 'block' : 'none'};">
       <label class="m3-field-label">Enddatum (Bis einschließlich):</label>
       <input class="m3-input" id="ev-end-date" type="date" value="${ev.end_date || ev.date}">
     </div>
-
     <div class="m3-field">
       <label class="m3-field-label">Kategorie:</label>
-      <select class="m3-select" id="ev-type">
-        ${typeOpts}
-      </select>
+      <select class="m3-select" id="ev-type">${typeOpts}</select>
     </div>
-
     <div id="ev-subject-row" class="m3-field" style="display:${ev.event_type === 'exam' ? 'block' : 'none'};">
       <label class="m3-field-label">Fach für die Klassenarbeit:</label>
       <select class="m3-select" id="ev-subject">
-        <option value="">Fach auswählen (optional)</option>
-        ${subOpts}
+        <option value="">Fach auswählen (optional)</option>${subOpts}
       </select>
     </div>
-
     <div class="m3-field" id="ev-more-toggle-wrap" style="display:${hasMore ? 'none' : 'block'};">
       <button type="button" id="ev-more-toggle" class="m3-inline-toggle m3-more-toggle" onclick="toggleEventMore()">
         <span style="display:flex;align-items:center;gap:6px;"><i data-lucide="sliders-horizontal" style="width:16px;height:16px;"></i> Weitere Optionen</span>
         <i data-lucide="chevron-down" style="width:16px;height:16px;"></i>
       </button>
     </div>
-
     <div id="ev-more-wrap" style="display:${hasMore ? 'block' : 'none'};">
       <div class="m3-field">
         <label class="m3-field-label">Dauer:</label>
         <div class="ev-segmented-wrap">
           <button type="button" id="ev-mode-single" class="ev-seg-btn ${!isRange ? 'active' : ''}" onclick="setEventRangeMode(false)">
-            <i data-lucide="calendar" style="width:16px;height:16px;"></i>
-            <span>Einzelner Tag</span>
+            <i data-lucide="calendar" style="width:16px;height:16px;"></i><span>Einzelner Tag</span>
           </button>
           <button type="button" id="ev-mode-range" class="ev-seg-btn ${isRange ? 'active' : ''}" onclick="setEventRangeMode(true)">
-            <i data-lucide="calendar-range" style="width:16px;height:16px;"></i>
-            <span>Zeitraum (mehrere Tage)</span>
+            <i data-lucide="calendar-range" style="width:16px;height:16px;"></i><span>Zeitraum (mehrere Tage)</span>
           </button>
         </div>
       </div>
-
       <div class="m3-field">
         <button type="button" id="ev-time-toggle" class="m3-inline-toggle" style="display:${hasTime ? 'none' : 'flex'};" onclick="toggleEventTime()">
           <i data-lucide="clock" style="width:16px;height:16px;"></i> + Uhrzeit hinzufügen (optional)
@@ -1626,16 +2377,16 @@ async function openEditEventSheet(eventId) {
         </div>
       </div>
     </div>
-
     ${sheetActions({ saveAction: `saveEditedEvent(${ev.id})` })}
   `);
+  calPendingFiles = (ev.attachments || []).map(a => ({ url: a.url, type: a.type || 'file', name: a.name || 'Datei' }));
+  renderCalFilePreview();
 
   const typeEl = document.getElementById('ev-type');
   const subRow = document.getElementById('ev-subject-row');
   if (typeEl && subRow) {
     typeEl.addEventListener('change', () => {
-      const isExam = typeEl.value === 'exam';
-      subRow.style.display = isExam ? 'block' : 'none';
+      subRow.style.display = typeEl.value === 'exam' ? 'block' : 'none';
     });
   }
 }
@@ -1644,21 +2395,20 @@ async function saveEditedEvent(eventId) {
   const title = document.getElementById('ev-title').value.trim();
   const date = document.getElementById('ev-date').value;
   if (!title || !date) { showToast('Titel und Datum erforderlich'); return; }
-
   const description = document.getElementById('ev-description').value.trim() || null;
   const isRange = document.getElementById('ev-mode-range')?.classList.contains('active');
   const endVal = document.getElementById('ev-end-date')?.value;
   const end_date = isRange && endVal && endVal >= date ? endVal : (isRange && endVal ? date : null);
-
   const event_type = document.getElementById('ev-type').value;
   const subEl = document.getElementById('ev-subject');
   const subject_id = (event_type === 'exam' && subEl && subEl.value) ? parseInt(subEl.value, 10) : null;
   const timeEl = document.getElementById('ev-time');
   const time = (timeEl && timeEl.value) ? timeEl.value : null;
-
   try {
-    await API.updateEvent(eventId, { title, description, date, end_date, time, event_type, subject_id });
+    if (calUploading) { showToast('Dateien werden noch hochgeladen'); return; }
+    await API.updateEvent(eventId, { title, description, date, end_date, time, event_type, subject_id, attachments: calPendingFiles.slice() });
     closeSheet();
+    calPeriodCache.clear();
     await loadCalEvents();
     renderCal();
     showToast('Termin aktualisiert');
@@ -1668,9 +2418,8 @@ async function saveEditedEvent(eventId) {
 }
 
 function confirmDelEvent(eventId) {
-  const ev = calEvents.find(x => x.id === eventId);
+  const ev = calEvents.find(x => x.id === eventId) || calSearchPool.find(x => x.id === eventId);
   const title = ev ? escapeHtml(ev.title) : 'diesen Termin';
-
   openModal(confirmDelete({
     title: 'Termin löschen?',
     message: `Willst du das wirklich löschen?<br><span style="font-weight:700;color:#1c1b1f;display:inline-block;margin-top:6px;">„${title}“</span>`,
@@ -1683,12 +2432,22 @@ async function doDelEvent(eventId) {
   animateCardRemoval(document.getElementById('cal-events-list'), eventId);
   try {
     await API.deleteEvent(eventId);
+    calPeriodCache.clear();
     calEvents = calEvents.filter(e => e.id !== eventId);
+    calSearchPool = calSearchPool.filter(e => e.id !== eventId);
     showToast('Termin gelöscht');
   } catch {
     showToast('Fehler beim Löschen');
   }
-  renderCalGridOnly(false); // dots on the grid can change too — no month-change animation for a single delete
-  renderEventList();
+  renderCal();
 }
+
+function selectDay(dateStr) {
+  selectedCalDate = dateStr;
+  calWeekAnchor = new Date(dateStr + 'T00:00');
+  setCalDisplayMode('day', { persist: false });
+}
+function toggleCalDisplayMode() { toggleCalViewPicker(document.getElementById('cal-viewmode-btn')); }
+function renderEventList() { if (calDisplayMode === 'agenda') renderAgendaList(); }
+function toggleCalMonthPanel() { toggleCalMiniDrawer(); }
 </script>

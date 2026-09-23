@@ -1,20 +1,102 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_, and_, func
 from backend.database import get_db
 from backend.auth import get_current_user, require_admin, require_super_admin
+from backend.config import settings
 from backend.models.calendar_event import CalendarEvent
 from backend.models.class_group import ClassGroup
 from backend.models.user import User
 from backend.schemas import CalendarEventOut, CalendarEventCreate, HolidayImportRequest
 from backend.services.holidays import GERMAN_STATES, fetch_holidays
 from backend.services.audit_service import log_audit
+from backend.services.virus_scanner import scan_file
+from backend.services.compression import compress_lossless
 from typing import List, Optional
 import logging
+import os
+import uuid
+import aiofiles
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/calendar", tags=["calendar"])
+
+_CAL_URL_PREFIX = "/uploads/calendar/"
+
+
+def _attachment_dicts(items) -> list:
+    out = []
+    for a in items or []:
+        data = a.model_dump() if hasattr(a, "model_dump") else dict(a)
+        url = data.get("url") or ""
+        name = os.path.basename(url)
+        if not url.startswith(_CAL_URL_PREFIX) or not name or name != url[len(_CAL_URL_PREFIX):]:
+            raise HTTPException(400, "Ungültiger Dateianhang")
+        if "/" in name or "\\" in name or ".." in name:
+            raise HTTPException(400, "Ungültiger Dateianhang")
+        kind = "image" if data.get("type") == "image" else "file"
+        out.append({"url": url, "type": kind, "name": (data.get("name") or name)[:180]})
+    return out
+
+
+def _calendar_file_path(url: str):
+    if not url or not url.startswith(_CAL_URL_PREFIX):
+        return None
+    name = url[len(_CAL_URL_PREFIX):]
+    if not name or "/" in name or "\\" in name or ".." in name:
+        return None
+    return os.path.join(settings.upload_dir, "calendar", name)
+
+
+def _remove_dropped_files(previous, kept):
+    keep_urls = {a.get("url") for a in kept}
+    for old in previous or []:
+        if not isinstance(old, dict):
+            continue
+        url = old.get("url")
+        if not url or url in keep_urls:
+            continue
+        path = _calendar_file_path(url)
+        if path and os.path.isfile(path):
+            try:
+                os.remove(path)
+            except OSError:
+                logger.warning("Could not remove calendar file %s", path)
+
+
+@router.post("/upload")
+async def upload_event_file(
+    request: Request,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    content = await file.read()
+    if len(content) > settings.max_file_size:
+        raise HTTPException(413, "Datei zu groß (max. 1 GB)")
+
+    await scan_file(content, file.filename or "unknown", file.content_type)
+    content, ext, mime = compress_lossless(content, file.filename or "", file.content_type)
+    if not ext:
+        ext = os.path.splitext(file.filename or "")[1]
+
+    filename = f"{uuid.uuid4().hex}{ext}"
+    dest_dir = os.path.join(settings.upload_dir, "calendar")
+    os.makedirs(dest_dir, exist_ok=True)
+    async with aiofiles.open(os.path.join(dest_dir, filename), "wb") as out:
+        await out.write(content)
+
+    file_type = "image" if (mime or file.content_type or "").startswith("image/") else "file"
+    await log_audit(
+        db,
+        action="calendar.file_upload",
+        user=current_user,
+        entity_type="calendar_file",
+        details={"filename": file.filename, "size": len(content), "type": file_type},
+        request=request,
+    )
+    return {"url": f"{_CAL_URL_PREFIX}{filename}", "type": file_type, "name": file.filename}
 
 @router.get("/", response_model=List[CalendarEventOut])
 async def list_events(month: Optional[str] = None, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -48,6 +130,7 @@ async def create_event(request: Request, data: CalendarEventCreate, db: AsyncSes
         class_id=current_user.class_id,
         subject_id=data.subject_id,
         created_by=current_user.id,
+        attachments=_attachment_dicts(data.attachments),
     )
     db.add(event)
     await db.commit()
@@ -196,6 +279,10 @@ async def update_event(request: Request, event_id: int, data: CalendarEventCreat
     event.time = data.time
     event.event_type = data.event_type
     event.subject_id = data.subject_id
+    if data.attachments is not None:
+        previous = list(event.attachments or [])
+        event.attachments = _attachment_dicts(data.attachments)
+        _remove_dropped_files(previous, event.attachments)
 
     await db.commit()
     await db.refresh(event)
@@ -230,6 +317,7 @@ async def delete_event(request: Request, event_id: int, db: AsyncSession = Depen
         raise HTTPException(403, "Persönliche Termine können nur vom Ersteller gelöscht werden")
     title = event.title
     dt = event.date
+    _remove_dropped_files(list(event.attachments or []), [])
 
     try:
         from backend.services.google_sync_service import sync_event_deleted

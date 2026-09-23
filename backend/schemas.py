@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
 from typing import Optional, List, Any
 from datetime import datetime
 
@@ -64,6 +64,12 @@ class SubjectUpdate(BaseModel):
     short_name: Optional[str] = None
     color: Optional[str] = None
 
+# Shared file attachment (homework and calendar)
+class AttachmentItem(BaseModel):
+    url: str
+    type: str = "file"  # "image" or "file"
+    name: Optional[str] = None
+
 # Calendar
 class CalendarEventOut(BaseModel):
     id: int
@@ -76,7 +82,21 @@ class CalendarEventOut(BaseModel):
     class_id: int
     subject_id: Optional[int]
     created_by: int
+    attachments: List[AttachmentItem] = []
     class Config: from_attributes = True
+
+    @field_validator("attachments", mode="before")
+    @classmethod
+    def empty_attachments(cls, v):
+        if not v:
+            return []
+        if isinstance(v, str):
+            import json
+            try:
+                v = json.loads(v)
+            except Exception:
+                return []
+        return v
 
 class CalendarEventCreate(BaseModel):
     title: str
@@ -86,18 +106,15 @@ class CalendarEventCreate(BaseModel):
     time: Optional[str] = None
     event_type: str = "other"
     subject_id: Optional[int] = None
+    # None on update means "leave the files as they are". A list replaces them.
+    attachments: Optional[List[AttachmentItem]] = None
 
 class HolidayImportRequest(BaseModel):
     state: str
     year: int
     class_id: Optional[int] = None
 
-# Homework & Attachments
-class AttachmentItem(BaseModel):
-    url: str
-    type: str = "file"  # "image" or "file"
-    name: Optional[str] = None
-
+# Homework
 class HomeworkOut(BaseModel):
     id: int
     subject_id: int

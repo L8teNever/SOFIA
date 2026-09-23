@@ -1231,8 +1231,14 @@ function enhanceDateTimeInputs(root = document) {
 }
 
 let _sheetViewportHandler = null;
+let _sheetCloseTimer = null;
 function openSheet(html) {
+  if (_sheetCloseTimer) {
+    clearTimeout(_sheetCloseTimer);
+    _sheetCloseTimer = null;
+  }
   let sheet = document.querySelector('.bottom-sheet');
+  const replacing = !!(sheet && sheet.isConnected);
   if (!sheet) { sheet = document.createElement('div'); sheet.className = 'bottom-sheet'; document.body.appendChild(sheet); }
   sheet.innerHTML = '<div class="sheet-handle"></div>' + html;
   enhanceDropdowns(sheet);
@@ -1250,6 +1256,9 @@ function openSheet(html) {
   // visualViewport DOES shrink with the keyboard, so mirror its height
   // onto the sheet's max-height while it's open.
   if (window.visualViewport) {
+    if (_sheetViewportHandler) {
+      window.visualViewport.removeEventListener('resize', _sheetViewportHandler);
+    }
     _sheetViewportHandler = () => {
       const s = document.querySelector('.bottom-sheet');
       if (s) s.style.maxHeight = Math.round(window.visualViewport.height * 0.9) + 'px';
@@ -1258,11 +1267,22 @@ function openSheet(html) {
     _sheetViewportHandler();
   }
 
-  history.pushState({ page: currentPage, sheet: true }, '', window.location.pathname);
+  if (!replacing) {
+    history.pushState({ page: currentPage, sheet: true }, '', window.location.pathname);
+  }
 }
 function closeSheet(isPopState = false) {
   const sheet = document.querySelector('.bottom-sheet');
-  if (sheet) { sheet.classList.remove('active'); sheet.style.maxHeight = ''; setTimeout(() => sheet.remove(), 400); }
+  if (sheet) {
+    sheet.classList.remove('active');
+    sheet.style.maxHeight = '';
+    if (_sheetCloseTimer) clearTimeout(_sheetCloseTimer);
+    const closing = sheet;
+    _sheetCloseTimer = setTimeout(() => {
+      if (closing.parentNode) closing.remove();
+      _sheetCloseTimer = null;
+    }, 400);
+  }
   document.getElementById('bottom-sheet-scrim').classList.remove('active');
   if (_sheetViewportHandler && window.visualViewport) {
     window.visualViewport.removeEventListener('resize', _sheetViewportHandler);
