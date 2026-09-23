@@ -13,7 +13,6 @@ from backend.config import settings
 from backend.services.virus_scanner import scan_file
 from backend.services.compression import compress_lossless
 from backend.services.audit_service import log_audit
-from backend.gemini_client import classify_drive_file, analyze_drive_upload, GeminiError
 from datetime import datetime, timezone
 from typing import List, Optional
 import aiofiles, uuid, os, logging, html, re
@@ -23,10 +22,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/drive", tags=["drive"])
 
 TEXT_EDITABLE_EXTS = {".md", ".markdown", ".txt"}
-IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"}
-# Matches the DD.MM.YYYY topics the upload sheet's subject+day picker
-# auto-creates (see onDriveUploadDateChange() in pages/drive.html) — kept in
-# sync with the frontend's own DRIVE_DATE_TOPIC_RE.
+# Leftover per-lesson date folders from the old upload sheet. Empty ones
+# are still cleaned up on delete/move so they don't linger.
 DATE_TOPIC_RE = re.compile(r"^\d{2}\.\d{2}\.\d{4}$")
 
 def _ext(name: str) -> str:
@@ -160,82 +157,14 @@ async def upload_drive_file(
 
     resolved_subject_id = int(subject_id) if subject_id.strip().isdigit() else None
     resolved_topic = topic.strip() or None
-    auto_sorted = False
-
-    # Computed once, up front, since both the (subject-blank-only) auto-sort
-    # below and the (always-runs) filename suggestion further down need the
-    # same text excerpt.
-    text_excerpt = None
-    if ext in TEXT_EDITABLE_EXTS:
-        try:
-            text_excerpt = content.decode("utf-8", errors="ignore")[:1500]
-        except Exception:
-            text_excerpt = None
-
-    if resolved_subject_id is None:
-        try:
-            result = await db.execute(select(Subject).where(
-                or_(
-                    Subject.class_id == current_user.class_id,
-                    Subject.is_global == True,  # noqa: E712
-                    Subject.class_id.is_(None),
-                )
-            ))
-            class_subjects = list(result.scalars().all())
-        except Exception:
-            class_subjects = []
-
-        if class_subjects:
-            existing = await db.execute(select(DriveFile).where(DriveFile.class_id == current_user.class_id))
-            existing_files = list(existing.scalars().all())
-            topics_by_subject: dict[str, list[str]] = {}
-            subj_by_id = {s.id: s.name for s in class_subjects}
-            for f in existing_files:
-                if f.subject_id and f.topic:
-                    name = subj_by_id.get(f.subject_id)
-                    if name:
-                        topics_by_subject.setdefault(name, [])
-                        if f.topic not in topics_by_subject[name]:
-                            topics_by_subject[name].append(f.topic)
-
-            try:
-                suggestion = await classify_drive_file(
-                    file.filename or "Datei", mime or file.content_type,
-                    [s.name for s in class_subjects], topics_by_subject, text_excerpt,
-                )
-                if suggestion.get("subject"):
-                    name_to_id = {s.name: s.id for s in class_subjects}
-                    resolved_subject_id = name_to_id.get(suggestion["subject"])
-                    if resolved_subject_id and not resolved_topic:
-                        resolved_topic = suggestion.get("topic")
-                    auto_sorted = resolved_subject_id is not None
-            except Exception as e:
-                logger.warning("Drive auto-sort failed, leaving file unsorted: %s", e)
 
     if resolved_subject_id and resolved_topic:
         await _get_or_create_topic(db, current_user.class_id, resolved_subject_id, resolved_topic)
 
-    # Renaming and lecture-notes detection run regardless of how the
-    # subject/topic were resolved (by hand or by classify_drive_file above)
-    # — picking the subject/day manually doesn't mean the uploader also
-    # typed a meaningful filename. Only text and image content is actually
-    # readable here; other types (PDF, docx, ...) keep their original name
-    # and are never flagged as lecture notes.
-    original_name = file.filename or f"Datei{ext}"
-    is_lecture_notes = False
-    try:
-        analysis = {"filename": None, "is_lecture_notes": False}
-        if ext in IMAGE_EXTS:
-            analysis = await analyze_drive_upload(original_name, mime or file.content_type, image_bytes=content)
-        elif text_excerpt:
-            analysis = await analyze_drive_upload(original_name, mime or file.content_type, text_excerpt=text_excerpt)
-        if analysis.get("filename"):
-            original_name = f"{analysis['filename']}{ext}"
-        is_lecture_notes = bool(analysis.get("is_lecture_notes"))
-    except Exception as e:
-        logger.warning("Drive upload analysis failed, keeping original name: %s", e)
-
-    original_name = await _dedupe_original_name(db, current_user.class_id, resolved_subject_id, resolved_topic, original_name)
+    original_name = await _dedupe_original_name(
+        db, current_user.class_id, resolved_subject_id, resolved_topic,
+        file.filename or f"Datei{ext}",
+    )
 
     filename = f"{uuid.uuid4().hex}{ext}"
     dest = os.path.join(settings.drive_storage_dir, filename)
@@ -247,7 +176,7 @@ async def upload_drive_file(
         class_id=current_user.class_id,
         subject_id=resolved_subject_id,
         topic=resolved_topic,
-        is_lecture_notes=is_lecture_notes,
+        is_lecture_notes=False,
         uploader_id=current_user.id,
         filename=filename,
         original_name=original_name,
@@ -260,13 +189,11 @@ async def upload_drive_file(
 
     await log_audit(
         db, action="drive.upload", user=current_user, entity_type="drive_file", entity_id=df.id,
-        details={"filename": df.original_name, "size": len(content), "auto_sorted": auto_sorted},
+        details={"filename": df.original_name, "size": len(content)},
         request=request,
     )
 
-    out = (await _serialize(db, [df]))[0]
-    out["auto_sorted"] = auto_sorted
-    return out
+    return (await _serialize(db, [df]))[0]
 
 @router.get("/download/{file_id}")
 async def download_drive_file(file_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
