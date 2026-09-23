@@ -18,11 +18,11 @@ async function init_notes() {
   if (window.__notesOpenBoardId) {
     const id = window.__notesOpenBoardId;
     window.__notesOpenBoardId = null;
-    openNotesBoardCanvas(id);
+    window.openNotesBoardCanvas(id);
     return;
   }
   const pathMatch = location.pathname.match(/^\/notes\/(\d+)/);
-  if (pathMatch) openNotesBoardCanvas(parseInt(pathMatch[1]));
+  if (pathMatch) window.openNotesBoardCanvas(parseInt(pathMatch[1]));
 }
 
 function renderNotesList() {
@@ -60,7 +60,7 @@ function renderNotesList() {
 
 let notesActiveEngine = null;
 
-async function openNotesBoardCanvas(id) {
+async function openNotesBoardCanvasImpl(id) {
   let board;
   try {
     board = await API.notesBoard(id);
@@ -231,4 +231,4 @@ async function deleteNotesBoardDo(id) {
 // ============================================================================
 
 window.__init_notes_impl = init_notes;
-window.__openNotesBoardCanvasImpl = openNotesBoardCanvas;
+window.__openNotesBoardCanvasImpl = openNotesBoardCanvasImpl;
