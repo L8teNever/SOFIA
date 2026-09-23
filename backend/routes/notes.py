@@ -1,17 +1,20 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_, delete
-from backend.database import get_db
-from backend.auth import get_current_user
+from backend.database import get_db, AsyncSessionLocal
+from backend.auth import get_current_user, get_current_user_ws
 from backend.models.notes_board import NotesBoard
 from backend.models.notes_stroke import NotesStroke
 from backend.models.drive_topic import DriveTopic
 from backend.models.subject import Subject
 from backend.models.user import User
 from backend.schemas import NotesBoardOut, NotesBoardCreate, NotesBoardUpdate
+from backend.services.notes_connection_manager import NotesConnectionManager
 from typing import List, Optional
+import json
 
 router = APIRouter(prefix="/api/v1/notes", tags=["notes"])
+manager = NotesConnectionManager()
 
 # Duplicated from drive.py's private helper of the same name rather than
 # shared across files — this codebase already accepts this kind of small
@@ -149,3 +152,151 @@ async def delete_notes_board(board_id: int, db: AsyncSession = Depends(get_db), 
     await db.delete(board)
     await db.commit()
     return {"ok": True}
+
+def _board_visible(board: NotesBoard, user: User) -> bool:
+    return board.is_public or board.owner_id == user.id or user.role in ("admin", "super_admin")
+
+# --- Live drawing --- one connection = one already-scoped board, so unlike
+# a single multiplexed endpoint, no boardId needs threading into individual
+# messages — only into the URL and the connection-manager's broadcast scope.
+# Message protocol below is an unchanged port of sofianotes' own (see
+# C:\tmp\sofianotes-explore\backend\app\main.py) plus a ping/pong keepalive
+# it didn't have, cheap insurance against a Cloudflare Tunnel idle timeout.
+@router.websocket("/ws/{board_id}")
+async def notes_ws(websocket: WebSocket, board_id: int):
+    # Auth-in-handshake has no in-repo precedent (first WebSocket route in
+    # this codebase) — called as plain functions, not via Depends(), to
+    # sidestep FastAPI's Request-vs-WebSocket dependency typing ambiguity.
+    #
+    # accept() has to happen BEFORE any rejection: closing pre-accept still
+    # sends the intended close code at the ASGI level, but browsers only
+    # ever surface a generic 1006 to JS for anything that closes before the
+    # opening handshake completes — verified against this exact FastAPI/
+    # Starlette pin, not assumed. Accepting first (then immediately closing
+    # on failure) is also consistent with this codebase's existing
+    # never-distinguish-404-from-403 convention elsewhere (_get_visible in
+    # drive.py) — a rejected probe looks identical at the network level to
+    # an accepted-then-closed one either way.
+    await websocket.accept()
+    async with AsyncSessionLocal() as db:
+        user = await get_current_user_ws(websocket, db)
+        if user is None:
+            await websocket.close(code=4401)
+            return
+        result = await db.execute(select(NotesBoard).where(NotesBoard.id == board_id))
+        board = result.scalar_one_or_none()
+        if not board or board.class_id != user.class_id:
+            await websocket.close(code=4404)
+            return
+        if not _board_visible(board, user):
+            await websocket.close(code=4403)
+            return
+
+    display_name = user.display_name or user.email.split("@")[0]
+    client = manager.connect(board_id, websocket, user.id, display_name)
+
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(NotesStroke).where(NotesStroke.board_id == board_id).order_by(NotesStroke.created_at)
+        )
+        strokes = [
+            {"id": s.id, "tool": s.tool, "color": s.color, "size": s.size, "points": json.loads(s.points)}
+            for s in result.scalars().all()
+        ]
+    await websocket.send_json({"type": "init", "clientId": client.id, "color": client.color, "strokes": strokes})
+    await manager.broadcast(board_id, {
+        "type": "presence_join", "id": client.id, "color": client.color,
+        "userId": client.user_id, "displayName": client.display_name,
+    }, exclude=websocket)
+
+    try:
+        while True:
+            msg = await websocket.receive_json()
+            msg_type = msg.get("type")
+
+            if msg_type == "ping":
+                await websocket.send_json({"type": "pong"})
+
+            elif msg_type == "cursor":
+                await manager.broadcast(board_id, {
+                    "type": "cursor", "id": client.id, "color": client.color,
+                    "userId": client.user_id, "displayName": client.display_name,
+                    "x": msg.get("x"), "y": msg.get("y"), "tool": msg.get("tool"), "size": msg.get("size"),
+                }, exclude=websocket)
+
+            elif msg_type == "stroke_start":
+                stroke_id = msg.get("strokeId")
+                if not stroke_id:
+                    continue
+                client.in_progress[stroke_id] = {
+                    "id": stroke_id, "tool": msg.get("tool", "pen"), "color": msg.get("color", "#000000"),
+                    "size": msg.get("size", 4), "points": list(msg.get("points", [])),
+                }
+                entry = client.in_progress[stroke_id]
+                await manager.broadcast(board_id, {
+                    "type": "stroke_start", "id": client.id, "strokeId": stroke_id,
+                    "tool": entry["tool"], "color": entry["color"], "size": entry["size"], "points": entry["points"],
+                }, exclude=websocket)
+
+            elif msg_type == "stroke_points":
+                stroke_id = msg.get("strokeId")
+                entry = client.in_progress.get(stroke_id)
+                new_points = msg.get("points", [])
+                if entry is not None:
+                    entry["points"].extend(new_points)
+                await manager.broadcast(board_id, {
+                    "type": "stroke_points", "id": client.id, "strokeId": stroke_id, "points": new_points,
+                }, exclude=websocket)
+
+            elif msg_type == "stroke_end":
+                stroke_id = msg.get("strokeId")
+                entry = client.in_progress.pop(stroke_id, None)
+                if entry is not None and len(entry["points"]) >= 1:
+                    async with AsyncSessionLocal() as db:
+                        await db.merge(NotesStroke(
+                            id=entry["id"], board_id=board_id, tool=entry["tool"],
+                            color=entry["color"], size=entry["size"], points=json.dumps(entry["points"]),
+                        ))
+                        await db.commit()
+                await manager.broadcast(board_id, {"type": "stroke_end", "id": client.id, "strokeId": stroke_id}, exclude=websocket)
+
+            elif msg_type == "stroke_replace":
+                stroke_id = msg.get("strokeId")
+                entry = client.in_progress.get(stroke_id)
+                new_points = msg.get("points", [])
+                if entry is not None:
+                    entry["points"] = new_points
+                await manager.broadcast(board_id, {
+                    "type": "stroke_replace", "id": client.id, "strokeId": stroke_id, "points": new_points,
+                }, exclude=websocket)
+
+            elif msg_type == "stroke_move":
+                stroke = msg.get("stroke")
+                if stroke and stroke.get("id"):
+                    async with AsyncSessionLocal() as db:
+                        await db.merge(NotesStroke(
+                            id=stroke["id"], board_id=board_id, tool=stroke.get("tool", "pen"),
+                            color=stroke.get("color", "#000000"), size=stroke.get("size", 4),
+                            points=json.dumps(stroke.get("points", [])),
+                        ))
+                        await db.commit()
+                    await manager.broadcast(board_id, {"type": "stroke_move", "id": client.id, "stroke": stroke}, exclude=websocket)
+
+            elif msg_type == "stroke_abort":
+                stroke_id = msg.get("strokeId")
+                client.in_progress.pop(stroke_id, None)
+                await manager.broadcast(board_id, {"type": "stroke_abort", "id": client.id, "strokeId": stroke_id}, exclude=websocket)
+
+            elif msg_type == "erase":
+                stroke_ids = [s for s in msg.get("strokeIds", []) if s]
+                if stroke_ids:
+                    async with AsyncSessionLocal() as db:
+                        await db.execute(delete(NotesStroke).where(NotesStroke.board_id == board_id, NotesStroke.id.in_(stroke_ids)))
+                        await db.commit()
+                    await manager.broadcast(board_id, {"type": "erase", "id": client.id, "strokeIds": stroke_ids}, exclude=websocket)
+
+    except WebSocketDisconnect:
+        pass
+    finally:
+        manager.disconnect(board_id, websocket)
+        await manager.broadcast(board_id, {"type": "presence_leave", "id": client.id})
