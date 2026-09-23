@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Request, Depends
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.exceptions import HTTPException
 from contextlib import asynccontextmanager
 from backend.database import init_db
@@ -98,9 +98,21 @@ async def apple_touch_icon():
             return FileResponse(p, media_type="image/png")
     raise HTTPException(status_code=404)
 
+# notes.kulbarts.com is the same app/container as sofia.kulbarts.com (same
+# Cloudflare Access app, same login) — it just needs to land on the Notes
+# page instead of the dashboard. boot() in app.js already opens whatever
+# KNOWN_PAGES entry the URL's first path segment names, so landing there
+# is just a redirect to /notes for that hostname's root, not a separate
+# code path — any other path on this host (e.g. a bookmarked board link)
+# already resolves correctly without this redirect ever firing.
+NOTES_HOSTNAMES = {"notes.kulbarts.com"}
+
 # Serve frontend SPA — inject build timestamp for cache busting
 @app.get("/{full_path:path}", include_in_schema=False)
 async def spa(full_path: str, request: Request):
+    host = request.headers.get("host", "").split(":")[0].lower()
+    if host in NOTES_HOSTNAMES and not full_path:
+        return RedirectResponse(url="/notes")
     with open("pages/index.html", "r", encoding="utf-8") as f:
         html = f.read().replace("__BUILD__", BUILD_TS)
     return HTMLResponse(html)
