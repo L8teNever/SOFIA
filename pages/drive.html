@@ -3,11 +3,11 @@
   <div class="page-scroll-1col">
   <div class="page-inner">
 
-    <input type="file" id="drive-file-input" multiple style="display:none;" onchange="handleDriveFileSelect(this.files)">
+    <input type="file" id="drive-file-input" multiple style="display:none;" onchange="handleDriveFileSelect(this)">
 
     <div id="drive-view-chips" style="display:flex;gap:8px;flex-wrap:wrap;">
-      <button onclick="setDriveMode('folders',this)" class="chip active" id="drive-chip-folders">Fächer</button>
-      <button onclick="setDriveMode('recent',this)" class="chip" id="drive-chip-recent">Zuletzt hochgeladen</button>
+      <button onclick="setDriveMode('folders',this)" class="chip active" id="drive-chip-folders">Ordner</button>
+      <button onclick="setDriveMode('recent',this)" class="chip" id="drive-chip-recent">Zuletzt</button>
     </div>
 
     <div id="drive-content" style="margin-top:16px;"></div>
@@ -15,24 +15,31 @@
   </div>
   </div>
 
-  <div id="drive-preview-lightbox" style="display:none;position:fixed;inset:0;z-index:2000;background:#fff;flex-direction:column;opacity:0;transition:opacity 0.22s ease;">
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:max(16px, env(safe-area-inset-top)) 16px 16px;border-bottom:1px solid rgba(0,0,0,0.08);flex-shrink:0;">
+  <div id="drive-fab-slot"></div>
+
+  <div id="drive-preview-lightbox" style="display:none;position:fixed;inset:0;z-index:2000;background:rgba(0,0,0,0.92);backdrop-filter:blur(12px);flex-direction:column;opacity:0;transition:opacity 0.22s ease;">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:max(12px, env(safe-area-inset-top)) 16px 12px;color:#fff;flex-shrink:0;">
       <div style="min-width:0;flex:1;">
-        <div id="drive-preview-title" style="font-weight:700;font-size:1rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></div>
-        <div id="drive-preview-meta" style="font-size:0.75rem;opacity:0.55;"></div>
+        <div id="drive-preview-title" style="font-weight:700;font-size:0.95rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></div>
+        <div id="drive-preview-meta" style="font-size:0.75rem;opacity:0.65;"></div>
       </div>
-      <button onclick="closeDriveFilePreview()" style="width:40px;height:40px;border-radius:50%;background:rgba(0,0,0,0.06);border:none;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;" title="Schließen">
-        <i data-lucide="x" style="width:20px;height:20px;"></i>
-      </button>
+      <div style="display:flex;gap:8px;align-items:center;flex-shrink:0;">
+        <a id="drive-preview-open-link" href="#" download style="width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,0.12);color:#fff;display:flex;align-items:center;justify-content:center;text-decoration:none;" title="Herunterladen">
+          <i data-lucide="download" style="width:18px;height:18px;"></i>
+        </a>
+        <button onclick="closeDriveFilePreview()" style="width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,0.12);color:#fff;border:none;display:flex;align-items:center;justify-content:center;cursor:pointer;" title="Schließen">
+          <i data-lucide="x" style="width:22px;height:22px;"></i>
+        </button>
+      </div>
     </div>
-    <div id="drive-preview-body" style="flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;padding:16px;"></div>
-    <div id="drive-preview-actions" style="display:flex;gap:10px;padding:16px;padding-bottom:max(16px, env(safe-area-inset-bottom));border-top:1px solid rgba(0,0,0,0.08);flex-shrink:0;"></div>
+    <div id="drive-preview-body" style="flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column;"></div>
+    <div id="drive-preview-actions" style="display:none;gap:10px;padding:12px 16px;padding-bottom:max(16px, env(safe-area-inset-bottom));flex-shrink:0;"></div>
   </div>
 
   <style>
   .drive-folder-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; }
   @media (min-width:560px) { .drive-folder-grid { grid-template-columns:repeat(3,1fr); } }
-  .drive-folder-tile { background:#fff; border-radius:20px; padding:16px; display:flex; flex-direction:column; gap:10px; cursor:pointer; border:1px solid rgba(0,0,0,0.04); transition:transform 0.15s; }
+  .drive-folder-tile { background:#fff; border-radius:20px; padding:16px; display:flex; flex-direction:column; gap:10px; cursor:pointer; border:1px solid rgba(0,0,0,0.04); transition:transform 0.15s; -webkit-tap-highlight-color:transparent; }
   .drive-folder-tile:active { transform:scale(0.97); }
   .drive-topic-group { margin-bottom:18px; }
   .drive-topic-label { font-size:0.78rem; font-weight:700; opacity:0.55; margin:0 0 8px 4px; display:flex; align-items:center; gap:6px; }
@@ -44,6 +51,39 @@
     transition: width 0.28s cubic-bezier(0.2,0.8,0.2,1), opacity 0.18s ease;
   }
   .drive-header-search-wrap.open { width: 100%; opacity: 1; }
+  .drive-gallery-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .drive-gallery-item {
+    position: relative;
+    border-radius: 16px;
+    overflow: hidden;
+    background: #000;
+    cursor: pointer;
+    aspect-ratio: 4/3;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    -webkit-tap-highlight-color: transparent;
+  }
+  .drive-gallery-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .drive-gallery-overlay {
+    position: absolute; inset: 0;
+    background: linear-gradient(to top, rgba(0,0,0,0.5), transparent);
+    display: flex; align-items: flex-end; gap: 6px; padding: 8px; color: #fff;
+  }
+  .drive-file-card {
+    background: #fff;
+    border-radius: 16px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+    border: 1px solid rgba(0,0,0,0.04);
+  }
   </style>
 </div>
 
@@ -53,7 +93,7 @@ document.getElementById('ph-drive').outerHTML = pageHeader({
   titleHtml: `<div style="flex:1;min-width:0;position:relative;height:100%;display:flex;align-items:center;">
       <span class="page-title" id="drive-title-text" style="transition:opacity 0.15s;">Drive</span>
       <div id="drive-header-search-wrap" class="drive-header-search-wrap">
-        <input type="text" id="drive-search-input" placeholder="Dateien durchsuchen..." style="flex:1;min-width:0;border:none;outline:none;background:transparent;padding:6px 0;font-size:1.05rem;font-weight:600;color:inherit;" oninput="onDriveSearchInput(this.value)">
+        <input type="text" id="drive-search-input" placeholder="Dateien durchsuchen..." autocomplete="off" inputmode="search" style="flex:1;min-width:0;border:none;outline:none;background:transparent;padding:6px 0;font-size:1.05rem;font-weight:600;color:inherit;" oninput="onDriveSearchInput(this.value)">
         <button type="button" id="drive-search-clear" onclick="clearDriveSearch()" style="display:none;background:none;border:none;cursor:pointer;opacity:0.4;padding:6px;flex-shrink:0;">
           <i data-lucide="x" style="width:16px;height:16px;"></i>
         </button>
@@ -62,24 +102,20 @@ document.getElementById('ph-drive').outerHTML = pageHeader({
   trailing: `<button class="icon-btn" id="drive-search-btn" onclick="toggleDriveHeaderSearch()" title="Suchen">
       <i data-lucide="search" id="drive-search-btn-icon" style="width:20px;height:20px;"></i>
       <i data-lucide="x" id="drive-search-btn-icon-close" style="width:20px;height:20px;display:none;"></i>
-    </button>
-    <button class="icon-btn" id="drive-upload-btn" onclick="document.getElementById('drive-file-input').click()" title="Datei hochladen">
-      <i data-lucide="upload" style="width:20px;height:20px;"></i>
     </button>`
+});
+document.getElementById('drive-fab-slot').outerHTML = fab({
+  icon: 'upload', onclick: 'document.getElementById("drive-file-input").click()',
+  title: 'Datei hochladen', id: 'drive-fab'
 });
 
 let driveFiles = [], driveSubjects = [];
 let driveMode = 'folders';
-let driveSelectedSubjectId = null; // null = root folder grid, 'unsorted' = unsorted bucket, else a subject id
+let driveSelectedSubjectId = null;
 let driveSearchQuery = '';
-let driveSelectedUploadFiles = [];
-let driveUploadTargetSubjectId = null;
 let drivePreviewFileId = null;
-let driveTopicsCache = {}; // subjectId -> [{id, name, file_count}]
-let driveInLessonsView = false; // inside the "Unterrichtsstunden" sub-folder of the current subject
-let driveSelectedLessonTopic = null; // inside one specific date folder within Unterrichtsstunden
-let driveLabelFilter = null; // null | 'lecture_notes' — active within the current subject folder
-const DRIVE_DATE_TOPIC_RE = /^\d{2}\.\d{2}\.\d{4}$/; // matches the DD.MM.YYYY topics the upload sheet auto-creates
+let driveTopicsCache = {};
+let driveUploading = false;
 
 const DRIVE_COLORS = ['#eaddff','#d3e3fd','#c4eed0','#ffdec1','#ffd8e4','#fff3c4'];
 const DRIVE_ICON_MAP = {
@@ -91,11 +127,12 @@ const DRIVE_ICON_MAP = {
   ppt:'presentation', pptx:'presentation',
 };
 const DRIVE_TEXT_EXTS = ['md', 'markdown', 'txt'];
-const DRIVE_IMAGE_EXTS = ['jpg','jpeg','png','gif','webp','bmp'];
+const DRIVE_IMAGE_EXTS = ['jpg','jpeg','png','gif','webp','bmp','svg'];
 
 function driveExt(name) { return (name.split('.').pop() || '').toLowerCase(); }
 function driveIcon(name) { return DRIVE_ICON_MAP[driveExt(name)] || 'file'; }
 function driveColorFor(id) { return DRIVE_COLORS[Math.abs(id||0) % DRIVE_COLORS.length]; }
+function driveIsImage(f) { return DRIVE_IMAGE_EXTS.includes(driveExt(f.original_name)); }
 
 function formatBytes(b) {
   if (b < 1024) return b + ' B';
@@ -103,14 +140,6 @@ function formatBytes(b) {
   return (b/1048576).toFixed(1) + ' MB';
 }
 
-// A real-looking URL for a file — /drive/{subject}/{topic}/{filename}
-// [/raw|/download] — with no id anywhere in it, instead of the bare
-// /api/v1/drive/preview/{id} kind of link. The backend (public_router in
-// backend/routes/drive.py) looks the file up BY this exact subject/topic/
-// filename combination, scoped to the requesting user's own class — so
-// these segments have to be exact, unlike a cosmetic label. Upload/move
-// auto-renames a file that would otherwise collide with an existing one in
-// the same folder (see _dedupe_original_name), so this is never ambiguous.
 function driveFileUrl(f, suffix) {
   const subject = encodeURIComponent(f.subject_name || 'Unsortiert');
   const topic = encodeURIComponent(f.topic || 'Ohne-Thema');
@@ -153,9 +182,10 @@ function toggleDriveHeaderSearch() {
   driveHeaderSearchOpen = !driveHeaderSearchOpen;
   const title = document.getElementById('drive-title-text');
   const wrap = document.getElementById('drive-header-search-wrap');
-  document.getElementById('drive-upload-btn').style.display = driveHeaderSearchOpen ? 'none' : '';
+  const fabBtn = document.getElementById('drive-fab');
   document.getElementById('drive-search-btn-icon').style.display = driveHeaderSearchOpen ? 'none' : '';
   document.getElementById('drive-search-btn-icon-close').style.display = driveHeaderSearchOpen ? '' : 'none';
+  if (fabBtn) fabBtn.style.display = driveHeaderSearchOpen ? 'none' : '';
 
   if (driveHeaderSearchOpen) {
     title.style.opacity = '0';
@@ -186,23 +216,17 @@ function driveMatchesSearch(f, q) {
   return hay.includes(q);
 }
 
-// The header title (top of the page, not the in-content folder header)
-// otherwise just always said "Drive" no matter how deep you'd navigated —
-// this keeps it in sync with wherever driveSelectedSubjectId/driveInLessonsView
-// currently point, same as a normal file browser's window title would.
 function driveHeaderTitle() {
   if (driveSearchQuery || driveMode === 'recent') return 'Drive';
   if (driveSelectedSubjectId === null) return 'Drive';
   if (driveSelectedSubjectId === 'unsorted') return 'Unsortiert';
-  if (driveSelectedLessonTopic) return driveSelectedLessonTopic;
-  if (driveInLessonsView) return 'Unterrichtsstunden';
   const subject = driveSubjects.find(s => s.id === driveSelectedSubjectId);
   return subject ? subject.name : 'Drive';
 }
 
 function renderDrive() {
   const el = document.getElementById('drive-content');
-  document.getElementById('drive-view-chips').style.display = driveSearchQuery ? 'none' : 'flex';
+  document.getElementById('drive-view-chips').style.display = (driveSearchQuery || driveSelectedSubjectId !== null) ? 'none' : 'flex';
   const titleEl = document.getElementById('drive-title-text');
   if (titleEl) titleEl.textContent = driveHeaderTitle();
 
@@ -229,11 +253,6 @@ function renderDriveFolderGrid() {
   const hasUnsorted = driveFiles.some(f => !f.subject_id);
   const tiles = driveSubjects.map(s => {
     const count = driveFiles.filter(f => f.subject_id === s.id).length;
-    // subject.color is almost always still the DB's shared default (every
-    // subject that was never given a custom color looks identical, barely
-    // visible at low opacity) — driveColorFor() instead gives each subject
-    // its own distinct, fully-saturated pastel from the same palette
-    // already used for file icons elsewhere in Drive.
     return `<div class="drive-folder-tile" onclick="openDriveSubjectFolder(${s.id})">
       <div class="icon-box" style="width:44px;height:44px;border-radius:14px;background:${driveColorFor(s.id)};">
         <i data-lucide="folder" style="width:22px;height:22px;color:#442b7a;"></i>
@@ -243,59 +262,39 @@ function renderDriveFolderGrid() {
     </div>`;
   }).join('');
   const unsortedTile = hasUnsorted ? `<div class="drive-folder-tile" onclick="openDriveSubjectFolder('unsorted')">
-      <div class="icon-box" style="width:40px;height:40px;border-radius:12px;background:rgba(0,0,0,0.06);color:#49454f;">
-        <i data-lucide="folder-open" style="width:20px;height:20px;"></i>
+      <div class="icon-box" style="width:44px;height:44px;border-radius:14px;background:rgba(0,0,0,0.06);color:#49454f;">
+        <i data-lucide="folder-open" style="width:22px;height:22px;"></i>
       </div>
       <div style="font-weight:700;font-size:0.92rem;">Unsortiert</div>
-      <div style="font-size:0.75rem;opacity:0.5;">${driveFiles.filter(f=>!f.subject_id).length} Datei(en)</div>
+      <div style="font-size:0.75rem;opacity:0.5;">${driveFiles.filter(f=>!f.subject_id).length} Datei${driveFiles.filter(f=>!f.subject_id).length===1?'':'en'}</div>
     </div>` : '';
 
   if (!driveSubjects.length && !hasUnsorted) {
-    return emptyState({ icon:'hard-drive', title:'Noch keine Dateien', subtitle:'Lade die erste Datei hoch — sie wird automatisch einsortiert.', hidden:false });
+    return emptyState({ icon:'hard-drive', title:'Noch keine Dateien', subtitle:'Tippe auf den Upload-Button und wähle einfach Dateien aus.', hidden:false });
   }
   return `<div class="drive-folder-grid">${tiles}${unsortedTile}</div>`;
 }
 
-// Mirrors driveFileUrl()'s subject/topic path shape so the address bar
-// reflects wherever you've actually navigated to — /drive, /drive/Deutsch,
-// /drive/Deutsch/Unterrichtsstunden, /drive/Deutsch/19.08.2026, ... —
-// instead of staying on the bare page URL no matter how deep you go.
 function driveUrlPath() {
   if (driveSelectedSubjectId === null) return '/drive';
   if (driveSelectedSubjectId === 'unsorted') return '/drive/Unsortiert';
   const subject = driveSubjects.find(s => s.id === driveSelectedSubjectId);
-  const subjName = encodeURIComponent(subject ? subject.name : 'Fach');
-  if (driveSelectedLessonTopic) return `/drive/${subjName}/${encodeURIComponent(driveSelectedLessonTopic)}`;
-  if (driveInLessonsView) return `/drive/${subjName}/Unterrichtsstunden`;
-  return `/drive/${subjName}`;
+  return `/drive/${encodeURIComponent(subject ? subject.name : 'Fach')}`;
 }
 
-// Every forward navigation (open a subject, drill into Unterrichtsstunden,
-// open one date folder) pushes its own history entry carrying the full nav
-// state — going back is then just history.back() (see driveHeaderBack()),
-// with driveHandlePopstate() (hooked into app.js's central popstate
-// handler) restoring state from e.state rather than this file needing its
-// own popstate listener (which would otherwise pile up a duplicate one
-// every time the Drive page script re-runs on each visit).
 function drivePushHistory() {
   history.pushState({
     page: 'drive', subjectId: driveSelectedSubjectId,
-    inLessons: driveInLessonsView, lessonTopic: driveSelectedLessonTopic,
   }, '', driveUrlPath());
 }
 
 function driveHandlePopstate(state) {
   driveSelectedSubjectId = state.subjectId ?? null;
-  driveInLessonsView = !!state.inLessons;
-  driveSelectedLessonTopic = state.lessonTopic || null;
   renderDrive();
 }
 
 async function openDriveSubjectFolder(id) {
   driveSelectedSubjectId = id;
-  driveInLessonsView = false;
-  driveSelectedLessonTopic = null;
-  driveLabelFilter = null;
   if (id !== 'unsorted' && !driveTopicsCache[id]) {
     driveTopicsCache[id] = await API.driveTopics(id).catch(() => []);
   }
@@ -303,14 +302,6 @@ async function openDriveSubjectFolder(id) {
   drivePushHistory();
 }
 
-// The page header's own back arrow (top-left, guaranteed by pageHeader())
-// normally just leaves the page entirely via closePage() — inside Drive
-// that meant one tap out of a folder took you all the way back to the
-// dashboard instead of one level up. This makes that same button context-
-// aware: one level back through the folder hierarchy while browsing (via
-// the real browser history, same as the hardware/gesture back button would
-// do), falling through to the normal "leave Drive" behavior only once
-// you're already at the folder grid root.
 function driveHeaderBack() {
   if (driveSelectedSubjectId === null) {
     closePage();
@@ -319,63 +310,29 @@ function driveHeaderBack() {
   history.back();
 }
 
-function openDriveLessonsView() {
-  driveInLessonsView = true;
-  driveSelectedLessonTopic = null;
-  renderDrive();
-  drivePushHistory();
-}
-
-function openDriveLessonTopic(name) {
-  driveSelectedLessonTopic = name;
-  renderDrive();
-  drivePushHistory();
-}
-
-function setDriveLabelFilter(val) {
-  driveLabelFilter = driveLabelFilter === val ? null : val;
-  renderDrive();
-}
-
-function driveLabelFilterChips() {
-  return `<div style="display:flex;gap:8px;margin-bottom:14px;">
-    <button onclick="setDriveLabelFilter(null)" class="chip${driveLabelFilter===null?' active':''}">Alle</button>
-    <button onclick="setDriveLabelFilter('lecture_notes')" class="chip${driveLabelFilter==='lecture_notes'?' active':''}"><i data-lucide="notebook-pen" style="width:14px;height:14px;margin-right:4px;vertical-align:-2px;"></i>Aufschriebe</button>
-  </div>`;
-}
-
-// Groups a file list into named topic groups (shared by the subject root
-// view and the nested "Unterrichtsstunden" view) — extracted so both can
-// render the same folder-group markup for their own subset of topic names.
 function renderDriveTopicGroups(topicNames, topicMap, subjectId) {
   return topicNames.map(name => {
     const g = topicMap[name];
     const list = g.files.sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
     return `<div class="drive-topic-group">
       <div class="drive-topic-label">
-        <i data-lucide="tag" style="width:12px;height:12px;"></i>${escapeHtml(name)}
+        <i data-lucide="folder" style="width:12px;height:12px;"></i>${escapeHtml(name)}
         ${g.topicId ? `<button onclick="openRenameTopicSheet(${g.topicId},${subjectId})" style="background:none;border:none;cursor:pointer;opacity:0.5;padding:2px;display:flex;" title="Umbenennen">
           <i data-lucide="pencil" style="width:12px;height:12px;"></i>
         </button>` : ''}
       </div>
-      ${list.length ? renderDriveFileList(list, false) : `<div style="opacity:0.4;font-size:0.82rem;padding:6px 4px 14px;">Leerer Ordner — verschiebe eine Datei hierher.</div>`}
+      ${list.length ? renderDriveFileList(list, false) : `<div style="opacity:0.4;font-size:0.82rem;padding:6px 4px 14px;">Leerer Ordner</div>`}
     </div>`;
   }).join('');
 }
 
 function renderDriveSubjectFolder(id) {
   const isUnsorted = id === 'unsorted';
-  const subject = isUnsorted ? null : driveSubjects.find(s => s.id === id);
-  let files = isUnsorted
+  const files = isUnsorted
     ? driveFiles.filter(f => !f.subject_id)
     : driveFiles.filter(f => f.subject_id === id);
-  if (!isUnsorted && driveLabelFilter === 'lecture_notes') files = files.filter(f => f.is_lecture_notes);
 
-  // No in-content back arrow or title here — the page header (top-left
-  // back button + title, see driveHeaderBack()/driveHeaderTitle()) already
-  // covers both, so repeating them right below would just be clutter
-  // saying the same thing twice.
-  const header = (!isUnsorted && !driveInLessonsView) ? `<div style="display:flex;justify-content:flex-end;margin-bottom:14px;">
+  const header = !isUnsorted ? `<div style="display:flex;justify-content:flex-end;margin-bottom:14px;">
     <button class="icon-btn" onclick="openCreateTopicSheet(${id})" style="width:36px;height:36px;flex-shrink:0;" title="Neuer Ordner">
       <i data-lucide="folder-plus" style="width:18px;height:18px;"></i>
     </button>
@@ -388,10 +345,7 @@ function renderDriveSubjectFolder(id) {
 
   const knownTopics = driveTopicsCache[id] || [];
   const topicMap = {};
-  // Empty known folders are only worth showing when browsing normally —
-  // under a label filter they'd all appear as clutter ("Leerer Ordner")
-  // even though every file in them is just filtered out, not actually gone.
-  if (!driveLabelFilter) knownTopics.forEach(t => { topicMap[t.name] = { files: [], topicId: t.id }; });
+  knownTopics.forEach(t => { topicMap[t.name] = { files: [], topicId: t.id }; });
   const untagged = [];
   files.forEach(f => {
     if (f.topic) {
@@ -402,67 +356,18 @@ function renderDriveSubjectFolder(id) {
     }
   });
 
-  const allTopicNames = Object.keys(topicMap);
-  const dateTopicNames = allTopicNames.filter(n => DRIVE_DATE_TOPIC_RE.test(n)).sort((a,b) => {
-    // DD.MM.YYYY — sort chronologically (most recent first), not alphabetically
-    const [da,ma,ya] = a.split('.'); const [db,mb,yb] = b.split('.');
-    return `${yb}${mb}${db}`.localeCompare(`${ya}${ma}${da}`);
-  });
-  const otherTopicNames = allTopicNames.filter(n => !DRIVE_DATE_TOPIC_RE.test(n)).sort((a,b) => a.localeCompare(b));
-
-  if (driveInLessonsView) {
-    // One specific date folder, opened from the tile grid below — a real
-    // folder now (its own navigation level you click into), not just a
-    // heading with files sitting inline underneath it.
-    if (driveSelectedLessonTopic) {
-      const g = topicMap[driveSelectedLessonTopic];
-      const list = g ? g.files.sort((a,b) => new Date(b.created_at) - new Date(a.created_at)) : [];
-      const topicHeader = g && g.topicId ? `<div style="display:flex;justify-content:flex-end;margin-bottom:14px;">
-        <button class="icon-btn" onclick="openRenameTopicSheet(${g.topicId},${id})" style="width:36px;height:36px;" title="Umbenennen">
-          <i data-lucide="pencil" style="width:16px;height:16px;"></i>
-        </button>
-      </div>` : '';
-      return topicHeader + (list.length
-        ? renderDriveFileList(list, false)
-        : emptyState({ icon:'folder-open', title:'Noch keine Dateien in diesem Ordner', hidden:false }));
-    }
-
-    if (!dateTopicNames.length) return header + driveLabelFilterChips() + emptyState({ icon:'folder-open', title:'Noch keine Unterrichtsstunden-Ordner', hidden:false });
-    const dateTiles = dateTopicNames.map(name => {
-      const count = topicMap[name].files.length;
-      return `<div class="drive-folder-tile" onclick="openDriveLessonTopic('${name}')">
-        <div class="icon-box" style="width:44px;height:44px;border-radius:14px;background:#ffdec1;">
-          <i data-lucide="calendar" style="width:22px;height:22px;color:#442b7a;"></i>
-        </div>
-        <div style="font-weight:700;font-size:0.92rem;">${escapeHtml(name)}</div>
-        <div style="font-size:0.75rem;opacity:0.5;">${count} Datei${count===1?'':'en'}</div>
-      </div>`;
-    }).join('');
-    return header + driveLabelFilterChips() + `<div class="drive-folder-grid">${dateTiles}</div>`;
+  const topicNames = Object.keys(topicMap).sort((a,b) => a.localeCompare(b));
+  if (!topicNames.length && !untagged.length) {
+    return header + emptyState({ icon:'folder-open', title:'Noch keine Dateien in diesem Ordner', subtitle:'Tippe unten rechts, um Dateien hochzuladen.', hidden:false });
   }
 
-  if (!allTopicNames.length && !untagged.length) {
-    return header + emptyState({ icon:'folder-open', title:'Noch keine Dateien in diesem Ordner', subtitle:'Lade eine Datei hoch oder lege oben rechts einen neuen Ordner an.', hidden:false });
-  }
-
-  const lessonsFileCount = dateTopicNames.reduce((sum,n) => sum + topicMap[n].files.length, 0);
-  const lessonsTile = dateTopicNames.length ? `<div class="drive-folder-grid" style="margin-bottom:18px;">
-    <div class="drive-folder-tile" onclick="openDriveLessonsView()">
-      <div class="icon-box" style="width:44px;height:44px;border-radius:14px;background:#ffdec1;">
-        <i data-lucide="calendar-days" style="width:22px;height:22px;color:#442b7a;"></i>
-      </div>
-      <div style="font-weight:700;font-size:0.92rem;">Unterrichtsstunden</div>
-      <div style="font-size:0.75rem;opacity:0.5;">${lessonsFileCount} Datei${lessonsFileCount===1?'':'en'}</div>
-    </div>
-  </div>` : '';
-
-  const otherGroups = renderDriveTopicGroups(otherTopicNames, topicMap, id);
+  const otherGroups = renderDriveTopicGroups(topicNames, topicMap, id);
   const untaggedGroup = untagged.length ? `<div class="drive-topic-group">
-    <div class="drive-topic-label"><i data-lucide="tag" style="width:12px;height:12px;"></i>Ohne Thema</div>
+    ${topicNames.length ? `<div class="drive-topic-label"><i data-lucide="files" style="width:12px;height:12px;"></i>Dateien</div>` : ''}
     ${renderDriveFileList(untagged.sort((a,b) => new Date(b.created_at) - new Date(a.created_at)), false)}
   </div>` : '';
 
-  return header + driveLabelFilterChips() + lessonsTile + otherGroups + untaggedGroup;
+  return header + otherGroups + untaggedGroup;
 }
 
 function openCreateTopicSheet(subjectId) {
@@ -507,10 +412,6 @@ async function submitRenameTopic(topicId, subjectId) {
     await API.renameDriveTopic(topicId, { name });
     driveFiles = await API.driveFiles().catch(() => driveFiles);
     driveTopicsCache[subjectId] = await API.driveTopics(subjectId).catch(() => []);
-    // A renamed date folder may no longer look like one (or may have been
-    // the one currently open) — step back to the Unterrichtsstunden tile
-    // grid rather than keep pointing at a name that no longer exists.
-    if (driveSelectedLessonTopic) driveSelectedLessonTopic = null;
     closeSheet();
     renderDrive();
     showToast('Ordner umbenannt');
@@ -525,16 +426,13 @@ function openMoveFileSheet(fileId) {
     <div style="padding:4px;">
       <div style="font-weight:700;font-size:1.05rem;margin-bottom:4px;">Datei verschieben</div>
       <div style="opacity:0.6;font-size:0.85rem;margin-bottom:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(f.original_name)}</div>
-
-      <div style="font-size:0.8rem;font-weight:700;opacity:0.5;margin-bottom:6px;">FACH</div>
+      <div style="font-size:0.8rem;font-weight:700;opacity:0.5;margin-bottom:6px;">ORDNER</div>
       <select class="m3-select" id="drive-move-subject" style="margin-bottom:14px;">
         <option value="">Unsortiert</option>
         ${subjectOptions}
       </select>
-
-      <div style="font-size:0.8rem;font-weight:700;opacity:0.5;margin-bottom:6px;">THEMA (optional)</div>
-      <input type="text" class="m3-input" id="drive-move-topic" value="${escapeHtml(f.topic||'')}" placeholder="z. B. Photosynthese" style="margin-bottom:14px;">
-
+      <div style="font-size:0.8rem;font-weight:700;opacity:0.5;margin-bottom:6px;">UNTERORDNER (optional)</div>
+      <input type="text" class="m3-input" id="drive-move-topic" value="${escapeHtml(f.topic||'')}" placeholder="z. B. Arbeitsblätter" style="margin-bottom:14px;">
       <button class="m3-btn-full" onclick="submitMoveFile(${fileId})">Verschieben</button>
     </div>
   `);
@@ -543,7 +441,6 @@ function openMoveFileSheet(fileId) {
 async function submitMoveFile(fileId) {
   const subjVal = document.getElementById('drive-move-subject').value;
   const topicVal = document.getElementById('drive-move-topic').value;
-  const before = driveFiles.find(f => f.id === fileId);
   try {
     const updated = await API.updateDriveFile(fileId, {
       subject_id: subjVal ? parseInt(subjVal) : null,
@@ -552,15 +449,6 @@ async function submitMoveFile(fileId) {
     const idx = driveFiles.findIndex(f => f.id === fileId);
     if (idx !== -1) driveFiles[idx] = updated;
     driveTopicsCache = {};
-
-    // Same auto-delete-emptied-date-folder handling as executeDeleteDriveFile
-    // — moving the last file out of the currently-open date folder empties
-    // it (and the backend removes it) just as surely as deleting it would.
-    if (before && driveSelectedLessonTopic && before.topic === driveSelectedLessonTopic && before.subject_id === driveSelectedSubjectId) {
-      const stillHasFiles = driveFiles.some(f => f.subject_id === driveSelectedSubjectId && f.topic === driveSelectedLessonTopic);
-      if (!stillHasFiles) driveSelectedLessonTopic = null;
-    }
-
     closeSheet();
     renderDrive();
     showToast('Datei verschoben');
@@ -571,195 +459,101 @@ function renderDriveFileList(files, showTag) {
   if (!files.length) {
     return `<div style="text-align:center;padding:30px;opacity:0.4;font-size:0.9rem;">Keine Dateien gefunden</div>`;
   }
-  return files.map(f => {
+  const images = files.filter(driveIsImage);
+  const others = files.filter(f => !driveIsImage(f));
+  let html = '';
+  if (images.length) {
+    html += `<div class="drive-gallery-grid">${images.map(f => `
+      <div class="drive-gallery-item" onclick="openDriveFile(${f.id})">
+        <img class="drive-gallery-img" src="${driveFileUrl(f, 'raw')}" alt="${escapeHtml(f.original_name)}" loading="lazy">
+        <div class="drive-gallery-overlay">
+          <span style="font-size:0.7rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0;">${escapeHtml(f.original_name)}</span>
+          <button onclick="event.stopPropagation();openDriveFileActions(${f.id})" style="background:rgba(255,255,255,0.18);border:none;border-radius:10px;width:28px;height:28px;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#fff;cursor:pointer;" title="Mehr">
+            <i data-lucide="more-vertical" style="width:14px;height:14px;"></i>
+          </button>
+        </div>
+      </div>`).join('')}</div>`;
+  }
+  html += others.map(f => {
     const canDelete = currentUser && (f.uploader_id === currentUser.id || currentUser.role === 'admin' || currentUser.role === 'super_admin');
     const tag = showTag && (f.subject_name || f.topic)
-      ? `<div style="margin-top:4px;"><span class="drive-file-tag">${escapeHtml([f.subject_name, f.topic].filter(Boolean).join(' · '))}</span></div>`
+      ? `<div style="margin-top:2px;"><span class="drive-file-tag">${escapeHtml([f.subject_name, f.topic].filter(Boolean).join(' · '))}</span></div>`
       : '';
     return `
-    <div class="file-row" data-id="${f.id}">
-      <div class="file-icon" style="background:${driveColorFor(f.subject_id||f.id)};cursor:pointer;" onclick="openDriveFile(${f.id})">
-        <i data-lucide="${driveIcon(f.original_name)}" style="width:20px;height:20px;"></i>
+    <div class="drive-file-card">
+      <div onclick="openDriveFile(${f.id})" style="display:flex;align-items:center;gap:12px;min-width:0;flex:1;cursor:pointer;">
+        <div class="icon-box" style="width:40px;height:40px;background:${driveColorFor(f.subject_id||f.id)};border-radius:12px;flex-shrink:0;">
+          <i data-lucide="${driveIcon(f.original_name)}" style="width:18px;height:18px;color:#442b7a;"></i>
+        </div>
+        <div style="min-width:0;flex:1;">
+          <div style="font-weight:600;font-size:0.88rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(f.original_name)}</div>
+          <div style="font-size:0.72rem;opacity:0.55;">${formatBytes(f.file_size)} · ${escapeHtml(f.uploader_name||'?')} · ${driveRelTime(f.created_at)}</div>
+          ${tag}
+        </div>
       </div>
-      <div style="flex:1;min-width:0;cursor:pointer;" onclick="openDriveFile(${f.id})">
-        <div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(f.original_name)}${f.is_lecture_notes ? ' <i data-lucide="notebook-pen" title="Aufschrieb" style="width:13px;height:13px;vertical-align:-2px;opacity:0.6;"></i>' : ''}</div>
-        <div style="font-size:0.75rem;opacity:0.6;">${formatBytes(f.file_size)} · ${escapeHtml(f.uploader_name||'?')} · ${driveRelTime(f.created_at)}</div>
-        ${tag}
-      </div>
-      <button onclick="openMoveFileSheet(${f.id})" style="background:#f3edf7;border:none;border-radius:12px;padding:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;cursor:pointer;" title="Verschieben">
-        <i data-lucide="move" style="width:18px;height:18px;"></i>
+      <button onclick="openDriveFileActions(${f.id})" style="background:#f3edf7;border:none;border-radius:12px;width:40px;height:40px;display:flex;align-items:center;justify-content:center;flex-shrink:0;cursor:pointer;" title="Mehr">
+        <i data-lucide="more-vertical" style="width:18px;height:18px;"></i>
       </button>
-      <a href="${driveFileUrl(f, 'download')}" download style="background:#f3edf7;border-radius:12px;padding:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;" title="Herunterladen">
-        <i data-lucide="download" style="width:18px;height:18px;"></i>
-      </a>
-      ${canDelete ? `<button onclick="deleteDriveFileConfirm(${f.id})" style="background:none;border:none;cursor:pointer;opacity:0.4;padding:4px;flex-shrink:0;" title="Löschen">
+      ${canDelete ? `<button onclick="deleteDriveFileConfirm(${f.id})" style="background:none;border:none;cursor:pointer;opacity:0.4;padding:8px;flex-shrink:0;" title="Löschen">
         <i data-lucide="trash-2" style="width:16px;height:16px;"></i>
       </button>` : ''}
     </div>`;
   }).join('');
+  return html;
 }
 
-// --- Upload ---
-
-function handleDriveFileSelect(fileList) {
-  if (!fileList || !fileList.length) return;
-  driveSelectedUploadFiles = Array.from(fileList);
-  const preselect = (driveSelectedSubjectId && driveSelectedSubjectId !== 'unsorted') ? driveSelectedSubjectId : '';
-  const subjectOptions = driveSubjects.map(s => `<option value="${s.id}"${String(s.id)===String(preselect)?' selected':''}>${escapeHtml(s.name)}</option>`).join('');
-  const todayIso = new Date().toISOString().slice(0, 10);
-
-  const filesLabel = driveSelectedUploadFiles.length === 1
-    ? `${escapeHtml(driveSelectedUploadFiles[0].name)} (${formatBytes(driveSelectedUploadFiles[0].size)})`
-    : `${driveSelectedUploadFiles.length} Dateien ausgewählt (${formatBytes(driveSelectedUploadFiles.reduce((s,f)=>s+f.size,0))})`;
-
+function openDriveFileActions(fileId) {
+  const f = driveFiles.find(x => x.id === fileId);
+  if (!f) return;
+  const canDelete = currentUser && (f.uploader_id === currentUser.id || currentUser.role === 'admin' || currentUser.role === 'super_admin');
   openSheet(`
-    <div style="padding:4px 4px 0;">
-      <div style="font-weight:700;font-size:1.05rem;margin-bottom:4px;">${driveSelectedUploadFiles.length === 1 ? 'Datei hochladen' : 'Dateien hochladen'}</div>
-      <div style="opacity:0.6;font-size:0.85rem;margin-bottom:16px;">${filesLabel}</div>
-
-      <div style="font-size:0.8rem;font-weight:700;opacity:0.5;margin-bottom:6px;">FACH</div>
-      <select class="m3-select" id="drive-up-subject" style="margin-bottom:14px;" onchange="onDriveUploadSubjectChange()">
-        <option value="">Automatisch sortieren (KI)</option>
-        ${subjectOptions}
-      </select>
-
-      <div style="font-size:0.8rem;font-weight:700;opacity:0.5;margin-bottom:6px;">TAG (aus dem Stundenplan vorgeschlagen)</div>
-      <input type="date" class="m3-input" id="drive-up-date" value="${todayIso}" onchange="onDriveUploadDateChange()" style="margin-bottom:14px;">
-
-      <div style="font-size:0.8rem;font-weight:700;opacity:0.5;margin-bottom:6px;">THEMA (optional, wird aus dem Tag befüllt)</div>
-      <input type="text" class="m3-input" id="drive-up-topic" placeholder="z. B. Photosynthese — leer lassen für KI-Vorschlag" style="margin-bottom:14px;">
-
-      <button class="m3-btn-full" style="margin-top:8px;" onclick="uploadDriveFiles()" id="drive-up-btn">Hochladen</button>
+    <div style="padding:4px;">
+      <div style="font-weight:700;font-size:1.05rem;margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(f.original_name)}</div>
+      <div style="opacity:0.55;font-size:0.82rem;margin-bottom:16px;">${formatBytes(f.file_size)} · ${escapeHtml(f.uploader_name||'?')}</div>
+      <button class="m3-btn-full" style="margin-bottom:8px;" onclick="closeSheet();openDriveFile(${f.id})">Vorschau</button>
+      <a href="${driveFileUrl(f, 'download')}" download class="m3-btn-outline" style="display:block;text-align:center;text-decoration:none;margin-bottom:8px;">Herunterladen</a>
+      <button class="m3-btn-outline" style="width:100%;margin-bottom:8px;" onclick="closeSheet();openMoveFileSheet(${f.id})">Verschieben</button>
+      ${canDelete ? `<button class="m3-btn-outline" style="width:100%;color:#ba1a1a;" onclick="closeSheet();deleteDriveFileConfirm(${f.id})">Löschen</button>` : ''}
     </div>
   `);
-
-  if (preselect) onDriveUploadSubjectChange();
 }
 
-// Caches the class's Untis timetable so the upload sheet can suggest which
-// day a file belongs to (based on when the chosen subject is actually
-// taught) without a fresh fetch on every subject change. null = not
-// fetched yet, [] = fetched but empty/no Untis configured.
-let driveTimetableCache = null;
-async function ensureDriveTimetable() {
-  if (driveTimetableCache !== null) return driveTimetableCache;
-  try {
-    const data = await API.timetable();
-    driveTimetableCache = (data.configured && !data.error)
-      ? [...(data.this_week?.lessons || []), ...(data.next_week?.lessons || [])]
-      : [];
-  } catch { driveTimetableCache = []; }
-  return driveTimetableCache;
-}
+async function handleDriveFileSelect(inputEl) {
+  const fileList = Array.from(inputEl.files || []);
+  inputEl.value = '';
+  if (!fileList.length || driveUploading) return;
 
-// When the subject changes, find which weekdays the timetable actually has
-// that subject on, then jump the date field to the nearest such day (today
-// if it already matches, otherwise the next one within two weeks) — a
-// starting suggestion, not a lock, the date stays a normal editable field.
-// Suggests the actual lesson date closest to today — not just the closest
-// matching weekday — so someone uploading notes from a lesson that already
-// happened this week (e.g. "gestern hatten wir das") lands on that real
-// date instead of always being pushed to the next future occurrence.
-// Ties (equally close past vs. future) favor the past, since "upload what
-// we just did" is the more common case than pre-uploading for a lesson
-// that hasn't happened yet. Only covers the ~2-week window the timetable
-// API actually returns — older dates still work, just via manual picking.
-async function onDriveUploadSubjectChange() {
-  const subjSelect = document.getElementById('drive-up-subject');
-  const dateInput = document.getElementById('drive-up-date');
-  if (!subjSelect || !dateInput) return;
-  const subject = driveSubjects.find(s => String(s.id) === subjSelect.value);
-  // No subject picked (back to full-AI mode) or nothing to suggest from —
-  // leave the topic field exactly as it is rather than forcing a date on
-  // it, so the AI's own topic suggestion (which might not be a date at
-  // all) isn't silently overridden by a "resolved_topic already set" check
-  // in the backend.
-  if (!subject) return;
+  const subjectId = (driveSelectedSubjectId && driveSelectedSubjectId !== 'unsorted') ? String(driveSelectedSubjectId) : '';
+  driveUploading = true;
+  const fabBtn = document.getElementById('drive-fab');
+  if (fabBtn) fabBtn.style.opacity = '0.45';
 
-  // Even with no Untis lesson to suggest a specific day, a subject was
-  // still picked by hand here (manual mode) — the date field already
-  // defaults to today, so the topic should reflect that immediately
-  // instead of staying blank until someone happens to touch the date
-  // input themselves.
-  const lessons = await ensureDriveTimetable();
-  if (!lessons.length) { onDriveUploadDateChange(); return; }
-
-  const shortName = (subject.short_name || '').toLowerCase();
-  const fullName = (subject.name || '').toLowerCase();
-  const matchingDates = [];
-  lessons.forEach(l => {
-    if (l.cancelled) return; // nothing happened that day — nothing to upload notes about
-    const lShort = (l.subject_short || '').toLowerCase();
-    const lFull = (l.subject || '').toLowerCase();
-    if ((shortName && lShort === shortName) || (fullName && lFull === fullName)) {
-      const y = l.date.slice(0, 4), m = parseInt(l.date.slice(4, 6), 10) - 1, d = l.date.slice(6, 8);
-      matchingDates.push(new Date(y, m, d));
-    }
-  });
-  if (!matchingDates.length) { onDriveUploadDateChange(); return; }
-
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  matchingDates.sort((a, b) => {
-    const diffA = Math.abs(a - today), diffB = Math.abs(b - today);
-    if (diffA !== diffB) return diffA - diffB;
-    return a - b; // tie: prefer the earlier (past) date
-  });
-  dateInput.value = matchingDates[0].toISOString().slice(0, 10);
-  onDriveUploadDateChange();
-}
-
-// The topic folder for an upload picked via subject+day is just that day,
-// formatted — automatic, per the whole point of this flow, but the field
-// stays a plain text input so it can still be overridden by hand.
-function onDriveUploadDateChange() {
-  const dateInput = document.getElementById('drive-up-date');
-  const topicInput = document.getElementById('drive-up-topic');
-  if (!dateInput?.value || !topicInput) return;
-  const [y, m, d] = dateInput.value.split('-');
-  topicInput.value = `${d}.${m}.${y}`;
-}
-
-async function uploadDriveFiles() {
-  if (!driveSelectedUploadFiles.length) return;
-  const subjectId = document.getElementById('drive-up-subject').value;
-  const topic = document.getElementById('drive-up-topic').value;
-  const total = driveSelectedUploadFiles.length;
-  const btn = document.getElementById('drive-up-btn');
-  btn.disabled = true;
-
-  // Uploaded one at a time (not in parallel) so the progress count is
-  // meaningful and a slow AI-analysis call on one file doesn't hold up an
-  // unrelated batch of concurrent requests to the same endpoint.
-  let uploaded = 0, failed = 0, anyAutoSorted = false;
-  for (const file of driveSelectedUploadFiles) {
-    btn.textContent = total > 1 ? `Hochladen… (${uploaded + failed + 1}/${total})` : 'Hochladen…';
+  let uploaded = 0, failed = 0;
+  for (const file of fileList) {
+    showToast(fileList.length > 1 ? `Hochladen… (${uploaded + failed + 1}/${fileList.length})` : 'Hochladen…');
     const form = new FormData();
     form.append('file', file);
     form.append('subject_id', subjectId);
-    form.append('topic', topic);
+    form.append('topic', '');
     try {
       const f = await API.uploadDriveFile(form);
       driveFiles.unshift(f);
-      if (f.auto_sorted) anyAutoSorted = true;
       uploaded++;
     } catch {
       failed++;
     }
   }
 
-  driveSelectedUploadFiles = [];
+  driveUploading = false;
+  if (fabBtn) fabBtn.style.opacity = '';
   driveTopicsCache = {};
-  closeSheet();
   renderDrive();
 
   if (failed && uploaded) showToast(`${uploaded} hochgeladen, ${failed} fehlgeschlagen`);
   else if (failed) showToast('Upload fehlgeschlagen');
-  else if (total > 1) showToast(`${uploaded} Dateien hochgeladen!`);
-  else showToast(anyAutoSorted ? 'Datei automatisch einsortiert!' : 'Datei hochgeladen!');
+  else if (uploaded > 1) showToast(`${uploaded} Dateien hochgeladen`);
+  else showToast('Datei hochgeladen');
 }
-
-// --- Delete ---
 
 function deleteDriveFileConfirm(id) {
   const f = driveFiles.find(x => x.id === id);
@@ -772,7 +566,6 @@ function deleteDriveFileConfirm(id) {
 }
 
 async function executeDeleteDriveFile(id) {
-  const deleted = driveFiles.find(f => f.id === id);
   try {
     await API.deleteDriveFile(id);
   } catch {
@@ -781,49 +574,16 @@ async function executeDeleteDriveFile(id) {
   }
   driveFiles = driveFiles.filter(f => f.id !== id);
   driveTopicsCache = {};
-
-  // The backend auto-deletes an emptied date folder (see
-  // backend/routes/drive.py) — if that's the exact folder currently open,
-  // step back up to the tile grid rather than rendering a now-nonexistent
-  // folder's (empty) contents.
-  if (deleted && driveSelectedLessonTopic && deleted.topic === driveSelectedLessonTopic && deleted.subject_id === driveSelectedSubjectId) {
-    const stillHasFiles = driveFiles.some(f => f.subject_id === driveSelectedSubjectId && f.topic === driveSelectedLessonTopic);
-    if (!stillHasFiles) driveSelectedLessonTopic = null;
-  }
-
   closeModal();
   renderDrive();
   showToast('Gelöscht');
 }
 
-// --- Preview / inline text editing ---
-
-// Tapping a file always opens it in a new browser tab — using the browser's
-// own native viewer instead of an in-app one — EXCEPT for .md/.txt, which
-// still open the in-app lightbox since that's what makes inline editing
-// possible; there's no "edit" you can do with a file that just opened in a
-// new tab.
-//
-// The /view/{id} wrapper page (its own white header with a back-to-Drive
-// arrow) exists because a phone/tablet browser tab often has no visible
-// back button of its own once maximized — on a real desktop browser window
-// there's always a tab bar and back button already, so the wrapper's own
-// header would just be redundant chrome on top of the browser's; there, the
-// raw file (/preview/{id}) opens directly instead. 1100px matches this
-// app's own tablet/desktop breakpoint (static/css/base.css) everywhere else.
 function openDriveFile(id) {
-  const f = driveFiles.find(x => x.id === id);
-  if (!f) return;
-  if (DRIVE_TEXT_EXTS.includes(driveExt(f.original_name))) {
-    openDriveFilePreview(id);
-  } else if (window.innerWidth >= 1100) {
-    window.open(driveFileUrl(f, 'raw'), '_blank', 'noopener');
-  } else {
-    window.open(driveFileUrl(f), '_blank', 'noopener');
-  }
+  openDriveFilePreview(id);
 }
 
-let drivePreviewHome = null; // { parent, nextSibling } — where the lightbox lives when not portaled to <body>
+let drivePreviewHome = null;
 
 async function openDriveFilePreview(id) {
   const f = driveFiles.find(x => x.id === id);
@@ -831,10 +591,6 @@ async function openDriveFilePreview(id) {
   drivePreviewFileId = id;
   const lb = document.getElementById('drive-preview-lightbox');
   if (!lb) return;
-  // Portal to <body> so it stacks above the page (and any overlay) it was
-  // opened from, same reasoning as the homework/mealplan image lightboxes —
-  // and move it back on close so it doesn't get discarded if Drive itself
-  // closes while the preview is portaled out.
   if (lb.parentElement !== document.body) {
     drivePreviewHome = { parent: lb.parentElement, nextSibling: lb.nextSibling };
     document.body.appendChild(lb);
@@ -842,6 +598,8 @@ async function openDriveFilePreview(id) {
 
   document.getElementById('drive-preview-title').textContent = f.original_name;
   document.getElementById('drive-preview-meta').textContent = `${formatBytes(f.file_size)} · ${f.uploader_name||'?'} · ${driveRelTime(f.created_at)}`;
+  const openLink = document.getElementById('drive-preview-open-link');
+  if (openLink) openLink.href = driveFileUrl(f, 'download');
 
   const ext = driveExt(f.original_name);
   const isImage = DRIVE_IMAGE_EXTS.includes(ext);
@@ -849,46 +607,43 @@ async function openDriveFilePreview(id) {
   const isText = DRIVE_TEXT_EXTS.includes(ext);
 
   const body = document.getElementById('drive-preview-body');
-  body.style.padding = (isPdf || isImage) ? '0' : '16px';
-  body.style.overflow = 'hidden';
-  body.style.alignItems = (isImage || (!isText && !isPdf)) ? 'center' : '';
-  body.style.justifyContent = (isImage || (!isText && !isPdf)) ? 'center' : '';
+  const actions = document.getElementById('drive-preview-actions');
+  body.style.alignItems = '';
+  body.style.justifyContent = '';
+  lb.style.background = isImage ? 'rgba(0,0,0,0.92)' : '#f3edf7';
 
   if (isImage) {
-    // A plain <img> has no zoom of its own, and the app's viewport meta
-    // sets user-scalable=no (so the browser's native pinch-zoom is off
-    // everywhere else too) — initDriveZoomPan() below adds pinch/wheel/
-    // double-tap zoom + pan by hand instead of relying on either.
+    actions.style.display = 'none';
     body.innerHTML = `<div id="drive-preview-image-wrap" style="width:100%;height:100%;overflow:hidden;touch-action:none;position:relative;">
-      <img id="drive-preview-image" src="${driveFileUrl(f, 'raw')}" style="max-width:100%;max-height:100%;position:absolute;top:0;left:0;transform-origin:0 0;will-change:transform;">
+      <img id="drive-preview-image" src="${driveFileUrl(f, 'raw')}" alt="" style="max-width:100%;max-height:100%;position:absolute;top:0;left:0;transform-origin:0 0;will-change:transform;border-radius:0;">
     </div>`;
     const img = document.getElementById('drive-preview-image');
     if (img.complete) initDriveZoomPan('drive-preview-image-wrap', 'drive-preview-image');
     else img.onload = () => initDriveZoomPan('drive-preview-image-wrap', 'drive-preview-image');
   } else if (isPdf) {
-    // Rendered via PDF.js onto stacked <canvas> pages instead of an <iframe>
-    // with the browser's native PDF viewer — an iframe is a separate
-    // browsing context, so pointer/touch gestures over its content never
-    // reach our own zoom/pan handlers (and the native viewer's own touch
-    // support is inconsistent across mobile browsers anyway).
-    body.innerHTML = `<div id="drive-preview-pdf-wrap" style="width:100%;height:100%;overflow:hidden;touch-action:none;position:relative;background:#f3edf7;">
+    actions.style.display = 'none';
+    body.innerHTML = `<div id="drive-preview-pdf-wrap" style="width:100%;height:100%;overflow:hidden;touch-action:none;position:relative;background:#1c1b1f;">
       <div id="drive-preview-pdf-pages" style="position:absolute;top:0;left:0;transform-origin:0 0;"></div>
     </div>`;
     renderDrivePdfPreview(id);
   } else if (isText) {
-    body.innerHTML = `<div style="text-align:center;margin:auto;opacity:0.5;">Lädt…</div>`;
+    actions.style.display = 'flex';
+    actions.innerHTML = `<button class="m3-btn-primary" style="flex:1;" onclick="startDriveTextEdit(${id})" id="drive-edit-toggle-btn">Bearbeiten</button>`;
+    body.style.padding = '16px';
+    body.style.overflow = 'auto';
+    body.innerHTML = `<div style="text-align:center;margin:auto;opacity:0.5;color:#1c1b1f;">Lädt…</div>`;
   } else {
-    body.innerHTML = `<div style="text-align:center;opacity:0.5;">
+    actions.style.display = 'flex';
+    actions.innerHTML = `<a href="${driveFileUrl(f, 'download')}" download class="m3-btn-primary" style="flex:1;text-align:center;text-decoration:none;">Herunterladen</a>`;
+    body.style.padding = '24px';
+    body.style.overflow = 'auto';
+    body.style.alignItems = 'center';
+    body.style.justifyContent = 'center';
+    body.innerHTML = `<div style="text-align:center;opacity:0.7;color:#1c1b1f;">
       <i data-lucide="${driveIcon(f.original_name)}" style="width:48px;height:48px;margin-bottom:12px;"></i>
-      <div>Keine Vorschau für diesen Dateityp verfügbar.</div>
+      <div>Keine Vorschau für diesen Dateityp.</div>
     </div>`;
   }
-
-  document.getElementById('drive-preview-actions').innerHTML = `
-    <a href="${driveFileUrl(f, 'download')}" download class="m3-btn-outline" style="flex:1;text-align:center;text-decoration:none;">Herunterladen</a>
-    ${!isText ? `<a href="${driveFileUrl(f)}" target="_blank" rel="noopener" class="m3-btn-outline" style="flex:1;text-align:center;text-decoration:none;">In neuem Tab öffnen</a>` : ''}
-    ${isText ? `<button class="m3-btn-primary" style="flex:1;" onclick="startDriveTextEdit(${id})" id="drive-edit-toggle-btn">Bearbeiten</button>` : ''}
-  `;
 
   lb.style.display = 'flex';
   requestAnimationFrame(() => lb.style.opacity = '1');
@@ -897,9 +652,9 @@ async function openDriveFilePreview(id) {
   if (isText) {
     try {
       const res = await API.driveFileText(id);
-      body.innerHTML = `<textarea id="drive-preview-textarea" readonly style="flex:1;width:100%;border:1px solid rgba(0,0,0,0.1);border-radius:12px;padding:14px;font-family:monospace;font-size:0.9rem;resize:none;background:#faf9fc;">${escapeHtml(res.content)}</textarea>`;
+      body.innerHTML = `<textarea id="drive-preview-textarea" readonly style="flex:1;width:100%;min-height:50vh;border:1px solid rgba(0,0,0,0.1);border-radius:12px;padding:14px;font-family:monospace;font-size:0.9rem;resize:none;background:#faf9fc;color:#1c1b1f;">${escapeHtml(res.content)}</textarea>`;
     } catch {
-      body.innerHTML = `<div style="text-align:center;margin:auto;opacity:0.5;">Inhalt konnte nicht geladen werden.</div>`;
+      body.innerHTML = `<div style="text-align:center;margin:auto;opacity:0.5;color:#1c1b1f;">Inhalt konnte nicht geladen werden.</div>`;
     }
   }
 }
@@ -919,16 +674,6 @@ function closeDriveFilePreview(isPopState = false) {
   }, 220);
 }
 
-// --- Pinch/wheel/double-tap zoom + drag-to-pan, shared by the image and PDF
-// previews ---
-// Hand-rolled because the app's viewport meta has user-scalable=no (so the
-// browser's own pinch-zoom is off everywhere), and neither a plain <img>
-// nor (see renderDrivePdfPreview) a canvas-rendered PDF has any zoom of its
-// own otherwise. Panning is always active (not just once zoomed in) so it
-// doubles as the scroll mechanism for a multi-page PDF taller than the
-// viewport — bounds are clamped in clampDriveZoomPan() so content can't be
-// dragged arbitrarily far off-screen, and centered automatically whenever
-// it's smaller than the wrap in a given dimension.
 let driveZoom = { scale: 1, x: 0, y: 0, startDist: null, startScale: 1, dragging: false, dragStartX: 0, dragStartY: 0, panStartX: 0, panStartY: 0, lastTapTime: 0 };
 let driveZoomWrapId = null, driveZoomTargetId = null;
 
@@ -941,7 +686,6 @@ function clampDriveZoomPan() {
   const naturalH = target.scrollHeight || target.offsetHeight;
   const scaledW = naturalW * driveZoom.scale;
   const scaledH = naturalH * driveZoom.scale;
-
   driveZoom.x = scaledW <= wrapW ? (wrapW - scaledW) / 2 : Math.min(0, Math.max(wrapW - scaledW, driveZoom.x));
   driveZoom.y = scaledH <= wrapH ? (wrapH - scaledH) / 2 : Math.min(0, Math.max(wrapH - scaledH, driveZoom.y));
 }
@@ -951,15 +695,8 @@ function applyDriveZoomTransform() {
   if (!target) return;
   clampDriveZoomPan();
   target.style.transform = `translate(${driveZoom.x}px, ${driveZoom.y}px) scale(${driveZoom.scale})`;
-  target.style.cursor = driveZoom.scale > 1 ? 'grab' : '';
 }
 
-// Changes scale while keeping the content point under (anchorX, anchorY) —
-// wrap-local coordinates — visually fixed in place, the way pinch/double-
-// tap/wheel zoom is expected to behave everywhere else. Without this, only
-// changing driveZoom.scale and re-clamping snaps the view toward whichever
-// corner the clamp happens to land on instead of zooming from where the
-// gesture actually happened.
 function driveZoomTo(newScale, anchorX, anchorY) {
   newScale = Math.min(5, Math.max(1, newScale));
   const contentX = (anchorX - driveZoom.x) / driveZoom.scale;
@@ -983,11 +720,6 @@ function initDriveZoomPan(wrapId, targetId) {
   const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 
   wrap.onpointerdown = (e) => {
-    // Can throw for a pointer the browser doesn't consider "active" (seen
-    // with synthetic/edge-case pointer events) — capture is just an upgrade
-    // (keeps drag events flowing outside the element's bounds), not a
-    // requirement, so a failure here must never abort the rest of the
-    // tap/zoom/drag handling below.
     try { wrap.setPointerCapture(e.pointerId); } catch {}
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (pointers.size === 1) {
@@ -1044,10 +776,6 @@ function initDriveZoomPan(wrapId, targetId) {
   };
 }
 
-// Renders every page of the PDF onto its own <canvas>, stacked vertically,
-// so initDriveZoomPan() can treat the whole document as one zoomable/
-// pannable block — a multi-page PDF scrolls by dragging exactly like a
-// single tall image, with pinch/wheel/double-tap zoom on top.
 let pdfjsLibPromise = null;
 function loadPdfJs() {
   if (!pdfjsLibPromise) {
@@ -1087,7 +815,7 @@ async function renderDrivePdfPreview(id) {
     }
     initDriveZoomPan('drive-preview-pdf-wrap', 'drive-preview-pdf-pages');
   } catch (e) {
-    wrap.innerHTML = '<div style="text-align:center;margin:auto;padding:20px;opacity:0.6;">PDF konnte nicht geladen werden.</div>';
+    wrap.innerHTML = '<div style="text-align:center;margin:auto;padding:20px;opacity:0.7;color:#fff;">PDF konnte nicht geladen werden.</div>';
   }
 }
 
