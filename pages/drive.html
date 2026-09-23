@@ -37,10 +37,24 @@
   </div>
 
   <style>
-  .drive-folder-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; }
-  @media (min-width:560px) { .drive-folder-grid { grid-template-columns:repeat(3,1fr); } }
-  .drive-folder-tile { background:#fff; border-radius:20px; padding:16px; display:flex; flex-direction:column; gap:10px; cursor:pointer; border:1px solid rgba(0,0,0,0.04); transition:transform 0.15s; -webkit-tap-highlight-color:transparent; }
-  .drive-folder-tile:active { transform:scale(0.97); }
+  .drive-folder-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+  @media (min-width:560px) { .drive-folder-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  .drive-folder-tile {
+    background: #fff; border-radius: 20px; padding: 16px;
+    display: flex; flex-direction: column; gap: 10px;
+    min-width: 0; width: 100%; box-sizing: border-box;
+    cursor: pointer; border: 1px solid rgba(0,0,0,0.04);
+    transition: transform 0.15s; -webkit-tap-highlight-color: transparent;
+  }
+  .drive-folder-tile:active { transform: scale(0.97); }
+  .drive-folder-tile .drive-folder-name,
+  .drive-folder-tile .drive-folder-meta {
+    min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
   .drive-topic-group { margin-bottom:18px; }
   .drive-topic-label { font-size:0.78rem; font-weight:700; opacity:0.55; margin:0 0 8px 4px; display:flex; align-items:center; gap:6px; }
   .drive-file-tag { font-size:0.66rem; font-weight:700; padding:2px 8px; border-radius:8px; background:#eaddff; color:#442b7a; white-space:nowrap; }
@@ -53,9 +67,12 @@
   .drive-header-search-wrap.open { width: 100%; opacity: 1; }
   .drive-gallery-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;
     margin-bottom: 12px;
+  }
+  @media (min-width:560px) {
+    .drive-gallery-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   }
   .drive-gallery-item {
     position: relative;
@@ -141,10 +158,8 @@ function formatBytes(b) {
 }
 
 function driveFileUrl(f, suffix) {
-  const subject = encodeURIComponent(f.subject_name || 'Unsortiert');
-  const topic = encodeURIComponent(f.topic || 'Ohne-Thema');
-  const filename = encodeURIComponent(f.original_name || 'Datei');
-  return `/drive/${subject}/${topic}/${filename}${suffix ? '/' + suffix : ''}`;
+  if (suffix === 'download') return `/api/v1/drive/download/${f.id}`;
+  return `/api/v1/drive/preview/${f.id}`;
 }
 
 function driveRelTime(iso) {
@@ -257,16 +272,16 @@ function renderDriveFolderGrid() {
       <div class="icon-box" style="width:44px;height:44px;border-radius:14px;background:${driveColorFor(s.id)};">
         <i data-lucide="folder" style="width:22px;height:22px;color:#442b7a;"></i>
       </div>
-      <div style="font-weight:700;font-size:0.92rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(s.name)}</div>
-      <div style="font-size:0.75rem;opacity:0.5;">${count} Datei${count===1?'':'en'}</div>
+      <div class="drive-folder-name" style="font-weight:700;font-size:0.92rem;">${escapeHtml(s.name)}</div>
+      <div class="drive-folder-meta" style="font-size:0.75rem;opacity:0.5;">${count} Datei${count===1?'':'en'}</div>
     </div>`;
   }).join('');
   const unsortedTile = hasUnsorted ? `<div class="drive-folder-tile" onclick="openDriveSubjectFolder('unsorted')">
       <div class="icon-box" style="width:44px;height:44px;border-radius:14px;background:rgba(0,0,0,0.06);color:#49454f;">
         <i data-lucide="folder-open" style="width:22px;height:22px;"></i>
       </div>
-      <div style="font-weight:700;font-size:0.92rem;">Unsortiert</div>
-      <div style="font-size:0.75rem;opacity:0.5;">${driveFiles.filter(f=>!f.subject_id).length} Datei${driveFiles.filter(f=>!f.subject_id).length===1?'':'en'}</div>
+      <div class="drive-folder-name" style="font-weight:700;font-size:0.92rem;">Unsortiert</div>
+      <div class="drive-folder-meta" style="font-size:0.75rem;opacity:0.5;">${driveFiles.filter(f=>!f.subject_id).length} Datei${driveFiles.filter(f=>!f.subject_id).length===1?'':'en'}</div>
     </div>` : '';
 
   if (!driveSubjects.length && !hasUnsorted) {
@@ -275,17 +290,10 @@ function renderDriveFolderGrid() {
   return `<div class="drive-folder-grid">${tiles}${unsortedTile}</div>`;
 }
 
-function driveUrlPath() {
-  if (driveSelectedSubjectId === null) return '/drive';
-  if (driveSelectedSubjectId === 'unsorted') return '/drive/Unsortiert';
-  const subject = driveSubjects.find(s => s.id === driveSelectedSubjectId);
-  return `/drive/${encodeURIComponent(subject ? subject.name : 'Fach')}`;
-}
-
 function drivePushHistory() {
   history.pushState({
     page: 'drive', subjectId: driveSelectedSubjectId,
-  }, '', driveUrlPath());
+  }, '', '/drive');
 }
 
 function driveHandlePopstate(state) {
