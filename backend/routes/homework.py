@@ -141,10 +141,11 @@ async def create_homework(request: Request, data: HomeworkCreate, db: AsyncSessi
 async def update_homework(request: Request, hw_id: int, data: HomeworkUpdate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     result = await db.execute(select(Homework).where(Homework.id == hw_id))
     hw = result.scalar_one_or_none()
-    if not hw or hw.class_id != current_user.class_id:
+    if not hw:
         raise HTTPException(404, "Hausaufgabe nicht gefunden")
-    if hw.created_by != current_user.id and current_user.role not in ("admin", "super_admin"):
+    if hw.class_id != current_user.class_id:
         raise HTTPException(403)
+    # Class-wide resource: any classmate can edit, not just the creator or an admin.
 
     if data.subject_id is not None:
         hw.subject_id = data.subject_id
@@ -195,10 +196,11 @@ async def toggle_check(hw_id: int, db: AsyncSession = Depends(get_db), current_u
 async def delete_homework(request: Request, hw_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     result = await db.execute(select(Homework).where(Homework.id == hw_id))
     hw = result.scalar_one_or_none()
-    if not hw or hw.class_id != current_user.class_id:
+    if not hw:
         raise HTTPException(404)
-    if hw.created_by != current_user.id and current_user.role not in ("admin", "super_admin"):
+    if hw.class_id != current_user.class_id:
         raise HTTPException(403)
+    # Same class-scoped rule as update — solutions stay author-only.
 
     try:
         from backend.services.google_sync_service import sync_homework_deleted
