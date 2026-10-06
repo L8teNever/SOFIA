@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Request, Depends
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.exceptions import HTTPException
 from contextlib import asynccontextmanager
 from backend.database import init_db
@@ -10,7 +10,7 @@ from backend.models.user import User
 from backend.routes import auth_routes, users, classes, subjects, calendar, homework, grades, files, vapid, admin, timetable, mealplan, notifications, drive, google_sync, chat, notes
 from backend.services.rate_limiter import RateLimiterMiddleware
 from backend.services.notification_scheduler import start_notification_scheduler
-from backend.version import get_version_info
+from backend.version import get_git_commit, get_version_info
 import os, time, mimetypes, asyncio, logging
 
 logging.basicConfig(
@@ -18,7 +18,11 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 
+# Wall-clock of this process — display only. SW cache name and SPA
+# __GIT_COMMIT__ use the git SHA so container restarts do not fake an update.
 BUILD_TS = str(int(time.time()))
+GIT_COMMIT = get_git_commit()
+NO_STORE = {"Cache-Control": "no-store"}
 
 # Some platforms (notably Windows) don't have .webp registered in their
 # MIME registry, which makes StaticFiles fall back to text/plain and
@@ -62,7 +66,7 @@ async def impressum_config():
 # App version & build metadata endpoint
 @app.get("/api/v1/version", include_in_schema=False)
 async def app_version():
-    return get_version_info(BUILD_TS)
+    return JSONResponse(get_version_info(BUILD_TS), headers=NO_STORE)
 
 # Page fragments — only accessible when authenticated
 @app.get("/pages/{page_name}.html", include_in_schema=False)
@@ -76,7 +80,7 @@ async def serve_page(page_name: str, _: User = Depends(get_current_user)):
 @app.get("/sw.js", include_in_schema=False)
 async def service_worker():
     with open("static/sw.js", "r", encoding="utf-8") as f:
-        content = f.read().replace("__BUILD__", BUILD_TS)
+        content = f.read().replace("__BUILD__", GIT_COMMIT)
     return HTMLResponse(content, media_type="application/javascript",
                         headers={"Service-Worker-Allowed": "/", "Cache-Control": "no-store"})
 
@@ -114,5 +118,9 @@ async def spa(full_path: str, request: Request):
     if host in NOTES_HOSTNAMES and not full_path:
         return RedirectResponse(url="/notes")
     with open("pages/index.html", "r", encoding="utf-8") as f:
-        html = f.read().replace("__BUILD__", BUILD_TS)
-    return HTMLResponse(html)
+        html = (
+            f.read()
+            .replace("__BUILD__", BUILD_TS)
+            .replace("__COMMIT__", GIT_COMMIT)
+        )
+    return HTMLResponse(html, headers=NO_STORE)
