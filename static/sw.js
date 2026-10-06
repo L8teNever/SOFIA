@@ -59,9 +59,11 @@ self.addEventListener('fetch', e => {
 
   e.respondWith(
     caches.match(e.request).then(cached => {
-      // Network-first for HTML root, cache-first for everything else
-      const isHtml = url.pathname === '/';
-      if (isHtml) {
+      // Network-first for every SPA navigation. Cache-first on paths like
+      // /settings left HTML/`__GIT_COMMIT__` stale while /api/v1/version was
+      // fresh, so Settings showed "update available" forever.
+      const isNavigate = e.request.mode === 'navigate';
+      if (isNavigate) {
         return fetch(e.request)
           .then(res => {
             if (res.ok) caches.open(CACHE).then(c => c.put(e.request, res.clone()));

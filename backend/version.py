@@ -24,6 +24,28 @@ def get_git_commit() -> str:
     except Exception:
         return "main"
 
+def normalize_commit(value: str | None) -> str:
+    if not value:
+        return ""
+    text = str(value).strip()
+    if text in ("__COMMIT__", "__BUILD__", "main"):
+        return ""
+    return text[:7]
+
+
+def client_needs_update(client_commit: str | None, server_commit: str | None) -> bool:
+    """Update-needed is git commit, not process-start wall-clock.
+
+    Container restarts change BUILD_TS but not the deployed commit; comparing
+    timestamps caused a permanent Settings update loop.
+    """
+    client = normalize_commit(client_commit)
+    server = normalize_commit(server_commit)
+    if not client or not server:
+        return False
+    return client != server
+
+
 def get_version_info(build_ts: str) -> dict:
     commit = get_git_commit()
     try:
