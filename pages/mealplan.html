@@ -146,8 +146,9 @@ document.getElementById('meal-day-chips').innerHTML = chipRow({
   ],
 });
 let mealPlan = null;
-let mealCanDelete = false;
-let mealCanEdit = false; // correcting a day's text — upload stays open to everyone, editing is admin-only
+let mealCanUpload = false; // weekly photo: any logged-in Sofia user
+let mealCanDelete = false; // wipe the whole plan: admin/super_admin only
+let mealCanEdit = false; // correcting a day's text: admin/super_admin only
 let mealDays = [];
 let mealDayIndex = 0;
 let mealActiveDate = null;
@@ -371,8 +372,11 @@ function mealFilter(mode) {
 
 async function init_mealplan() {
   const me = await API.me().catch(() => null);
+  mealCanUpload = !!me;
   mealCanDelete = !!(me && (me.role === 'admin' || me.role === 'super_admin'));
   mealCanEdit = mealCanDelete;
+  const fab = document.getElementById('meal-fab');
+  if (fab) fab.style.display = mealCanUpload ? 'flex' : 'none';
   initMealSwipe();
   await refreshMealPlan();
 }
@@ -534,7 +538,7 @@ function mealShowErrorBanner(res) {
   const el = document.getElementById('meal-error-banner');
   if (!el) return;
   const msg = (res && (res.status_error || res.status_message)) || 'KI-Erkennung fehlgeschlagen';
-  const retry = !!(res && res.retry_available);
+  const retry = !!(res && res.retry_available && mealCanUpload);
   el.style.display = 'block';
   el.innerHTML = `
     <div class="m3-card" style="padding:16px 18px;border:1.5px solid rgba(179,38,30,0.28);background:#fff8f7;">
@@ -547,10 +551,10 @@ function mealShowErrorBanner(res) {
           <div style="font-size:0.86rem;color:#1c1b1f;opacity:0.78;margin-top:4px;line-height:1.4;">${escapeHtml(msg)}</div>
           <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;">
             ${retry ? `<button class="m3-btn" type="button" onclick="retryMealPlanOcr()" style="background:#b3261e;color:#fff;border:none;padding:8px 14px;border-radius:12px;font-weight:600;cursor:pointer;">Erneut versuchen</button>` : ''}
-            <label style="display:inline-flex;align-items:center;padding:8px 14px;border-radius:12px;font-weight:600;font-size:0.86rem;cursor:pointer;background:rgba(0,0,0,0.06);">
+            ${mealCanUpload ? `<label style="display:inline-flex;align-items:center;padding:8px 14px;border-radius:12px;font-weight:600;font-size:0.86rem;cursor:pointer;background:rgba(0,0,0,0.06);">
               Neues Foto
               <input type="file" accept="image/*" style="display:none;" onchange="mealFileSelected(this)">
-            </label>
+            </label>` : ''}
           </div>
         </div>
       </div>

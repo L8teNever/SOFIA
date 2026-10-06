@@ -174,7 +174,7 @@ async def upload_meal_plan(
     request: Request,
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),  # any activated Sofia user, including students
 ):
     global upload_status
     if not (file.content_type or "").startswith("image/"):
@@ -238,7 +238,7 @@ async def upload_meal_plan(
 
 @router.post("/retry")
 async def retry_meal_plan(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),  # any activated Sofia user, including students
 ):
     """Re-run OCR on the last uploaded image that failed recognition."""
     _mark_stale_processing()
