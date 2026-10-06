@@ -4,7 +4,7 @@ avoid an extra dependency for what's a single API call."""
 from backend.config import settings
 from datetime import date
 from PIL import Image, ImageOps
-import httpx, json, logging, base64, io, re
+import asyncio, httpx, json, logging, base64, io, re
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +87,34 @@ def _parse_hhmm(raw) -> int | None:
 class GeminiError(Exception):
     pass
 
+
+_RETRY_STATUS = {429, 503}
+_MAX_ATTEMPTS = 4
+_BACKOFF_BASE_S = 0.5
+_DEFAULT_MODEL = "gemini-3.6-flash"
+
+
+def _resolve_model(name: str) -> str:
+    model = (name or "").strip() or _DEFAULT_MODEL
+    # gemini-2.0-flash is retired by Google; auto-upgrade to gemini-3.6-flash
+    if model in ("gemini-2.0-flash", "gemini-2.0-flash-exp"):
+        return _DEFAULT_MODEL
+    return model
+
+
+def _http_error_detail(resp: httpx.Response) -> str:
+    err_msg = ""
+    try:
+        err_json = resp.json()
+        err_msg = err_json.get("error", {}).get("message", "")
+    except Exception:
+        err_msg = (resp.text or "")[:200]
+    logger.warning("Gemini request failed (%s): %s", resp.status_code, err_msg or (resp.text or "")[:500])
+    detail = f"Gemini-Anfrage fehlgeschlagen ({resp.status_code})"
+    if err_msg:
+        detail += f": {err_msg}"
+    return detail
+
 def _optimize_image(image_bytes: bytes) -> tuple[bytes, str]:
     """Ensures image is in a supported format (JPEG), auto-rotated according to EXIF,
     and downscaled if oversized to stay within payload limits and ensure fast OCR."""
@@ -129,40 +157,58 @@ async def _call_gemini_json(prompt: str, image_bytes: bytes = None, mime_type: s
         "contents": [{"parts": parts}],
         "generationConfig": {"temperature": 0.1, "responseMimeType": "application/json"},
     }
-    model = settings.gemini_model
-    # gemini-2.0-flash is retired by Google; auto-upgrade to gemini-3.6-flash
-    if model in ("gemini-2.0-flash", "gemini-2.0-flash-exp"):
-        model = "gemini-3.6-flash"
+    primary = _resolve_model(settings.gemini_model)
+    fallback_raw = getattr(settings, "gemini_fallback_model", "") or ""
+    fallback = _resolve_model(fallback_raw) if fallback_raw.strip() else None
+    models = [primary]
+    if fallback and fallback != primary:
+        models.append(fallback)
 
+    last_error = None
+    resp = None
     async with httpx.AsyncClient(timeout=60) as client:
-        resp = await client.post(
-            GEMINI_URL.format(model=model),
-            params={"key": settings.gemini_api_key},
-            json=body,
-        )
+        for mi, model in enumerate(models):
+            for attempt in range(_MAX_ATTEMPTS):
+                resp = await client.post(
+                    GEMINI_URL.format(model=model),
+                    params={"key": settings.gemini_api_key},
+                    json=body,
+                )
+                if resp.status_code == 200:
+                    last_error = None
+                    break
+                if resp.status_code == 404 and model != _DEFAULT_MODEL:
+                    logger.info("Modell %s meldete 404; Fallback auf %s...", model, _DEFAULT_MODEL)
+                    model = _DEFAULT_MODEL
+                    continue
+                if resp.status_code in _RETRY_STATUS and attempt < _MAX_ATTEMPTS - 1:
+                    delay = _BACKOFF_BASE_S * (2 ** attempt)
+                    logger.warning(
+                        "Gemini %s auf %s (Versuch %s/%s); warte %.1fs",
+                        resp.status_code, model, attempt + 1, _MAX_ATTEMPTS, delay,
+                    )
+                    await asyncio.sleep(delay)
+                    continue
+                last_error = GeminiError(_http_error_detail(resp))
+                if resp.status_code in _RETRY_STATUS and mi < len(models) - 1:
+                    logger.info(
+                        "Gemini weiterhin überlastet auf %s; versuche Fallback-Modell %s",
+                        model, models[mi + 1],
+                    )
+                    break
+                raise last_error
+            else:
+                continue
+            if resp is not None and resp.status_code == 200:
+                break
+        else:
+            if last_error:
+                raise last_error
 
-        # Fallback to gemini-3.6-flash if custom/deprecated model returned 404
-        if resp.status_code == 404 and model != "gemini-3.6-flash":
-            logger.info("Modell %s meldete 404; Fallback auf gemini-3.6-flash...", model)
-            model = "gemini-3.6-flash"
-            resp = await client.post(
-                GEMINI_URL.format(model=model),
-                params={"key": settings.gemini_api_key},
-                json=body,
-            )
-
-    if resp.status_code != 200:
-        err_msg = ""
-        try:
-            err_json = resp.json()
-            err_msg = err_json.get("error", {}).get("message", "")
-        except Exception:
-            err_msg = resp.text[:200]
-        logger.warning("Gemini request failed (%s): %s", resp.status_code, err_msg or resp.text[:500])
-        detail = f"Gemini-Anfrage fehlgeschlagen ({resp.status_code})"
-        if err_msg:
-            detail += f": {err_msg}"
-        raise GeminiError(detail)
+    if resp is None or resp.status_code != 200:
+        if last_error:
+            raise last_error
+        raise GeminiError("Gemini-Anfrage fehlgeschlagen")
 
     data = resp.json()
     candidates = data.get("candidates", [])

@@ -13,20 +13,98 @@ from backend.services.virus_scanner import scan_file
 from backend.services.compression import compress_lossless
 from backend.services.audit_service import log_audit
 from datetime import date, datetime, timedelta
-import os, uuid, aiofiles, asyncio, logging
+import os, uuid, aiofiles, asyncio, logging, json
 from typing import Optional
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/mealplan", tags=["mealplan"])
 
-# In-memory background processing state
-upload_status = {
-    "status": "idle",  # "idle" | "processing" | "ready" | "error"
-    "message": "",
-    "started_at": None,
-    "error": None,
-    "plan_id": None,
-}
+_STATUS_FILE = os.path.join(settings.upload_dir, "mealplan", "_upload_status.json")
+_STALE_PROCESSING_S = 180
+
+_STATUS_KEYS = (
+    "status", "message", "started_at", "error", "plan_id",
+    "filename", "content_type", "user_id",
+)
+
+
+def _default_status():
+    return {
+        "status": "idle",  # "idle" | "processing" | "ready" | "error"
+        "message": "",
+        "started_at": None,
+        "error": None,
+        "plan_id": None,
+        "filename": None,
+        "content_type": None,
+        "user_id": None,
+    }
+
+
+def _load_status():
+    st = _default_status()
+    try:
+        with open(_STATUS_FILE, encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data, dict):
+            for k in _STATUS_KEYS:
+                if k in data:
+                    st[k] = data[k]
+    except FileNotFoundError:
+        pass
+    except Exception as e:
+        logger.warning("Konnte Speiseplan-Status nicht laden: %s", e)
+    return st
+
+
+def _save_status():
+    try:
+        os.makedirs(os.path.dirname(_STATUS_FILE), exist_ok=True)
+        payload = {k: upload_status.get(k) for k in _STATUS_KEYS}
+        with open(_STATUS_FILE, "w", encoding="utf-8") as f:
+            json.dump(payload, f)
+    except Exception as e:
+        logger.warning("Konnte Speiseplan-Status nicht speichern: %s", e)
+
+
+upload_status = _load_status()
+
+
+def _mark_stale_processing():
+    if upload_status.get("status") != "processing" or not upload_status.get("started_at"):
+        return
+    try:
+        started = datetime.fromisoformat(upload_status["started_at"])
+        if (datetime.now() - started).total_seconds() < _STALE_PROCESSING_S:
+            return
+    except Exception:
+        return
+    upload_status["status"] = "error"
+    upload_status["error"] = "Die KI-Erkennung wurde unterbrochen. Du kannst es erneut versuchen."
+    upload_status["message"] = upload_status["error"]
+    _save_status()
+
+
+def _public_status():
+    _mark_stale_processing()
+    filename = upload_status.get("filename")
+    retry_available = bool(
+        filename
+        and upload_status.get("status") == "error"
+        and os.path.exists(os.path.join(settings.upload_dir, "mealplan", os.path.basename(str(filename))))
+    )
+    return {
+        "status": upload_status.get("status") or "idle",
+        "message": upload_status.get("message") or "",
+        "started_at": upload_status.get("started_at"),
+        "error": upload_status.get("error"),
+        "plan_id": upload_status.get("plan_id"),
+        "retry_available": retry_available,
+    }
+
+
+def _mealplan_path(filename: str) -> str:
+    return os.path.join(settings.upload_dir, "mealplan", os.path.basename(filename))
 
 
 async def _process_meal_plan_background(raw: bytes, content_type: str, filename: str, user_id: int):
@@ -68,17 +146,20 @@ async def _process_meal_plan_background(raw: bytes, content_type: str, filename:
             upload_status["plan_id"] = plan.id
             upload_status["message"] = "Speiseplan erfolgreich erkannt!"
             upload_status["error"] = None
+            _save_status()
             logger.info("Speiseplan erfolgreich im Hintergrund verarbeitet (Plan ID %s)", plan.id)
     except GeminiError as e:
         logger.error("Hintergrund-Verarbeitung Speiseplan fehlgeschlagen: %s", e)
         upload_status["status"] = "error"
         upload_status["error"] = str(e)
         upload_status["message"] = f"Fehler bei KI-Erkennung: {e}"
+        _save_status()
     except Exception as e:
         logger.exception("Unerwarteter Fehler bei Hintergrund-Verarbeitung Speiseplan: %s", e)
         upload_status["status"] = "error"
         upload_status["error"] = "Unerwarteter Fehler bei der Bilderkennung"
         upload_status["message"] = "Unerwarteter Fehler bei der Bilderkennung"
+        _save_status()
 
 
 async def _get_plan(db: AsyncSession, plan_id: int) -> Optional[MealPlan]:
@@ -116,6 +197,8 @@ async def upload_meal_plan(
             started = datetime.fromisoformat(upload_status["started_at"])
             if (datetime.now() - started).total_seconds() < 90:
                 raise HTTPException(409, "Ein Speiseplan wird gerade bereits im Hintergrund verarbeitet.")
+        except HTTPException:
+            raise
         except Exception:
             pass
 
@@ -130,6 +213,10 @@ async def upload_meal_plan(
     upload_status["started_at"] = datetime.now().isoformat()
     upload_status["error"] = None
     upload_status["plan_id"] = None
+    upload_status["filename"] = filename
+    upload_status["content_type"] = mime or file.content_type
+    upload_status["user_id"] = current_user.id
+    _save_status()
 
     await log_audit(
         db,
@@ -146,6 +233,41 @@ async def upload_meal_plan(
         "ok": True,
         "status": "processing",
         "message": "Foto hochgeladen! Die KI verarbeitet den Plan im Hintergrund.",
+    }
+
+
+@router.post("/retry")
+async def retry_meal_plan(
+    current_user: User = Depends(get_current_user),
+):
+    """Re-run OCR on the last uploaded image that failed recognition."""
+    _mark_stale_processing()
+    if upload_status.get("status") == "processing":
+        raise HTTPException(409, "Ein Speiseplan wird gerade bereits im Hintergrund verarbeitet.")
+    filename = upload_status.get("filename")
+    if not filename:
+        raise HTTPException(400, "Kein hochgeladenes Foto zum erneuten Erkennen vorhanden.")
+    path = _mealplan_path(filename)
+    if not os.path.exists(path):
+        raise HTTPException(404, "Das hochgeladene Foto ist nicht mehr vorhanden. Bitte erneut hochladen.")
+
+    async with aiofiles.open(path, "rb") as f:
+        raw = await f.read()
+    content_type = upload_status.get("content_type") or "image/jpeg"
+    user_id = upload_status.get("user_id") or current_user.id
+
+    upload_status["status"] = "processing"
+    upload_status["message"] = "KI analysiert den Speiseplan im Hintergrund..."
+    upload_status["started_at"] = datetime.now().isoformat()
+    upload_status["error"] = None
+    upload_status["plan_id"] = None
+    _save_status()
+
+    asyncio.create_task(_process_meal_plan_background(raw, content_type, filename, user_id))
+    return {
+        "ok": True,
+        "status": "processing",
+        "message": "Erneute KI-Erkennung gestartet.",
     }
 
 
@@ -187,7 +309,7 @@ async def cleanup_past_mealplans(db: AsyncSession) -> dict:
 
 @router.get("/status")
 async def meal_plan_status(current_user: User = Depends(get_current_user)):
-    return upload_status
+    return _public_status()
 
 
 @router.get("/current")
@@ -237,12 +359,14 @@ async def current_meal_plan(db: AsyncSession = Depends(get_db), current_user: Us
                 clean_days.append(d)
         plan.days = clean_days
 
+    pub = _public_status()
     return {
         "today": MealPlanDayOut.model_validate(today_day) if today_day else None,
         "plan": MealPlanOut.model_validate(plan) if plan else None,
-        "status": upload_status["status"],
-        "status_message": upload_status["message"],
-        "status_error": upload_status["error"],
+        "status": pub["status"],
+        "status_message": pub["message"],
+        "status_error": pub["error"],
+        "retry_available": pub["retry_available"],
     }
 
 

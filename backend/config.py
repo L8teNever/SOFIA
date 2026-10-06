@@ -156,6 +156,8 @@ class Settings:
     dev_email:         Optional[str] = os.getenv("DEV_EMAIL")
     gemini_api_key:    str           = os.getenv("GEMINI_API_KEY", "")
     gemini_model:      str           = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
+    # Optional second model if the primary keeps returning 429/503 after retries.
+    gemini_fallback_model: str       = os.getenv("GEMINI_FALLBACK_MODEL", "")
     # Chat's GIF picker (GIPHY). Must come from a free key a human creates
     # on developers.giphy.com — no way to self-generate one. (Tenor was the
     # original choice here but stopped accepting new API clients in January
