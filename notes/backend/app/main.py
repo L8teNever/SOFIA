@@ -387,11 +387,6 @@ async def sofia_sync_now(_: dict = Depends(require_admin)) -> dict:
     return await sofia_sync.sync_once(force=True)
 
 
-def _people_from_sofia() -> None:
-    if sofia_sync.enabled():
-        raise HTTPException(status_code=409, detail="Personen kommen automatisch aus Sofia - dort aendern.")
-
-
 @app.get("/api/me/prefs")
 async def my_prefs(person: dict = Depends(get_current_person)) -> dict:
     """Geraete-Einstellungen (Stift, Farben, Leisten, Zoom ...) fuer alle Geraete des Kontos."""
@@ -432,69 +427,6 @@ async def set_my_settings(request: Request, person: dict = Depends(get_current_p
 @app.get("/api/me")
 async def me(person: dict = Depends(get_current_person)) -> dict:
     return person
-
-
-class PersonCreate(BaseModel):
-    name: str
-
-
-class EmailAdd(BaseModel):
-    email: str
-
-
-@app.get("/api/admin/people")
-async def admin_list_people(_: dict = Depends(require_admin)) -> list[dict]:
-    return await db.people_admin()
-
-
-@app.post("/api/admin/people")
-async def admin_create_person(payload: PersonCreate, _: dict = Depends(require_admin)) -> dict:
-    _people_from_sofia()
-    name = payload.name.strip()
-    if not name:
-        raise HTTPException(status_code=400, detail="Name fehlt.")
-    return await db.create_person(name)
-
-
-@app.patch("/api/admin/people/{person_id}")
-async def admin_rename_person(person_id: str, payload: PersonCreate, _: dict = Depends(require_admin)) -> dict:
-    _people_from_sofia()
-    ok = await db.rename_person(person_id, payload.name)
-    if not ok:
-        raise HTTPException(status_code=404, detail="not found")
-    return {"ok": True}
-
-
-@app.delete("/api/admin/people/{person_id}")
-async def admin_delete_person(person_id: str, admin: dict = Depends(require_admin)) -> dict:
-    _people_from_sofia()
-    if person_id == admin["id"]:
-        raise HTTPException(status_code=400, detail="Die eigene Person kann nicht geloescht werden.")
-    err = await db.delete_person(person_id)
-    if err == "not_found":
-        raise HTTPException(status_code=404, detail="not found")
-    if err == "owns_boards":
-        raise HTTPException(status_code=409, detail="Diese Person besitzt noch Blaetter - erst loeschen/uebertragen.")
-    return {"ok": True}
-
-
-@app.post("/api/admin/people/{person_id}/emails")
-async def admin_add_email(person_id: str, payload: EmailAdd, _: dict = Depends(require_admin)) -> dict:
-    _people_from_sofia()
-    email = payload.email.strip().lower()
-    if not email or "@" not in email:
-        raise HTTPException(status_code=400, detail="Ungueltige Mail-Adresse.")
-    added = await db.add_person_email(person_id, email)
-    if not added:
-        raise HTTPException(status_code=409, detail="Diese Mail-Adresse ist schon vergeben oder die Person existiert nicht.")
-    return {"ok": True}
-
-
-@app.delete("/api/admin/people/{person_id}/emails/{email}")
-async def admin_remove_email(person_id: str, email: str, _: dict = Depends(require_admin)) -> dict:
-    _people_from_sofia()
-    await db.remove_person_email(person_id, email)
-    return {"ok": True}
 
 
 @app.get("/api/library")

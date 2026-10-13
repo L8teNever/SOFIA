@@ -558,11 +558,6 @@
         <span class="set-nav-text"><strong>Schul-Timer</strong><small id="set-sum-school">Restzeit der Stunde, Hinweise</small></span>
         <span class="material-symbols-rounded set-chev">chevron_right</span>
       </button>
-      <button type="button" class="set-nav hidden" id="set-nav-people" data-go="people" data-title="Personen">
-        <span class="set-ico"><span class="material-symbols-rounded">group</span></span>
-        <span class="set-nav-text"><strong>Personen</strong><small>Nur für Admins</small></span>
-        <span class="material-symbols-rounded set-chev">chevron_right</span>
-      </button>
       <button type="button" class="set-nav hidden" id="set-nav-sofia" data-go="sofia" data-title="Sofia">
         <span class="set-ico"><span class="material-symbols-rounded">cloud_upload</span></span>
         <span class="set-nav-text"><strong>Sofia &amp; Lösungen</strong><small id="set-sum-sofia">Automatisch teilen</small></span>
@@ -816,15 +811,6 @@
         <button type="button" id="gn-import-reset" class="m3-btn-outline gn-import-reset">Andere Dateien</button>
       </div>
       <p class="set-hint" id="gn-import-status"></p>
-    </div>
-
-    <div class="set-page hidden" data-page="people">
-      <p class="set-hint">Wer sich mit welcher Mail-Adresse anmeldet, landet automatisch bei der zugeordneten Person. Eine Person kann mehrere Mail-Adressen haben.</p>
-      <div id="admin-people-list" class="admin-people-list"></div>
-      <div class="admin-new-person-row">
-        <input id="admin-new-person-name" type="text" placeholder="Name der neuen Person" maxlength="40" autocomplete="off" autocorrect="off" spellcheck="false" name="admin-person-input" />
-        <button type="button" id="btn-admin-new-person">Anlegen</button>
-      </div>
     </div>
 
     <div class="set-page hidden" data-page="exp">

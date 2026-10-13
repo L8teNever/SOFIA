@@ -3925,10 +3925,6 @@
     }
     settingsPopover.dataset.page = wide ? show : asked;
     syncSettingsSummary();
-    if (show === "people" && isAdmin && typeof loadAdminPeople === "function") {
-      loadAdminPeople();
-      if (typeof syncSofiaAdminHint === "function") syncSofiaAdminHint();
-    }
   }
   function syncSettingsSummary() {
     const set = (id, t) => {
@@ -18063,168 +18059,6 @@
     });
   }
 
-  // ---- Admin: Personen + Mail-Adressen verwalten -----------------------
-  const adminPeopleListEl = document.getElementById("admin-people-list");
-
-  function openAdminPanel() {
-    if (!isAdmin) return;
-    openSettings();
-    showSettingsPage("people");
-  }
-  // Kommen die Personen aus Sofia, ist hier nur Ansehen + "jetzt abgleichen" moeglich
-  async function syncSofiaAdminHint() {
-    let st = null;
-    try {
-      st = await api("/api/sofia/status");
-    } catch (err) {
-      st = null;
-    }
-    const on = !!(st && st.enabled);
-    document.querySelector('.set-page[data-page="people"]')?.classList.toggle("from-sofia", on);
-    let hint = document.getElementById("admin-sofia-hint");
-    if (!on) {
-      if (hint) hint.remove();
-      return;
-    }
-    if (!hint) {
-      hint = document.createElement("div");
-      hint.id = "admin-sofia-hint";
-      hint.className = "admin-sofia-hint";
-      hint.innerHTML = '<span class="material-symbols-rounded">sync</span><div><strong>Personen kommen aus Sofia</strong><small></small></div><button type="button">Jetzt abgleichen</button>';
-      adminPeopleListEl.parentElement.insertBefore(hint, adminPeopleListEl);
-      hint.querySelector("button").addEventListener("click", async (e) => {
-        const b = e.currentTarget;
-        b.disabled = true;
-        b.textContent = "Gleiche ab…";
-        try {
-          await api("/api/sofia/sync", { method: "POST" });
-          await loadAdminPeople();
-          await refreshPeople();
-          libMem.clear();
-          refreshLibrary();
-        } catch (err) {
-          showToast("Abgleich mit Sofia hat nicht geklappt");
-        }
-        b.disabled = false;
-        b.textContent = "Jetzt abgleichen";
-        syncSofiaAdminHint();
-      });
-    }
-    const when = st.lastSync ? new Date(st.lastSync * 1000).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }) : "noch nie";
-    hint.querySelector("small").textContent = st.lastError
-      ? "Letzter Versuch fehlgeschlagen: " + st.lastError
-      : "Neue Personen und Fächer in Sofia erscheinen hier automatisch · zuletzt " + when + " · " + (st.people || 0) + " Personen, " + (st.subjects || 0) + " Fächer";
-  }
-  function closeAdminPanel() {
-    if (settingsPopover && settingsPopover.dataset.page === "people") showSettingsPage("main");
-  }
-
-  function escapeHtml(s) {
-    const div = document.createElement("div");
-    div.textContent = s;
-    return div.innerHTML;
-  }
-
-  async function loadAdminPeople() {
-    let people;
-    try {
-      people = await api("/api/admin/people");
-    } catch (err) {
-      adminPeopleListEl.textContent = "Konnte Personen nicht laden.";
-      return;
-    }
-    adminPeopleListEl.innerHTML = "";
-    for (const person of people) {
-      const card = document.createElement("div");
-      card.className = "admin-person-card";
-
-      const head = document.createElement("div");
-      head.className = "admin-person-head";
-      head.innerHTML =
-        `<span>${escapeHtml(person.name)}</span>` +
-        (person.isAdmin ? `<span class="admin-badge">Admin</span>` : "");
-      const renameBtn = document.createElement("button");
-      renameBtn.className = "link";
-      renameBtn.textContent = "Umbenennen";
-      renameBtn.addEventListener("click", async () => {
-        const res = await openNameSheet({ title: "Person umbenennen", label: "Name", initial: person.name });
-        if (res === null || !res.value.trim()) return;
-        await api("/api/admin/people/" + encodeURIComponent(person.id), {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: res.value.trim() }),
-        });
-        await loadAdminPeople();
-        await refreshPeople();
-      });
-      head.appendChild(renameBtn);
-      if (!person.isAdmin) {
-        const delBtn = document.createElement("button");
-        delBtn.className = "danger";
-        delBtn.textContent = "Löschen";
-        delBtn.addEventListener("click", async () => {
-          if (!(await askConfirm({ title: "„" + person.name + "“ löschen?", text: "Die Person verliert den Zugang. Geht nur, wenn sie keine eigenen Blätter mehr hat." }))) return;
-          try {
-            await api("/api/admin/people/" + encodeURIComponent(person.id), { method: "DELETE" });
-            await loadAdminPeople();
-            await refreshPeople();
-          } catch (err) {
-            window.alert("Geht nicht: hat noch eigene Blätter oder existiert nicht mehr.");
-          }
-        });
-        head.appendChild(delBtn);
-      }
-      card.appendChild(head);
-
-      for (const email of person.emails) {
-        const row = document.createElement("div");
-        row.className = "admin-email-row";
-        const span = document.createElement("span");
-        span.textContent = email;
-        row.appendChild(span);
-        const rm = document.createElement("button");
-        rm.textContent = "✕";
-        rm.title = "Mail-Adresse entfernen";
-        rm.addEventListener("click", async () => {
-          await api("/api/admin/people/" + encodeURIComponent(person.id) + "/emails/" + encodeURIComponent(email), {
-            method: "DELETE",
-          });
-          loadAdminPeople();
-        });
-        row.appendChild(rm);
-        card.appendChild(row);
-      }
-
-      const addRow = document.createElement("div");
-      addRow.className = "admin-add-email-row";
-      const input = document.createElement("input");
-      input.type = "email";
-      input.placeholder = "weitere Mail-Adresse";
-      const addBtn = document.createElement("button");
-      addBtn.textContent = "+";
-      addBtn.addEventListener("click", async () => {
-        const email = input.value.trim();
-        if (!email) return;
-        try {
-          await api("/api/admin/people/" + encodeURIComponent(person.id) + "/emails", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email }),
-          });
-          input.value = "";
-          loadAdminPeople();
-        } catch (err) {
-          window.alert("Diese Mail-Adresse ist schon vergeben.");
-        }
-      });
-      addRow.appendChild(input);
-      addRow.appendChild(addBtn);
-      card.appendChild(addRow);
-
-      adminPeopleListEl.appendChild(card);
-    }
-  }
-
   async function refreshPeople() {
     try {
       const r = await api("/api/people");
@@ -18241,23 +18075,6 @@
       }
     }
   }
-
-  document.getElementById("btn-admin-close")?.addEventListener("click", closeAdminPanel);
-  document.getElementById("btn-admin-new-person")?.addEventListener("click", async (e) => {
-    const input = document.getElementById("admin-new-person-name");
-    const name = input.value.trim();
-    if (!name) return;
-    await window.sofiaWithBusy(e.currentTarget, async () => {
-      await api("/api/admin/people", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name }),
-      });
-      input.value = "";
-      await loadAdminPeople();
-      await refreshPeople();
-    });
-  });
 
   document.getElementById("btn-open-library")?.addEventListener("click", () => showLibrary());
   // grosser Zurueck-Pfeil oben links: eine Ebene zurueck (vom Blatt in den Ordner)
@@ -18301,10 +18118,6 @@
   });
   applyBackMode();
   document.getElementById("btn-library-close")?.addEventListener("click", () => hideLibrary());
-  document.getElementById("set-nav-people")?.addEventListener("click", () => {
-    if (!isAdmin) return;
-    showSettingsPage("people");
-  });
   const libSearchRow = document.getElementById("lib-search-row");
   const libSearchInput = document.getElementById("lib-search-input");
   document.getElementById("btn-library-search")?.addEventListener("click", () => {
@@ -25407,7 +25220,6 @@
       currentPersonId = me.id;
       isAdmin = !!me.isAdmin;
       if (startedOffline) setConnState("offline");
-      document.getElementById("set-nav-people")?.classList.toggle("hidden", !isAdmin);
       localStorage.setItem("sofianotes-person", currentPersonId);
       const startParams = new URLSearchParams(location.search);
       currentFolderId = startParams.get("folder") || null;
