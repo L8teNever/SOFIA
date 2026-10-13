@@ -7,9 +7,10 @@ from backend.database import init_db
 from backend.config import settings
 from backend.auth import get_current_user
 from backend.models.user import User
-from backend.routes import auth_routes, users, classes, subjects, calendar, homework, grades, files, vapid, admin, timetable, mealplan, notifications, drive, google_sync, chat, notes
+from backend.routes import auth_routes, users, classes, subjects, calendar, homework, grades, files, vapid, admin, timetable, mealplan, notifications, drive, google_sync, chat, notes, moodle
 from backend.services.rate_limiter import RateLimiterMiddleware
 from backend.services.notification_scheduler import start_notification_scheduler
+from backend.services.moodle_service import moodle_poll_loop
 from backend.version import get_git_commit, get_version_info
 import os, time, mimetypes, asyncio, logging
 
@@ -33,8 +34,10 @@ mimetypes.add_type("image/webp", ".webp")
 async def lifespan(app: FastAPI):
     await init_db()
     sched_task = asyncio.create_task(start_notification_scheduler())
+    moodle_task = asyncio.create_task(moodle_poll_loop())
     yield
     sched_task.cancel()
+    moodle_task.cancel()
 
 app = FastAPI(title="Sofia", lifespan=lifespan)
 app.add_middleware(RateLimiterMiddleware)
@@ -53,7 +56,7 @@ async def _revalidate_app_files(request, call_next):
     return response
 
 # API routes
-for r in [auth_routes, users, classes, subjects, calendar, homework, grades, files, vapid, admin, timetable, mealplan, notifications, drive, google_sync, chat, notes]:
+for r in [auth_routes, users, classes, subjects, calendar, homework, grades, files, vapid, admin, timetable, mealplan, notifications, drive, google_sync, chat, notes, moodle]:
     app.include_router(r.router)
 app.include_router(drive.public_router)
 

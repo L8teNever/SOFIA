@@ -23,6 +23,11 @@ class ClassGroup(Base):
     # forth without losing either the Untis credentials or an uploaded photo
     # timetable's recognized entries.
     timetable_source = Column(String, nullable=False, default="untis")
+    # Moodle: ein Konto fuer die ganze Klasse (nur im Admin-Bereich eingetragen,
+    # Passwort verschluesselt wie bei Untis)
+    moodle_url = Column(String, nullable=True)
+    moodle_user = Column(String, nullable=True)
+    moodle_password_enc = Column(String, nullable=True)
 
     members = relationship("User", back_populates="class_group")
     subjects = relationship("Subject", back_populates="class_group", cascade="all, delete-orphan")

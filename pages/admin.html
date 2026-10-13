@@ -14,6 +14,7 @@
         <button class="admin-tab-btn" onclick="adminTab('classes',this)" data-tab="classes">Klassen</button>
         <button class="admin-tab-btn" onclick="adminTab('subjects',this)" data-tab="subjects">Fächer</button>
         <button class="admin-tab-btn" onclick="adminTab('untis',this)" data-tab="untis">Untis</button>
+        <button class="admin-tab-btn" onclick="adminTab('moodle',this)" data-tab="moodle">Moodle</button>
         <button class="admin-tab-btn" onclick="adminTab('push',this)" data-tab="push">Push</button>
         <button class="admin-tab-btn" onclick="adminTab('holidays',this)" data-tab="holidays" id="tab-btn-holidays" style="display:none;">Schulferien</button>
         <button class="admin-tab-btn" onclick="adminTab('storage',this)" data-tab="storage" id="tab-btn-storage" style="display:none;">Speicher</button>
@@ -45,6 +46,14 @@
           <div style="font-size:0.82rem;opacity:0.75;line-height:1.5;">Trage pro Klasse die WebUntis-Zugangsdaten ein. Der Stundenplan wird dann automatisch geladen. Die Daten findest du in deinem WebUntis-Konto unter <strong>Einstellungen → API-Zugang</strong>. Falls Untis nicht verbunden werden kann, lässt sich weiter unten stattdessen ein Foto vom gedruckten Stundenplan hochladen — die KI erkennt Fächer und Zeiten daraus.</div>
         </div>
         <div id="untis-classes-list"></div>
+      </div>
+
+      <div id="tab-moodle" style="display:none;">
+        <div class="m3-card-tonal" style="background:#ffd8e4;color:#31111d;margin-bottom:12px;">
+          <div style="font-weight:700;margin-bottom:6px;">Moodle</div>
+          <div style="font-size:0.82rem;opacity:0.75;line-height:1.5;">Pro Klasse meldet sich <strong>ein</strong> Moodle-Konto für alle an. Sofia holt dann alle 20 Minuten Kurse, Inhalte, Beiträge und Aufgaben und zeigt sie unter „Moodle“ – Dateien laufen über Sofia, niemand braucht ein eigenes Moodle-Login. Das Passwort wird verschlüsselt gespeichert.</div>
+        </div>
+        <div id="moodle-classes-list"></div>
       </div>
 
       <div id="tab-push" style="display:none;" class="m3-card">
@@ -212,13 +221,14 @@ async function init_admin() {
 }
 
 function adminTab(tab, btn) {
-  ['users','classes','subjects','untis','push','holidays','storage','audit'].forEach(t => {
+  ['users','classes','subjects','untis','moodle','push','holidays','storage','audit'].forEach(t => {
     const el = document.getElementById('tab-'+t);
     if (el) el.style.display = t===tab?'block':'none';
   });
   document.querySelectorAll('#page-admin .admin-tab-btn').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
   if (tab === 'untis') renderUntisTab();
+  if (tab === 'moodle') renderMoodleTab();
   if (tab === 'holidays') initHolidaysTab();
   if (tab === 'storage') renderStorageTab();
   if (tab === 'audit') loadAuditLogs();
@@ -701,6 +711,123 @@ async function executeDeleteClass(id) {
   adminClasses = adminClasses.filter(c=>c.id!==id);
   renderAdminClasses();
   showToast('Gelöscht');
+}
+
+// ---- Moodle pro Klasse ----
+async function renderMoodleTab() {
+  const list = document.getElementById('moodle-classes-list');
+  if (!adminClasses.length) {
+    list.innerHTML = '<div class="m3-card" style="opacity:0.5;text-align:center;">Keine Klassen vorhanden</div>';
+    return;
+  }
+  list.innerHTML = adminClasses.map(c => `
+    <div class="m3-card" style="margin-bottom:10px;">
+      <div style="display:flex;align-items:center;gap:14px;">
+        <div style="width:44px;height:44px;background:#ffd8e4;border-radius:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+          <i data-lucide="graduation-cap" style="width:20px;height:20px;color:#31111d;"></i>
+        </div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(c.name)}</div>
+          <div style="font-size:0.75rem;opacity:0.6;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" id="moodle-status-${c.id}">Status wird geladen…</div>
+        </div>
+        <button onclick="openMoodleSheet(${c.id})" style="background:#ffd8e4;color:#31111d;border:none;border-radius:14px;padding:10px 16px;font-size:0.82rem;font-weight:700;cursor:pointer;font-family:inherit;flex-shrink:0;">Konfigurieren</button>
+      </div>
+      <div id="moodle-sync-row-${c.id}" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid rgba(0,0,0,0.06);">
+        <button onclick="syncMoodleNow(${c.id})" id="moodle-sync-btn-${c.id}" style="background:#d3e3fd;color:#041e49;border:none;border-radius:12px;padding:9px 14px;font-size:0.82rem;font-weight:700;cursor:pointer;font-family:inherit;width:100%;">
+          <i data-lucide="refresh-cw" style="width:14px;height:14px;vertical-align:-2px;margin-right:5px;"></i>Jetzt laden
+        </button>
+        <div id="moodle-sync-result-${c.id}" style="font-size:0.78rem;padding:6px 4px 0;min-height:16px;"></div>
+      </div>
+    </div>`).join('');
+  lucide.createIcons();
+  for (const c of adminClasses) loadMoodleStatus(c.id);
+}
+
+async function loadMoodleStatus(classId) {
+  const el = document.getElementById('moodle-status-' + classId);
+  try {
+    const d = await API.getMoodle(classId);
+    if (!el) return;
+    if (d.configured) {
+      const when = d.updated_at ? ' · Stand ' + new Date(d.updated_at * 1000).toLocaleString('de-DE', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }) : '';
+      el.innerHTML = '<span style="color:#146c2e;font-weight:600;">✓ ' + escapeHtml(d.username) + '</span> · ' + d.courses + ' Kurse' + when + (d.error ? ' · <span style="color:#b3261e;">' + escapeHtml(d.error) + '</span>' : '');
+      const row = document.getElementById('moodle-sync-row-' + classId);
+      if (row) row.style.display = 'block';
+    } else {
+      el.innerHTML = '<span style="color:#b3261e;">Nicht eingerichtet</span>';
+    }
+  } catch {
+    if (el) el.innerHTML = '<span style="color:#b3261e;">Nicht eingerichtet</span>';
+  }
+}
+
+async function openMoodleSheet(classId) {
+  openSheet(`
+    <div class="sheet-title">Moodle-Zugang der Klasse</div>
+    <input class="m3-input" id="md-url" placeholder="Moodle-Adresse (z.B. https://moodle.schule.de)" autocomplete="off">
+    <input class="m3-input" id="md-user" placeholder="Benutzername" autocomplete="off">
+    <input class="m3-input" id="md-pass" type="password" placeholder="Passwort" autocomplete="new-password">
+    <div id="md-test-result" style="min-height:20px;font-size:0.82rem;margin-bottom:10px;padding:0 4px;"></div>
+    <div style="display:flex;gap:10px;">
+      <button class="m3-btn-tonal" style="flex:1;" onclick="testMoodleConn(${classId}, this)">Verbindung testen</button>
+      <button class="m3-btn-full" style="flex:1;" onclick="saveMoodle(${classId})">Speichern</button>
+    </div>
+  `);
+  try {
+    const d = await API.getMoodle(classId);
+    document.getElementById('md-url').value = d.url || '';
+    document.getElementById('md-user').value = d.username || '';
+    if (d.has_password) document.getElementById('md-pass').placeholder = 'Passwort (leer lassen zum Beibehalten)';
+  } catch {}
+}
+
+function moodleForm() {
+  return {
+    url: document.getElementById('md-url').value.trim(),
+    username: document.getElementById('md-user').value.trim(),
+    password: document.getElementById('md-pass').value,
+  };
+}
+
+async function testMoodleConn(classId, btn) {
+  btn.disabled = true; btn.textContent = 'Teste…';
+  const el = document.getElementById('md-test-result');
+  try {
+    const res = await API.testMoodle(classId, moodleForm());
+    el.innerHTML = res.ok
+      ? '<span style="color:#146c2e;font-weight:600;">✓ ' + escapeHtml(res.message) + '</span>'
+      : '<span style="color:#b3261e;font-weight:600;">✗ ' + escapeHtml(res.message) + '</span>';
+  } catch (e) {
+    el.innerHTML = '<span style="color:#b3261e;">Fehler: ' + escapeHtml(e.message || 'Unbekannt') + '</span>';
+  }
+  btn.disabled = false; btn.textContent = 'Verbindung testen';
+}
+
+async function saveMoodle(classId) {
+  try {
+    await API.saveMoodle(classId, moodleForm());
+  } catch (e) {
+    showToast('Speichern fehlgeschlagen');
+    return;
+  }
+  closeSheet();
+  showToast('Moodle gespeichert – lädt im Hintergrund');
+  API.syncMoodle(classId).then(() => loadMoodleStatus(classId)).catch(() => {});
+  loadMoodleStatus(classId);
+}
+
+async function syncMoodleNow(classId) {
+  const btn = document.getElementById('moodle-sync-btn-' + classId);
+  const res = document.getElementById('moodle-sync-result-' + classId);
+  if (btn) { btn.disabled = true; btn.style.opacity = '0.6'; }
+  try {
+    const r = await API.syncMoodle(classId);
+    if (res) res.innerHTML = r.ok ? '<span style="color:#146c2e;font-weight:600;">✓ ' + escapeHtml(r.message) + '</span>' : '<span style="color:#b3261e;">✗ ' + escapeHtml(r.message) + '</span>';
+  } catch (e) {
+    if (res) res.innerHTML = '<span style="color:#b3261e;">Fehler</span>';
+  }
+  if (btn) { btn.disabled = false; btn.style.opacity = ''; }
+  loadMoodleStatus(classId);
 }
 
 async function openUntisSheet(classId) {

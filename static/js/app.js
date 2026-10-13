@@ -58,7 +58,7 @@ if (window.visualViewport) {
   window.visualViewport.addEventListener('resize', updateAppHeight);
 }
 
-const KNOWN_PAGES = ['calendar','homework','grades','timetable','mealplan','drive','quickshare','settings','admin','notifications','notification-settings','google-sync','chat','notes'];
+const KNOWN_PAGES = ['calendar','homework','grades','timetable','mealplan','drive','moodle','settings','admin','notifications','notification-settings','google-sync','chat','notes'];
 const pageCache = new Map();
 
 function prefetchPages() {
@@ -1346,7 +1346,15 @@ async function loadDashboard() {
       const avg = (grades.reduce((s, g) => s + g.value, 0) / grades.length).toFixed(1);
       document.getElementById('w-grade-avg').textContent = avg;
     }
-    document.getElementById('w-files-count').textContent = files.length;
+    // Moodle-Kachel: offene Aufgaben der naechsten Zeit, sonst Anzahl Kurse
+    API.moodle().then(m => {
+      const el = document.getElementById('w-moodle-sub');
+      if (!el) return;
+      if (!m || !m.configured) { el.textContent = 'Nicht eingerichtet'; return; }
+      const now = Date.now() / 1000;
+      const open = (m.courses || []).flatMap(c => c.assignments || []).filter(a => a.due > now).length;
+      el.textContent = open ? open + (open === 1 ? ' Aufgabe offen' : ' Aufgaben offen') : (m.courses || []).length + ' Kurse';
+    }).catch(() => {});
 
     API.chatConversations().then(convs => {
       const unread = convs.reduce((sum, c) => sum + (c.is_muted ? 0 : (c.unread_count || 0)), 0);

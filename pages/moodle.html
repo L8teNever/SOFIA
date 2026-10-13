@@ -1,0 +1,199 @@
+<div class="page" id="page-moodle" style="background:#fff8f9;">
+  <div id="ph-moodle"></div>
+
+  <div class="page-scroll-1col no-scrollbar"><div class="page-inner">
+    <div id="moodle-banner"></div>
+    <div id="moodle-loading" style="padding:40px 0;text-align:center;opacity:0.55;font-size:0.9rem;">Moodle wird geladen…</div>
+
+    <div id="moodle-due-wrap" style="display:none;">
+      <div class="section-label">Anstehende Aufgaben</div>
+      <div id="moodle-due"></div>
+    </div>
+
+    <div id="moodle-news-wrap" style="display:none;">
+      <div class="section-label" style="margin-top:18px;">Neueste Beiträge</div>
+      <div id="moodle-news"></div>
+    </div>
+
+    <div id="moodle-courses-wrap" style="display:none;">
+      <div class="section-label" style="margin-top:18px;">Kurse</div>
+      <div id="moodle-courses"></div>
+    </div>
+  </div></div>
+  <style>
+    .md-card { background:#fff; border-radius:20px; padding:14px 16px; margin-bottom:10px; box-shadow:0 1px 3px rgba(0,0,0,0.06); }
+    .md-row { display:flex; align-items:center; gap:12px; }
+    .md-ico { width:40px; height:40px; border-radius:14px; display:flex; align-items:center; justify-content:center; flex-shrink:0; background:#ffd8e4; color:#31111d; }
+    .md-ico.sm { width:32px; height:32px; border-radius:11px; }
+    .md-title { font-weight:700; font-size:0.95rem; color:#1c1b1f; line-height:1.3; }
+    .md-sub { font-size:0.78rem; opacity:0.6; margin-top:2px; }
+    .md-text { font-size:0.84rem; line-height:1.45; color:#1c1b1f; opacity:0.85; white-space:pre-line; margin-top:8px; }
+    .md-chip { display:inline-block; font-size:0.7rem; font-weight:700; padding:3px 9px; border-radius:8px; background:#f3edf7; color:#4a4458; margin-right:6px; }
+    .md-due { font-size:0.72rem; font-weight:700; padding:4px 10px; border-radius:10px; background:#eaddff; color:#21005d; flex-shrink:0; white-space:nowrap; }
+    .md-due.soon { background:#ffdad6; color:#8c1d18; }
+    .md-files { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
+    .md-file { display:inline-flex; align-items:center; gap:6px; max-width:100%; padding:7px 12px; border-radius:12px; background:#f7f2fa; color:#21005d; font-size:0.78rem; font-weight:600; text-decoration:none; }
+    .md-file span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .md-course-head { cursor:pointer; }
+    .md-chev { transition:transform 0.2s; opacity:0.45; flex-shrink:0; }
+    .md-course.open .md-chev { transform:rotate(180deg); }
+    .md-course-body { display:none; margin-top:12px; padding-top:12px; border-top:1px solid rgba(0,0,0,0.06); }
+    .md-course.open .md-course-body { display:block; }
+    .md-sec { margin-bottom:14px; }
+    .md-sec-name { font-size:0.72rem; font-weight:800; text-transform:uppercase; letter-spacing:0.06em; color:#7d5260; margin:4px 0 8px; }
+    .md-mod { padding:10px 12px; border-radius:16px; background:#fdf7fa; margin-bottom:6px; }
+    .md-mod a.md-link { color:inherit; text-decoration:none; }
+    .md-open { font-size:0.75rem; font-weight:700; color:#7d5260; text-decoration:none; flex-shrink:0; padding:6px 10px; border-radius:10px; background:#ffd8e4; }
+  </style>
+</div>
+
+
+
+<script>
+document.getElementById('ph-moodle').outerHTML = pageHeader({
+  title: 'Moodle',
+  subtitleId: 'moodle-sub',
+  subtitle: 'Kurse & Aufgaben',
+  trailing: '<button class="icon-btn" id="moodle-refresh" onclick="moodleRefresh()" title="Neu laden"><i data-lucide="refresh-cw" style="width:20px;height:20px;"></i></button>',
+});
+
+const MD_ICONS = { resource:'file-text', folder:'folder', url:'link', assign:'clipboard-check', forum:'messages-square', page:'file', quiz:'circle-help', label:'text', book:'book-open', choice:'list-checks', feedback:'message-square-text', lesson:'presentation', h5pactivity:'play-circle', bigbluebuttonbn:'video' };
+const mdEsc = (s) => escapeHtml(String(s == null ? '' : s));
+let mdData = null;
+const mdOpen = new Set();
+
+function mdDate(ts) {
+  const d = new Date(ts * 1000);
+  return d.toLocaleDateString('de-DE', { weekday:'short', day:'numeric', month:'short' }) + ' · ' + d.toLocaleTimeString('de-DE', { hour:'2-digit', minute:'2-digit' });
+}
+function mdDueLabel(ts) {
+  const diff = ts * 1000 - Date.now();
+  const days = Math.floor(diff / 86400000);
+  if (diff < 0) return 'abgelaufen';
+  if (diff < 86400000) return 'heute ' + new Date(ts * 1000).toLocaleTimeString('de-DE', { hour:'2-digit', minute:'2-digit' });
+  if (days === 1) return 'morgen';
+  return 'in ' + days + ' Tagen';
+}
+function mdFiles(files) {
+  if (!files || !files.length) return '';
+  return '<div class="md-files">' + files.map(f =>
+    `<a class="md-file" href="${mdEsc(f.url)}" target="_blank" rel="noopener"><i data-lucide="${f.external ? 'external-link' : 'paperclip'}" style="width:14px;height:14px;flex-shrink:0;"></i><span>${mdEsc(f.name)}</span></a>`
+  ).join('') + '</div>';
+}
+
+function mdRender() {
+  const d = mdData || {};
+  const banner = document.getElementById('moodle-banner');
+  document.getElementById('moodle-loading').style.display = 'none';
+  if (!d.configured) {
+    banner.innerHTML = emptyState({ icon:'graduation-cap', title:'Moodle ist noch nicht eingerichtet', subtitle:'Ein Admin trägt unter Admin → Moodle die Zugangsdaten der Klasse ein.', hidden:false });
+    ['due','news','courses'].forEach(k => document.getElementById('moodle-' + k + '-wrap').style.display = 'none');
+    lucide.createIcons();
+    return;
+  }
+  banner.innerHTML = d.error
+    ? `<div class="md-card" style="background:#ffdad6;color:#410002;"><b>Moodle gerade nicht erreichbar.</b><div style="font-size:0.8rem;margin-top:4px;opacity:0.8;">${mdEsc(d.error)}${d.updated_at ? ' · zeigt den Stand von ' + mdDate(d.updated_at) : ''}</div></div>`
+    : '';
+  const sub = document.getElementById('moodle-sub');
+  if (sub && d.updated_at) sub.textContent = 'Stand ' + new Date(d.updated_at * 1000).toLocaleTimeString('de-DE', { hour:'2-digit', minute:'2-digit' });
+  const courses = d.courses || [];
+  const now = Date.now() / 1000;
+
+  // Anstehende Aufgaben aller Kurse
+  const due = courses.flatMap(c => (c.assignments || []).filter(a => a.due > now).map(a => ({ ...a, course: c.name })))
+    .sort((a, b) => a.due - b.due);
+  document.getElementById('moodle-due-wrap').style.display = due.length ? 'block' : 'none';
+  document.getElementById('moodle-due').innerHTML = due.map(a => `
+    <div class="md-card">
+      <div class="md-row">
+        <div class="md-ico"><i data-lucide="clipboard-check" style="width:20px;height:20px;"></i></div>
+        <div style="flex:1;min-width:0;">
+          <div class="md-title">${mdEsc(a.name)}</div>
+          <div class="md-sub">${mdEsc(a.course)} · ${mdDate(a.due)}</div>
+        </div>
+        <span class="md-due${a.due - now < 2 * 86400 ? ' soon' : ''}">${mdDueLabel(a.due)}</span>
+      </div>
+      ${a.text ? `<div class="md-text">${mdEsc(a.text)}</div>` : ''}
+      ${mdFiles(a.files)}
+    </div>`).join('');
+
+  // Neueste Beitraege (Ankuendigungen/Foren) ueber alle Kurse
+  const news = courses.flatMap(c => (c.news || []).map(n => ({ ...n, course: c.name }))).sort((a, b) => b.time - a.time).slice(0, 6);
+  document.getElementById('moodle-news-wrap').style.display = news.length ? 'block' : 'none';
+  document.getElementById('moodle-news').innerHTML = news.map(n => `
+    <div class="md-card">
+      <div class="md-row">
+        <div class="md-ico" style="background:#eaddff;color:#21005d;"><i data-lucide="megaphone" style="width:20px;height:20px;"></i></div>
+        <div style="flex:1;min-width:0;">
+          <div class="md-title">${mdEsc(n.title)}</div>
+          <div class="md-sub">${mdEsc(n.course)}${n.author ? ' · ' + mdEsc(n.author) : ''}${n.time ? ' · ' + mdDate(n.time) : ''}</div>
+        </div>
+      </div>
+      ${n.text ? `<div class="md-text">${mdEsc(n.text)}</div>` : ''}
+      ${mdFiles(n.files)}
+    </div>`).join('');
+
+  // Alle Kurse zum Aufklappen
+  document.getElementById('moodle-courses-wrap').style.display = courses.length ? 'block' : 'none';
+  document.getElementById('moodle-courses').innerHTML = courses.map(c => {
+    const nMods = (c.sections || []).reduce((s, x) => s + (x.modules || []).length, 0);
+    const body = (c.sections || []).map(s => `
+      <div class="md-sec">
+        ${s.name ? `<div class="md-sec-name">${mdEsc(s.name)}</div>` : ''}
+        ${s.text ? `<div class="md-text" style="margin:0 0 8px;">${mdEsc(s.text)}</div>` : ''}
+        ${(s.modules || []).map(m => m.type === 'label' ? `
+          <div class="md-mod"><div class="md-text" style="margin:0;">${mdEsc(m.text || m.name)}</div>${mdFiles(m.files)}</div>` : `
+          <div class="md-mod">
+            <div class="md-row">
+              <div class="md-ico sm"><i data-lucide="${MD_ICONS[m.type] || 'box'}" style="width:16px;height:16px;"></i></div>
+              <div style="flex:1;min-width:0;font-weight:600;font-size:0.88rem;">${mdEsc(m.name)}</div>
+              ${m.url ? `<a class="md-open" href="${mdEsc(m.url)}" target="_blank" rel="noopener">Öffnen</a>` : ''}
+            </div>
+            ${m.text ? `<div class="md-text">${mdEsc(m.text)}</div>` : ''}
+            ${mdFiles(m.files)}
+          </div>`).join('')}
+      </div>`).join('') || '<div class="md-sub">Keine Inhalte sichtbar.</div>';
+    return `
+      <div class="md-card md-course${mdOpen.has(c.id) ? ' open' : ''}" data-id="${c.id}">
+        <div class="md-row md-course-head" onclick="mdToggle(${c.id})">
+          <div class="md-ico"><i data-lucide="book-open" style="width:20px;height:20px;"></i></div>
+          <div style="flex:1;min-width:0;">
+            <div class="md-title">${mdEsc(c.name)}</div>
+            <div class="md-sub">${nMods} Einträge${(c.assignments || []).length ? ' · ' + c.assignments.length + ' Aufgaben' : ''}</div>
+          </div>
+          <i data-lucide="chevron-down" class="md-chev" style="width:20px;height:20px;"></i>
+        </div>
+        <div class="md-course-body">${body}</div>
+      </div>`;
+  }).join('');
+  lucide.createIcons();
+}
+
+function mdToggle(id) {
+  if (mdOpen.has(id)) mdOpen.delete(id); else mdOpen.add(id);
+  const el = document.querySelector('.md-course[data-id="' + id + '"]');
+  if (el) el.classList.toggle('open', mdOpen.has(id));
+}
+
+async function moodleRefresh() {
+  const btn = document.getElementById('moodle-refresh');
+  if (btn) btn.style.opacity = '0.4';
+  try {
+    mdData = await API.moodleRefresh();
+    mdRender();
+    showToast('Moodle aktualisiert');
+  } catch (e) {
+    showToast('Moodle nicht erreichbar');
+  }
+  if (btn) btn.style.opacity = '';
+}
+
+async function init_moodle() {
+  try {
+    mdData = await API.moodle();
+  } catch (e) {
+    mdData = { configured: true, error: e.message || 'Fehler', courses: [] };
+  }
+  mdRender();
+}
+</script>

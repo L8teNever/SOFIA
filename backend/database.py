@@ -109,6 +109,9 @@ async def _migrate_columns(conn):
     existing_cls = {row[1] for row in result_cls.fetchall()}
     if "timetable_source" not in existing_cls:
         await conn.execute(text("ALTER TABLE class_groups ADD COLUMN timetable_source TEXT DEFAULT 'untis'"))
+    for col in ("moodle_url", "moodle_user", "moodle_password_enc"):
+        if col not in existing_cls:
+            await conn.execute(text(f"ALTER TABLE class_groups ADD COLUMN {col} TEXT"))
 
     result_df = await conn.execute(text("PRAGMA table_info(drive_files)"))
     existing_df = {row[1] for row in result_df.fetchall()}
