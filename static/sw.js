@@ -14,7 +14,8 @@ self.addEventListener('install', e => {
   self.skipWaiting();
   e.waitUntil(
     caches.open(CACHE).then(c => {
-      return c.addAll(PRECACHE).catch(err => {
+      // frisch vom Server, nicht aus dem Browser-Cache (sonst bleibt nach einem Update die alte Version)
+      return c.addAll(PRECACHE.map(u => new Request(u, { cache: 'reload' }))).catch(err => {
         console.warn('SW precache error:', err);
       });
     })
@@ -71,7 +72,7 @@ self.addEventListener('fetch', e => {
           })
           .catch(() => cached);
       }
-      const fresh = fetch(e.request).then(res => {
+      const fresh = fetch(e.request, { cache: 'no-cache' }).then(res => {
         if (res.ok) caches.open(CACHE).then(c => c.put(e.request, res.clone()));
         return res;
       });

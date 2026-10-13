@@ -78,7 +78,7 @@ function prefetchPages() {
     const batch = queue.slice(idx, idx + CONCURRENCY);
     idx += batch.length;
     Promise.all(batch.map(name =>
-      fetch('/pages/' + name + '.html')
+      fetch('/pages/' + name + '.html', { cache: 'no-cache' })
         .then(res => res.ok ? res.text() : null)
         .then(html => { if (html) pageCache.set(name, html); })
         .catch(() => {})
@@ -465,7 +465,7 @@ async function openPage(name, triggerEl, preserveUrl = false) {
   let html = pageCache.get(name);
   if (!html) {
     try {
-      const res = await fetch('/pages/' + name + '.html');
+      const res = await fetch('/pages/' + name + '.html', { cache: 'no-cache' });
       if (!res.ok) throw new Error('not found');
       html = await res.text();
       pageCache.set(name, html);

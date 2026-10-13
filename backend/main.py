@@ -39,6 +39,19 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Sofia", lifespan=lifespan)
 app.add_middleware(RateLimiterMiddleware)
 
+
+# App-Dateien (Skripte, Styles, Seiten) immer kurz beim Server nachfragen lassen.
+# Ohne Cache-Control raet der Browser selbst und behaelt nach einem Update die alte
+# Version oft stundenlang (z. B. Stundenplan-Fix kam auf dem Handy nicht an).
+# Unveraendert antwortet der Server per ETag nur mit 304 - kostet kaum etwas.
+@app.middleware("http")
+async def _revalidate_app_files(request, call_next):
+    response = await call_next(request)
+    path = request.url.path
+    if (path.startswith("/static/") or path.startswith("/pages/")) and "cache-control" not in response.headers:
+        response.headers["Cache-Control"] = "no-cache"
+    return response
+
 # API routes
 for r in [auth_routes, users, classes, subjects, calendar, homework, grades, files, vapid, admin, timetable, mealplan, notifications, drive, google_sync, chat, notes]:
     app.include_router(r.router)
