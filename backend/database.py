@@ -39,38 +39,14 @@ async def init_db():
         user, class_group, subject, calendar_event, homework, homework_solution,
         grade, shared_file, notification, meal_plan,
         push_subscription, notification_setting, sent_notification_log,
-        subject_weighting, audit_log, manual_timetable_entry, drive_file, drive_topic,
+        subject_weighting, audit_log, manual_timetable_entry,
         google_account, google_sync_map, user_email_alias,
         chat_conversation, chat_participant, chat_message, chat_poll_option, chat_poll_vote,
-        chat_message_reaction, notes_board, notes_stroke
+        chat_message_reaction
     )
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         await _migrate_columns(conn)
-        await _migrate_drive_storage(conn)
-
-async def _migrate_drive_storage(conn):
-    """One-time move of any Drive file still sitting in its old location
-    (settings.upload_dir, served publicly and unauthenticated at /uploads/...
-    — see backend/main.py) into settings.drive_storage_dir, which nothing
-    serves directly. Safe to run on every startup: a file already in its new
-    home is simply skipped."""
-    from sqlalchemy import text
-    from backend.config import settings
-    import shutil
-
-    os.makedirs(settings.drive_storage_dir, exist_ok=True)
-    result = await conn.execute(text("SELECT filename FROM drive_files"))
-    moved = 0
-    for (filename,) in result.fetchall():
-        old_path = os.path.join(settings.upload_dir, filename)
-        new_path = os.path.join(settings.drive_storage_dir, filename)
-        if os.path.exists(old_path) and not os.path.exists(new_path):
-            shutil.move(old_path, new_path)
-            moved += 1
-    if moved:
-        import logging
-        logging.getLogger(__name__).info("Moved %d Drive file(s) to the non-public storage directory", moved)
 
 async def _migrate_columns(conn):
     from sqlalchemy import text
@@ -113,15 +89,6 @@ async def _migrate_columns(conn):
         if col not in existing_cls:
             await conn.execute(text(f"ALTER TABLE class_groups ADD COLUMN {col} TEXT"))
 
-    result_df = await conn.execute(text("PRAGMA table_info(drive_files)"))
-    existing_df = {row[1] for row in result_df.fetchall()}
-    if "is_lecture_notes" not in existing_df:
-        await conn.execute(text("ALTER TABLE drive_files ADD COLUMN is_lecture_notes BOOLEAN DEFAULT 0"))
-    if "is_public" not in existing_df:
-        # Default 1 backfills every existing row to public so nothing already
-        # shared with the class disappears — new uploads explicitly pass
-        # is_public=False at the route level going forward (private by default).
-        await conn.execute(text("ALTER TABLE drive_files ADD COLUMN is_public BOOLEAN DEFAULT 1"))
 
     result_cp = await conn.execute(text("PRAGMA table_info(chat_participants)"))
     existing_cp = {row[1] for row in result_cp.fetchall()}

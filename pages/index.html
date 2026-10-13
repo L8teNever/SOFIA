@@ -146,31 +146,13 @@
       </div>
     </div>
 
-    <!-- Drive + Share: same plain 1x1 square from tablet up, but a short
-         half-height bar on mobile (each still its own grid cell, so they
-         sit side by side, not stacked) — their content is a single short
-         line each, not enough to justify a full square on the narrowest
-         screens. Placed last (after Chat) so on mobile's 2-column grid
-         they land in a row together as each other's row-mate, rather than
-         paired against a full-height square — see the .w-mobile-half
-         comment in base.css. -->
-    <div class="widget w-square w-mobile-half" style="background:#e8def8;color:#1d192b;" onclick="openPage('drive',this)" data-page="drive">
-      <div class="icon-box" style="width:48px;height:48px;background:rgba(29,25,43,0.1);">
-        <i data-lucide="hard-drive" style="width:24px;height:24px;"></i>
-      </div>
-      <div>
-        <div style="font-size:1.1rem;font-weight:700;">Drive</div>
-        <div style="font-size:0.72rem;opacity:0.6;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;">Dateien</div>
-      </div>
-    </div>
-
-    <div class="widget w-square w-mobile-half" style="background:#ffd8e4;color:#31111d;" onclick="openPage('moodle',this)" data-page="moodle">
-      <div class="icon-box" style="width:48px;height:48px;background:rgba(49,17,29,0.1);">
-        <i data-lucide="graduation-cap" style="width:24px;height:24px;"></i>
+    <div class="widget w-full-span" style="background:#c8eee7;color:#00201c;" onclick="openPage('moodle',this)" data-page="moodle">
+      <div class="icon-box" style="width:44px;height:44px;background:rgba(0,32,28,0.1);">
+        <i data-lucide="graduation-cap" style="width:22px;height:22px;"></i>
       </div>
       <div style="overflow:hidden;min-width:0;">
-        <div style="font-size:1.1rem;font-weight:700;">Moodle</div>
-        <div style="font-size:0.72rem;opacity:0.6;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;" id="w-moodle-sub">Kurse</div>
+        <div style="font-size:0.8rem;opacity:0.65;margin-top:2px;">Moodle</div>
+        <div style="font-size:1.02rem;font-weight:700;line-height:1.25;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" id="w-moodle-sub">Kurse</div>
       </div>
     </div>
 

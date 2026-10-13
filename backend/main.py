@@ -7,7 +7,7 @@ from backend.database import init_db
 from backend.config import settings
 from backend.auth import get_current_user
 from backend.models.user import User
-from backend.routes import auth_routes, users, classes, subjects, calendar, homework, grades, files, vapid, admin, timetable, mealplan, notifications, drive, google_sync, chat, notes, moodle
+from backend.routes import auth_routes, users, classes, subjects, calendar, homework, grades, files, vapid, admin, timetable, mealplan, notifications, google_sync, chat, moodle
 from backend.services.rate_limiter import RateLimiterMiddleware
 from backend.services.notification_scheduler import start_notification_scheduler
 from backend.services.moodle_service import moodle_poll_loop
@@ -56,9 +56,8 @@ async def _revalidate_app_files(request, call_next):
     return response
 
 # API routes
-for r in [auth_routes, users, classes, subjects, calendar, homework, grades, files, vapid, admin, timetable, mealplan, notifications, drive, google_sync, chat, notes, moodle]:
+for r in [auth_routes, users, classes, subjects, calendar, homework, grades, files, vapid, admin, timetable, mealplan, notifications, google_sync, chat, moodle]:
     app.include_router(r.router)
-app.include_router(drive.public_router)
 
 
 # Static files
@@ -120,21 +119,9 @@ async def apple_touch_icon():
             return FileResponse(p, media_type="image/png")
     raise HTTPException(status_code=404)
 
-# notes.kulbarts.com is the same app/container as sofia.kulbarts.com (same
-# Cloudflare Access app, same login) — it just needs to land on the Notes
-# page instead of the dashboard. boot() in app.js already opens whatever
-# KNOWN_PAGES entry the URL's first path segment names, so landing there
-# is just a redirect to /notes for that hostname's root, not a separate
-# code path — any other path on this host (e.g. a bookmarked board link)
-# already resolves correctly without this redirect ever firing.
-NOTES_HOSTNAMES = {"notes.kulbarts.com"}
-
 # Serve frontend SPA — inject build timestamp for cache busting
 @app.get("/{full_path:path}", include_in_schema=False)
 async def spa(full_path: str, request: Request):
-    host = request.headers.get("host", "").split(":")[0].lower()
-    if host in NOTES_HOSTNAMES and not full_path:
-        return RedirectResponse(url="/notes")
     with open("pages/index.html", "r", encoding="utf-8") as f:
         html = (
             f.read()

@@ -1,5 +1,5 @@
 """Sofia MCP bridge — a standalone MCP server exposing a scoped subset of
-Sofia's own REST API as tools (homework, calendar events, Drive, meal plan —
+Sofia's own REST API as tools (homework, calendar events, meal plan —
 deliberately NOT grades, which stay private). Runs as its own container on
 its own port, fully isolated from the main app's dependencies (the mcp
 package needs a newer Starlette than the main FastAPI app is pinned to).
@@ -209,56 +209,6 @@ async def delete_event(event_id: int) -> dict:
     """Löscht einen Kalendertermin."""
     async with _client() as c:
         r = await c.delete(f"/calendar/{event_id}")
-        r.raise_for_status()
-        return r.json()
-
-
-# --- Drive ---
-
-@mcp.tool()
-async def list_drive_files() -> list[dict]:
-    """Listet alle Dateien im Drive auf (Metadaten wie Name, Fach, Thema, Größe — kein Inhalt)."""
-    async with _client() as c:
-        r = await c.get("/drive/")
-        r.raise_for_status()
-        return r.json()
-
-
-@mcp.tool()
-async def upload_drive_file(
-    filename: str,
-    content_base64: str,
-    subject_id: int | None = None,
-    topic: str | None = None,
-) -> dict:
-    """Lädt eine neue Datei ins Drive hoch. content_base64 ist der Dateiinhalt
-    Base64-kodiert. Wird subject_id weggelassen, versucht die KI automatisch
-    das passende Fach zu erkennen."""
-    raw = base64.b64decode(content_base64)
-    async with _client() as c:
-        r = await c.post(
-            "/drive/upload",
-            data={"subject_id": str(subject_id) if subject_id is not None else "", "topic": topic or ""},
-            files={"file": (filename, raw)},
-        )
-        r.raise_for_status()
-        return r.json()
-
-
-@mcp.tool()
-async def update_drive_file(file_id: int, subject_id: int | None = None, topic: str | None = None) -> dict:
-    """Verschiebt eine Drive-Datei in ein anderes Fach und/oder Thema."""
-    async with _client() as c:
-        r = await c.put(f"/drive/{file_id}", json={"subject_id": subject_id, "topic": topic})
-        r.raise_for_status()
-        return r.json()
-
-
-@mcp.tool()
-async def delete_drive_file(file_id: int) -> dict:
-    """Löscht eine Datei aus dem Drive."""
-    async with _client() as c:
-        r = await c.delete(f"/drive/{file_id}")
         r.raise_for_status()
         return r.json()
 

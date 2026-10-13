@@ -58,7 +58,7 @@ if (window.visualViewport) {
   window.visualViewport.addEventListener('resize', updateAppHeight);
 }
 
-const KNOWN_PAGES = ['calendar','homework','grades','timetable','mealplan','drive','moodle','settings','admin','notifications','notification-settings','google-sync','chat','notes'];
+const KNOWN_PAGES = ['calendar','homework','grades','timetable','mealplan','moodle','settings','admin','notifications','notification-settings','google-sync','chat'];
 const pageCache = new Map();
 
 function prefetchPages() {
@@ -617,12 +617,6 @@ window.addEventListener('popstate', (e) => {
     return;
   }
 
-  const drivePreview = document.getElementById('drive-preview-lightbox');
-  if (drivePreview && drivePreview.style.display !== 'none' && typeof closeDriveFilePreview === 'function') {
-    closeDriveFilePreview(true);
-    return;
-  }
-
   if (e.state && e.state.page === 'chat' && typeof chatHandlePopstate === 'function') {
     chatHandlePopstate(e.state);
     return;
@@ -631,17 +625,6 @@ window.addEventListener('popstate', (e) => {
   const chatDetail = document.getElementById('chat-detail-view');
   if (chatDetail && chatDetail.style.display !== 'none' && typeof closeChatConversation === 'function') {
     closeChatConversation(true);
-    return;
-  }
-
-  // Drive's own folder-navigation history entries (see drivePushHistory()
-  // in pages/drive.html) — each one carries the full nav state to restore,
-  // rather than this handler having to know anything about Drive's
-  // internal folder-depth logic. Must come before the generic "close the
-  // whole page" fallback below, or popping back out of a folder would
-  // close all of Drive instead of just stepping up one level.
-  if (e.state && e.state.page === 'drive' && typeof driveHandlePopstate === 'function') {
-    driveHandlePopstate(e.state);
     return;
   }
 
