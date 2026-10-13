@@ -1,7 +1,20 @@
 import os, json, subprocess
 from datetime import datetime
 
-VERSION = "1.2.0"
+def _read_version() -> str:
+    """Gemeinsame Versionsnummer (Sofia + sofianotes), vom Build in version.json geschrieben."""
+    path = os.path.join(os.path.dirname(__file__), "version.json")
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            v = str(json.load(f).get("version") or "").strip()
+            if v:
+                return v
+    except Exception:
+        pass
+    return "1.0.0"
+
+
+VERSION = _read_version()
 
 def get_git_commit() -> str:
     env_commit = os.getenv("GIT_COMMIT") or os.getenv("GITHUB_SHA")

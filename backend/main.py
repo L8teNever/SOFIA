@@ -23,6 +23,7 @@ logging.basicConfig(
 # __GIT_COMMIT__ use the git SHA so container restarts do not fake an update.
 BUILD_TS = str(int(time.time()))
 GIT_COMMIT = get_git_commit()
+APP_VERSION = get_version_info(BUILD_TS)["version"]
 NO_STORE = {"Cache-Control": "no-store"}
 
 # Some platforms (notably Windows) don't have .webp registered in their
@@ -127,5 +128,6 @@ async def spa(full_path: str, request: Request):
             f.read()
             .replace("__BUILD__", BUILD_TS)
             .replace("__COMMIT__", GIT_COMMIT)
+            .replace("__VERSION__", APP_VERSION)
         )
     return HTMLResponse(html, headers=NO_STORE)

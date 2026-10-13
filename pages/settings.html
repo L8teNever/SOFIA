@@ -103,7 +103,7 @@
           <div style="font-size:0.78rem;opacity:0.6;margin-top:3px;" id="settings-build-date">Build wird geladen...</div>
         </div>
         <div style="text-align:right;">
-          <div style="font-weight:800;font-size:0.95rem;color:#1c1b1f;" id="settings-version-label">v1.2.0</div>
+          <div style="font-weight:800;font-size:0.95rem;color:#1c1b1f;" id="settings-version-label">v</div>
           <div id="settings-version-status-badge" style="display:inline-flex;align-items:center;gap:4px;font-size:0.75rem;font-weight:700;color:#2e7d32;margin-top:3px;">
             <i data-lucide="check-circle" style="width:13px;height:13px;"></i>
             <span id="settings-version-status-text">Auf neuestem Stand</span>
@@ -442,7 +442,7 @@ async function loadVersionInfo() {
   const applyBtn = document.getElementById('btn-apply-update');
   const descEl = document.getElementById('settings-update-desc');
 
-  const clientVer = window.__APP_VERSION__ || '1.2.0';
+  const clientVer = (window.__APP_VERSION__ && window.__APP_VERSION__ !== '__VERSION__') ? window.__APP_VERSION__ : '';
   if (verLabel) verLabel.textContent = 'v' + clientVer;
 
   try {
@@ -560,7 +560,7 @@ async function checkForUpdatesManual() {
         statusBadge.style.color = '#2e7d32';
         statusBadge.innerHTML = '<i data-lucide="check-circle" style="width:13px;height:13px;"></i> <span id="settings-version-status-text">Auf neuestem Stand</span>';
       }
-      if (descEl) descEl.textContent = 'Alles auf dem neuesten Stand (v' + (info?.version || '1.2.0') + ').';
+      if (descEl) descEl.textContent = 'Alles auf dem neuesten Stand (v' + (info?.version || window.__APP_VERSION__ || '') + ').';
       if (applyBtn) applyBtn.style.display = 'none';
       if (window.lucide) lucide.createIcons();
       showToast('Sofia ist auf dem neuesten Stand ✓');

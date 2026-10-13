@@ -21,9 +21,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Eine Versionsnummer fuer Sofia und sofianotes: zaehlt bei jedem Build hoch und macht
+      # bei der Zaehlung von sofianotes weiter (dort zuletzt 1.0.106 -> Lauf 323 = 1.0.107)
+      - name: Version
+        id: ver
+        run: echo "v=1.0.$(( ${{ github.run_number }} - 216 ))" >> "$GITHUB_OUTPUT"
+
       - name: Write version metadata
         run: |
-          echo "{\"version\": \"1.2.0\", \"commit\": \"${{ github.sha }}\"}" > backend/version.json
+          echo "{\"version\": \"${{ steps.ver.outputs.v }}\", \"commit\": \"${{ github.sha }}\"}" > backend/version.json
 
       - name: Fix Docker daemon DNS
         run: |
@@ -66,7 +72,7 @@ jobs:
           cache-to: type=gha,mode=max
           build-args: |
             GIT_COMMIT=${{ github.sha }}
-            NOTES_VERSION=1.1.${{ github.run_number }}
+            NOTES_VERSION=${{ steps.ver.outputs.v }}
 
   build-and-push-mcp:
     runs-on: ubuntu-latest
