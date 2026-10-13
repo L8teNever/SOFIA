@@ -93,24 +93,35 @@ function _toMin(t) { return Math.floor(t/100)*60 + (t%100); }
 // into a single block that carries the substitute's info plus the name of
 // what it replaced.
 function ttCombineSubstitutions(lessons) {
-  const used = new Set();
-  const out = [];
-  for (let i = 0; i < lessons.length; i++) {
-    if (used.has(i)) continue;
-    const l = lessons[i];
-    if (l.cancelled) {
-      const j = lessons.findIndex((o, oi) => oi !== i && !used.has(oi) &&
-        o.startTime === l.startTime && o.endTime === l.endTime && !o.cancelled);
-      if (j !== -1) {
-        used.add(i); used.add(j);
-        out.push({ ...lessons[j], substituted: true, cancelled_subject: l.subject, cancelled_subject_short: l.subject_short });
-        continue;
-      }
+  // Reihenfolge-unabhaengig: Untis liefert Ausfall und Vertretung mal so, mal so herum
+  // (z. B. erst "AT" als Vertretung, dann "BWL" als Ausfall). Frueher wurde nur ein Ausfall
+  // mit einer *spaeter* stehenden Vertretung gepaart - stand die Vertretung vorne, blieb
+  // der Ausfall stehen und ueberdeckte im Wochenraster die Stunde, die wirklich stattfindet.
+  // Gepaart wird auch, wenn sich die Zeiten nur zu mindestens der Haelfte decken
+  // (Vertretung als ein Block ueber zwei ausgefallene Einzelstunden).
+  const toMin = (t) => Math.floor(t / 100) * 60 + (t % 100);
+  const out = lessons.map((l) => ({ ...l }));
+  const live = out.filter((l) => !l.cancelled);
+  const paired = new Set();
+  const hidden = new Set();
+  for (const l of out) {
+    if (!l.cancelled) continue;
+    const s = toMin(l.startTime), e = toMin(l.endTime);
+    const half = Math.max(1, (e - s) / 2);
+    const cands = live.filter((o) => o.date === l.date &&
+      Math.min(e, toMin(o.endTime)) - Math.max(s, toMin(o.startTime)) >= half);
+    if (!cands.length) continue;
+    const exact = (o) => o.startTime === l.startTime && o.endTime === l.endTime;
+    const o = cands.find((c) => !paired.has(c) && exact(c)) || cands.find((c) => !paired.has(c)) || cands[0];
+    paired.add(o);
+    hidden.add(l);
+    o.substituted = true;
+    if (!o.cancelled_subject && l.subject && l.subject !== o.subject) {
+      o.cancelled_subject = l.subject;
+      o.cancelled_subject_short = l.subject_short;
     }
-    used.add(i);
-    out.push(l);
   }
-  return out;
+  return out.filter((l) => !hidden.has(l));
 }
 
 function ttMerge(lessons) {
