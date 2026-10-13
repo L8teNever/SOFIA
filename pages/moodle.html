@@ -118,7 +118,11 @@ function mdRender() {
     </div>`).join('');
 
   // Neueste Beitraege (Ankuendigungen/Foren) ueber alle Kurse
-  const news = courses.flatMap(c => (c.news || []).map(n => ({ ...n, course: c.name }))).sort((a, b) => b.time - a.time).slice(0, 6);
+  // nur Beitraege aus diesem Jahr - alte Ankuendigungen aus Vorjahren interessieren nicht
+  const yearStart = new Date(new Date().getFullYear(), 0, 1).getTime() / 1000;
+  const news = courses.flatMap(c => (c.news || []).map(n => ({ ...n, course: c.name })))
+    .filter(n => n.time >= yearStart)
+    .sort((a, b) => b.time - a.time).slice(0, 6);
   document.getElementById('moodle-news-wrap').style.display = news.length ? 'block' : 'none';
   document.getElementById('moodle-news').innerHTML = news.map(n => `
     <div class="md-card">
