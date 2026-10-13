@@ -3,8 +3,10 @@ services:
     image: ghcr.io/l8tenever/sofia:latest
     container_name: sofia
     restart: unless-stopped
+    # ein Dienst, zwei Seiten: 8000 = Sofia, 8001 = sofianotes
     ports:
       - "8000:8000"
+      - "8001:8001"
     env_file:
       - .env
     environment:
@@ -14,6 +16,7 @@ services:
     volumes:
       - ./data:/app/data
       - ./uploads:/app/uploads
+      - ./notes-data:/app/notes/data
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/auth/check')"]
       interval: 30s

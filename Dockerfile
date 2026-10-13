@@ -1,4 +1,4 @@
-﻿FROM python:3.12-slim
+FROM python:3.12-slim
 
 WORKDIR /app
 
@@ -6,7 +6,8 @@ WORKDIR /app
 # python-slim ships without zoneinfo data, so TZ alone does nothing until
 # tzdata is installed and /etc/localtime points at it.
 ENV TZ=Europe/Berlin
-RUN apt-get update && apt-get install -y --no-install-recommends tzdata && \
+# hunspell: Rechtschreibpruefung fuer sofianotes
+RUN apt-get update && apt-get install -y --no-install-recommends tzdata hunspell hunspell-de-de && \
     ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone && \
     rm -rf /var/lib/apt/lists/*
 
@@ -22,6 +23,18 @@ COPY static/ ./static/
 # Uploads dir (overridden by volume at runtime)
 RUN mkdir -p uploads
 
-EXPOSE 8000
+# ---- sofianotes: zweite Seite im selben Dienst (Port 8001) ----
+# eigene Python-Umgebung, weil sofianotes andere FastAPI-/Starlette-Versionen braucht
+COPY notes/backend/requirements.txt ./notes/backend/requirements.txt
+RUN python -m venv /opt/notes-venv && /opt/notes-venv/bin/pip install --no-cache-dir -r notes/backend/requirements.txt
+COPY notes/ ./notes/
+# Version/Commit fuer die Anzeige in sofianotes (vom Workflow gesetzt)
+ARG GIT_COMMIT=
+ARG NOTES_VERSION=
+RUN GIT_COMMIT="$GIT_COMMIT" APP_VERSION="$NOTES_VERSION" python3 notes/scripts/bake-version.py && mkdir -p notes/data
 
-CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
+COPY start.sh ./start.sh
+
+EXPOSE 8000 8001
+
+CMD ["sh", "/app/start.sh"]

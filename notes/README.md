@@ -1,0 +1,198 @@
+# sofianotes
+
+Live-Collaborative-Whiteboard fuer iPad (Apple Pencil), Desktop und Android.
+Ein einzelnes, dauerhaftes Board, an dem mehrere Personen gleichzeitig zeichnen
+koennen — inkl. Palm Rejection, Pinch-Zoom, Radiergummi und Live-Cursor der
+anderen Teilnehmer.
+
+## Stack
+
+- Backend: Python (FastAPI) + WebSocket
+- Persistenz: SQLite (`data/board.db`)
+- Frontend: Vanilla JS + HTML5 Canvas (kein Framework)
+- PWA: installierbar auf iPad/Android/Desktop
+- Deployment: Docker, Pull-basiert vom GitHub-Repo
+
+## Lokal entwickeln & testen
+
+```bash
+# Variante A: direkt mit Python
+git config core.hooksPath .githooks   # Version bei jedem Commit automatisch hochzaehlen
+cd backend
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
+# -> http://localhost:8000
+
+# Variante B: mit Docker (wie auf dem Server, nur auf 127.0.0.1)
+docker compose up --build
+# -> http://localhost:8000
+```
+
+Zum Testen der Live-Kollaboration einfach das Board in zwei Browser-Tabs
+(oder einem Tab + iPad im selben WLAN via lokaler IP) oeffnen und zeichnen —
+Striche, Radieren und der Cursor/Werkzeug-Hinweis der anderen Seite sollten
+sofort erscheinen.
+
+Auf einem iPad: die lokale Adresse (z.B. `http://<lokale-ip>:8000`) im
+Safari-Home-Bildschirm hinzufuegen, um die PWA zu installieren und mit Apple
+Pencil zu testen (Palm Rejection greift nur bei echtem `pointerType: 'pen'`,
+das simuliert ein Desktop-Browser nicht).
+
+## Bedienung
+
+- **Stift**: zeichnet mit Apple Pencil (druckempfindlich) oder Maus. Finger-
+  Touches sind standardmaessig reine Navigation (Pan/Zoom), niemals Zeichnen —
+  klassische Palm Rejection.
+- **Finger-Zeichnen** (Schalter 🖐️ in der Toolbar): schaltet das um, sodass
+  auch ein einzelner Finger mit dem aktuell gewaehlten Werkzeug zeichnet
+  (fuer Geraete/Tests ohne Stift). Zwei Finger bleiben dabei immer fuer
+  Pinch-to-Zoom reserviert; kommt waehrend des Zeichnens ein zweiter Finger
+  dazu, wird der Strich sofort verworfen.
+- **Textmarker**: wie der Stift, aber breiter und halbtransparent, liegt beim
+  Rendern immer unter der normalen Tinte (klassischer Highlighter-Effekt).
+- **Formen-Erkennung** (Schalter 🔷 in der Toolbar, per Klick an/aus): mit dem
+  Stift eine Linie, ein Dreieck, ein Rechteck oder einen Kreis zeichnen und am
+  Ende kurz ruhig halten (Stift bleibt unten) — die Form wird dann automatisch
+  glattgezogen. Ohne Halten oder bei ausgeschaltetem Schalter bleibt jeder
+  Strich normale Handschrift, die Erkennung greift nie ungefragt ein.
+- **Buchstaben erkennen** (Schalter `abc`): nach einer kurzen Pause liest
+  zuerst EMNIST lokal, danach das schnelle Cloudflare-Modell Moondream die
+  krumme Handschrift (ein Chip pro Zeile). Tippen korrigiert; Korrekturen
+  bleiben lokal gespeichert (IndexedDB, k-NN). Ohne Cloudflare-Token bleibt
+  nur EMNIST.
+- **Rechnungen lösen** (Schalter `calculate`): Tinte wird wie bei ink-on zu
+  einem Ausdruck zusammengesetzt (`12+34`, Brüche, `2x3`). Wenn er sich rechnen
+  laesst, erscheint `= 46` — ein Tap setzt das Ergebnis aufs Blatt.
+- **Durchstreichen**: ein Strich oder Gekritzel durch vorhandene Tinte radiert
+  sie. Am Desktop reicht ein kurzer schraeger Strich.
+- **Auswahl (👆 Lasso)**: mit dem Stift/der Maus eine Schlinge um Striche
+  ziehen, um sie auszuwaehlen (gestrichelter Rahmen), danach von innerhalb des
+  Rahmens ziehen, um die ausgewaehlten Striche zu verschieben. Ein Tap auf
+  einen Strich waehlt ihn. Farbe und Staerke in der Leiste aendern danach
+  die Auswahl — auch direkt nach dem Malen, solange der Strich noch markiert
+  ist. Ein Tap ausserhalb hebt die Auswahl wieder auf.
+- **Radiergummi**: entfernt beruehrte Striche komplett, Kreis-Cursor zeigt die
+  aktuelle Groesse.
+- **Rueckgaengig/Wiederholen** (↩️/↪️ oder Strg/Cmd+Z, mit Shift fuer
+  Wiederholen): persoenlicher Verlauf der eigenen Aktionen (Strich
+  hinzugefuegt, radiert, verschoben). Wirkt nur auf die eigenen Aktionen,
+  nicht auf das, was andere Teilnehmer gerade zeichnen.
+- **Zwei Finger**: Pinch-to-Zoom (0.25x–4x) und Pan. Ein laufender Strich,
+  eine laufende Verschiebung oder eine laufende Lasso-Auswahl wird sofort
+  verworfen, sobald ein zweiter Finger aufsetzt.
+- **Space + Maus-Drag** bzw. **mittlere Maustaste**: Pan am Desktop.
+- **GoodNotes-Export** (Download in der Kopfleiste): laedt `sofianotes.goodnotes` herunter. Dieselbe
+  Datei liegt dauerhaft auf dem Server in `data/` und wird bei jedem
+  gespeicherten Strich aktualisiert. Die enthaltene PDF in GoodNotes
+  importieren.
+- **Verschiebbare Leisten**: die Werkzeugleiste per Griff an oben, unten,
+  links oder rechts andocken; Undo/Redo/Zoom in eine der vier Ecken ziehen.
+  Raster (kariert, Punkte, liniert, blanko) sitzt unter dem Zahnrad.
+
+## Architektur / Sync-Protokoll
+
+Jeder Client verbindet sich per WebSocket auf `/ws`. Beim Verbinden schickt
+der Server den kompletten Board-Zustand (`init`). Waehrend des Zeichnens
+werden Punkte in kleinen Batches live gestreamt (`stroke_start` /
+`stroke_points` / `stroke_end`), sodass andere Teilnehmer den Strich schon
+waehrend des Zeichnens sehen — nicht erst danach. Radiergummi-Aktionen werden
+als kleine `erase`-Diffs (nur betroffene Strich-IDs) gesendet statt das ganze
+Board neu zu laden. Live-Cursor-Updates (`cursor`) zeigen Position und
+aktuell gewaehltes Werkzeug der anderen Person ueber ihrem Zeichenpunkt an.
+Persistiert wird erst der fertige Strich (SQLite) — das Board uebersteht also
+Server-Neustarts. Parallel schreibt der Server nach jeder Aenderung
+`data/sofianotes.pdf` (Vektor-PDF, das GoodNotes als Dokument importiert)
+und zusaetzlich `data/sofianotes.goodnotes` (ZIP mit `strokes.json` + derselben
+PDF — das native GoodNotes-Dateiformat ist geschlossen, daher kein direkter
+`.goodnotes`-Import). Download in der Leiste ist die PDF (`/api/export.pdf`);
+das Archiv bleibt unter `/api/export.goodnotes`.
+
+## Version
+
+Die angezeigte App-Version steht in `backend/version.json` (semver). Bei **jedem
+Commit** zaehlt der Git-Hook `.githooks/pre-commit` den Patch hoch (`1.0.0` →
+`1.0.1`). Einmalig im Klon:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+`SKIP_VERSION_BUMP=1` ueberspringt das Hochzaehlen (z. B. Doku-only). Der Server
+liest die Datei fuer `/api/version` und setzt `%%APP_VERSION%%` in `index.html`.
+
+## Deployment (GitHub -> Server, Pull-Mechanismus)
+
+Es gibt **keinen** manuellen Datei-Upload. Auf dem Server liegt ein Git-Klon
+des Repos, `deploy.sh` zieht Aenderungen und baut den Container neu:
+
+```bash
+# einmalig auf dem Server, im gewuenschten Zielverzeichnis
+git clone https://github.com/L8teNever/sofianotes
+cd sofianotes
+cp .env.example .env   # BIND_HOST/BIND_PORT fuer die eigene Umgebung anpassen
+
+# nach jedem Push erneut ausfuehren
+./deploy.sh
+```
+
+`deploy.sh` setzt `GIT_COMMIT` auf den Short-SHA von `HEAD` und macht
+`docker compose up -d --build`. Ein normales `docker compose build` (ohne
+`GIT_COMMIT` in der Umgebung) reicht ebenfalls: das Dockerfile liest
+`backend/version.json` (nicht mehr hart `1.0.0`) und den Short-SHA aus `.git`.
+`GIT_COMMIT=main` wird nicht mehr als Fallback gesetzt. `/api/version` zeigt
+danach die Version aus `version.json` und den echten Commit.
+
+Der Container bindet laut `docker-compose.yml` an
+`${BIND_HOST}:${BIND_PORT}` (Default lokal `127.0.0.1:8000`). Fuer einen
+produktiven Betrieb hinter einem eigenen Reverse Proxy oder Tunnel `BIND_HOST`
+und `BIND_PORT` in der eigenen, nicht eingecheckten `.env` entsprechend
+setzen — Details zur konkreten Domain/Tunnel-Konfiguration sind bewusst nicht
+Teil dieses oeffentlichen Repos. Fuer die Cloudflare-Handschrifterkennung
+zusaetzlich `CLOUDFLARE_ACCOUNT_ID` und `CLOUDFLARE_API_TOKEN` eintragen
+(Workers AI Edit). Ohne Token bleibt nur EMNIST.
+
+**Cache-Busting bei Aenderungen an `app.js`/`style.css`**: Sitzt ein CDN/Proxy
+davor, das statische Dateien nach Endung cacht (unabhaengig vom
+`Cache-Control`-Header des Origin-Servers), reicht ein `docker compose
+up -d --build` allein nicht — Clients koennten eine alte, gecachte Version
+weiter ausgeliefert bekommen. Bei jeder inhaltlichen Aenderung an `app.js`
+oder `style.css`: den `?v=N`-Query-Parameter in `frontend/index.html` (und
+die passenden Pfade + `CACHE_NAME` in `frontend/service-worker.js`) um eins
+erhoehen. Das erzeugt eine neue URL, die zwangslaeufig frisch vom Origin
+geholt wird, ganz ohne dass ein Cache irgendwo explizit geleert werden muss.
+
+## Anbindung an Sofia (optional)
+
+Laufen sofianotes und die Sofia-App auf demselben Server, kann sofianotes Sofia im
+internen Docker-Netz fragen (gleicher Weg wie der Sofia-MCP-Dienst: `X-Internal-Token`).
+
+- **Personen** kommen dann aus Sofia, inklusive aller Mail-Adressen. Neue Sofia-Personen
+  erscheinen nach spätestens 2 Minuten, bei der ersten Anmeldung sofort. Personen ohne
+  Sofia-Gegenstück werden nur ausgeblendet, ihre Blätter bleiben erhalten.
+- **Fächer**: Für jedes Fach, das eine Person in Sofia sieht, gibt es automatisch einen
+  Ordner (Umbenennungen ziehen nach, ein gelöschtes Fach lässt den Ordner stehen).
+- **Stundenplan**: Der Ordner des Fachs, das gerade dran ist (oder in 20 Min. beginnt),
+  steht in der Bibliothek vorne und ist hervorgehoben.
+
+Beispiel `docker-compose.override.yml` neben `docker-compose.yml` (nicht eingecheckt):
+
+```yaml
+services:
+  sofianotes:
+    environment:
+      SOFIA_API_BASE: http://sofia-kulbarts:8000/api/v1
+      SOFIA_TOKEN_FILE: /sofia-data/internal_service_token.txt
+      SOFIA_ACT_AS: admin@example.com
+    volumes:
+      - /opt/stacks/sofia-kulbarts/data/internal_service_token.txt:/sofia-data/internal_service_token.txt:ro
+    networks: [default, sofia]
+networks:
+  sofia:
+    external: true
+    name: sofia-kulbarts_default
+```
+
+## Was bewusst fehlt
+
+Mehrere Boards, Undo/Redo, Nutzer-Accounts/Login, Formen-Werkzeuge — laut
+Anforderung nicht Teil dieses Projekts.
