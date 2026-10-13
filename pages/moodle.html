@@ -34,6 +34,8 @@
     .md-files { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
     .md-file { display:inline-flex; align-items:center; gap:6px; max-width:100%; padding:7px 12px; border-radius:12px; background:#f7f2fa; color:#21005d; font-size:0.78rem; font-weight:600; text-decoration:none; }
     .md-file span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .md-fdate { font-size:0.68rem; font-weight:600; opacity:0.55; flex-shrink:0; }
+  .md-up { font-size:0.72rem; color:#7d5260; margin-top:2px; }
     .md-course-head { cursor:pointer; }
     .md-chev { transition:transform 0.2s; opacity:0.45; flex-shrink:0; }
     .md-course.open .md-chev { transform:rotate(180deg); }
@@ -66,6 +68,19 @@ function mdDate(ts) {
   const d = new Date(ts * 1000);
   return d.toLocaleDateString('de-DE', { weekday:'short', day:'numeric', month:'short' }) + ' · ' + d.toLocaleTimeString('de-DE', { hour:'2-digit', minute:'2-digit' });
 }
+// "hochgeladen am": kurz, mit Jahr nur wenn nicht dieses Jahr
+function mdUp(ts) {
+  if (!ts) return '';
+  const d = new Date(ts * 1000);
+  const opts = { day: 'numeric', month: 'short' };
+  if (d.getFullYear() !== new Date().getFullYear()) opts.year = 'numeric';
+  return d.toLocaleDateString('de-DE', opts);
+}
+function mdUpShort(ts) {
+  if (!ts) return '';
+  const d = new Date(ts * 1000);
+  return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: d.getFullYear() !== new Date().getFullYear() ? '2-digit' : undefined });
+}
 function mdDueLabel(ts) {
   const diff = ts * 1000 - Date.now();
   const days = Math.floor(diff / 86400000);
@@ -77,7 +92,7 @@ function mdDueLabel(ts) {
 function mdFiles(files) {
   if (!files || !files.length) return '';
   return '<div class="md-files">' + files.map(f =>
-    `<a class="md-file" href="${mdEsc(f.url)}" target="_blank" rel="noopener"><i data-lucide="${f.external ? 'external-link' : 'paperclip'}" style="width:14px;height:14px;flex-shrink:0;"></i><span>${mdEsc(f.name)}</span></a>`
+    `<a class="md-file" href="${mdEsc(f.url)}" target="_blank" rel="noopener"${f.time ? ` title="Hochgeladen am ${mdEsc(mdUp(f.time))}"` : ''}><i data-lucide="${f.external ? 'external-link' : 'paperclip'}" style="width:14px;height:14px;flex-shrink:0;"></i><span>${mdEsc(f.name)}</span>${f.time ? `<small class="md-fdate">${mdUpShort(f.time)}</small>` : ''}</a>`
   ).join('') + '</div>';
 }
 
@@ -109,7 +124,8 @@ function mdRender() {
         <div class="md-ico"><i data-lucide="clipboard-check" style="width:20px;height:20px;"></i></div>
         <div style="flex:1;min-width:0;">
           <div class="md-title">${mdEsc(a.name)}</div>
-          <div class="md-sub">${mdEsc(a.course)} · ${mdDate(a.due)}</div>
+          <div class="md-sub">${mdEsc(a.course)} · fällig ${mdDate(a.due)}</div>
+          ${a.time ? `<div class="md-up">eingestellt ${mdUp(a.time)}</div>` : ''}
         </div>
         <span class="md-due${a.due - now < 2 * 86400 ? ' soon' : ''}">${mdDueLabel(a.due)}</span>
       </div>
@@ -130,7 +146,8 @@ function mdRender() {
         <div class="md-ico" style="background:#eaddff;color:#21005d;"><i data-lucide="megaphone" style="width:20px;height:20px;"></i></div>
         <div style="flex:1;min-width:0;">
           <div class="md-title">${mdEsc(n.title)}</div>
-          <div class="md-sub">${mdEsc(n.course)}${n.author ? ' · ' + mdEsc(n.author) : ''}${n.time ? ' · ' + mdDate(n.time) : ''}</div>
+          <div class="md-sub">${mdEsc(n.course)}${n.author ? ' · ' + mdEsc(n.author) : ''}</div>
+          ${(n.posted || n.time) ? `<div class="md-up">eingestellt ${mdDate(n.posted || n.time)}</div>` : ''}
         </div>
       </div>
       ${n.text ? `<div class="md-text">${mdEsc(n.text)}</div>` : ''}
@@ -146,11 +163,14 @@ function mdRender() {
         ${s.name ? `<div class="md-sec-name">${mdEsc(s.name)}</div>` : ''}
         ${s.text ? `<div class="md-text" style="margin:0 0 8px;">${mdEsc(s.text)}</div>` : ''}
         ${(s.modules || []).map(m => m.type === 'label' ? `
-          <div class="md-mod"><div class="md-text" style="margin:0;">${mdEsc(m.text || m.name)}</div>${mdFiles(m.files)}</div>` : `
+          <div class="md-mod"><div class="md-text" style="margin:0;">${mdEsc(m.text || m.name)}</div>${m.time ? `<div class="md-up" style="margin-top:6px;">hochgeladen ${mdUp(m.time)}</div>` : ''}${mdFiles(m.files)}</div>` : `
           <div class="md-mod">
             <div class="md-row">
               <div class="md-ico sm"><i data-lucide="${MD_ICONS[m.type] || 'box'}" style="width:16px;height:16px;"></i></div>
-              <div style="flex:1;min-width:0;font-weight:600;font-size:0.88rem;">${mdEsc(m.name)}</div>
+              <div style="flex:1;min-width:0;">
+                <div style="font-weight:600;font-size:0.88rem;">${mdEsc(m.name)}</div>
+                ${m.time ? `<div class="md-up" style="margin-top:1px;">hochgeladen ${mdUp(m.time)}</div>` : ''}
+              </div>
               ${m.url ? `<a class="md-open" href="${mdEsc(m.url)}" target="_blank" rel="noopener">Öffnen</a>` : ''}
             </div>
             ${m.text ? `<div class="md-text">${mdEsc(m.text)}</div>` : ''}

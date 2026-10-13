@@ -94,13 +94,23 @@ def _file_link(url: str | None) -> str | None:
     return "/api/v1/moodle/file?u=" + quote(url, safe="")
 
 
+def _ftime(f: dict[str, Any]) -> int:
+    """Hochgeladen am: Moodle liefert timecreated/timemodified (Sekunden)."""
+    return int(f.get("timecreated") or f.get("timemodified") or 0)
+
+
 def _module(m: dict[str, Any]) -> dict[str, Any]:
     files = []
     for c in m.get("contents") or []:
         if c.get("type") == "file" and c.get("fileurl"):
-            files.append({"name": c.get("filename") or "Datei", "size": c.get("filesize") or 0, "mime": c.get("mimetype") or "", "url": _file_link(c.get("fileurl"))})
+            files.append({"name": c.get("filename") or "Datei", "size": c.get("filesize") or 0, "mime": c.get("mimetype") or "", "url": _file_link(c.get("fileurl")), "time": _ftime(c)})
         elif c.get("type") == "url" and c.get("fileurl"):
-            files.append({"name": c.get("filename") or c.get("fileurl"), "size": 0, "mime": "link", "url": c.get("fileurl"), "external": True})
+            files.append({"name": c.get("filename") or c.get("fileurl"), "size": 0, "mime": "link", "url": c.get("fileurl"), "external": True, "time": _ftime(c)})
+    # Wann eingestellt: Moodle 4 liefert "added", sonst die aelteste Datei des Eintrags
+    added = int(m.get("added") or 0)
+    if not added:
+        times = [f["time"] for f in files if f.get("time")]
+        added = min(times) if times else 0
     return {
         "id": m.get("id"),
         "name": html.unescape(m.get("name") or ""),
@@ -109,6 +119,7 @@ def _module(m: dict[str, Any]) -> dict[str, Any]:
         "text": _plain(m.get("description")),
         "files": files[:20],
         "visible": bool(m.get("uservisible", True)),
+        "time": added,
     }
 
 
@@ -168,7 +179,9 @@ async def fetch_all(base: str, username: str, password: str, token: str | None =
                             "due": a.get("duedate") or 0,
                             "text": _plain(a.get("intro"), 400),
                             "url": f"{base}/mod/assign/view.php?id={a.get('cmid')}" if a.get("cmid") else None,
-                            "files": [{"name": f.get("filename") or "Datei", "url": _file_link(f.get("fileurl")), "size": f.get("filesize") or 0} for f in a.get("introattachments") or [] if f.get("fileurl")],
+                            "files": [{"name": f.get("filename") or "Datei", "url": _file_link(f.get("fileurl")), "size": f.get("filesize") or 0, "time": _ftime(f)} for f in a.get("introattachments") or [] if f.get("fileurl")],
+                            # eingestellt: ab wann abgegeben werden darf, sonst letzte Aenderung
+                            "time": int(a.get("allowsubmissionsfromdate") or a.get("timemodified") or 0),
                         })
             except MoodleError as exc:
                 logger.info("Moodle Aufgaben: %s", exc)
@@ -196,8 +209,9 @@ async def fetch_all(base: str, username: str, password: str, token: str | None =
                             "text": _plain(p.get("message"), 800),
                             "author": p.get("userfullname") or "",
                             "time": p.get("timemodified") or p.get("created") or 0,
+                            "posted": p.get("created") or p.get("timemodified") or 0,
                             "url": f"{base}/mod/forum/discuss.php?d={p.get('discussion') or p.get('id')}",
-                            "files": [{"name": a.get("filename") or "Datei", "url": _file_link(a.get("fileurl")), "size": a.get("filesize") or 0} for a in p.get("attachments") or [] if a.get("fileurl")],
+                            "files": [{"name": a.get("filename") or "Datei", "url": _file_link(a.get("fileurl")), "size": a.get("filesize") or 0, "time": _ftime(a)} for a in p.get("attachments") or [] if a.get("fileurl")],
                         })
             except MoodleError as exc:
                 logger.info("Moodle Foren: %s", exc)
