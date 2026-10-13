@@ -260,35 +260,63 @@ function startHwPolling() {
 }
 
 function hwCombineSubstitutions(lessons) {
-  // Reihenfolge-unabhaengig: Untis liefert Ausfall und Vertretung mal so, mal so herum
-  // (z. B. erst "AT" als Vertretung, dann "BWL" als Ausfall). Frueher wurde nur ein Ausfall
-  // mit einer *spaeter* stehenden Vertretung gepaart - stand die Vertretung vorne, blieb
-  // der Ausfall stehen und ueberdeckte im Wochenraster die Stunde, die wirklich stattfindet.
-  // Gepaart wird auch, wenn sich die Zeiten nur zu mindestens der Haelfte decken
-  // (Vertretung als ein Block ueber zwei ausgefallene Einzelstunden).
+  // Gleiche Logik wie in sofianotes (sofia_sync._merge_slots): eine Karte pro Zeitfenster.
+  // Untis liefert dieselbe Stunde einmal pro Lehrer/Raum (Teamstunden) und bei Vertretung
+  // Ausfall und Ersatzstunde im selben Fenster - in beliebiger Reihenfolge. Was stattfindet,
+  // gewinnt; Ausfaelle daneben verschwinden und stehen als "statt ..." an der Stunde.
   const toMin = (t) => Math.floor(t / 100) * 60 + (t % 100);
-  const out = lessons.map((l) => ({ ...l }));
+  const join = (vals) => {
+    const out = [];
+    for (const v of vals) for (const p of String(v || '').split(', ')) if (p && !out.includes(p)) out.push(p);
+    return out.join(', ');
+  };
+  const slots = new Map();
+  for (const l of lessons) {
+    const k = l.date + '|' + l.startTime + '|' + l.endTime;
+    if (!slots.has(k)) slots.set(k, []);
+    slots.get(k).push(l);
+  }
+  let out = [];
+  for (const group of slots.values()) {
+    const running = group.filter((l) => !l.cancelled);
+    const dropped = running.length ? group.filter((l) => l.cancelled) : [];
+    const keep = running.length ? running : group;
+    const merged = new Map();
+    for (const l of keep) {
+      const key = (l.subject_short || l.subject) + '|' + (l.cancelled ? 1 : 0);
+      const m = merged.get(key);
+      if (!m) { merged.set(key, { ...l }); continue; }
+      for (const f of ['teacher', 'room', 'original_teacher', 'original_room', 'subst_text']) m[f] = join([m[f], l[f]]) || null;
+      m.substituted = m.substituted || l.substituted;
+    }
+    const subjects = new Set([...merged.values()].map((m) => m.subject));
+    const repl = dropped.filter((l) => !subjects.has(l.subject));
+    for (const m of merged.values()) {
+      if (repl.length) {
+        m.substituted = true;
+        m.cancelled_subject = join(repl.map((l) => l.subject));
+        m.cancelled_subject_short = join(repl.map((l) => l.subject_short));
+      }
+      out.push(m);
+    }
+  }
+  // Ersatz als ein Block ueber mehrere ausgefallene Einzelstunden: Ausfall, der zur Haelfte
+  // unter einer stattfindenden Stunde liegt, verschwindet ebenfalls
   const live = out.filter((l) => !l.cancelled);
-  const paired = new Set();
-  const hidden = new Set();
-  for (const l of out) {
-    if (!l.cancelled) continue;
+  out = out.filter((l) => {
+    if (!l.cancelled) return true;
     const s = toMin(l.startTime), e = toMin(l.endTime);
-    const half = Math.max(1, (e - s) / 2);
-    const cands = live.filter((o) => o.date === l.date &&
-      Math.min(e, toMin(o.endTime)) - Math.max(s, toMin(o.startTime)) >= half);
-    if (!cands.length) continue;
-    const exact = (o) => o.startTime === l.startTime && o.endTime === l.endTime;
-    const o = cands.find((c) => !paired.has(c) && exact(c)) || cands.find((c) => !paired.has(c)) || cands[0];
-    paired.add(o);
-    hidden.add(l);
+    const o = live.find((x) => x.date === l.date && Math.min(e, toMin(x.endTime)) - Math.max(s, toMin(x.startTime)) >= Math.max(1, (e - s) / 2));
+    if (!o) return true;
     o.substituted = true;
-    if (!o.cancelled_subject && l.subject && l.subject !== o.subject) {
+    if (!o.cancelled_subject && l.subject !== o.subject) {
       o.cancelled_subject = l.subject;
       o.cancelled_subject_short = l.subject_short;
     }
-  }
-  return out.filter((l) => !hidden.has(l));
+    return false;
+  });
+  out.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.startTime - b.startTime));
+  return out;
 }
 
 function hwCurrentSubjectId() {

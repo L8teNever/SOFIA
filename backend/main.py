@@ -73,7 +73,9 @@ async def app_version():
 async def serve_page(page_name: str, _: User = Depends(get_current_user)):
     path = f"pages/{page_name}.html"
     if os.path.exists(path):
-        return FileResponse(path)
+        # nie aus dem Browser-Cache: sonst zeigt ein Geraet nach einem Update noch
+        # stundenlang die alte Seite (ohne Cache-Control darf der Browser raten)
+        return FileResponse(path, headers={"Cache-Control": "no-cache"})
     raise HTTPException(status_code=404, detail="Page not found")
 
 # Service Worker at root so it controls all pages (default scope = /)
