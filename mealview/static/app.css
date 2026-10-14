@@ -6,7 +6,10 @@
   :root { --bg: #111412; --card: #1d211e; --ink: #e6e9e6; --muted: #a8b0aa; --line: rgba(255,255,255,.08);
           --accent: #9ad8a8; --chip: #262c27; --chip-on: #9ad8a8; --chip-on-ink: #0b2814; }
 }
-* { box-sizing: border-box; }
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+button:focus { outline: none; }
+button:focus-visible { outline: 2px solid var(--chip-on); outline-offset: 2px; }
+.chip { -webkit-user-select: none; user-select: none; }
 html, body { margin: 0; background: var(--bg); color: var(--ink); }
 body { font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; -webkit-text-size-adjust: 100%; }
 .wrap { max-width: 620px; margin: 0 auto; padding: calc(env(safe-area-inset-top, 0px) + 28px) 16px calc(env(safe-area-inset-bottom, 0px) + 32px); }
