@@ -5396,6 +5396,7 @@
         // kein Zugriff auf dieses Blatt (z.B. fremder Link): zurueck in die Bibliothek
         // statt endlos neu zu verbinden
         wantWs = false;
+        if (window.sofiaBoardLoading) window.sofiaBoardLoading(false);
         if (window.sofiaWatchEnded) window.sofiaWatchEnded();
         currentBoardId = null;
         boardStrokes.clear();
@@ -5478,6 +5479,7 @@
         if (notebook && window.sofiaSyncAllBoards && !window.sofiaSplitBg && !boardEditId) window.sofiaSyncAllBoards();
         requestRedraw();
         scheduleSaveBoard();
+        if (!window.sofiaSplitBg && window.sofiaBoardLoading) window.sofiaBoardLoading(false);
         break;
       }
       case "role":
@@ -15099,6 +15101,7 @@
   }
 
   function showLibrary(opts) {
+    if (window.sofiaBoardLoading) window.sofiaBoardLoading(false);
     if (window.sofiaWatchStop) window.sofiaWatchStop();
     if (boardEditId) exitBoardPage({ fit: false });
     if (currentBoardId && libraryBackdrop.classList.contains("hidden")) saveView(currentBoardId);
@@ -17237,6 +17240,26 @@
   window.addEventListener("pagehide", () => currentBoardId && stashUndo(currentBoardId));
   document.addEventListener("visibilitychange", () => document.hidden && currentBoardId && stashUndo(currentBoardId));
 
+  // Ladeanzeige ueber der Zeichenflaeche, bis das geoeffnete Blatt wirklich da ist
+  let boardLoadingTimer = null;
+  function setBoardLoading(on) {
+    const el = document.getElementById("board-loading");
+    if (!el) return;
+    clearTimeout(boardLoadingTimer);
+    if (on) {
+      el.classList.remove("hidden", "fading");
+      boardLoadingTimer = setTimeout(() => setBoardLoading(false), 10000); // nie haengen bleiben
+      return;
+    }
+    if (el.classList.contains("hidden")) return;
+    // erst nach dem naechsten Zeichnen ausblenden, damit das richtige Blatt schon steht
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      el.classList.add("fading");
+      setTimeout(() => el.classList.add("hidden"), 180);
+    }));
+  }
+  window.sofiaBoardLoading = setBoardLoading;
+
   async function openBoard(id, title, opts) {
     sofiaLog.action("Blatt öffnen " + String(id).slice(0, 8) + (opts && opts.creating ? " (neu)" : ""));
     if (window.sofiaWatchFor) window.sofiaWatchFor(id);
@@ -17271,6 +17294,8 @@
     setTimeout(() => applyTopBarItems(), 0);
     if (!opts || opts.homework === undefined) syncHomeworkPanel(null);
     else syncHomeworkPanel({ id, sofiaHomeworkId: opts.homework.id }, opts.homework);
+    if (!(opts && opts.creating)) setBoardLoading(true);
+    else setBoardLoading(false);
     if (filenameInput) filenameInput.value = title || "Unbenannte Skizze";
     fitFilename();
     if (title) document.title = title + " – sofianotes";
@@ -17313,6 +17338,7 @@
         handleMessage({ type: "init", clientId: myClientId, color: myColor, board: { ...meta.board, id }, role: meta.role || "owner", strokes: Array.from(merged.values()), offline: true });
       }
       setConnState("offline");
+      setBoardLoading(false);
     }
   }
 
