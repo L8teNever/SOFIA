@@ -366,12 +366,32 @@ async def board_solution(board_id: str, person: dict = Depends(get_current_perso
     }
 
 
+@app.get("/api/boards/{board_id}/hw-regions")
+async def board_hw_regions(board_id: str, person: dict = Depends(get_current_person)) -> dict:
+    board = await db.get_board(board_id)
+    if not board or not await db.can_access(person["id"], board_id):
+        raise HTTPException(status_code=404, detail="not found")
+    return {"linked": board.get("sofiaHomeworkId"), **board.get("hwRegions", {})}
+
+
+@app.put("/api/boards/{board_id}/hw-regions")
+async def board_hw_regions_set(board_id: str, request: Request, person: dict = Depends(get_current_person)) -> dict:
+    """Welche Hausaufgaben zum Blatt gehoeren und wo auf dem Blatt ihre Loesung steht."""
+    board = await db.get_board(board_id)
+    if not board or board.get("ownerId") != person["id"]:
+        raise HTTPException(status_code=404, detail="not found")
+    data = db.clean_hw_regions(await _json_body(request), board.get("hwRegions") or {})
+    await db.set_hw_regions(board_id, data)
+    return {"ok": True, "linked": board.get("sofiaHomeworkId"), **data}
+
+
 @app.post("/api/boards/{board_id}/solution")
 async def board_solution_set(board_id: str, request: Request, person: dict = Depends(get_current_person)) -> dict:
     """upload=true laedt das Blatt jetzt als Loesung hoch (Modus 'Knopf' oder 'automatisch');
     remove=true nimmt die geteilte Loesung in Sofia wieder weg."""
     board = await db.get_board(board_id)
-    if not board or board.get("ownerId") != person["id"] or not board.get("sofiaHomeworkId"):
+    has_hw = board and (board.get("sofiaHomeworkId") or (board.get("hwRegions") or {}).get("assigned"))
+    if not board or board.get("ownerId") != person["id"] or not has_hw:
         raise HTTPException(status_code=404, detail="not found")
     body = await _json_body(request)
     if body.get("remove"):
@@ -1038,7 +1058,7 @@ def _board_changed(board_id: str) -> None:
             await goodnotes_export.schedule_write(lambda: db.load_all(board_id))
             if sofia_sync.enabled():
                 b = await db.get_board(board_id)
-                if b and b.get("sofiaHomeworkId"):
+                if b and (b.get("sofiaHomeworkId") or (b.get("hwRegions") or {}).get("assigned")):
                     owner_settings = await db.person_settings(b["ownerId"])
                     if owner_settings["solutionMode"] == "auto":
                         sofia_sync.schedule_solution(board_id)

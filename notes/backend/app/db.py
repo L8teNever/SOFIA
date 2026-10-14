@@ -219,6 +219,10 @@ def _init_sync() -> None:
     board_cols3 = {row[1] for row in _conn.execute("PRAGMA table_info(boards)").fetchall()}
     if "refs" not in board_cols3:
         _conn.execute("ALTER TABLE boards ADD COLUMN refs TEXT")
+    if "hw_regions" not in board_cols3:
+        # Mehrere Hausaufgaben pro Blatt: zugeteilte Aufgaben, je Aufgabe markierte
+        # Seiten/Ausschnitte (= die Loesung) und die Loesungs-IDs in Sofia
+        _conn.execute("ALTER TABLE boards ADD COLUMN hw_regions TEXT")
     if "notebook" not in board_cols3:
         # Notizbuch mit A4-Seiten statt unendlichem Blatt (JSON: layout, template, pages)
         _conn.execute("ALTER TABLE boards ADD COLUMN notebook TEXT")
@@ -744,7 +748,7 @@ def valid_person(person_id: str | None) -> bool:
 
 def _board_row(board_id: str) -> dict[str, Any] | None:
     row = _conn.execute(
-        "SELECT id, owner_id, title, created_at, updated_at, sofia_homework_id, solution_share, sofia_solution_id, solution_synced_at, solution_error, paper, refs, notebook FROM boards WHERE id = ?",
+        "SELECT id, owner_id, title, created_at, updated_at, sofia_homework_id, solution_share, sofia_solution_id, solution_synced_at, solution_error, paper, refs, notebook, hw_regions FROM boards WHERE id = ?",
         (board_id,),
     ).fetchone()
     if not row:
@@ -767,7 +771,64 @@ def _board_row(board_id: str) -> dict[str, Any] | None:
         "paper": row[10] or "graph",
         "refs": _load_refs(row[11]),
         "notebook": _load_notebook(row[12]),
+        "hwRegions": load_hw_regions(row[13]),
     }
+
+
+def load_hw_regions(raw: str | None) -> dict[str, Any]:
+    try:
+        d = json.loads(raw) if raw else {}
+    except ValueError:
+        d = {}
+    if not isinstance(d, dict):
+        d = {}
+    return {
+        "assigned": [int(x) for x in d.get("assigned") or [] if str(x).isdigit()],
+        "regions": d.get("regions") if isinstance(d.get("regions"), dict) else {},
+        "solutions": d.get("solutions") if isinstance(d.get("solutions"), dict) else {},
+    }
+
+
+def clean_hw_regions(body: Any, old: dict[str, Any]) -> dict[str, Any]:
+    """Zuteilung + markierte Bereiche pruefen (Loesungs-IDs bleiben serverseitig)."""
+    body = body if isinstance(body, dict) else {}
+    assigned = []
+    for x in body.get("assigned") or []:
+        try:
+            v = int(x)
+        except (TypeError, ValueError):
+            continue
+        if v > 0 and v not in assigned:
+            assigned.append(v)
+    regions: dict[str, list[dict[str, Any]]] = {}
+    for hw, lst in (body.get("regions") or {}).items():
+        if not str(hw).isdigit() or not isinstance(lst, list):
+            continue
+        out = []
+        for r in lst[:40]:
+            if not isinstance(r, dict):
+                continue
+            if r.get("kind") == "page" and r.get("pageId"):
+                out.append({"kind": "page", "pageId": str(r["pageId"])[:64], "label": str(r.get("label") or "")[:40]})
+            elif r.get("kind") == "area" and isinstance(r.get("rect"), list) and len(r["rect"]) == 4:
+                try:
+                    rect = [round(float(v), 1) for v in r["rect"]]
+                except (TypeError, ValueError):
+                    continue
+                out.append({"kind": "area", "rect": rect, "boardPage": (str(r["boardPage"])[:64] if r.get("boardPage") else None), "label": str(r.get("label") or "")[:40]})
+        if out:
+            regions[str(hw)] = out
+    return {"assigned": assigned[:30], "regions": regions, "solutions": old.get("solutions") or {}}
+
+
+def _set_hw_regions_sync(board_id: str, data: dict[str, Any]) -> None:
+    _conn.execute("UPDATE boards SET hw_regions = ? WHERE id = ?", (json.dumps(data), board_id))
+    _conn.commit()
+
+
+async def set_hw_regions(board_id: str, data: dict[str, Any]) -> None:
+    async with _lock:
+        await asyncio.get_event_loop().run_in_executor(None, _set_hw_regions_sync, board_id, data)
 
 
 def _load_notebook(raw: str | None) -> dict[str, Any] | None:

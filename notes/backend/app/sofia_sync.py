@@ -559,13 +559,38 @@ def _send_json(method: str, path: str, email: str, payload: Any | None = None) -
         return json.loads(raw) if raw else None
 
 
+def _region_pdfs(board: dict[str, Any], strokes: list[dict[str, Any]], regions: list[dict[str, Any]], title: str) -> list[tuple[str, bytes]]:
+    """Markierte Seiten (ein PDF) und Ausschnitte (je ein PDF) einer Aufgabe."""
+    from . import goodnotes_export
+
+    out: list[tuple[str, bytes]] = []
+    nb = board.get("notebook")
+    pages = [r["pageId"] for r in regions if r.get("kind") == "page" and r.get("pageId")]
+    if pages and nb and nb.get("pages"):
+        out.append((title + " – Seiten.pdf", goodnotes_export.build_notebook_pdf(nb, strokes, only=set(pages))))
+    n = 0
+    for r in regions:
+        if r.get("kind") != "area" or not isinstance(r.get("rect"), list) or len(r["rect"]) != 4:
+            continue
+        n += 1
+        pdf = goodnotes_export.build_board_pdf(board, strokes, area=tuple(float(v) for v in r["rect"]), area_page=r.get("boardPage") or None)
+        out.append((title + f" – Ausschnitt {n}.pdf", pdf))
+    return out
+
+
 async def upload_solution(board_id: str, manual: bool = False) -> dict[str, Any]:
+    """Loesungen des Blatts zu Sofia: je zugeteilter Hausaufgabe nur die dafuer markierten
+    Seiten/Ausschnitte. Die verknuepfte Aufgabe ohne Markierung bekommt wie bisher das ganze Blatt."""
     from . import goodnotes_export
 
     if not enabled():
         return {"ok": False, "error": "disabled"}
     board = await db.get_board(board_id)
-    if not board or not board.get("sofiaHomeworkId"):
+    regs_all = (board or {}).get("hwRegions") or {}
+    linked = (board or {}).get("sofiaHomeworkId")
+    targets = [h for h in [linked, *(regs_all.get("assigned") or [])] if h]
+    targets = [h for i, h in enumerate(targets) if h not in targets[:i]]
+    if not board or not targets:
         return {"ok": False, "error": "no_homework"}
     mode = (await db.person_settings(board["ownerId"]))["solutionMode"]
     if mode == "off" or (mode == "manual" and not manual):
@@ -576,31 +601,50 @@ async def upload_solution(board_id: str, manual: bool = False) -> dict[str, Any]
     strokes = await db.load_all(board_id)
     if not strokes:
         return {"ok": False, "error": "empty"}
-    hw = board["sofiaHomeworkId"]
     loop = asyncio.get_event_loop()
-    try:
-        pdf = await loop.run_in_executor(None, goodnotes_export.build_board_pdf, board, strokes)
-        title = (board.get("title") or "Loesung").strip()
-        att = await loop.run_in_executor(None, _upload_pdf, email, title + ".pdf", pdf)
-        payload = {"text": "Mit sofianotes geschrieben – " + title, "attachments": [att]}
-        sol = None
-        sid = board.get("sofiaSolutionId")
-        if sid:
-            try:
-                sol = await loop.run_in_executor(None, _send_json, "PUT", f"/homework/{hw}/solutions/{sid}", email, payload)
-            except urllib.error.HTTPError as exc:
-                if exc.code not in (403, 404):
-                    raise
-                sol = None
-        if sol is None:
-            sol = await loop.run_in_executor(None, _send_json, "POST", f"/homework/{hw}/solutions", email, payload)
-        await db.solution_state(board_id, solutionId=(sol or {}).get("id"), syncedAt=time.time(), error=None)
-        return {"ok": True, "solutionId": (sol or {}).get("id")}
-    except Exception as exc:  # noqa: BLE001
-        msg = f"{type(exc).__name__}: {getattr(exc, 'code', '') or exc}"[:200]
-        log.warning("Loesung fuer Blatt %s nicht hochgeladen: %s", board_id, msg)
-        await db.solution_state(board_id, error=msg)
-        return {"ok": False, "error": msg}
+    title = (board.get("title") or "Loesung").strip()
+    solutions = dict(regs_all.get("solutions") or {})
+    done: list[int] = []
+    last_error = None
+    for hw in targets:
+        regions = (regs_all.get("regions") or {}).get(str(hw)) or []
+        try:
+            if regions:
+                files = await loop.run_in_executor(None, _region_pdfs, board, strokes, regions, title)
+            elif hw == linked:
+                files = [(title + ".pdf", await loop.run_in_executor(None, goodnotes_export.build_board_pdf, board, strokes))]
+            else:
+                continue  # zugeteilt, aber noch nichts markiert
+            atts = [await loop.run_in_executor(None, _upload_pdf, email, name, data) for name, data in files]
+            payload = {"text": "Mit sofianotes geschrieben – " + title, "attachments": atts}
+            sid = board.get("sofiaSolutionId") if hw == linked else solutions.get(str(hw))
+            sol = None
+            if sid:
+                try:
+                    sol = await loop.run_in_executor(None, _send_json, "PUT", f"/homework/{hw}/solutions/{sid}", email, payload)
+                except urllib.error.HTTPError as exc:
+                    if exc.code not in (403, 404):
+                        raise
+                    sol = None
+            if sol is None:
+                sol = await loop.run_in_executor(None, _send_json, "POST", f"/homework/{hw}/solutions", email, payload)
+            new_id = (sol or {}).get("id")
+            if hw == linked:
+                await db.solution_state(board_id, solutionId=new_id)
+            elif new_id:
+                solutions[str(hw)] = new_id
+            done.append(hw)
+        except Exception as exc:  # noqa: BLE001
+            last_error = f"{type(exc).__name__}: {getattr(exc, 'code', '') or exc}"[:200]
+            log.warning("Loesung fuer Blatt %s / Aufgabe %s nicht hochgeladen: %s", board_id, hw, last_error)
+    if solutions != (regs_all.get("solutions") or {}):
+        await db.set_hw_regions(board_id, {**regs_all, "solutions": solutions})
+    await db.solution_state(board_id, syncedAt=time.time() if done else board.get("solutionSyncedAt"), error=last_error)
+    if not done and last_error:
+        return {"ok": False, "error": last_error}
+    if not done:
+        return {"ok": False, "error": "nothing_marked"}
+    return {"ok": True, "homework": done}
 
 
 def schedule_solution(board_id: str, delay: float | None = None) -> None:

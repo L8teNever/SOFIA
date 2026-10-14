@@ -16208,6 +16208,7 @@
       desc.textContent = hwBoard.description || "(ohne Text)";
       hwPanelBody.appendChild(desc);
       hwAttachmentsHtml(hwPanelBody, hwBoard);
+      if (hwBoard.id) hwPanelBody.appendChild(renderHwRegions(hwBoard.id));
     }
     hwPanelBody.appendChild(renderOwnRefs());
     // PDF-Anhaenge der Aufgabe im Fenster oeffnen statt in einem neuen Tab
@@ -16241,6 +16242,140 @@
       hint.textContent = "Bild antippen, um es hier zu vergrößern. Lange halten und aufs Blatt ziehen fügt es ein.";
       hwPanelBody.appendChild(hint);
     }
+  }
+  // ---- "Loesung auf dem Blatt": je Aufgabe markierte Seiten/Ausschnitte ----
+  // Nur das Markierte geht als Loesung zu Sofia (ohne Markierung: verknuepfte Aufgabe = ganzes Blatt).
+  function renderHwRegions(hwId) {
+    const box = document.createElement("div");
+    box.className = "hw-regions";
+    const head = document.createElement("div");
+    head.className = "hw-regions-title";
+    head.textContent = "Lösung auf dem Blatt";
+    box.appendChild(head);
+    const list = hwRegs().regions[String(hwId)] || [];
+    const linked = currentBoardMeta && currentBoardMeta.sofiaHomeworkId === hwId;
+    const chips = document.createElement("div");
+    chips.className = "hw-region-chips";
+    list.forEach((r, i) => {
+      const c = document.createElement("span");
+      c.className = "hw-region-chip";
+      const go = document.createElement("button");
+      go.type = "button";
+      go.className = "hw-region-go";
+      go.innerHTML = '<span class="material-symbols-rounded">' + (r.kind === "page" ? "description" : "crop") + "</span>";
+      go.appendChild(document.createTextNode(r.label || (r.kind === "page" ? "Seite" : "Ausschnitt")));
+      go.title = "Hinspringen";
+      go.addEventListener("click", (e) => {
+        e.stopPropagation();
+        gotoHwRegion(r);
+      });
+      const x = document.createElement("button");
+      x.type = "button";
+      x.className = "hw-region-x";
+      x.title = "Markierung entfernen";
+      x.innerHTML = '<span class="material-symbols-rounded">close</span>';
+      x.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const arr = hwRegs().regions[String(hwId)] || [];
+        arr.splice(i, 1);
+        if (!arr.length) delete hwRegs().regions[String(hwId)];
+        saveHwRegs();
+        renderHwPanel();
+      });
+      c.append(go, x);
+      chips.appendChild(c);
+    });
+    box.appendChild(chips);
+    const hint = document.createElement("div");
+    hint.className = "hw-hint";
+    hint.textContent = list.length
+      ? "Nur diese Stellen werden als Lösung in Sofia geteilt."
+      : linked
+        ? "Noch nichts markiert – geteilt wird das ganze Blatt. Markiere, wo die Lösung steht, dann nur das."
+        : "Markiere, wo die Lösung zu dieser Aufgabe steht – nur das wird in Sofia geteilt.";
+    box.appendChild(hint);
+    if (myRole === "owner" && !viewOnly) {
+      const row = document.createElement("div");
+      row.className = "hw-region-add";
+      const addPage = document.createElement("button");
+      addPage.type = "button";
+      addPage.innerHTML = '<span class="material-symbols-rounded">description</span>Diese Seite';
+      addPage.disabled = !notebook;
+      if (!notebook) addPage.title = "Nur in einem Notizbuch mit Seiten";
+      addPage.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const pageId = currentHwPageId();
+        if (pageId) addHwRegion(hwId, { kind: "page", pageId, label: currentHwPageLabel() });
+      });
+      const addArea = document.createElement("button");
+      addArea.type = "button";
+      addArea.innerHTML = '<span class="material-symbols-rounded">crop</span>Dieser Ausschnitt';
+      addArea.title = "Genau das, was gerade auf dem Bildschirm zu sehen ist";
+      addArea.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const a = screenToWorld(viewLeft, 0);
+        const b = screenToWorld(window.innerWidth - viewRight, window.innerHeight);
+        const n = (hwRegs().regions[String(hwId)] || []).filter((r) => r.kind === "area").length + 1;
+        addHwRegion(hwId, { kind: "area", rect: [a.x, a.y, b.x, b.y].map((v) => Math.round(v * 10) / 10), boardPage: boardEditId || null, label: "Ausschnitt " + n + (boardEditId ? " (Board)" : "") });
+      });
+      row.append(addPage, addArea);
+      box.appendChild(row);
+    }
+    return box;
+  }
+  function currentHwPageId() {
+    if (boardEditId) return boardEditId;
+    if (!notebook || !window.sofiaCurrentPage) return null;
+    const pg = notebook.pages[window.sofiaCurrentPage()];
+    return pg ? pg.boardOf || pg.id : null;
+  }
+  function currentHwPageLabel() {
+    if (!notebook) return "Seite";
+    const id = currentHwPageId();
+    const i = notebook.pages.findIndex((p) => p.id === id);
+    return (boardEditId ? "Board-Seite " : "Seite ") + (i + 1);
+  }
+  function addHwRegion(hwId, region) {
+    const r = hwRegs();
+    const key = String(hwId);
+    const arr = r.regions[key] || (r.regions[key] = []);
+    if (region.kind === "page" && arr.some((x) => x.kind === "page" && x.pageId === region.pageId)) return showToast("Diese Seite ist schon markiert");
+    arr.push(region);
+    saveHwRegs();
+    renderHwPanel();
+    showToast(region.kind === "page" ? region.label + " markiert" : "Ausschnitt markiert");
+  }
+  function gotoHwRegion(r) {
+    if (r.kind === "page") {
+      if (!notebook) return;
+      const i = notebook.pages.findIndex((p) => p.id === r.pageId);
+      if (i < 0) return showToast("Die Seite gibt es nicht mehr");
+      const pg = notebook.pages[i];
+      if (pg.board) {
+        if (boardEditId !== pg.id && window.sofiaEnterBoardPage) window.sofiaEnterBoardPage(pg.id);
+        return;
+      }
+      if (boardEditId && window.sofiaExitBoardPage) window.sofiaExitBoardPage({ fit: false });
+      if (window.sofiaFitPage) window.sofiaFitPage(i, true);
+      return;
+    }
+    const bp = r.boardPage || null;
+    if (bp && boardEditId !== bp && window.sofiaEnterBoardPage) window.sofiaEnterBoardPage(bp);
+    if (!bp && boardEditId && window.sofiaExitBoardPage) window.sofiaExitBoardPage({ fit: false });
+    const [x0, y0, x1, y1] = r.rect;
+    const vw = window.innerWidth - viewLeft - viewRight;
+    const vh = window.innerHeight;
+    const sc = clampZoom(Math.min(vw / Math.max(1, x1 - x0), vh / Math.max(1, y1 - y0)));
+    const v = { scale: sc, offsetX: viewLeft + (vw - (x1 - x0) * sc) / 2 - x0 * sc, offsetY: (vh - (y1 - y0) * sc) / 2 - y0 * sc };
+    setTimeout(() => {
+      if (window.sofiaAnimateView) window.sofiaAnimateView(v);
+      else {
+        scale = v.scale;
+        offsetX = v.offsetX;
+        offsetY = v.offsetY;
+        requestRedraw();
+      }
+    }, bp ? 120 : 0);
   }
   // Bild aus der Aufgabe lange halten und aufs Blatt ziehen -> als Bild einfuegen
   let hwImgDrag = null;
@@ -16362,15 +16497,45 @@
     if (hwSwitchMenu) hwSwitchMenu.remove();
     hwSwitchMenu = null;
   }
+  // Zuteilung + markierte Loesungs-Bereiche liegen am Blatt auf dem Server (alle Geraete,
+  // und der Server laedt daraus die Loesungen je Aufgabe zu Sofia hoch)
+  function hwRegs() {
+    if (!currentBoardMeta) return { assigned: [], regions: {} };
+    if (!currentBoardMeta.hwRegions) currentBoardMeta.hwRegions = { assigned: [], regions: {} };
+    const r = currentBoardMeta.hwRegions;
+    if (!Array.isArray(r.assigned)) r.assigned = [];
+    if (!r.regions || typeof r.regions !== "object") r.regions = {};
+    return r;
+  }
+  let hwRegsSaveT = null;
+  function saveHwRegs() {
+    const bid = currentBoardId;
+    if (!bid) return;
+    const body = JSON.stringify({ assigned: hwRegs().assigned, regions: hwRegs().regions });
+    clearTimeout(hwRegsSaveT);
+    hwRegsSaveT = setTimeout(() => {
+      api("/api/boards/" + encodeURIComponent(bid) + "/hw-regions", { method: "PUT", headers: { "Content-Type": "application/json" }, body }).catch(() => showToast("Speichern der Zuteilung hat nicht geklappt"));
+    }, 300);
+  }
   function hwAssignedFor(boardId) {
+    if (boardId !== currentBoardId) return [];
+    // fruehere Zuteilung nur auf diesem Geraet einmalig uebernehmen
     const m = lsGet("sofianotes-hw-assigned", {});
-    return Array.isArray(m[boardId]) ? m[boardId] : [];
+    if (Array.isArray(m[boardId]) && m[boardId].length) {
+      const r = hwRegs();
+      for (const id of m[boardId]) if (!r.assigned.includes(id)) r.assigned.push(id);
+      delete m[boardId];
+      lsSet("sofianotes-hw-assigned", m);
+      if (myRole === "owner") saveHwRegs();
+    }
+    return hwRegs().assigned.slice();
   }
   function setHwAssigned(boardId, ids) {
-    const m = lsGet("sofianotes-hw-assigned", {});
-    if (ids.length) m[boardId] = ids;
-    else delete m[boardId];
-    lsSet("sofianotes-hw-assigned", m);
+    if (boardId !== currentBoardId) return;
+    const r = hwRegs();
+    r.assigned = ids.slice();
+    for (const k of Object.keys(r.regions)) if (!ids.includes(+k) && +k !== (currentBoardMeta && currentBoardMeta.sofiaHomeworkId)) delete r.regions[k];
+    saveHwRegs();
   }
   function pickHw(it) {
     closeHwSwitch();
