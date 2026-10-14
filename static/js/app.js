@@ -631,7 +631,8 @@ window.addEventListener('popstate', (e) => {
   // Detail overlays (e.g. a homework item opened on top of the list page)
   // stack on top of a regular .page rather than replacing it — close the
   // overlay first so back-navigation doesn't yank the page underneath it.
-  const overlay = document.querySelector('.page-overlay.active');
+  const overlays = document.querySelectorAll('.page-overlay.active');
+  const overlay = overlays[overlays.length - 1]; // oberstes zuerst (z. B. Datei über Moodle-Kurs)
   if (overlay) {
     overlay.classList.remove('active');
     overlay.classList.add('closing');
