@@ -38,12 +38,9 @@
   .md-up { font-size:0.72rem; color:#7d5260; margin-top:2px; }
     .md-course-head { cursor:pointer; }
     .md-chev { transition:transform 0.2s; opacity:0.45; flex-shrink:0; }
-    .md-course.open .md-chev { transform:rotate(180deg); }
-    .md-course-body { display:none; margin-top:12px; padding-top:12px; border-top:1px solid rgba(0,0,0,0.06); }
-    .md-course.open .md-course-body { display:block; }
     .md-sec { margin-bottom:14px; }
     .md-sec-name { font-size:0.72rem; font-weight:800; text-transform:uppercase; letter-spacing:0.06em; color:#7d5260; margin:4px 0 8px; }
-    .md-mod { padding:10px 12px; border-radius:16px; background:#fdf7fa; margin-bottom:6px; }
+    .md-mod { padding:12px 14px; border-radius:18px; margin-bottom:8px; }
     .md-mod a.md-link { color:inherit; text-decoration:none; }
     .md-open { font-size:0.75rem; font-weight:700; color:#7d5260; text-decoration:none; flex-shrink:0; padding:6px 10px; border-radius:10px; background:#ffd8e4; }
   </style>
@@ -62,7 +59,6 @@ document.getElementById('ph-moodle').outerHTML = pageHeader({
 const MD_ICONS = { resource:'file-text', folder:'folder', url:'link', assign:'clipboard-check', forum:'messages-square', page:'file', quiz:'circle-help', label:'text', book:'book-open', choice:'list-checks', feedback:'message-square-text', lesson:'presentation', h5pactivity:'play-circle', bigbluebuttonbn:'video' };
 const mdEsc = (s) => escapeHtml(String(s == null ? '' : s));
 let mdData = null;
-const mdOpen = new Set();
 
 function mdDate(ts) {
   const d = new Date(ts * 1000);
@@ -154,17 +150,35 @@ function mdRender() {
       ${mdFiles(n.files)}
     </div>`).join('');
 
-  // Alle Kurse zum Aufklappen
+  // Alle Kurse - ein Tipp oeffnet den Kurs als eigene Unterseite
   document.getElementById('moodle-courses-wrap').style.display = courses.length ? 'block' : 'none';
   document.getElementById('moodle-courses').innerHTML = courses.map(c => {
     const nMods = (c.sections || []).reduce((s, x) => s + (x.modules || []).length, 0);
-    const body = (c.sections || []).map(s => `
+    return `
+      <div class="md-card md-course" data-id="${c.id}">
+        <div class="md-row md-course-head" onclick="mdOpenCourse(${c.id})">
+          <div class="md-ico"><i data-lucide="book-open" style="width:20px;height:20px;"></i></div>
+          <div style="flex:1;min-width:0;">
+            <div class="md-title">${mdEsc(c.name)}</div>
+            <div class="md-sub">${nMods} Einträge${(c.assignments || []).length ? ' · ' + c.assignments.length + ' Aufgaben' : ''}</div>
+          </div>
+          <i data-lucide="chevron-right" class="md-chev" style="width:20px;height:20px;"></i>
+        </div>
+      </div>`;
+  }).join('');
+  const openId = document.getElementById('page-md-course')?.dataset.id;
+  if (openId) mdRenderCourse(+openId);
+  lucide.createIcons();
+}
+
+function mdCourseBody(c) {
+  return (c.sections || []).map(s => `
       <div class="md-sec">
         ${s.name ? `<div class="md-sec-name">${mdEsc(s.name)}</div>` : ''}
         ${s.text ? `<div class="md-text" style="margin:0 0 8px;">${mdEsc(s.text)}</div>` : ''}
         ${(s.modules || []).map(m => m.type === 'label' ? `
-          <div class="md-mod"><div class="md-text" style="margin:0;">${mdEsc(m.text || m.name)}</div>${m.time ? `<div class="md-up" style="margin-top:6px;">hochgeladen ${mdUp(m.time)}</div>` : ''}${mdFiles(m.files)}</div>` : `
-          <div class="md-mod">
+          <div class="md-card md-mod"><div class="md-text" style="margin:0;">${mdEsc(m.text || m.name)}</div>${m.time ? `<div class="md-up" style="margin-top:6px;">hochgeladen ${mdUp(m.time)}</div>` : ''}${mdFiles(m.files)}</div>` : `
+          <div class="md-card md-mod">
             <div class="md-row">
               <div class="md-ico sm"><i data-lucide="${MD_ICONS[m.type] || 'box'}" style="width:16px;height:16px;"></i></div>
               <div style="flex:1;min-width:0;">
@@ -177,26 +191,58 @@ function mdRender() {
             ${mdFiles(m.files)}
           </div>`).join('')}
       </div>`).join('') || '<div class="md-sub">Keine Inhalte sichtbar.</div>';
-    return `
-      <div class="md-card md-course${mdOpen.has(c.id) ? ' open' : ''}" data-id="${c.id}">
-        <div class="md-row md-course-head" onclick="mdToggle(${c.id})">
-          <div class="md-ico"><i data-lucide="book-open" style="width:20px;height:20px;"></i></div>
-          <div style="flex:1;min-width:0;">
-            <div class="md-title">${mdEsc(c.name)}</div>
-            <div class="md-sub">${nMods} Einträge${(c.assignments || []).length ? ' · ' + c.assignments.length + ' Aufgaben' : ''}</div>
-          </div>
-          <i data-lucide="chevron-down" class="md-chev" style="width:20px;height:20px;"></i>
-        </div>
-        <div class="md-course-body">${body}</div>
-      </div>`;
-  }).join('');
-  lucide.createIcons();
 }
 
-function mdToggle(id) {
-  if (mdOpen.has(id)) mdOpen.delete(id); else mdOpen.add(id);
-  const el = document.querySelector('.md-course[data-id="' + id + '"]');
-  if (el) el.classList.toggle('open', mdOpen.has(id));
+function mdRenderCourse(id) {
+  const c = ((mdData && mdData.courses) || []).find(x => x.id === id);
+  const page = document.getElementById('page-md-course');
+  if (!c || !page) return;
+  const now = Date.now() / 1000;
+  const tasks = (c.assignments || []).slice().sort((a, b) => (a.due || 0) - (b.due || 0));
+  const nMods = (c.sections || []).reduce((s, x) => s + (x.modules || []).length, 0);
+  document.getElementById('mdc-title').textContent = c.name;
+  document.getElementById('mdc-sub').textContent = nMods + ' Einträge' + (tasks.length ? ' · ' + tasks.length + ' Aufgaben' : '');
+  document.getElementById('mdc-body').innerHTML = (tasks.length ? `
+    <div class="section-label">Aufgaben</div>
+    ${tasks.map(a => `
+      <div class="md-card">
+        <div class="md-row">
+          <div class="md-ico"><i data-lucide="clipboard-check" style="width:20px;height:20px;"></i></div>
+          <div style="flex:1;min-width:0;">
+            <div class="md-title">${mdEsc(a.name)}</div>
+            ${a.due ? `<div class="md-sub">fällig ${mdDate(a.due)}</div>` : ''}
+            ${a.time ? `<div class="md-up">eingestellt ${mdUp(a.time)}</div>` : ''}
+          </div>
+          ${a.due ? `<span class="md-due${a.due > now && a.due - now < 2 * 86400 ? ' soon' : ''}">${mdDueLabel(a.due)}</span>` : ''}
+        </div>
+        ${a.text ? `<div class="md-text">${mdEsc(a.text)}</div>` : ''}
+        ${mdFiles(a.files)}
+      </div>`).join('')}
+    <div class="section-label" style="margin-top:18px;">Inhalte</div>` : '') + mdCourseBody(c);
+  page.dataset.id = id;
+  if (window.lucide) lucide.createIcons();
+}
+
+function mdOpenCourse(id) {
+  const existing = document.getElementById('page-md-course');
+  if (existing) existing.remove();
+  const page = document.createElement('div');
+  page.className = 'page page-overlay';
+  page.id = 'page-md-course';
+  page.style.background = '#fff8f9';
+  page.innerHTML = pageHeader({
+    title: '–', titleId: 'mdc-title',
+    subtitle: 'Kurs', subtitleId: 'mdc-sub',
+    backAction: 'event.stopPropagation();history.back();',
+  }) + '<div class="page-scroll-1col no-scrollbar"><div class="page-inner" id="mdc-body" style="padding-bottom:90px;"></div></div>';
+  document.body.appendChild(page);
+  const head = document.querySelector('.md-course[data-id="' + id + '"]');
+  const r = head ? head.getBoundingClientRect() : null;
+  page.style.setProperty('--ox', r ? Math.round(r.left + r.width / 2) + 'px' : '50%');
+  page.style.setProperty('--oy', r ? Math.round(r.top + r.height / 2) + 'px' : '50%');
+  mdRenderCourse(id);
+  requestAnimationFrame(() => requestAnimationFrame(() => page.classList.add('active')));
+  history.pushState({ mdCourse: id }, '', window.location.pathname);
 }
 
 async function moodleRefresh() {
