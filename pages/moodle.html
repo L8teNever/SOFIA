@@ -314,7 +314,7 @@ function mdViewFile(href) {
   v.querySelector('.md-vtitle small').textContent = host;
   v.querySelector('.md-vdl').href = href;
   v.querySelector('.md-vdl').setAttribute('download', name);
-  v.querySelector('.md-vclose').onclick = (e) => { e.stopPropagation(); history.back(); };
+  v.querySelector('.md-vclose').onclick = (e) => { e.stopPropagation(); mdCloseViewer(v); };
   document.body.appendChild(v);
   if (window.lucide) lucide.createIcons();
   requestAnimationFrame(() => requestAnimationFrame(() => v.classList.add('active')));
@@ -325,6 +325,17 @@ function mdViewFile(href) {
   else if (/^(png|jpe?g|gif|webp|bmp|svg)$/.test(ext)) body.innerHTML = `<img class="md-vimg" src="${mdEsc(href)}" alt="">`;
   else if (/^(txt|html?)$/.test(ext)) body.innerHTML = `<iframe src="${mdEsc(href)}" sandbox style="border:0;width:100%;height:100%;background:#fff;"></iframe>`;
   else body.innerHTML = `<div class="md-vmsg">Für diese Datei gibt es keine Vorschau.<br><a href="${mdEsc(href)}" download="${mdEsc(name)}">Herunterladen</a></div>`;
+}
+// X: Ansicht direkt schliessen. Nur wenn unser eigener Verlaufseintrag oben liegt, wird
+// er still mit zurueckgenommen - sonst wuerde "zurueck" die App selbst verlassen.
+function mdCloseViewer(v) {
+  v.classList.remove('active');
+  v.classList.add('closing');
+  setTimeout(() => v.remove(), 250);
+  if (history.state && history.state.mdFile) {
+    isSelfPopping = true;
+    history.back();
+  }
 }
 async function mdRenderPdf(href, body, v) {
   try {
