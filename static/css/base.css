@@ -228,6 +228,8 @@ body.has-update-banner { padding-top: 52px; transition: padding-top 0.3s ease; }
    default stretch sizing instead matches a same-row square's height
    exactly, since a square's aspect-ratio:1/1 sets the row's height. */
 @media (min-width: 600px) { .w-full-span { grid-column: span 2; aspect-ratio: auto; } }
+/* 2 breit, halbe Höhe (z. B. Moodle): Breite / (halbe Kachelhöhe) ≈ 4.15 */
+.w-wide-half { grid-column: span 2; aspect-ratio: 4.15/1; flex-direction: row; align-items: center; padding: 14px 20px; gap: 14px; }
 
 /* Drive + Share: same 1x1 square as every other widget from tablet up, but
    a short half-height bar on mobile — their content is a single short line
