@@ -5482,6 +5482,13 @@
         if (!window.sofiaSplitBg && window.sofiaBoardLoading) window.sofiaBoardLoading(false);
         break;
       }
+      case "hw_regions": {
+        if (currentBoardMeta && msg.hwRegions) {
+          currentBoardMeta.hwRegions = msg.hwRegions;
+          if (typeof renderHwPanel === "function") renderHwPanel();
+        }
+        break;
+      }
       case "role":
         myRole = msg.role || "edit";
         if (window.sofiaApplyRole) window.sofiaApplyRole(true);
@@ -16263,7 +16270,12 @@
       go.type = "button";
       go.className = "hw-region-go";
       go.innerHTML = '<span class="material-symbols-rounded">' + (r.kind === "page" ? "description" : "crop") + "</span>";
-      go.appendChild(document.createTextNode(r.label || (r.kind === "page" ? "Seite" : "Ausschnitt")));
+      let label = r.label || (r.kind === "page" ? "Seite" : "Ausschnitt");
+      if (r.kind === "page" && notebook) {
+        const pi = notebook.pages.findIndex((p) => p.id === r.pageId);
+        if (pi >= 0) label = (notebook.pages[pi].board ? "Board-Seite " : "Seite ") + (pi + 1);
+      }
+      go.appendChild(document.createTextNode(label));
       go.title = "Hinspringen";
       go.addEventListener("click", (e) => {
         e.stopPropagation();

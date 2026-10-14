@@ -382,6 +382,7 @@ async def board_hw_regions_set(board_id: str, request: Request, person: dict = D
         raise HTTPException(status_code=404, detail="not found")
     data = db.clean_hw_regions(await _json_body(request), board.get("hwRegions") or {})
     await db.set_hw_regions(board_id, data)
+    _board_changed(board_id)  # Markierung geaendert -> Loesung in Sofia aktualisieren (Modus automatisch)
     return {"ok": True, "linked": board.get("sofiaHomeworkId"), **data}
 
 
@@ -494,8 +495,12 @@ async def patch_board(board_id: str, request: Request, me: dict = Depends(get_cu
             new_ids = {pg.get("id") for pg in nb.get("pages", [])}
             if any(pid and pid not in new_ids for pid in old_ids):
                 raise HTTPException(status_code=403, detail="read only")
+        before = await db.get_board(board_id)
         await db.set_board_notebook(board_id, nb)
         await manager.broadcast({"type": "board_notebook", "notebook": nb}, board_id=board_id)
+        # neue Seite direkt hinter einer markierten Loesungs-Seite gehoert zur selben Aufgabe
+        await _extend_hw_regions(board_id, before, nb)
+        _board_changed(board_id)
         if "title" not in body and "paper" not in body and "refs" not in body:
             return {"ok": True, "notebook": nb}
     if "refs" in body:
@@ -1066,6 +1071,27 @@ def _board_changed(board_id: str) -> None:
             pass
 
     _after_change[board_id] = asyncio.get_event_loop().create_task(later())
+
+
+async def _extend_hw_regions(board_id: str, before: dict | None, nb: dict) -> None:
+    regs = (before or {}).get("hwRegions") or {}
+    if not regs.get("regions"):
+        return
+    old_ids = {pg.get("id") for pg in ((before or {}).get("notebook") or {}).get("pages", [])}
+    pages = [pg.get("id") for pg in nb.get("pages", []) if not pg.get("boardOf")]
+    changed = False
+    regions = {k: list(v) for k, v in regs["regions"].items()}
+    for i, pid in enumerate(pages):
+        if not pid or pid in old_ids or i == 0:
+            continue
+        prev = pages[i - 1]
+        for lst in regions.values():
+            if any(r.get("kind") == "page" and r.get("pageId") == prev for r in lst) and not any(r.get("pageId") == pid for r in lst):
+                lst.append({"kind": "page", "pageId": pid, "label": f"Seite {i + 1}"})
+                changed = True
+    if changed:
+        await db.set_hw_regions(board_id, {**regs, "regions": regions})
+        await manager.broadcast({"type": "hw_regions", "hwRegions": {**regs, "regions": regions}}, board_id=board_id)
 
 
 async def _writable_ids(role: str, person: str, ids: list[str]) -> list[str]:

@@ -28,3 +28,27 @@ def test_region_pdfs_pages_and_areas():
     assert [f[0] for f in files] == ["Blatt – Seiten.pdf", "Blatt – Ausschnitt 1.pdf"]
     assert all(f[1].startswith(b"%PDF") for f in files)
     assert goodnotes_export  # Modul geladen
+
+
+def test_new_page_after_marked_page_joins_homework(monkeypatch):
+    import asyncio
+    from app import main
+
+    saved = {}
+
+    async def fake_set(board_id, data):
+        saved["data"] = data
+
+    async def fake_broadcast(*a, **k):
+        return None
+
+    monkeypatch.setattr(main.db, "set_hw_regions", fake_set)
+    monkeypatch.setattr(main.manager, "broadcast", fake_broadcast)
+    before = {
+        "notebook": {"pages": [{"id": "a"}, {"id": "b"}]},
+        "hwRegions": {"assigned": [7], "regions": {"7": [{"kind": "page", "pageId": "a"}]}, "solutions": {}},
+    }
+    nb = {"pages": [{"id": "a"}, {"id": "new"}, {"id": "b"}, {"id": "c"}]}
+    asyncio.run(main._extend_hw_regions("x", before, nb))
+    ids = [r["pageId"] for r in saved["data"]["regions"]["7"]]
+    assert ids == ["a", "new"]  # nur die Seite direkt hinter der markierten
