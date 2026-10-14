@@ -23,12 +23,12 @@ nothing else indicates otherwise. Today's date is {today} — use that only as
 a fallback reference for inferring an ambiguous year, not as the date of any
 specific day. Ignore weekend columns (Samstag / Sonntag, Saturday / Sunday) completely — only extract Monday through Friday ("Montag" bis "Freitag").
 
-For each day, carefully identify the dishes and categorize them into:
-- soup: Suppe / Tagessuppe / Vorspeise (if available)
-- main: Hauptgericht / Menü 1 / Vollkost / Normal
-- vegetarian: Vegetarisches Gericht / Menü 2 / Veggie (if available)
-- muslim: Muslimisch / Schweinefleischfrei / Geflügel / Rind / Halal (if specifically indicated or offered as an alternative)
-- dessert: Dessert / Nachspeise / Obst / Pudding (if available)
+For each day, read the dishes exactly in the rows the plan uses and keep that
+split - do NOT re-sort dishes by meat/vegetarian:
+- soup: the "Suppe" row (Suppe / Tagessuppe / Vorspeise)
+- menu1: the "Menü 1" row (if the plan has no numbered menus: the first/main dish)
+- menu2: the "Menü 2" row (if the plan has no numbered menus: the second dish, if any)
+- dessert: the "Dessert" row (Dessert / Nachspeise / Obst / Pudding)
 
 If multiple components belong to one meal (e.g. main dish + side dishes), combine them into a clear description (e.g. "Cordon bleu vom Schwein mit Pommes frites und Salatteller"). If a category is not present on that day, omit it or set it to null.
 
@@ -37,9 +37,8 @@ Respond with ONLY a JSON array (no markdown fences, no commentary), like:
   {{
     "date": "2026-07-20",
     "soup": "Grießnockerlsuppe",
-    "main": "Cordon bleu vom Schwein mit Pommes frites",
-    "vegetarian": "Gemüselasagne mit Beilagensalat",
-    "muslim": "Puten-Cordon-bleu mit Pommes frites",
+    "menu1": "Cordon bleu vom Schwein mit Pommes frites",
+    "menu2": "Gemüselasagne mit Beilagensalat",
     "dessert": "Obstsalat"
   }},
   ...
@@ -271,14 +270,12 @@ async def extract_meal_days(image_bytes: bytes, mime_type: str) -> list[dict]:
         lines = []
         if item.get("soup"):
             lines.append(f"Suppe: {str(item['soup']).strip()}")
-        if item.get("main"):
-            lines.append(f"Hauptgericht: {str(item['main']).strip()}")
-        elif item.get("meal"):
-            lines.append(f"Hauptgericht: {str(item['meal']).strip()}")
-        if item.get("vegetarian"):
-            lines.append(f"Vegetarisch: {str(item['vegetarian']).strip()}")
-        if item.get("muslim"):
-            lines.append(f"Muslimisch: {str(item['muslim']).strip()}")
+        menu1 = item.get("menu1") or item.get("main") or item.get("meal")
+        menu2 = item.get("menu2") or item.get("vegetarian")
+        if menu1:
+            lines.append(f"Menü 1: {str(menu1).strip()}")
+        if menu2:
+            lines.append(f"Menü 2: {str(menu2).strip()}")
         if item.get("dessert"):
             lines.append(f"Dessert: {str(item['dessert']).strip()}")
 

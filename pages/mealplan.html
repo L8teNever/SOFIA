@@ -156,15 +156,15 @@ let mealPollInterval = null;
 let mealSwipeBusy = false;
 
 const MEAL_CATEGORY_CONFIG = {
-  'hauptgericht': { label: 'Hauptgericht',         icon: 'utensils',  bg: 'rgba(26,115,232,0.1)', color: '#1a73e8' },
+  'hauptgericht': { label: 'Menü 1',               icon: 'utensils',  bg: 'rgba(26,115,232,0.1)', color: '#1a73e8' },
   'menü':         { label: 'Menü 1',               icon: 'utensils',  bg: 'rgba(26,115,232,0.1)', color: '#1a73e8' },
   'menü 1':       { label: 'Menü 1',               icon: 'utensils',  bg: 'rgba(26,115,232,0.1)', color: '#1a73e8' },
-  'menü 2':       { label: 'Vegetarisch',          icon: 'leaf',      bg: 'rgba(46,125,50,0.1)',  color: '#2e7d32' },
-  'vegetarisch':  { label: 'Vegetarisch',          icon: 'leaf',      bg: 'rgba(46,125,50,0.1)',  color: '#2e7d32' },
-  'veggie':       { label: 'Vegetarisch',          icon: 'leaf',      bg: 'rgba(46,125,50,0.1)',  color: '#2e7d32' },
+  'menü 2':       { label: 'Menü 2',               icon: 'utensils',      bg: 'rgba(46,125,50,0.1)',  color: '#2e7d32' },
+  'vegetarisch':  { label: 'Menü 2',               icon: 'utensils',      bg: 'rgba(46,125,50,0.1)',  color: '#2e7d32' },
+  'veggie':       { label: 'Menü 2',               icon: 'utensils',      bg: 'rgba(46,125,50,0.1)',  color: '#2e7d32' },
   'muslimisch':   { label: 'Muslimisch / Geflügel',icon: 'moon',      bg: 'rgba(0,105,92,0.1)',   color: '#00695c' },
   'halal':        { label: 'Halal / Geflügel',     icon: 'moon',      bg: 'rgba(0,105,92,0.1)',   color: '#00695c' },
-  'suppe':        { label: 'Tagessuppe',           icon: 'soup',      bg: 'rgba(178,106,0,0.1)',  color: '#b26a00' },
+  'suppe':        { label: 'Suppe',                icon: 'soup',      bg: 'rgba(178,106,0,0.1)',  color: '#b26a00' },
   'vorspeise':    { label: 'Vorspeise',            icon: 'soup',      bg: 'rgba(178,106,0,0.1)',  color: '#b26a00' },
   'dessert':      { label: 'Dessert',              icon: 'ice-cream', bg: 'rgba(194,24,91,0.1)',  color: '#c2185b' },
   'nachtisch':    { label: 'Dessert',              icon: 'ice-cream', bg: 'rgba(194,24,91,0.1)',  color: '#c2185b' },
@@ -734,7 +734,7 @@ function editMealDay(dayId) {
     <div class="sheet-title">${weekday}, ${dayNum}. — Essen bearbeiten</div>
     <div style="font-size:0.75rem;opacity:0.6;margin-bottom:8px;line-height:1.4;">
       Tipp: Zeilen können mit einer Kategorie beginnen, z.&nbsp;B.:<br>
-      <code>Suppe: ...</code>, <code>Hauptgericht: ...</code>, <code>Vegetarisch: ...</code>, <code>Muslimisch: ...</code>, <code>Dessert: ...</code>
+      <code>Suppe: ...</code>, <code>Menü 1: ...</code>, <code>Menü 2: ...</code>, <code>Dessert: ...</code>
     </div>
     <textarea class="m3-input" id="meal-edit-text" rows="6" style="resize:none;height:auto;font-family:inherit;line-height:1.4;">${escapeHtml(day.meal)}</textarea>
     <button class="m3-btn-full" onclick="saveMealDay(${dayId})">Speichern</button>
