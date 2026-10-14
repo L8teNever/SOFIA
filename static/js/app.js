@@ -197,7 +197,7 @@ function pageHeader({
   const titleBlock = titleHtml || ((subtitle || subtitleId)
     ? `<div style="flex:1;min-width:0;">
         <div${subtitleId ? ` id="${subtitleId}"` : ''} style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.5;${subtitleStyle}">${subtitle}</div>
-        <span class="page-title"${titleId ? ` id="${titleId}"` : ''} style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${titleStyle}">${title}</span>
+        <span class="page-title"${titleId ? ` id="${titleId}"` : ''} style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${titleStyle}">${title}</span>
       </div>`
     : `<span class="page-title"${titleId ? ` id="${titleId}"` : ''} style="flex:1;min-width:0;${titleStyle}">${title}</span>`);
 
