@@ -17,4 +17,15 @@ if [ "${NOTES_ENABLED:-1}" != "0" ]; then
   ) &
 fi
 
+# Essensplan zum Anschauen (Port 8002): eigener, abgeschotteter Mini-Server, nur lesend
+if [ "${MEALVIEW_ENABLED:-1}" != "0" ]; then
+  (
+    while true; do
+      uvicorn mealview.server:app --host 0.0.0.0 --port "${MEALVIEW_PORT:-8002}" --no-server-header
+      echo "Essensplan-Seite beendet - Neustart in 3 s" >&2
+      sleep 3
+    done
+  ) &
+fi
+
 exec uvicorn backend.main:app --host 0.0.0.0 --port 8000

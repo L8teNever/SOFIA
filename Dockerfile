@@ -33,8 +33,9 @@ ARG GIT_COMMIT=
 ARG NOTES_VERSION=
 RUN GIT_COMMIT="$GIT_COMMIT" APP_VERSION="$NOTES_VERSION" python3 notes/scripts/bake-version.py && mkdir -p notes/data
 
+COPY mealview/ ./mealview/
 COPY start.sh ./start.sh
 
-EXPOSE 8000 8001
+EXPOSE 8000 8001 8002
 
 CMD ["sh", "/app/start.sh"]
