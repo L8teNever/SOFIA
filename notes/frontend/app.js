@@ -887,6 +887,32 @@
     };
   })();
   window.sofiaLog = sofiaLog;
+  // Einmal pro Sitzung (nur als installierte App): Bildschirm-/Statusleisten-Werte ans
+  // Fehlerprotokoll, um die Lage der oberen Leisten auf echten Geraeten richtig zu setzen
+  setTimeout(() => {
+    try {
+      if (!document.documentElement.classList.contains("pwa-standalone")) return;
+      if (sessionStorage.getItem("sofianotes-diag-layout")) return;
+      sessionStorage.setItem("sofianotes-diag-layout", "1");
+      const probe = document.createElement("div");
+      probe.style.cssText = "position:fixed;top:0;left:0;width:1px;height:env(safe-area-inset-top,0px);visibility:hidden";
+      document.body.appendChild(probe);
+      const inset = probe.getBoundingClientRect().height;
+      probe.remove();
+      const bar = document.querySelector(".top-side-bar, #toolbar, .lib-header");
+      const modes = ["fullscreen", "standalone", "minimal-ui", "browser"].filter((m) => matchMedia("(display-mode: " + m + ")").matches);
+      sofiaLog.report("diag", "Layout Statusleiste", "", {
+        insetTop: inset,
+        innerW: innerWidth, innerH: innerHeight,
+        screenW: screen.width, screenH: screen.height, availH: screen.availHeight, availTop: screen.availTop,
+        vvH: window.visualViewport ? Math.round(visualViewport.height) : null,
+        vvTop: window.visualViewport ? Math.round(visualViewport.offsetTop) : null,
+        dpr: devicePixelRatio, modes: modes.join(","),
+        statusGap: getComputedStyle(document.documentElement).getPropertyValue("--status-gap"),
+        barTop: bar ? Math.round(bar.getBoundingClientRect().top) : null,
+      });
+    } catch (e) {}
+  }, 5000);
 
   const uuid = () =>
     (crypto.randomUUID && crypto.randomUUID()) ||
