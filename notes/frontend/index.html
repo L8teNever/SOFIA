@@ -23,6 +23,24 @@
       window.matchMedia("(display-mode: fullscreen)").matches ||
       window.matchMedia("(display-mode: minimal-ui)").matches;
     if (standalone) document.documentElement.classList.add("pwa-standalone");
+    // Als App vom Startbildschirm zeichnet Android (v. a. Tablets) die Seite teils unter die
+    // durchscheinende Statusleiste, meldet aber keinen Abstand dafuer (safe-area = 0). Dann
+    // lagen die oberen Leisten halb unter der Statusleiste - in dem Fall selbst Platz lassen.
+    if (standalone) {
+      var fixTop = function () {
+        try {
+          var probe = document.createElement("div");
+          probe.style.cssText = "position:fixed;top:0;left:0;width:1px;height:env(safe-area-inset-top,0px);visibility:hidden;pointer-events:none";
+          document.documentElement.appendChild(probe);
+          var inset = probe.getBoundingClientRect().height;
+          probe.remove();
+          var underBar = window.innerHeight >= (window.screen.height || 0) - 2;
+          document.documentElement.style.setProperty("--status-gap", inset < 8 && underBar ? "36px" : "0px");
+        } catch (err) {}
+      };
+      fixTop();
+      window.addEventListener("resize", fixTop);
+    }
     try {
       document.documentElement.dataset.theme = localStorage.getItem("sofianotes-theme") === "dark" ? "dark" : "light";
     } catch (err) {}

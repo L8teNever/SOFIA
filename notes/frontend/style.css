@@ -13,7 +13,7 @@
   /* Alle drei Leisten (Werkzeuge, Zurueck/Vor, Name/Ordner) sind gleich hoch */
   --bar-h: 50px;
   --bar-btn: 36px;
-  --safe-top: max(1.25rem, env(safe-area-inset-top));
+  --safe-top: max(1.25rem, env(safe-area-inset-top), var(--status-gap, 0px));
   --safe-bottom: max(1.25rem, env(safe-area-inset-bottom));
   --safe-left: max(1.25rem, env(safe-area-inset-left));
   --safe-right: max(1.25rem, env(safe-area-inset-right));
@@ -810,7 +810,7 @@ button {
 
 .update-banner {
   position: fixed;
-  top: calc(12px + env(safe-area-inset-top, 0px));
+  top: calc(12px + max(env(safe-area-inset-top, 0px), var(--status-gap, 0px)));
   left: 50%;
   transform: translateX(-50%);
   z-index: 400;
@@ -1297,7 +1297,7 @@ html[data-theme="dark"] .app-toast {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: max(20px, env(safe-area-inset-top, 20px)) 16px 14px;
+  padding: max(20px, max(env(safe-area-inset-top, 20px), var(--status-gap, 0px))) 16px 14px;
   border-bottom: 1px solid rgba(0, 0, 0, 0.08);
   margin-bottom: 16px;
 }
@@ -2234,7 +2234,7 @@ html[data-theme="dark"] .app-toast {
   top: 0;
   z-index: 5;
   gap: 10px;
-  padding: max(18px, env(safe-area-inset-top, 18px)) 24px 14px;
+  padding: max(18px, max(env(safe-area-inset-top, 18px), var(--status-gap, 0px))) 24px 14px;
   margin-bottom: 4px;
   border-bottom: none;
   background: rgba(247, 245, 251, 0.86);
@@ -3663,7 +3663,7 @@ body.bars-stacked #toolbar.dock-right { right: calc(var(--safe-right) + var(--vi
   background: #fffbfe;
   box-shadow: -8px 0 32px rgba(0, 0, 0, 0.14);
   border-left: 1px solid rgba(0, 0, 0, 0.06);
-  padding-top: env(safe-area-inset-top);
+  padding-top: max(env(safe-area-inset-top, 0px), var(--status-gap, 0px));
   animation: history-in 0.18s ease-out;
 }
 @keyframes history-in { from { transform: translateX(30px); opacity: 0; } }
@@ -3888,7 +3888,7 @@ html[data-theme="dark"] #page-menu .page-menu-item.danger span { color: #f2b8b5;
   flex-direction: column;
   background: #f4f3f7;
   border-right: 1px solid rgba(0, 0, 0, 0.08);
-  padding-top: env(safe-area-inset-top);
+  padding-top: max(env(safe-area-inset-top, 0px), var(--status-gap, 0px));
 }
 .pages-panel.hidden { display: none; }
 .pages-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 8px 10px 12px; }
@@ -4242,7 +4242,7 @@ html[data-theme="dark"] .page-thumb.picked .page-thumb-img { outline-color: #d0b
 /* ---- Scannen ---- */
 .scan-scrim { position: fixed; inset: 0; z-index: 1500; background: #111; color: #fff; display: flex; flex-direction: column; font-family: 'Google Sans', 'Inter', sans-serif; }
 .scan-scrim.hidden { display: none; }
-.scan-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: max(10px, env(safe-area-inset-top)) 14px 10px; }
+.scan-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: max(10px, max(env(safe-area-inset-top, 0px), var(--status-gap, 0px))) 14px 10px; }
 .scan-title { font: 500 17px 'Google Sans', 'Inter', sans-serif; }
 .scan-btn { border: none; border-radius: 999px; padding: 10px 18px; font: 500 15px 'Google Sans', 'Inter', sans-serif; background: rgba(255,255,255,0.12); color: #fff; cursor: pointer; }
 .scan-btn.primary { background: #4c8dff; color: #fff; }
@@ -4349,7 +4349,7 @@ body.view-narrow #top-filename-bar > * { flex-shrink: 0; }
 
 /* Seiten-Leiste als schwebende Karte (Material): Abstand zum Rand, runde Ecken, Schatten, kommt von links */
 .pages-panel {
-  top: calc(env(safe-area-inset-top, 0px) + 12px);
+  top: calc(max(env(safe-area-inset-top, 0px), var(--status-gap, 0px)) + 12px);
   left: calc(env(safe-area-inset-left, 0px) + 12px);
   bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
   padding-top: 0;
@@ -4492,7 +4492,7 @@ body:not(.pages-open) #btn-split { animation: bar-fade 0.3s ease; }
   overflow: hidden;
   animation: sheet-in-right 0.28s cubic-bezier(0.2, 0, 0, 1);
 }
-.history-head { padding: calc(env(safe-area-inset-top, 0px) + 16px) 14px 8px 20px; }
+.history-head { padding: calc(max(env(safe-area-inset-top, 0px), var(--status-gap, 0px)) + 16px) 14px 8px 20px; }
 .history-toggle, .history-legend { background: #fff; }
 @keyframes sheet-in-right { from { transform: translateX(calc(100% + 24px)); opacity: 0.4; } to { transform: none; opacity: 1; } }
 @keyframes sheet-in-left { from { transform: translateX(calc(-100% - 24px)); opacity: 0.4; } to { transform: none; opacity: 1; } }
