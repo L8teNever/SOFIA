@@ -698,7 +698,7 @@ function renderHwDetail(hw) {
               ${escapeHtml(f.name || 'Dokument')}
             </div>
           </div>
-          <a href="${f.url}" target="_blank" class="m3-btn-tonal" style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;font-size:0.78rem;text-decoration:none;border-radius:10px;flex-shrink:0;">
+          <a href="${f.url}" target="_blank" data-name="${escapeHtml(f.name || '')}" class="m3-btn-tonal" style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;font-size:0.78rem;text-decoration:none;border-radius:10px;flex-shrink:0;">
             <i data-lucide="external-link" style="width:13px;height:13px;"></i> Öffnen
           </a>
         </div>
@@ -806,7 +806,7 @@ async function loadHwSolutions(hwId) {
                 </div>
                 <div style="font-weight:600;font-size:0.82rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(f.name || 'Lösungsdatei')}</div>
               </div>
-              <a href="${f.url}" target="_blank" class="m3-btn-tonal" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;font-size:0.75rem;text-decoration:none;border-radius:8px;">
+              <a href="${f.url}" target="_blank" data-name="${escapeHtml(f.name || '')}" class="m3-btn-tonal" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;font-size:0.75rem;text-decoration:none;border-radius:8px;">
                 <i data-lucide="external-link" style="width:12px;height:12px;"></i> Öffnen
               </a>
             </div>

@@ -594,6 +594,8 @@ window.addEventListener('popstate', (e) => {
     isSelfPopping = false;
     return;
   }
+  // Datei-Ansicht liegt ueber allem (auch ueber Bild-Vorschauen) - zuerst schliessen
+  if (typeof closeTopFileViewer === 'function' && closeTopFileViewer()) return;
   const modalActive = document.getElementById('modal-scrim')?.classList.contains('active');
   const sheetActive = document.querySelector('.bottom-sheet.active');
   

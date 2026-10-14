@@ -1255,7 +1255,7 @@ function renderChatMessageBody(m) {
   if (m.msg_type === 'poll') return renderChatPollBubble(m);
   if (m.msg_type === 'image') {
     const src = m.external_url || chatFileUrl(m);
-    return `<img src="${src}" loading="lazy" onload="onChatImageLoaded()" onerror="onChatImageLoaded()" style="max-width:220px;max-height:280px;border-radius:10px;display:block;cursor:pointer;" onclick="window.open('${src}','_blank')">`;
+    return `<img src="${src}" loading="lazy" onload="onChatImageLoaded()" onerror="onChatImageLoaded()" style="max-width:220px;max-height:280px;border-radius:10px;display:block;cursor:pointer;" data-src="${src}" data-name="${escapeHtml(m.file_name || 'Bild')}" onclick="if (this.dataset.src.startsWith('/')) openFileViewer(this.dataset.src, this.dataset.name); else window.open(this.dataset.src, '_blank')">`;
   }
   if (m.msg_type === 'file') {
     return `<a href="${chatFileUrl(m)}" download="${escapeHtml(m.file_name || '')}" style="display:flex;align-items:center;gap:8px;text-decoration:none;color:inherit;min-width:140px;">

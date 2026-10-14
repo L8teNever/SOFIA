@@ -2139,7 +2139,7 @@ function calDetailAttachments(ev) {
     ? `<div class="cal-att-grid">${images.map(a => `<a href="${escapeHtml(a.url)}" target="_blank" rel="noopener"><img src="${escapeHtml(a.url)}" alt="${escapeHtml(a.name || 'Bild')}"></a>`).join('')}</div>`
     : '';
   const rows = files.map(a => `
-    <a class="cal-att-row" href="${escapeHtml(a.url)}" target="_blank" rel="noopener">
+    <a class="cal-att-row" href="${escapeHtml(a.url)}" target="_blank" rel="noopener" data-name="${escapeHtml(a.name || '')}">
       <i data-lucide="file" style="width:18px;height:18px;color:#6750a4;flex-shrink:0;"></i>
       <span>${escapeHtml(a.name || 'Datei')}</span>
     </a>`).join('');
