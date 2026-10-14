@@ -16313,8 +16313,19 @@
   }
 
   // Blatt geoeffnet: gehoert es zu einer Hausaufgabe, Aufgabenstellung dazu holen
+  // Pro Blatt gemerkte Auswahl im Aufgaben-Fenster (mehrere Hausaufgaben in einer Datei)
+  function hwChoiceFor(boardId) {
+    const m = lsGet("sofianotes-hw-choice", {});
+    return boardId && m[boardId] ? m[boardId] : null;
+  }
+  function setHwChoice(boardId, hid) {
+    const m = lsGet("sofianotes-hw-choice", {});
+    if (hid) m[boardId] = hid;
+    else delete m[boardId];
+    lsSet("sofianotes-hw-choice", m);
+  }
   async function syncHomeworkPanel(board, known) {
-    const hid = board && board.sofiaHomeworkId;
+    const hid = (board && hwChoiceFor(board.id)) || (board && board.sofiaHomeworkId);
     closeHwViewer(true);
     if (!hid) {
       hwBoard = null;
@@ -16342,6 +16353,80 @@
       }
     }
   }
+  // Umschalter oben im Aufgaben-Fenster: Liste aller Hausaufgaben, Auswahl je Blatt merken
+  let hwSwitchMenu = null;
+  function closeHwSwitch() {
+    if (hwSwitchMenu) hwSwitchMenu.remove();
+    hwSwitchMenu = null;
+  }
+  async function openHwSwitch(anchor) {
+    if (hwSwitchMenu) return closeHwSwitch();
+    const menu = document.createElement("div");
+    menu.className = "hw-switch-menu";
+    menu.innerHTML = '<div class="hw-switch-empty">Aufgaben werden geladen…</div>';
+    document.body.appendChild(menu);
+    hwSwitchMenu = menu;
+    const place = () => {
+      const a = anchor.getBoundingClientRect();
+      const w = menu.offsetWidth, h = menu.offsetHeight;
+      let left = Math.max(8, Math.min(window.innerWidth - w - 8, a.left));
+      let top = a.bottom + 6;
+      if (top + h > window.innerHeight - 8) top = Math.max(8, a.top - h - 6);
+      menu.style.left = Math.round(left) + "px";
+      menu.style.top = Math.round(top) + "px";
+    };
+    place();
+    let items = [];
+    try {
+      const d = await api("/api/sofia/homework");
+      items = (d && d.items) || [];
+    } catch (err) {}
+    if (hwSwitchMenu !== menu) return;
+    menu.innerHTML = "";
+    if (!items.length) {
+      menu.innerHTML = '<div class="hw-switch-empty">Keine Aufgaben in Sofia gefunden.</div>';
+      place();
+      return;
+    }
+    const cur = hwBoard && hwBoard.id;
+    for (const it of items) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "hw-switch-item" + (it.id === cur ? " active" : "");
+      b.style.setProperty("--subj", it.color || "#6750a4");
+      const dot = document.createElement("span");
+      dot.className = "hw-switch-dot";
+      const txt = document.createElement("span");
+      txt.className = "hw-switch-text";
+      const t = document.createElement("b");
+      t.textContent = it.subject || "Aufgabe";
+      const dsc = document.createElement("span");
+      dsc.textContent = it.description || "(ohne Text)";
+      const due = document.createElement("small");
+      due.textContent = "Fällig: " + hwDueLabel(it.due) + (it.done ? " · erledigt" : "");
+      txt.append(t, dsc, due);
+      b.append(dot, txt);
+      b.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        closeHwSwitch();
+        if (!currentBoardId) return;
+        // die eigentliche Aufgabe des Blatts braucht keinen Eintrag
+        setHwChoice(currentBoardId, currentBoardMeta && currentBoardMeta.sofiaHomeworkId === it.id ? null : it.id);
+        hwBoard = it;
+        renderHwPanel();
+        setHwPanelState("open");
+      });
+      menu.appendChild(b);
+    }
+    place();
+  }
+  document.getElementById("hw-panel-switch")?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    openHwSwitch(e.currentTarget);
+  });
+  document.addEventListener("pointerdown", (e) => {
+    if (hwSwitchMenu && !e.target.closest(".hw-switch-menu") && !e.target.closest("#hw-panel-switch")) closeHwSwitch();
+  }, true);
   document.getElementById("hw-panel-min")?.addEventListener("click", (e) => {
     e.stopPropagation();
     setHwPanelState("min");
