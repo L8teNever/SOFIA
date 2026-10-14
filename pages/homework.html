@@ -611,8 +611,7 @@ function openHwDetail(id) {
     subtitleId: 'hwd-subject',
     subtitleStyle: 'color:#31111d;opacity:0.6;',
     backAction: 'event.stopPropagation();closeHwDetail();',
-    trailing: `<button class="icon-btn" id="hwd-toggle-btn" onclick="toggleHwFromDetail()" title="Als erledigt markieren"><i data-lucide="check" style="width:20px;height:20px;"></i></button>
-      <button class="icon-btn" onclick="deleteHwFromDetail()" style="color:#ba1a1a;" title="Aufgabe löschen"><i data-lucide="trash-2" style="width:20px;height:20px;"></i></button>`
+    trailing: `<button class="icon-btn" id="hwd-more-btn" onclick="openHwDetailMenu(this)" title="Mehr"><i data-lucide="more-vertical" style="width:20px;height:20px;"></i></button>`
   });
   const page = document.getElementById('page-hw-detail');
   page.style.setProperty('--ox', '50%');
@@ -657,18 +656,7 @@ function renderHwDetail(hw) {
     }
   }
 
-  const toggleBtn = document.getElementById('hwd-toggle-btn');
-  if (toggleBtn) {
-    if (checked) {
-      toggleBtn.style.background = '#c4eed0';
-      toggleBtn.style.color = '#074d1a';
-      toggleBtn.title = 'Als offen markieren';
-    } else {
-      toggleBtn.style.background = '';
-      toggleBtn.style.color = '';
-      toggleBtn.title = 'Als erledigt markieren';
-    }
-  }
+
 
   // Render Attachments
   const wrap = document.getElementById('hwd-attachment-wrap');
@@ -730,14 +718,20 @@ function closeHwDetail() {
   history.back();
 }
 
+function openHwDetailMenu(btn) {
+  if (hwDetailId == null) return;
+  const id = hwDetailId;
+  const hw = hwItems.find(h => h.id === id);
+  const done = !!hw && (hw.checked_by || []).includes(hwCurrentUser && hwCurrentUser.id);
+  toggleMoreMenu(btn, [
+    { icon: done ? 'rotate-ccw' : 'check', label: done ? 'Als offen markieren' : 'Abhaken', onclick: () => toggleHwFromDetail() },
+    { icon: 'pencil', label: 'Bearbeiten', onclick: () => openHwSheet(id) },
+    { icon: 'trash-2', label: 'Löschen', onclick: () => confirmDelHw(id), danger: true },
+  ]);
+}
+
 async function toggleHwFromDetail() {
   if (hwDetailId == null) return;
-  const btn = document.getElementById('hwd-toggle-btn');
-  if (btn) {
-    btn.classList.remove('hw-check-pop');
-    void btn.offsetWidth;
-    btn.classList.add('hw-check-pop');
-  }
   await toggleHw(hwDetailId);
   const hw = hwItems.find(h => h.id === hwDetailId);
   if (hw) renderHwDetail(hw);
@@ -1213,6 +1207,7 @@ async function saveHw() {
     closeSheet();
     renderHwStats();
     renderHw();
+    if (hwDetailId != null) { const d = hwItems.find(h => h.id === hwDetailId); if (d) renderHwDetail(d); }
   } catch (err) {
     showToast(err.detail || 'Fehler beim Speichern');
   }
