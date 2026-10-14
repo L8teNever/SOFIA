@@ -13,7 +13,6 @@ body { font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica N
 .head { padding: 4px 6px 18px; }
 .eyebrow { font-size: .78rem; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); }
 h1 { margin: 6px 0 4px; font-size: clamp(1.9rem, 7vw, 2.5rem); line-height: 1.1; font-weight: 800; letter-spacing: -.01em; overflow-wrap: anywhere; }
-.sub { margin: 0; color: var(--muted); font-size: .95rem; }
 .chips { display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 14px; scrollbar-width: none; }
 .chips::-webkit-scrollbar { display: none; }
 .chip { flex: 0 0 auto; border: 0; border-radius: 14px; padding: 10px 16px; background: var(--chip); color: var(--ink); font-family: inherit; font-size: .95rem; font-weight: 700; line-height: 1; cursor: pointer; }
@@ -37,3 +36,5 @@ h1 { margin: 6px 0 4px; font-size: clamp(1.9rem, 7vw, 2.5rem); line-height: 1.1;
 .k-soup .lbl { color: #b26a00; } .k-menu1 .lbl { color: #1a73e8; } .k-menu2 .lbl { color: #2e7d32; } .k-dessert .lbl { color: #c2185b; } .k-other .lbl { color: var(--muted); }
 .txt { font-size: 1.05rem; font-weight: 600; overflow-wrap: anywhere; }
 .empty { padding: 26px 4px 30px; text-align: center; color: var(--muted); }
+.card { touch-action: pan-y; will-change: transform; }
+.card.anim { transition: transform .22s ease, opacity .22s ease; }

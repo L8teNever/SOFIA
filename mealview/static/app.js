@@ -95,6 +95,46 @@
     loaded = true;
   }
 
+  // Wischen wie in Sofia: Karte folgt dem Finger, nach links = naechster Tag
+  (function swipe() {
+    var x0 = 0, y0 = 0, dx = 0, active = false, horiz = null;
+    function setX(x, fade) {
+      card.style.transform = x ? "translateX(" + x + "px)" : "";
+      card.style.opacity = fade ? String(Math.max(0.35, 1 - Math.abs(x) / 500)) : "";
+    }
+    card.addEventListener("touchstart", function (e) {
+      if (!data || !data.days || data.days.length < 2 || e.touches.length !== 1) return;
+      x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; dx = 0; active = true; horiz = null;
+      card.classList.remove("anim");
+    }, { passive: true });
+    card.addEventListener("touchmove", function (e) {
+      if (!active) return;
+      var mx = e.touches[0].clientX - x0, my = e.touches[0].clientY - y0;
+      if (horiz === null && (Math.abs(mx) > 8 || Math.abs(my) > 8)) horiz = Math.abs(mx) > Math.abs(my);
+      if (!horiz) return;
+      dx = mx;
+      var atEdge = (dx > 0 && current === 0) || (dx < 0 && current === data.days.length - 1);
+      setX(atEdge ? dx * 0.3 : dx, true);
+    }, { passive: true });
+    function end() {
+      if (!active) return;
+      active = false;
+      card.classList.add("anim");
+      var next = current + (dx < -60 ? 1 : dx > 60 ? -1 : 0);
+      if (!horiz || next === current || next < 0 || next >= data.days.length) { setX(0); return; }
+      var w = card.offsetWidth + 40;
+      setX(dx < 0 ? -w : w, true);
+      setTimeout(function () {
+        card.classList.remove("anim");
+        renderDay(next);
+        setX(dx < 0 ? w : -w, true);
+        requestAnimationFrame(function () { requestAnimationFrame(function () { card.classList.add("anim"); setX(0); }); });
+      }, 200);
+    }
+    card.addEventListener("touchend", end);
+    card.addEventListener("touchcancel", end);
+  })();
+
   function load() {
     fetch("/api/plan", { cache: "no-store", credentials: "omit" })
       .then(function (r) { return r.ok ? r.json() : null; })
