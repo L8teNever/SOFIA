@@ -344,10 +344,8 @@ function paintMealSubtitle() {
   const sub = document.getElementById('meal-header-sub');
   const day = mealDays[mealDayIndex];
   if (!sub || !day) return;
-  const dish = mealShortDish(day.meal);
-  const { weekday } = mealFormatDate(day.date);
-  const label = day.date === localDateStr() ? 'Heute' : weekday;
-  sub.textContent = dish ? (label + ': ' + dish) : (label + ' steht nichts im Plan');
+  // Das Gericht steht schon in der Karte (und im Widget), oben nicht nochmal
+  sub.textContent = 'Mensa Speiseplan';
 }
 
 function mealShowDay(index) {
