@@ -8,6 +8,13 @@
   pointer-events: none; background: #fff8ef; will-change: transform;
 }
 .tt-swipe-track > .tt-swipe-pane { background: #fff8ef; }
+.tt-head-seg { display: none; flex-shrink: 0; padding: 4px; border-radius: 22px; background: rgba(68,43,0,0.08); gap: 2px; }
+.tt-seg { border: 0; background: transparent; color: #442b00; font: 700 0.86rem 'Google Sans', 'Inter', sans-serif; padding: 9px 14px; border-radius: 18px; cursor: pointer; transition: background .15s, color .15s; }
+.tt-seg.active { background: #442b00; color: #fff8ef; }
+@media (max-width: 599px) {
+  #page-timetable .tt-head-seg { display: flex; }
+  #page-timetable .tt-nav-arrow, #page-timetable #tt-chips-slot { display: none !important; }
+}
 </style>
   <div id="ph-timetable"></div>
 
@@ -43,8 +50,10 @@ document.getElementById('ph-timetable').outerHTML = pageHeader({
   subtitle: '',
   subtitleId: 'tt-header-sub',
   subtitleStyle: 'color:#442b00;',
-  trailing: `<button onclick="ttNav(-1)" class="icon-btn"><i data-lucide="chevron-left" style="width:20px;height:20px;"></i></button>
-    <button onclick="ttNav(1)"  class="icon-btn"><i data-lucide="chevron-right" style="width:20px;height:20px;"></i></button>`
+  // Handy: Tag/Woche oben im Kopf, vor/zurueck per Wischen. Tablet: Pfeile wie gehabt.
+  trailing: `<div class="tt-head-seg"><button onclick="ttSetMode('day')" class="tt-seg active" id="tt-hchip-day">Tag</button><button onclick="ttSetMode('week')" class="tt-seg" id="tt-hchip-week">Woche</button></div>
+    <button onclick="ttNav(-1)" class="icon-btn tt-nav-arrow"><i data-lucide="chevron-left" style="width:20px;height:20px;"></i></button>
+    <button onclick="ttNav(1)"  class="icon-btn tt-nav-arrow"><i data-lucide="chevron-right" style="width:20px;height:20px;"></i></button>`
 });
 document.getElementById('tt-chips-slot').innerHTML = chipRow({
   onclick: 'ttSetMode',
@@ -229,8 +238,7 @@ function ttSetMode(mode, btn) {
   teardownTtSwipe();
   ttMode = mode;
   try { localStorage.setItem('tt_mode', mode); } catch {}
-  document.querySelectorAll('.chip[id^="tt-chip"]').forEach(b => b.classList.remove('active'));
-  if (btn) btn.classList.add('active');
+  document.querySelectorAll('[id^="tt-chip-"], [id^="tt-hchip-"]').forEach(b => b.classList.toggle('active', b.id.endsWith('-' + mode)));
   document.getElementById('tt-day-view').style.display  = mode==='day'  ? 'block' : 'none';
   document.getElementById('tt-week-view').style.display = mode==='week' ? 'block' : 'none';
   if (mode === 'day') ttRenderDay(); else ttRenderWeek();
