@@ -16194,7 +16194,8 @@
     const chip = document.getElementById("hw-panel-subject");
     chip.textContent = hwBoard ? hwBoard.subject || "Aufgabe" : "";
     chip.classList.toggle("hidden", !hwBoard);
-    hwPanel.querySelector(".hw-panel-title").textContent = hwBoard ? "Aufgabe" : "Material";
+    hwPanel.querySelector(".hw-panel-title").textContent = hwBoard ? hwBoard.subject || "Aufgabe" : "Material";
+    document.getElementById("hw-panel-switch")?.classList.toggle("material", !hwBoard);
     document.getElementById("hw-pill-text").textContent = hwBoard ? (hwBoard.subject ? hwBoard.subject + " – Aufgabe" : "Aufgabe") : "Material";
     hwPanelBody.innerHTML = "";
     if (hwBoard) {
@@ -16325,7 +16326,8 @@
     lsSet("sofianotes-hw-choice", m);
   }
   async function syncHomeworkPanel(board, known) {
-    const hid = (board && hwChoiceFor(board.id)) || (board && board.sofiaHomeworkId);
+    const choice = board && hwChoiceFor(board.id);
+    const hid = choice === "material" ? null : choice || (board && board.sofiaHomeworkId);
     closeHwViewer(true);
     if (!hid) {
       hwBoard = null;
@@ -16353,11 +16355,78 @@
       }
     }
   }
-  // Umschalter oben im Aufgaben-Fenster: Liste aller Hausaufgaben, Auswahl je Blatt merken
+  // Umschalter oben im Aufgaben-Fenster: oben die dem Blatt zugeteilten Aufgaben + Material,
+  // darunter weitere Aufgaben zuteilen. Zuteilung und Auswahl werden pro Blatt gemerkt.
   let hwSwitchMenu = null;
   function closeHwSwitch() {
     if (hwSwitchMenu) hwSwitchMenu.remove();
     hwSwitchMenu = null;
+  }
+  function hwAssignedFor(boardId) {
+    const m = lsGet("sofianotes-hw-assigned", {});
+    return Array.isArray(m[boardId]) ? m[boardId] : [];
+  }
+  function setHwAssigned(boardId, ids) {
+    const m = lsGet("sofianotes-hw-assigned", {});
+    if (ids.length) m[boardId] = ids;
+    else delete m[boardId];
+    lsSet("sofianotes-hw-assigned", m);
+  }
+  function pickHw(it) {
+    closeHwSwitch();
+    if (!currentBoardId) return;
+    const linked = currentBoardMeta && currentBoardMeta.sofiaHomeworkId;
+    if (!it) {
+      setHwChoice(currentBoardId, "material");
+      hwBoard = null;
+    } else {
+      if (it.id !== linked && !hwAssignedFor(currentBoardId).includes(it.id)) setHwAssigned(currentBoardId, hwAssignedFor(currentBoardId).concat(it.id));
+      setHwChoice(currentBoardId, it.id === linked ? null : it.id);
+      hwBoard = it;
+    }
+    renderHwPanel();
+    setHwPanelState("open");
+  }
+  function hwSwitchRow(it, active, onRemove) {
+    const row = document.createElement("div");
+    row.className = "hw-switch-row";
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "hw-switch-item" + (active ? " active" : "");
+    const dot = document.createElement("span");
+    dot.className = "hw-switch-dot" + (it ? "" : " mat");
+    if (it) b.style.setProperty("--subj", it.color || "#6750a4");
+    const txt = document.createElement("span");
+    txt.className = "hw-switch-text";
+    const t = document.createElement("b");
+    t.textContent = it ? it.subject || "Aufgabe" : "Material";
+    const dsc = document.createElement("span");
+    dsc.textContent = it ? it.description || "(ohne Text)" : "Eigene Bilder und Unterlagen zu diesem Blatt";
+    txt.append(t, dsc);
+    if (it) {
+      const due = document.createElement("small");
+      due.textContent = "Fällig: " + hwDueLabel(it.due) + (it.done ? " · erledigt" : "");
+      txt.append(due);
+    }
+    b.append(dot, txt);
+    b.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      pickHw(it);
+    });
+    row.appendChild(b);
+    if (onRemove) {
+      const x = document.createElement("button");
+      x.type = "button";
+      x.className = "hw-switch-x";
+      x.title = "Von diesem Blatt entfernen";
+      x.innerHTML = '<span class="material-symbols-rounded">close</span>';
+      x.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        onRemove();
+      });
+      row.appendChild(x);
+    }
+    return row;
   }
   async function openHwSwitch(anchor) {
     if (hwSwitchMenu) return closeHwSwitch();
@@ -16369,56 +16438,76 @@
     const place = () => {
       const a = anchor.getBoundingClientRect();
       const w = menu.offsetWidth, h = menu.offsetHeight;
-      let left = Math.max(8, Math.min(window.innerWidth - w - 8, a.left));
+      const left = Math.max(8, Math.min(window.innerWidth - w - 8, a.left));
       let top = a.bottom + 6;
       if (top + h > window.innerHeight - 8) top = Math.max(8, a.top - h - 6);
       menu.style.left = Math.round(left) + "px";
       menu.style.top = Math.round(top) + "px";
     };
     place();
-    let items = [];
+    let all = [];
     try {
       const d = await api("/api/sofia/homework");
-      items = (d && d.items) || [];
+      all = (d && d.items) || [];
     } catch (err) {}
+    if (hwSwitchMenu !== menu || !currentBoardId) return;
+    const boardId = currentBoardId;
+    const linked = currentBoardMeta && currentBoardMeta.sofiaHomeworkId;
+    const byId = new Map(all.map((it) => [it.id, it]));
+    if (hwBoard && hwBoard.id) byId.set(hwBoard.id, byId.get(hwBoard.id) || hwBoard);
+    const assignedIds = [linked, ...hwAssignedFor(boardId)].filter((id, i, arr) => id && arr.indexOf(id) === i);
+    // zugeteilte, die nicht (mehr) in der Liste stehen, einzeln holen
+    for (const id of assignedIds) {
+      if (byId.has(id)) continue;
+      try {
+        const one = await api("/api/sofia/homework/" + id);
+        if (one && one.id) byId.set(one.id, one);
+      } catch (err) {}
+    }
     if (hwSwitchMenu !== menu) return;
-    menu.innerHTML = "";
-    if (!items.length) {
-      menu.innerHTML = '<div class="hw-switch-empty">Keine Aufgaben in Sofia gefunden.</div>';
+    const render = (showMore) => {
+      menu.innerHTML = "";
+      const sec = document.createElement("div");
+      sec.className = "hw-switch-sec";
+      sec.textContent = "Diesem Blatt zugeteilt";
+      menu.appendChild(sec);
+      const cur = hwBoard && hwBoard.id;
+      for (const id of assignedIds) {
+        const it = byId.get(id);
+        if (!it) continue;
+        const removable = id !== linked;
+        menu.appendChild(hwSwitchRow(it, id === cur, removable ? () => {
+          setHwAssigned(boardId, hwAssignedFor(boardId).filter((x) => x !== id));
+          assignedIds.splice(assignedIds.indexOf(id), 1);
+          if (cur === id) pickHw(linked ? byId.get(linked) || null : null);
+          else render(showMore);
+        } : null));
+      }
+      menu.appendChild(hwSwitchRow(null, !cur, null));
+      const others = all.filter((it) => !assignedIds.includes(it.id));
+      if (others.length) {
+        menu.appendChild(Object.assign(document.createElement("div"), { className: "hw-switch-line" }));
+        if (!showMore) {
+          const more = document.createElement("button");
+          more.type = "button";
+          more.className = "hw-switch-more";
+          more.innerHTML = '<span class="material-symbols-rounded">add</span>Weitere Aufgabe zuteilen';
+          more.addEventListener("click", (ev) => {
+            ev.stopPropagation();
+            render(true);
+          });
+          menu.appendChild(more);
+        } else {
+          const sec2 = document.createElement("div");
+          sec2.className = "hw-switch-sec";
+          sec2.textContent = "Weitere Aufgabe zuteilen";
+          menu.appendChild(sec2);
+          for (const it of others) menu.appendChild(hwSwitchRow(it, false, null));
+        }
+      }
       place();
-      return;
-    }
-    const cur = hwBoard && hwBoard.id;
-    for (const it of items) {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = "hw-switch-item" + (it.id === cur ? " active" : "");
-      b.style.setProperty("--subj", it.color || "#6750a4");
-      const dot = document.createElement("span");
-      dot.className = "hw-switch-dot";
-      const txt = document.createElement("span");
-      txt.className = "hw-switch-text";
-      const t = document.createElement("b");
-      t.textContent = it.subject || "Aufgabe";
-      const dsc = document.createElement("span");
-      dsc.textContent = it.description || "(ohne Text)";
-      const due = document.createElement("small");
-      due.textContent = "Fällig: " + hwDueLabel(it.due) + (it.done ? " · erledigt" : "");
-      txt.append(t, dsc, due);
-      b.append(dot, txt);
-      b.addEventListener("click", (ev) => {
-        ev.stopPropagation();
-        closeHwSwitch();
-        if (!currentBoardId) return;
-        // die eigentliche Aufgabe des Blatts braucht keinen Eintrag
-        setHwChoice(currentBoardId, currentBoardMeta && currentBoardMeta.sofiaHomeworkId === it.id ? null : it.id);
-        hwBoard = it;
-        renderHwPanel();
-        setHwPanelState("open");
-      });
-      menu.appendChild(b);
-    }
-    place();
+    };
+    render(false);
   }
   document.getElementById("hw-panel-switch")?.addEventListener("click", (e) => {
     e.stopPropagation();
