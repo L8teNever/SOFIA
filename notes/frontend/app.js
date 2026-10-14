@@ -12629,12 +12629,48 @@
       })
       .catch(() => {});
   }
+  // Bilder aus Sofia-Hausaufgaben (Anhaenge) zum direkten Einfuegen vorschlagen
+  let hwImageItems = [];
+  function refreshHomeworkImages() {
+    return fetch("/api/sofia/homework", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!d || !Array.isArray(d.items)) return;
+        const out = [];
+        const seen = new Set();
+        for (const hw of d.items) {
+          for (const a of hw.attachments || []) {
+            if (a.type !== "image" || !a.url || seen.has(a.url)) continue;
+            seen.add(a.url);
+            out.push({ url: a.url, name: a.name || "Bild", subject: hw.subjectShort || hw.subject || "", task: hw.description || "" });
+          }
+        }
+        hwImageItems = out;
+      })
+      .catch(() => {});
+  }
+  async function insertHomeworkImage(it) {
+    if (viewOnly || myRole === "view") return showToast("Nur ansehen: hier kann man nichts einfügen");
+    try {
+      const r = await fetch(it.url);
+      if (!r.ok) throw new Error(String(r.status));
+      const blob = await r.blob();
+      let name = it.name || "Bild";
+      if (!/\.[a-z0-9]{2,5}$/i.test(name)) name += "." + ((blob.type.split("/")[1] || "jpg").replace("jpeg", "jpg"));
+      await importFiles([new File([blob], name, { type: blob.type || "image/jpeg" })]);
+    } catch (err) {
+      showToast("Bild aus der Aufgabe konnte nicht geladen werden");
+    }
+  }
   setTimeout(refreshImageLibrary, 4000);
+  setTimeout(refreshHomeworkImages, 4500);
   function openImageLibrary(anchor) {
     closeImageLibrary();
     const items = imageLibItems.slice();
+    const hwItems = hwImageItems.slice();
     refreshImageLibrary();
-    if (!items.length) return pickImportFiles("image/*,.heic,.heif,.tif,.tiff,.bmp,.svg,.avif,.webp,.jfif");
+    refreshHomeworkImages();
+    if (!items.length && !hwItems.length) return pickImportFiles("image/*,.heic,.heif,.tif,.tiff,.bmp,.svg,.avif,.webp,.jfif");
     const pop = document.createElement("div");
     pop.className = "image-lib-pop";
     const up = document.createElement("button");
@@ -12647,10 +12683,43 @@
       pickImportFiles("image/*,.heic,.heif,.tif,.tiff,.bmp,.svg,.avif,.webp,.jfif");
     });
     pop.appendChild(up);
+    if (hwItems.length) {
+      const hwTitle = document.createElement("div");
+      hwTitle.className = "image-lib-title";
+      hwTitle.textContent = "Aus Aufgaben";
+      pop.appendChild(hwTitle);
+      const hwGrid = document.createElement("div");
+      hwGrid.className = "image-lib-grid";
+      for (const it of hwItems) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "image-lib-item";
+        b.title = (it.subject ? it.subject + ": " : "") + (it.task || it.name);
+        const img = document.createElement("img");
+        img.loading = "lazy";
+        img.decoding = "async";
+        img.alt = "";
+        img.src = it.url;
+        b.appendChild(img);
+        if (it.subject) {
+          const who = document.createElement("span");
+          who.className = "image-lib-who";
+          who.textContent = it.subject;
+          b.appendChild(who);
+        }
+        b.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          closeImageLibrary();
+          insertHomeworkImage(it);
+        });
+        hwGrid.appendChild(b);
+      }
+      pop.appendChild(hwGrid);
+    }
     const title = document.createElement("div");
     title.className = "image-lib-title";
     title.textContent = "Zuletzt eingefügt";
-    pop.appendChild(title);
+    if (items.length) pop.appendChild(title);
     const grid = document.createElement("div");
     grid.className = "image-lib-grid";
     for (const it of items) {
