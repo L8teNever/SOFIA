@@ -5143,7 +5143,18 @@
 
   async function probeOnline() {
     try {
-      const r = await fetch("/api/health", { cache: "no-store" });
+      const r = await fetch("/api/health", { cache: "no-store", redirect: "manual" });
+      if (r.type === "opaqueredirect") {
+        // Cloudflare-Anmeldung abgelaufen: Seite neu laden, dann fragt Access nach dem Login
+        // (hoechstens einmal pro Minute, damit nichts in einer Schleife haengt)
+        let last = 0;
+        try { last = Number(sessionStorage.getItem("sofianotes-relogin") || 0); } catch (e) {}
+        if (Date.now() - last > 60000) {
+          try { sessionStorage.setItem("sofianotes-relogin", String(Date.now())); } catch (e) {}
+          location.reload();
+        }
+        return false;
+      }
       return r.ok;
     } catch (err) {
       return false;

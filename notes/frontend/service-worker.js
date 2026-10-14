@@ -139,6 +139,24 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  // Seitenaufruf: direkt ans Netz. Leitet Cloudflare Access zur Anmeldung um (Sitzung
+  // abgelaufen), geht diese Umleitung unveraendert an den Browser - sonst bliebe die App
+  // auf der alten, gespeicherten Seite haengen und kaeme nie mehr an den Server.
+  if (event.request.mode === "navigate" && url.origin === self.location.origin) {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          if (response.ok && response.type === "basic" && isHtmlPath(url.pathname)) {
+            const copy = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put("/index.html", copy));
+          }
+          return response;
+        })
+        .catch(() => caches.match(event.request).then((hit) => hit || caches.match("/index.html")))
+    );
+    return;
+  }
+
   if (url.origin === self.location.origin && isFreshPath(url.pathname)) {
     event.respondWith(networkFirst(event.request, url));
     return;
