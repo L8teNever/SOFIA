@@ -171,6 +171,18 @@ function mdRender() {
   lucide.createIcons();
 }
 
+// "Oeffnen": wenn moeglich direkt die Datei/den Link ueber Sofia (ohne Moodle-Anmeldung),
+// nur sonst die Moodle-Seite selbst
+function mdTarget(m) {
+  const files = m.files || [];
+  const own = files.filter(f => !f.external);
+  if (m.type === 'url' && files.find(f => f.external)) return files.find(f => f.external).url;
+  if (m.type === 'page') { const ix = own.find(f => /\.html?$/i.test(f.name)); if (ix) return ix.url; }
+  if (m.type === 'resource' && own.length) return own[0].url;
+  if (m.type === 'folder' && own.length) return '';
+  return m.url || '';
+}
+
 function mdCourseBody(c) {
   return (c.sections || []).map(s => `
       <div class="md-sec">
@@ -185,7 +197,7 @@ function mdCourseBody(c) {
                 <div style="font-weight:600;font-size:0.88rem;">${mdEsc(m.name)}</div>
                 ${m.time ? `<div class="md-up" style="margin-top:1px;">hochgeladen ${mdUp(m.time)}</div>` : ''}
               </div>
-              ${m.url ? `<a class="md-open" href="${mdEsc(m.url)}" target="_blank" rel="noopener">Öffnen</a>` : ''}
+              ${mdTarget(m) ? `<a class="md-open" href="${mdEsc(mdTarget(m))}" target="_blank" rel="noopener">Öffnen</a>` : ''}
             </div>
             ${m.text ? `<div class="md-text">${mdEsc(m.text)}</div>` : ''}
             ${mdFiles(m.files)}

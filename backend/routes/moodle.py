@@ -1,4 +1,5 @@
 """Moodle der eigenen Klasse anzeigen; Zugangsdaten pro Klasse im Admin-Bereich."""
+import re
 import time
 from typing import Optional
 
@@ -66,6 +67,7 @@ async def moodle_file(u: str = Query(...), user: User = Depends(get_current_user
     if not ms.same_host(u, base):
         raise HTTPException(400, "Kein Moodle-Dateilink")
     url = u.replace("/pluginfile.php", "/webservice/pluginfile.php", 1) if "/webservice/pluginfile.php" not in u else u
+    url = re.sub(r"([?&])forcedownload=1(&|$)", r"\1", url).rstrip("?&")
     sep = "&" if "?" in url else "?"
     async with httpx.AsyncClient(timeout=60, follow_redirects=True) as client:
         r = await client.get(f"{url}{sep}token={token}")
@@ -75,8 +77,13 @@ async def moodle_file(u: str = Query(...), user: User = Depends(get_current_user
     if "application/json" in ctype:  # Moodle meldet Fehler als JSON
         raise HTTPException(404, "Datei nicht verfügbar")
     headers = {"Cache-Control": "private, max-age=3600"}
+    # im Browser anzeigen statt herunterladen
     if r.headers.get("content-disposition"):
-        headers["Content-Disposition"] = r.headers["content-disposition"]
+        headers["Content-Disposition"] = re.sub(r"^\s*attachment", "inline", r.headers["content-disposition"], flags=re.I)
+    # Moodle-HTML (Textseiten) ohne Skripte und ohne Zugriff auf Sofia anzeigen
+    if "html" in ctype or "svg" in ctype or "xml" in ctype:
+        headers["Content-Security-Policy"] = "sandbox; default-src 'none'; img-src * data:; style-src 'unsafe-inline' *; font-src *"
+        headers["X-Content-Type-Options"] = "nosniff"
     return Response(content=r.content, media_type=ctype, headers=headers)
 
 
