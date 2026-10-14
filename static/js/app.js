@@ -455,6 +455,7 @@ function runScripts(container) {
 }
 
 async function openPage(name, triggerEl, preserveUrl = false) {
+  if (window.sofiaLog) window.sofiaLog.action('seite ' + name);
   if (currentPage === name) return;
   let ox = '50%', oy = '50%';
   if (triggerEl) {

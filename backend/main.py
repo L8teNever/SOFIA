@@ -7,7 +7,7 @@ from backend.database import init_db
 from backend.config import settings
 from backend.auth import get_current_user
 from backend.models.user import User
-from backend.routes import auth_routes, users, classes, subjects, calendar, homework, grades, files, vapid, admin, timetable, mealplan, notifications, google_sync, chat, moodle
+from backend.routes import auth_routes, users, classes, subjects, calendar, homework, grades, files, vapid, admin, timetable, mealplan, notifications, google_sync, chat, moodle, clientlog
 from backend.services.rate_limiter import RateLimiterMiddleware
 from backend.services.notification_scheduler import start_notification_scheduler
 from backend.services.moodle_service import moodle_poll_loop
@@ -57,7 +57,7 @@ async def _revalidate_app_files(request, call_next):
     return response
 
 # API routes
-for r in [auth_routes, users, classes, subjects, calendar, homework, grades, files, vapid, admin, timetable, mealplan, notifications, google_sync, chat, moodle]:
+for r in [auth_routes, users, classes, subjects, calendar, homework, grades, files, vapid, admin, timetable, mealplan, notifications, google_sync, chat, moodle, clientlog]:
     app.include_router(r.router)
 
 

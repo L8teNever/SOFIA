@@ -12,6 +12,8 @@ const API = {
       const err = new Error(detail || `${res.status}`);
       err.status = res.status;
       err.detail = detail;
+      // Serverfehler mitprotokollieren (4xx sind meist gewollte Antworten)
+      if (res.status >= 500 && path !== '/client-log' && window.sofiaLog) window.sofiaLog.report('api', `${method} ${path} → ${res.status}${detail ? ': ' + detail : ''}`);
       throw err;
     }
     const ct = res.headers.get('content-type') || '';
