@@ -35,7 +35,10 @@
           var inset = probe.getBoundingClientRect().height;
           probe.remove();
           var underBar = window.innerHeight >= (window.screen.height || 0) - 2;
-          document.documentElement.style.setProperty("--status-gap", inset < 8 && underBar ? "36px" : "0px");
+          // iPad/iPhone-App: unter der Statusleiste liegt noch ein verschwommener Uebergang
+          // (iPadOS), der tiefer reicht als die gemeldete Hoehe - darunter Platz lassen
+          var gap = inset >= 8 ? inset + 22 : (underBar ? 36 : 0);
+          document.documentElement.style.setProperty("--status-gap", gap + "px");
         } catch (err) {}
       };
       fixTop();
