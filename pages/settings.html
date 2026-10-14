@@ -609,5 +609,8 @@ async function applyAppUpdate() {
     window.location.replace('/?_=' + Date.now());
   }, 400);
 }
+
+// Doppelklick-Schutz (siehe sofiaOnce in app.js)
+saveName = sofiaOnce(saveName);
 </script>
 

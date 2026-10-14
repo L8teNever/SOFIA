@@ -359,4 +359,7 @@ async function saveGradeWeighting() {
     showToast('Fehler beim Speichern der Gewichtung');
   }
 }
+
+// Doppelklick-Schutz (siehe sofiaOnce in app.js)
+saveGrade = sofiaOnce(saveGrade); saveGradeWeighting = sofiaOnce(saveGradeWeighting);
 </script>

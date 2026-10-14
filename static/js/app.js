@@ -45,6 +45,30 @@ let currentUser = null;
 let currentPage = null;
 let pageHistory = [];
 let isSelfPopping = false;
+
+// Doppelklick-Schutz fuer Speichern/Erstellen: solange der erste Aufruf laeuft, werden
+// weitere Klicks ignoriert und der Knopf ist gesperrt (sonst entstanden z. B. mehrere
+// gleiche Termine, wenn man waehrend des Ladens mehrmals tippt).
+function sofiaOnce(fn) {
+  if (typeof fn !== 'function' || fn.__once) return fn;
+  let busy = false;
+  const wrapped = async function (...args) {
+    if (busy) return;
+    busy = true;
+    const ev = window.event;
+    const btn = ev && ev.type === 'click' && ev.target && ev.target.closest ? ev.target.closest('button') : null;
+    if (btn) { btn.disabled = true; btn.style.opacity = '0.6'; }
+    try {
+      return await fn.apply(this, args);
+    } finally {
+      busy = false;
+      if (btn) { btn.disabled = false; btn.style.opacity = ''; }
+    }
+  };
+  wrapped.__once = true;
+  return wrapped;
+}
+
 let lastDashboardLoadAt = 0;
 
 function updateAppHeight() {

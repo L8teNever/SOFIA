@@ -553,4 +553,7 @@ async function saveNewReminder(type) {
   await API.updateNotificationSettings({ [key]: arr }).catch(()=>{});
   showToast('Erinnerung hinzugefügt');
 }
+
+// Doppelklick-Schutz (siehe sofiaOnce in app.js)
+saveNewReminder = sofiaOnce(saveNewReminder);
 </script>

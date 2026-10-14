@@ -813,4 +813,7 @@ async function retryMealPlanOcr() {
     await refreshMealPlan();
   }
 }
+
+// Doppelklick-Schutz (siehe sofiaOnce in app.js)
+saveMealDay = sofiaOnce(saveMealDay);
 </script>

@@ -1212,4 +1212,7 @@ async function saveHw() {
     showToast(err.detail || 'Fehler beim Speichern');
   }
 }
+
+// Doppelklick-Schutz (siehe sofiaOnce in app.js)
+submitSolution = sofiaOnce(submitSolution); saveHw = sofiaOnce(saveHw);
 </script>

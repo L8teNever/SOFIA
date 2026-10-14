@@ -2450,4 +2450,7 @@ function selectDay(dateStr) {
 function toggleCalDisplayMode() { toggleCalViewPicker(document.getElementById('cal-viewmode-btn')); }
 function renderEventList() { if (calDisplayMode === 'agenda') renderAgendaList(); }
 function toggleCalMonthPanel() { toggleCalMiniDrawer(); }
+
+// Doppelklick-Schutz (siehe sofiaOnce in app.js)
+saveEvent = sofiaOnce(saveEvent); saveEditedEvent = sofiaOnce(saveEditedEvent);
 </script>

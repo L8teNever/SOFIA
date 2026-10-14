@@ -1355,5 +1355,8 @@ function openAuditDetail(idx) {
     </div>
   `);
 }
+
+// Doppelklick-Schutz (siehe sofiaOnce in app.js)
+saveManualEntry = sofiaOnce(saveManualEntry); submitNewUser = sofiaOnce(submitNewUser); saveUser = sofiaOnce(saveUser); createClass = sofiaOnce(createClass); saveMoodle = sofiaOnce(saveMoodle); saveUntis = sofiaOnce(saveUntis); createSubject = sofiaOnce(createSubject); submitEditSubject = sofiaOnce(submitEditSubject);
 </script>
 
