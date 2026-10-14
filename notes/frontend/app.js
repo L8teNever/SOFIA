@@ -20898,6 +20898,27 @@
   window.addEventListener("offline", () => {
     setConnState("offline");
   });
+  // Selbstheilung: steht die Anzeige auf "Offline", obwohl das Geraet Netz hat (z. B. weil
+  // der Server kurz neu gestartet ist), alle 10 s und beim Zurueckkehren in die App erneut
+  // versuchen. Vorher blieb es nach einem einzigen Fehlversuch dauerhaft offline.
+  let healing = false;
+  async function healConnection() {
+    if (healing || reconnecting || document.hidden) return;
+    if (statusEl.dataset.mode !== "offline") return;
+    if (typeof navigator !== "undefined" && navigator.onLine === false) return;
+    healing = true;
+    try {
+      if (currentBoardId) wantWs = true;
+      await goOnlineIfPossible();
+    } catch (err) {
+    } finally {
+      healing = false;
+    }
+  }
+  setInterval(healConnection, 10000);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) healConnection();
+  });
 
   // ---- Notizbuch: Seiten-Leiste, Seiten anlegen/loeschen, Hintergruende, PDF-Seiten ----
   (() => {
