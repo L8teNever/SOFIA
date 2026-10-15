@@ -213,7 +213,7 @@ document.getElementById('ph-homework').outerHTML = pageHeader({
   subtitle: 'Lade…',
   subtitleId: 'hw-header-sub',
   subtitleStyle: 'color:#31111d;',
-  trailing: `<div class="hw-head-seg"><button class="hw-seg active" data-f="all" onclick="hwFilter('all')">Alle</button><button class="hw-seg" data-f="done" onclick="hwFilter('done')">Erledigt</button></div>`,
+  trailing: `<div class="hw-head-seg"><button class="hw-seg" data-f="open" onclick="hwFilter('open')">Offen</button><button class="hw-seg active" data-f="all" onclick="hwFilter('all')">Alle</button></div>`,
 });
 document.getElementById('hw-empty-slot').outerHTML = emptyState({
   icon: 'check-circle', title: 'Keine Hausaufgaben!', wrapperId: 'hw-empty'
