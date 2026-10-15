@@ -2,7 +2,7 @@
   <div id="ph-mealplan"></div>
 
   <!-- Day Filter Chips (Consistent with SOFIA UI) -->
-  <div class="no-scrollbar page-subbar" id="meal-day-chips" style="padding-top:0;padding-bottom:8px;display:flex;gap:8px;overflow-x:auto;flex-shrink:0;"></div>
+  <div class="no-scrollbar page-subbar" id="meal-day-chips" style="display:none;"></div>
 
   <div class="page-scroll-1col no-scrollbar"><div class="page-inner">
     <!-- Empty state -->
@@ -76,6 +76,10 @@
   </div>
 
   <style>
+    /* Tag-Auswahl oben rechts im Kopf (gleicher Stil wie Tag/Woche beim Stundenplan) */
+    .meal-day-pick { display:none; align-items:center; gap:4px; flex-shrink:0; border:0; cursor:pointer; padding:9px 10px 9px 16px; border-radius:22px; background:#072711; color:#f0faf3; font:700 0.86rem 'Google Sans','Inter',sans-serif; -webkit-tap-highlight-color:transparent; }
+    .meal-day-pick.on { display:inline-flex; }
+
   @keyframes spin-meal {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
@@ -121,9 +125,7 @@ document.getElementById('ph-mealplan').outerHTML = pageHeader({
   subtitle: 'Mensa Speiseplan',
   subtitleId: 'meal-header-sub',
   subtitleStyle: 'color:#072711;',
-  trailing: `<button class="icon-btn" id="meal-delete-btn" onclick="deleteMealPlanConfirm()" style="display:none;color:#b3261e;">
-      <i data-lucide="trash-2" style="width:20px;height:20px;"></i>
-    </button>`
+  trailing: `<button class="meal-day-pick" id="meal-day-pick" onclick="openMealDayMenu(this)" title="Tag wählen"><span id="meal-day-pick-label">Heute</span><i data-lucide="chevron-down" style="width:18px;height:18px;"></i></button>`
 });
 document.getElementById('meal-empty-slot').outerHTML = emptyState({
   icon: 'utensils',
@@ -323,7 +325,32 @@ function mealPickIndex(days) {
   return upcoming >= 0 ? upcoming : days.length - 1;
 }
 
+// Tag-Auswahl oben rechts: Menue mit allen Tagen (+ Plan loeschen fuer Admins)
+function openMealDayMenu(btn) {
+  const today = localDateStr();
+  const items = mealDays.map((d, i) => {
+    const f = mealFormatDate(d.date);
+    const label = f.weekday + ', ' + f.dayNum + '. ' + f.monthName + (d.date === today ? ' · Heute' : '');
+    return { icon: i === mealDayIndex ? 'check' : (d.date === today ? 'sun' : 'calendar'), label: escapeHtml(label), onclick: () => mealShowDay(i) };
+  });
+  if (mealCanDelete && mealPlan) items.push({ icon: 'trash-2', label: 'Plan löschen', onclick: () => deleteMealPlanConfirm(), danger: true });
+  toggleMoreMenu(btn, items);
+  // alle Tage + Loeschen ohne Scrollen zeigen
+  if (typeof _moreMenuEl !== 'undefined' && _moreMenuEl) _moreMenuEl.style.maxHeight = '70vh';
+}
+
+function mealSyncPick() {
+  const btn = document.getElementById('meal-day-pick');
+  const lbl = document.getElementById('meal-day-pick-label');
+  if (!btn || !lbl) return;
+  const day = mealDays[mealDayIndex];
+  btn.classList.toggle('on', !!day);
+  if (!day) return;
+  lbl.textContent = day.date === localDateStr() ? 'Heute' : mealFormatDate(day.date).weekday;
+}
+
 function mealSyncChips() {
+  mealSyncPick();
   const day = mealDays[mealDayIndex];
   const dow = day ? String(new Date(day.date + 'T00:00').getDay()) : '';
   document.querySelectorAll('#meal-day-chips .chip').forEach(c => {
