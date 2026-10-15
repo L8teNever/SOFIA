@@ -1,6 +1,17 @@
 <div class="page" id="page-homework" style="background:#fff5f8;">
   <div id="ph-homework"></div>
-  <div id="hw-chips-slot" class="no-scrollbar page-subbar" style="padding-top:0;padding-bottom:8px;display:flex;gap:8px;overflow-x:auto;flex-shrink:0;"></div>
+<style>
+/* Filter oben rechts im Kopf, wie Tag/Woche beim Stundenplan */
+.hw-head-seg { display: flex; flex-shrink: 0; padding: 4px; border-radius: 22px; background: rgba(49,17,29,0.08); gap: 2px; }
+.hw-seg { border: 0; background: transparent; color: #31111d; font: 700 0.84rem 'Google Sans', 'Inter', sans-serif; padding: 9px 12px; border-radius: 18px; cursor: pointer; transition: background .15s, color .15s; -webkit-tap-highlight-color: transparent; }
+.hw-seg.active { background: #31111d; color: #fff5f8; }
+@media (max-width: 480px) {
+  .hw-head-seg { padding: 3px; }
+  .hw-seg { padding: 8px 9px; font-size: 0.78rem; }
+  #page-homework .page-header .page-title { font-size: 1.45rem; }
+}
+@media (max-width: 370px) { .hw-seg { padding: 7px 7px; font-size: 0.74rem; } }
+</style>
   <div class="page-scroll-1col no-scrollbar">
     <div class="page-inner-wide">
       <div id="hw-list" class="hw-card-grid"></div>
@@ -202,21 +213,13 @@ document.getElementById('ph-homework').outerHTML = pageHeader({
   subtitle: 'Lade…',
   subtitleId: 'hw-header-sub',
   subtitleStyle: 'color:#31111d;',
+  trailing: `<div class="hw-head-seg"><button class="hw-seg" data-f="open" onclick="hwFilter('open')">Offen</button><button class="hw-seg active" data-f="all" onclick="hwFilter('all')">Alle</button><button class="hw-seg" data-f="done" onclick="hwFilter('done')">Erledigt</button></div>`,
 });
 document.getElementById('hw-empty-slot').outerHTML = emptyState({
   icon: 'check-circle', title: 'Keine Hausaufgaben!', wrapperId: 'hw-empty'
 });
 document.getElementById('hw-fab-slot').outerHTML = fab({
   onclick: 'openHwSheet()', title: 'Neue Aufgabe erstellen'
-});
-document.getElementById('hw-chips-slot').innerHTML = chipRow({
-  onclick: 'hwFilter',
-  idPrefix: 'hw-f',
-  items: [
-    { value: 'all', label: 'Alle', active: true },
-    { value: 'open', label: 'Offen' },
-    { value: 'done', label: 'Erledigt' },
-  ],
 });
 let hwItems = [], hwSubjects = [], hwCurrentFilter = 'all', hwCurrentUser = null, hwTimetable = null;
 let hwDueMode = 'next', hwCustomDate = null;
@@ -409,10 +412,10 @@ function renderHwStats() {
   if (sub) sub.textContent = open + ' offen · ' + done + ' erledigt';
 }
 
-function hwFilter(f, btn) {
+function hwFilter(f) {
   hwCurrentFilter = f;
-  document.querySelectorAll('#page-homework .chip').forEach(c => c.classList.remove('active'));
-  btn.classList.add('active'); renderHw();
+  document.querySelectorAll('#page-homework .hw-seg').forEach(c => c.classList.toggle('active', c.dataset.f === f));
+  renderHw();
 }
 
 function sectionLabel(text) {
