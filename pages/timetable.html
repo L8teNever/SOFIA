@@ -15,6 +15,8 @@
 #page-timetable #tt-chips-slot { display: none !important; }
 @media (max-width: 599px) {
   #page-timetable .tt-nav-arrow { display: none !important; }
+  /* die ausgeblendeten Pfeile stehen dahinter - Abstand zum Rand wie bei allen Seiten */
+  #page-timetable .tt-head-seg { margin-right: calc(-1 * var(--ph-icon-pull)); }
 }
 </style>
   <div id="ph-timetable"></div>
