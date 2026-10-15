@@ -41,6 +41,26 @@
     .md-sec { margin-bottom:14px; }
     .md-sec-name { font-size:0.72rem; font-weight:800; text-transform:uppercase; letter-spacing:0.06em; color:#7d5260; margin:4px 0 8px; }
     .md-mod { padding:12px 14px; border-radius:18px; margin-bottom:8px; }
+    .md-sec-head { display:flex; align-items:baseline; justify-content:space-between; gap:8px; margin:18px 6px 8px; }
+    .md-sec-head .md-sec-name { margin:0; }
+    .md-sec-count { font-size:0.72rem; font-weight:700; color:#7d5260; opacity:0.7; }
+    .md-group { background:#fff; border-radius:20px; box-shadow:0 1px 3px rgba(0,0,0,0.06); overflow:hidden; }
+    .md-item + .md-item { border-top:1px solid rgba(0,0,0,0.06); }
+    .md-item-row { display:flex; align-items:center; gap:12px; padding:12px 14px; color:inherit; text-decoration:none; -webkit-tap-highlight-color:transparent; }
+    a.md-item-row:active { background:#fdf2f5; }
+    .md-item-main { flex:1; min-width:0; }
+    .md-item-title { font-weight:600; font-size:0.92rem; color:#1c1b1f; line-height:1.3; }
+    .md-item-meta { font-size:0.74rem; color:#7d5260; margin-top:2px; }
+    .md-item-text { font-size:0.8rem; color:#49454f; margin-top:4px; line-height:1.4; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; white-space:pre-line; }
+    .md-item-go { flex-shrink:0; opacity:0.35; }
+    .md-item-files { padding:0 14px 12px 58px; }
+    .md-item-files .md-files { margin-top:0; }
+    .md-note { padding:12px 16px; font-size:0.84rem; color:#49454f; background:#fdf7fa; white-space:pre-line; }
+    .md-due.past { background:#efe9ec; color:#6b5f65; }
+    .md-past { margin:14px 0 4px; }
+    .md-past summary { display:flex; align-items:center; gap:8px; cursor:pointer; list-style:none; padding:10px 6px; font-size:0.82rem; font-weight:700; color:#7d5260; -webkit-tap-highlight-color:transparent; }
+    .md-past summary::-webkit-details-marker { display:none; }
+    .md-past[open] summary { margin-bottom:6px; }
     .md-mod a.md-link { color:inherit; text-decoration:none; }
     .md-open { font-size:0.75rem; font-weight:700; color:#7d5260; text-decoration:none; flex-shrink:0; padding:6px 10px; border-radius:10px; background:#ffd8e4; }
   </style>
@@ -183,26 +203,58 @@ function mdTarget(m) {
   return m.url || '';
 }
 
+// Eine Zeile pro Eintrag; die ganze Zeile oeffnet. Datei-Chips nur, wenn es mehrere gibt.
+function mdItem(m) {
+  if (m.type === 'label') {
+    return `<div class="md-item md-note">${mdEsc(m.text || m.name)}${mdFiles(m.files)}</div>`;
+  }
+  const target = mdTarget(m);
+  const own = (m.files || []).filter(f => !f.external);
+  const extraFiles = (m.files || []).length > 1 ? mdFiles(m.files) : '';
+  const meta = [m.time ? mdUp(m.time) : '', own.length > 1 ? own.length + ' Dateien' : ''].filter(Boolean).join(' · ');
+  const head = `
+      <div class="md-ico sm"><i data-lucide="${MD_ICONS[m.type] || 'box'}" style="width:16px;height:16px;"></i></div>
+      <div class="md-item-main">
+        <div class="md-item-title">${mdEsc(m.name)}</div>
+        ${meta ? `<div class="md-item-meta">${meta}</div>` : ''}
+        ${m.text ? `<div class="md-item-text">${mdEsc(m.text)}</div>` : ''}
+      </div>
+      ${target ? '<i data-lucide="chevron-right" class="md-item-go" style="width:18px;height:18px;"></i>' : ''}`;
+  const row = target
+    ? `<a class="md-item-row" href="${mdEsc(target)}" target="_blank" rel="noopener">${head}</a>`
+    : `<div class="md-item-row">${head}</div>`;
+  return `<div class="md-item">${row}${extraFiles ? `<div class="md-item-files">${extraFiles}</div>` : ''}</div>`;
+}
+
 function mdCourseBody(c) {
-  return (c.sections || []).map(s => `
+  const secs = (c.sections || []).filter(s => (s.modules || []).length || s.text);
+  return secs.map(s => `
       <div class="md-sec">
-        ${s.name ? `<div class="md-sec-name">${mdEsc(s.name)}</div>` : ''}
-        ${s.text ? `<div class="md-text" style="margin:0 0 8px;">${mdEsc(s.text)}</div>` : ''}
-        ${(s.modules || []).map(m => m.type === 'label' ? `
-          <div class="md-card md-mod"><div class="md-text" style="margin:0;">${mdEsc(m.text || m.name)}</div>${m.time ? `<div class="md-up" style="margin-top:6px;">hochgeladen ${mdUp(m.time)}</div>` : ''}${mdFiles(m.files)}</div>` : `
-          <div class="md-card md-mod">
-            <div class="md-row">
-              <div class="md-ico sm"><i data-lucide="${MD_ICONS[m.type] || 'box'}" style="width:16px;height:16px;"></i></div>
-              <div style="flex:1;min-width:0;">
-                <div style="font-weight:600;font-size:0.88rem;">${mdEsc(m.name)}</div>
-                ${m.time ? `<div class="md-up" style="margin-top:1px;">hochgeladen ${mdUp(m.time)}</div>` : ''}
-              </div>
-              ${mdTarget(m) ? `<a class="md-open" href="${mdEsc(mdTarget(m))}" target="_blank" rel="noopener">Öffnen</a>` : ''}
-            </div>
-            ${m.text ? `<div class="md-text">${mdEsc(m.text)}</div>` : ''}
-            ${mdFiles(m.files)}
-          </div>`).join('')}
+        <div class="md-sec-head">
+          <span class="md-sec-name">${mdEsc(s.name || 'Allgemeines')}</span>
+          <span class="md-sec-count">${(s.modules || []).filter(m => m.type !== 'label').length || ''}</span>
+        </div>
+        <div class="md-group">
+          ${s.text ? `<div class="md-item md-note">${mdEsc(s.text)}</div>` : ''}
+          ${(s.modules || []).map(mdItem).join('')}
+        </div>
       </div>`).join('') || '<div class="md-sub">Keine Inhalte sichtbar.</div>';
+}
+
+function mdTaskCard(a, now) {
+  return `
+      <div class="md-item">
+        <div class="md-item-row">
+          <div class="md-ico sm"><i data-lucide="clipboard-check" style="width:16px;height:16px;"></i></div>
+          <div class="md-item-main">
+            <div class="md-item-title">${mdEsc(a.name)}</div>
+            <div class="md-item-meta">${a.due ? 'fällig ' + mdDate(a.due) : 'ohne Abgabetermin'}</div>
+            ${a.text ? `<div class="md-item-text">${mdEsc(a.text)}</div>` : ''}
+          </div>
+          ${a.due ? `<span class="md-due${a.due > now && a.due - now < 2 * 86400 ? ' soon' : ''}${a.due < now ? ' past' : ''}">${mdDueLabel(a.due)}</span>` : ''}
+        </div>
+        ${(a.files || []).length ? `<div class="md-item-files">${mdFiles(a.files)}</div>` : ''}
+      </div>`;
 }
 
 function mdRenderCourse(id) {
@@ -211,26 +263,16 @@ function mdRenderCourse(id) {
   if (!c || !page) return;
   const now = Date.now() / 1000;
   const tasks = (c.assignments || []).slice().sort((a, b) => (a.due || 0) - (b.due || 0));
-  const nMods = (c.sections || []).reduce((s, x) => s + (x.modules || []).length, 0);
+  const open = tasks.filter(a => !a.due || a.due >= now);
+  const past = tasks.filter(a => a.due && a.due < now).reverse();
+  const nMods = (c.sections || []).reduce((s, x) => s + (x.modules || []).filter(m => m.type !== 'label').length, 0);
   document.getElementById('mdc-title').textContent = c.name;
-  document.getElementById('mdc-sub').textContent = nMods + ' Einträge' + (tasks.length ? ' · ' + tasks.length + ' Aufgaben' : '');
-  document.getElementById('mdc-body').innerHTML = (tasks.length ? `
-    <div class="section-label">Aufgaben</div>
-    ${tasks.map(a => `
-      <div class="md-card">
-        <div class="md-row">
-          <div class="md-ico"><i data-lucide="clipboard-check" style="width:20px;height:20px;"></i></div>
-          <div style="flex:1;min-width:0;">
-            <div class="md-title">${mdEsc(a.name)}</div>
-            ${a.due ? `<div class="md-sub">fällig ${mdDate(a.due)}</div>` : ''}
-            ${a.time ? `<div class="md-up">eingestellt ${mdUp(a.time)}</div>` : ''}
-          </div>
-          ${a.due ? `<span class="md-due${a.due > now && a.due - now < 2 * 86400 ? ' soon' : ''}">${mdDueLabel(a.due)}</span>` : ''}
-        </div>
-        ${a.text ? `<div class="md-text">${mdEsc(a.text)}</div>` : ''}
-        ${mdFiles(a.files)}
-      </div>`).join('')}
-    <div class="section-label" style="margin-top:18px;">Inhalte</div>` : '') + mdCourseBody(c);
+  document.getElementById('mdc-sub').textContent = nMods + ' Einträge' + (open.length ? ' · ' + open.length + ' offene Aufgaben' : '');
+  let html = '';
+  if (open.length) html += `<div class="md-sec"><div class="md-sec-head"><span class="md-sec-name">Offene Aufgaben</span><span class="md-sec-count">${open.length}</span></div><div class="md-group">${open.map(a => mdTaskCard(a, now)).join('')}</div></div>`;
+  if (past.length) html += `<details class="md-past"><summary><i data-lucide="history" style="width:16px;height:16px;"></i> Abgelaufene Aufgaben (${past.length})</summary><div class="md-group">${past.map(a => mdTaskCard(a, now)).join('')}</div></details>`;
+  html += mdCourseBody(c);
+  document.getElementById('mdc-body').innerHTML = html;
   page.dataset.id = id;
   if (window.lucide) lucide.createIcons();
 }
