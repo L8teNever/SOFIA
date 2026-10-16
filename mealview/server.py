@@ -53,6 +53,8 @@ SECURITY_HEADERS = {
     "Cross-Origin-Opener-Policy": "same-origin",
     "Cross-Origin-Resource-Policy": "same-origin",
     "X-Robots-Tag": "noindex, nofollow",
+    # Browser merken sich: diese Seite nur noch verschluesselt laden
+    "Strict-Transport-Security": "max-age=31536000",
 }
 
 # ---- einfache Bremse gegen Massenabrufe ----
