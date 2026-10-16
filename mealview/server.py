@@ -52,6 +52,8 @@ SECURITY_HEADERS = {
     "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()",
     "Cross-Origin-Opener-Policy": "same-origin",
     "Cross-Origin-Resource-Policy": "same-origin",
+    "Cross-Origin-Embedder-Policy": "require-corp",
+    "X-Permitted-Cross-Domain-Policies": "none",
     "X-Robots-Tag": "noindex, nofollow",
     # Browser merken sich: diese Seite nur noch verschluesselt laden
     "Strict-Transport-Security": "max-age=31536000",
