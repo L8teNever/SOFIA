@@ -148,6 +148,7 @@ def _plan_cached() -> dict:
 
 
 # ---- Antworten ----
+# no-transform: Cloudflare spritzt dann kein Analytics-Skript ein (wuerde die CSP verletzen)
 def _secure(resp: Response) -> Response:
     for k, v in SECURITY_HEADERS.items():
         resp.headers[k] = v
@@ -156,11 +157,11 @@ def _secure(resp: Response) -> Response:
 
 async def static_file(request: Request) -> Response:
     body, ctype = _CONTENT[request.url.path]
-    return _secure(Response(body, media_type=ctype, headers={"Cache-Control": "no-cache"}))
+    return _secure(Response(body, media_type=ctype, headers={"Cache-Control": "no-cache, no-transform"}))
 
 
 async def plan(request: Request) -> Response:
-    return _secure(JSONResponse(_plan_cached(), headers={"Cache-Control": "no-store"}))
+    return _secure(JSONResponse(_plan_cached(), headers={"Cache-Control": "no-store, no-transform"}))
 
 
 async def health(request: Request) -> Response:
