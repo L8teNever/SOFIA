@@ -475,6 +475,36 @@ html.is-android .page-header > .hdr-back:first-child + * { margin-left: 0; }
 .page-header > *:last-child { margin-right: calc(-1 * var(--ph-icon-pull)); }
 .page-title { font-size: 1.75rem; font-weight: 700; letter-spacing: -0.01em; }
 
+/* ===== Einheitlicher Seitenkopf =====
+   Gilt fuer JEDEN .page-header (pageHeader() und Chat): gleiche Schrift,
+   gleiche Knopfgroesse, gleicher Abstand zum Rand, gleiche Kopfhoehe.
+   Einzelne Seiten setzen hier nichts mehr eigenes. */
+.page-header { gap: 12px; }
+/* feste Mindesthoehe fuer den Inhalt - mit und ohne Untertitel sitzt der Kopf gleich hoch */
+.page-header::before { content: ''; flex: 0 0 0; width: 0; height: 56px; margin-right: -12px; }
+.page-header .page-title { font-size: 1.75rem; font-weight: 700; letter-spacing: -0.01em; line-height: 1.2; }
+.page-header .icon-btn, .page-header .back-btn {
+  width: 44px !important; height: 44px !important; border-radius: 16px !important;
+  padding: 0 !important; flex-shrink: 0;
+}
+.page-header .icon-btn svg, .page-header .back-btn svg { width: 20px !important; height: 20px !important; }
+/* Pillen im Kopf (Filter, Tag/Woche, Tag-Auswahl, Rollen-Schild, Text-Knoepfe): gleiche Hoehe und Schrift */
+.ph-pill, .hw-head-seg, .tt-head-seg, .meal-day-pick {
+  height: 44px; box-sizing: border-box; border-radius: 22px;
+  font: 700 0.86rem 'Google Sans', 'Inter', sans-serif;
+}
+.ph-pill { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; padding: 0 16px; border: 0; cursor: pointer; }
+.hw-head-seg, .tt-head-seg { align-items: center; }
+.hw-seg, .tt-seg { height: 100%; padding: 0 14px !important; font: inherit; }
+.meal-day-pick { padding: 0 10px 0 16px !important; }
+@media (min-width: 600px) {
+  .page-header { gap: 16px; }
+  .page-header::before { margin-right: -16px; }
+  .page-header .icon-btn, .page-header .back-btn { width: 48px !important; height: 48px !important; border-radius: 20px !important; }
+  .page-header .icon-btn svg, .page-header .back-btn svg { width: 22px !important; height: 22px !important; }
+  .ph-pill, .hw-head-seg, .tt-head-seg, .meal-day-pick { height: 48px; border-radius: 24px; }
+}
+
 /* A toolbar row (filter chips, mode toggles) sitting directly under
    .page-header, outside the scrollable content — capped/centered/padded
    with the exact same values as the header so its content starts at the

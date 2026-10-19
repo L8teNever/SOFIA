@@ -85,12 +85,7 @@
   <div id="cal-fab-slot"></div>
 
 <style>
-.cal-header-row { gap: 8px; }
-.cal-nav-row { gap: 4px; display: flex; align-items: center; flex-shrink: 0; }
-/* Same tonal icon buttons the rest of the app uses, just scaled down on
-   phones — the header carries four of them next to the month title. */
-.cal-back-btn, .cal-nav-btn { width: 40px; height: 40px; border-radius: 16px; }
-.cal-back-btn i, .cal-nav-btn i { width: 18px; height: 18px; }
+.cal-nav-row { gap: 12px; display: flex; align-items: center; flex-shrink: 0; }
 .cal-title-btn {
   display: flex; align-items: center; gap: 4px; min-width: 0;
   background: none; border: none; padding: 4px 8px 4px 2px; margin: 0;
@@ -101,9 +96,8 @@
 .cal-title-btn:disabled { cursor: default; }
 .cal-title-btn:disabled:hover, .cal-title-btn:disabled:active { background: none; }
 .cal-month-title {
-  font-size: 1.28rem; font-weight: 800; color: #1c1b1f;
+  color: #1c1b1f;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  letter-spacing: -0.01em; line-height: 1.15;
 }
 #cal-title-chevron { width: 20px; height: 20px; flex-shrink: 0; opacity: 0.55; transition: transform 0.2s ease; }
 .cal-today-icon {
@@ -124,18 +118,12 @@
 }
 .cal-period-nav { display: none; }
 @media (min-width: 600px) {
-  .cal-header-row { gap: 12px; }
-  .cal-nav-row { gap: 6px; }
-  .cal-back-btn, .cal-nav-btn { width: 48px; height: 48px; border-radius: 20px; }
-  .cal-back-btn i, .cal-nav-btn i { width: 22px; height: 22px; }
-  .cal-month-title { font-size: 1.55rem; }
+  .cal-nav-row { gap: 16px; }
   .cal-today-icon { width: 24px; height: 24px; font-size: 11px; }
   #cal-filter-dot { top: 8px !important; right: 8px !important; }
 }
 @media (min-width: 900px) {
   .cal-period-nav { display: flex; }
-  /* Matches .page-title once there's room for it beside the nav row. */
-  .cal-month-title { font-size: 1.75rem; }
 }
 
 /* Capped and padded with the same values as .page-header above it, so the

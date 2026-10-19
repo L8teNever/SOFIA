@@ -621,7 +621,7 @@ function openHwDetail(id) {
   document.getElementById('ph-hwd').outerHTML = pageHeader({
     title: '–',
     titleId: 'hwd-title',
-    titleStyle: 'color:#31111d;font-size:1.25rem;',
+    titleStyle: 'color:#31111d;',
     subtitle: '–',
     subtitleId: 'hwd-subject',
     subtitleStyle: 'color:#31111d;opacity:0.6;',
@@ -1192,7 +1192,7 @@ function openHwMoodlePicker() {
     title: 'Moodle', titleId: 'hwm-title',
     subtitle: 'Anhang hinzufügen', subtitleId: 'hwm-sub',
     backAction: 'event.stopPropagation();hwmBack();',
-    trailing: '<button type="button" class="m3-btn-tonal" id="hwm-done" onclick="hwmDone()" style="border-radius:14px;padding:8px 14px;flex-shrink:0;">Fertig</button>',
+    trailing: '<button type="button" class="ph-pill" id="hwm-done" onclick="hwmDone()" style="background:#f3edf7;color:#6750a4;">Fertig</button>',
   }) + `<div style="padding:4px 16px 8px;">
       <div class="hwm-search"><i data-lucide="search" style="width:18px;height:18px;opacity:0.5;flex-shrink:0;"></i>
         <input id="hwm-q" type="search" placeholder="In Moodle suchen…" autocomplete="off" oninput="hwmQuery=this.value;renderHwMoodlePicker()">
