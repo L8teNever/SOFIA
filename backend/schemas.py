@@ -67,8 +67,23 @@ class SubjectUpdate(BaseModel):
 # Shared file attachment (homework and calendar)
 class AttachmentItem(BaseModel):
     url: str
-    type: str = "file"  # "image" or "file"
+    type: str = "file"  # "image", "file" or "link" (Verknuepfung, z. B. Moodle)
     name: Optional[str] = None
+
+
+class AttachmentIn(AttachmentItem):
+    """Neue Anhaenge: nur eigene Pfade oder http(s) - sonst landet z. B. javascript: im Link."""
+
+    @field_validator("url")
+    @classmethod
+    def _safe_url(cls, v: str) -> str:
+        v = (v or "").strip()
+        low = v.lower()
+        if not (low.startswith(("http://", "https://")) or (v.startswith("/") and not v.startswith(("//", "/\\")))):
+            raise ValueError("Ungültiger Link")
+        if len(v) > 2000:
+            raise ValueError("Link zu lang")
+        return v
 
 # Calendar
 class CalendarEventOut(BaseModel):
@@ -135,7 +150,7 @@ class HomeworkCreate(BaseModel):
     due_date: str
     file_url: Optional[str] = None
     file_type: Optional[str] = None
-    attachments: Optional[List[AttachmentItem]] = []
+    attachments: Optional[List[AttachmentIn]] = []
 
 class HomeworkUpdate(BaseModel):
     subject_id: Optional[int] = None
@@ -143,7 +158,7 @@ class HomeworkUpdate(BaseModel):
     due_date: Optional[str] = None
     file_url: Optional[str] = None
     file_type: Optional[str] = None
-    attachments: Optional[List[AttachmentItem]] = None
+    attachments: Optional[List[AttachmentIn]] = None
 
 class SolutionUserOut(BaseModel):
     id: int

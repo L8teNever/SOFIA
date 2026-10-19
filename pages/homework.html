@@ -689,13 +689,13 @@ function renderHwDetail(hw) {
         <div class="hw-file-card">
           <div style="display:flex;align-items:center;gap:12px;min-width:0;flex:1;">
             <div class="icon-box" style="width:38px;height:38px;background:rgba(103,80,164,0.1);border-radius:10px;flex-shrink:0;">
-              <i data-lucide="file-text" style="width:18px;height:18px;color:#6750a4;"></i>
+              <i data-lucide="${f.type === 'link' ? 'link' : 'file-text'}" style="width:18px;height:18px;color:#6750a4;"></i>
             </div>
             <div style="font-weight:600;font-size:0.85rem;color:#1c1b1f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-              ${escapeHtml(f.name || 'Dokument')}
+              ${escapeHtml(f.name || (f.type === 'link' ? 'Link' : 'Dokument'))}
             </div>
           </div>
-          <a href="${f.url}" target="_blank" data-name="${escapeHtml(f.name || '')}" class="m3-btn-tonal" style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;font-size:0.78rem;text-decoration:none;border-radius:10px;flex-shrink:0;">
+          <a href="${escapeHtml(f.url)}" target="_blank" rel="noopener" data-name="${escapeHtml(f.name || '')}" class="m3-btn-tonal" style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;font-size:0.78rem;text-decoration:none;border-radius:10px;flex-shrink:0;">
             <i data-lucide="external-link" style="width:13px;height:13px;"></i> Öffnen
           </a>
         </div>
@@ -1041,15 +1041,167 @@ function openHwSheet(editId) {
     + '<div class="section-label" style="margin:16px 4px 6px 4px;">Fällig am</div>'
     + '<div id="hw-due-section"></div>'
     + '<div class="section-label" style="margin:16px 4px 6px 4px;">Anhänge (mehrere möglich)</div>'
-    + '<label class="m3-btn-tonal" style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;border-radius:14px;padding:12px;">'
-    +   '<i data-lucide="camera" style="width:18px;height:18px;"></i> Fotos / Dateien hinzufügen'
-    +   '<input type="file" id="hw-file-input" multiple accept="image/*,application/pdf,.doc,.docx,.txt" style="display:none;" onchange="hwFilesSelected(this)">'
-    + '</label>'
+    + '<button type="button" class="m3-btn-tonal" onclick="toggleHwAttachChoice()" style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;border-radius:14px;padding:12px;">'
+    +   '<i data-lucide="paperclip" style="width:18px;height:18px;"></i> Anhang hinzufügen'
+    + '</button>'
+    + '<input type="file" id="hw-file-input" multiple accept="image/*,application/pdf,.doc,.docx,.txt" style="display:none;" onchange="hwFilesSelected(this)">'
+    + '<div id="hw-attach-choice" style="display:none;gap:8px;margin-top:8px;">'
+    +   hwChoiceTile('camera', 'Foto / Datei', "hwPickAttach('file')")
+    +   hwChoiceTile('graduation-cap', 'Moodle', "hwPickAttach('moodle')", 'hw-moodle-btn')
+    +   hwChoiceTile('link', 'Link', "hwPickAttach('link')")
+    + '</div>'
+    + '<div id="hw-link-box" style="display:none;margin-top:8px;gap:8px;">'
+    +   '<input class="m3-input" id="hw-link-url" type="url" inputmode="url" placeholder="https://…" style="flex:1;margin:0;" onkeydown="if(event.key===\'Enter\'){event.preventDefault();addHwLink();}">'
+    +   '<button type="button" class="m3-btn-tonal" onclick="addHwLink()" style="border-radius:14px;padding:0 16px;">Hinzufügen</button>'
+    + '</div>'
+    + '<div id="hw-moodle-box" style="display:none;margin-top:8px;"></div>'
     + '<div id="hw-file-preview" style="margin-top:10px;"></div>'
     + '<button class="m3-btn-full" onclick="saveHw()" style="margin-top:16px;border-radius:16px;">Speichern</button>');
   renderHwDueSection();
   renderHwFilePreview();
+  hwLoadMoodle();
   if (window.lucide) lucide.createIcons();
+}
+
+// ---- Verknüpfungen: Moodle-Einträge und eigene Links als Anhang ----
+
+let hwMoodle = null, hwMoodleCourse = null;
+
+function hwChoiceTile(icon, label, action, id) {
+  return '<button type="button"' + (id ? ' id="' + id + '"' : '') + ' onclick="' + action + '" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;background:#f5f3f9;border:none;border-radius:14px;padding:12px 6px;cursor:pointer;font:inherit;font-size:0.8rem;font-weight:600;color:#1c1b1f;">'
+    + '<i data-lucide="' + icon + '" style="width:22px;height:22px;color:#6750a4;"></i>' + label + '</button>';
+}
+
+// "Anhang hinzufügen" -> Auswahl: Foto/Datei, Moodle oder Link
+function toggleHwAttachChoice() {
+  const box = document.getElementById('hw-attach-choice');
+  if (!box) return;
+  box.style.display = box.style.display === 'none' ? 'flex' : 'none';
+}
+
+function hwPickAttach(kind) {
+  document.getElementById('hw-attach-choice').style.display = 'none';
+  const linkBox = document.getElementById('hw-link-box');
+  const moodleBox = document.getElementById('hw-moodle-box');
+  if (kind !== 'link') linkBox.style.display = 'none';
+  if (kind !== 'moodle') moodleBox.style.display = 'none';
+  if (kind === 'file') {
+    document.getElementById('hw-file-input').click();
+  } else if (kind === 'link') {
+    linkBox.style.display = 'flex';
+    document.getElementById('hw-link-url').focus();
+  } else if (kind === 'moodle') {
+    if (!hwMoodle) { showToast('Moodle wird geladen…'); hwLoadMoodle().then(() => hwMoodle && toggleHwMoodle()); return; }
+    if (moodleBox.style.display === 'none') toggleHwMoodle();
+  }
+}
+
+// Moodle-Auswahl nur anbieten, wenn die Klasse Moodle eingerichtet hat
+async function hwLoadMoodle() {
+  if (!hwMoodle) {
+    try { hwMoodle = await API.moodle(); } catch { hwMoodle = null; }
+  }
+  const ok = hwMoodle && hwMoodle.configured && (hwMoodle.courses || []).length;
+  const btn = document.getElementById('hw-moodle-btn');
+  if (btn) btn.style.display = ok ? 'flex' : 'none';
+}
+
+function addHwLink() {
+  const input = document.getElementById('hw-link-url');
+  let url = (input.value || '').trim();
+  if (!url) return;
+  if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+  let parsed;
+  try { parsed = new URL(url); } catch { showToast('Kein gültiger Link'); return; }
+  if (!/^https?:$/.test(parsed.protocol)) { showToast('Kein gültiger Link'); return; }
+  hwPendingFiles.push({ url: parsed.href, type: 'link', name: parsed.host + (parsed.pathname.length > 1 ? parsed.pathname : '') });
+  input.value = '';
+  document.getElementById('hw-link-box').style.display = 'none';
+  renderHwFilePreview();
+}
+
+// Kurs zum gewählten Fach raten (z. B. "Mathe" -> "Mathematik 11a")
+function hwGuessCourse(courses) {
+  const sel = document.getElementById('hw-subject');
+  const sub = sel && hwSubjects.find(s => s.id === parseInt(sel.value));
+  if (sub) {
+    const keys = [sub.name, sub.short_name].filter(Boolean).map(k => k.toLowerCase().slice(0, 4)).filter(k => k.length >= 2);
+    const hit = courses.find(c => keys.some(k => (c.name || '').toLowerCase().includes(k) || (c.short || '').toLowerCase().includes(k)));
+    if (hit) return hit.id;
+  }
+  return courses[0] && courses[0].id;
+}
+
+function toggleHwMoodle() {
+  const box = document.getElementById('hw-moodle-box');
+  if (!box) return;
+  if (box.style.display !== 'none') { box.style.display = 'none'; return; }
+  const courses = (hwMoodle && hwMoodle.courses) || [];
+  if (!courses.length) { showToast('Keine Moodle-Kurse gefunden'); return; }
+  hwMoodleCourse = hwGuessCourse(courses);
+  box.style.display = 'block';
+  box.innerHTML = '<select class="m3-select" id="hw-moodle-course" onchange="hwMoodleCourse=parseInt(this.value);renderHwMoodleList()">'
+    + courses.map(c => '<option value="' + c.id + '"' + (c.id === hwMoodleCourse ? ' selected' : '') + '>' + escapeHtml(c.name) + '</option>').join('')
+    + '</select><div id="hw-moodle-list" class="no-scrollbar" style="max-height:280px;overflow-y:auto;margin-top:6px;"></div>';
+  if (typeof enhanceDropdowns === 'function') enhanceDropdowns(box);
+  renderHwMoodleList();
+}
+
+// Alles aus einem Kurs, was man verknüpfen kann: Aufgaben, Dateien, Links, Seiten
+function hwMoodleEntries(c) {
+  const out = [];
+  const isImg = (n) => /\.(png|jpe?g|gif|webp)$/i.test(n || '');
+  const fileEntry = (f, sub) => f.url && out.push({
+    url: f.url, name: f.name || 'Datei', sub,
+    type: f.external ? 'link' : (isImg(f.name) ? 'image' : 'file'),
+    icon: f.external ? 'link' : 'file-text',
+  });
+  const now = Date.now() / 1000;
+  (c.assignments || []).filter(a => !a.due || a.due >= now).forEach(a => {
+    if (a.url) out.push({ url: a.url, name: a.name, sub: 'Moodle-Aufgabe', type: 'link', icon: 'clipboard-check' });
+    (a.files || []).forEach(f => fileEntry(f, a.name));
+  });
+  (c.sections || []).forEach(s => (s.modules || []).forEach(m => {
+    if (m.type === 'label') return;
+    const files = m.files || [];
+    if (files.length) files.forEach(f => fileEntry(f, s.name || m.name));
+    else if (m.url) out.push({ url: m.url, name: m.name, sub: s.name || 'Moodle', type: 'link', icon: 'link' });
+  }));
+  // doppelte Links nur einmal
+  const seen = new Set();
+  return out.filter(e => !seen.has(e.url) && seen.add(e.url));
+}
+
+function renderHwMoodleList() {
+  const list = document.getElementById('hw-moodle-list');
+  const c = ((hwMoodle && hwMoodle.courses) || []).find(x => x.id === hwMoodleCourse);
+  if (!list || !c) return;
+  const entries = hwMoodleEntries(c);
+  list._entries = entries;
+  if (!entries.length) { list.innerHTML = '<div style="font-size:0.8rem;opacity:0.6;padding:10px 4px;">In diesem Kurs gibt es nichts zum Verknüpfen.</div>'; return; }
+  list.innerHTML = entries.map((e, i) => {
+    const added = hwPendingFiles.some(f => f.url === e.url);
+    return `<button type="button" onclick="toggleHwMoodleEntry(${i})" style="display:flex;align-items:center;gap:10px;width:100%;text-align:left;margin-top:4px;background:${added ? '#e8def8' : '#f5f3f9'};border:none;border-radius:12px;padding:8px 10px;cursor:pointer;font:inherit;color:inherit;">
+      <div class="icon-box" style="width:34px;height:34px;background:rgba(103,80,164,0.1);border-radius:8px;flex-shrink:0;"><i data-lucide="${e.icon}" style="width:16px;height:16px;color:#6750a4;"></i></div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:0.82rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(e.name)}</div>
+        <div style="font-size:0.72rem;opacity:0.6;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(e.sub || '')}</div>
+      </div>
+      <i data-lucide="${added ? 'check' : 'plus'}" style="width:18px;height:18px;flex-shrink:0;color:#6750a4;"></i>
+    </button>`;
+  }).join('');
+  if (window.lucide) lucide.createIcons();
+}
+
+function toggleHwMoodleEntry(i) {
+  const list = document.getElementById('hw-moodle-list');
+  const e = list && list._entries && list._entries[i];
+  if (!e) return;
+  const idx = hwPendingFiles.findIndex(f => f.url === e.url);
+  if (idx >= 0) hwPendingFiles.splice(idx, 1);
+  else hwPendingFiles.push({ url: e.url, type: e.type, name: e.name });
+  renderHwMoodleList();
+  renderHwFilePreview();
 }
 
 function renderHwDueSection() {
@@ -1158,8 +1310,8 @@ function renderHwFilePreview() {
     return `
       <div style="display:flex;align-items:center;gap:10px;margin-top:6px;background:#f5f3f9;border-radius:12px;padding:8px 10px;">
         ${isImg
-          ? `<img src="${f.url}" style="width:38px;height:38px;border-radius:8px;object-fit:cover;flex-shrink:0;">`
-          : `<div class="icon-box" style="width:38px;height:38px;background:rgba(103,80,164,0.1);border-radius:8px;flex-shrink:0;"><i data-lucide="file" style="width:18px;height:18px;color:#6750a4;"></i></div>`}
+          ? `<img src="${escapeHtml(f.url)}" style="width:38px;height:38px;border-radius:8px;object-fit:cover;flex-shrink:0;">`
+          : `<div class="icon-box" style="width:38px;height:38px;background:rgba(103,80,164,0.1);border-radius:8px;flex-shrink:0;"><i data-lucide="${f.type === 'link' ? 'link' : 'file'}" style="width:18px;height:18px;color:#6750a4;"></i></div>`}
         <span style="flex:1;font-size:0.82rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(f.name || 'Datei')}</span>
         <button type="button" onclick="removeHwFile(${idx})" style="background:rgba(0,0,0,0.06);border:none;border-radius:8px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
           <i data-lucide="x" style="width:14px;height:14px;"></i>
@@ -1173,6 +1325,7 @@ function renderHwFilePreview() {
 function removeHwFile(idx) {
   hwPendingFiles.splice(idx, 1);
   renderHwFilePreview();
+  renderHwMoodleList();
 }
 
 async function saveHw() {
