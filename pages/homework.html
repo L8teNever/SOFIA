@@ -1157,22 +1157,22 @@ function hwMoodleEntries(c) {
   const isImg = (n) => /\.(png|jpe?g|gif|webp)$/i.test(n || '');
   const now = Date.now() / 1000;
   const add = (e) => e.url && out.push({ course: c.id, courseName: c.name, ...e });
-  const fileEntry = (f, section, parent) => add({
-    url: f.url, name: f.name || 'Datei', section, parent,
+  const fileEntry = (f, section, parent, time) => add({
+    url: f.url, name: f.name || 'Datei', section, parent, time: f.time || time,
     type: f.external ? 'link' : (isImg(f.name) ? 'image' : 'file'),
     icon: f.external ? 'link' : (isImg(f.name) ? 'image' : 'file-text'),
   });
   (c.assignments || []).filter(a => !a.due || a.due >= now).sort((x, y) => (x.due || 9e9) - (y.due || 9e9)).forEach(a => {
     const due = a.due ? 'fällig ' + new Date(a.due * 1000).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' }) : 'Moodle-Aufgabe';
-    if (a.url) add({ url: a.url, name: a.name, section: 'Offene Aufgaben', parent: due, type: 'link', icon: 'clipboard-check' });
-    (a.files || []).forEach(f => fileEntry(f, 'Offene Aufgaben', a.name));
+    if (a.url) add({ url: a.url, name: a.name, section: 'Offene Aufgaben', parent: due, time: a.time, type: 'link', icon: 'clipboard-check' });
+    (a.files || []).forEach(f => fileEntry(f, 'Offene Aufgaben', a.name, a.time));
   });
   (c.sections || []).forEach(s => (s.modules || []).forEach(m => {
     if (m.type === 'label') return;
     const sec = s.name || 'Allgemeines';
     const files = m.files || [];
-    if (files.length) files.forEach(f => fileEntry(f, sec, files.length > 1 || f.name !== m.name ? m.name : ''));
-    else if (m.url) add({ url: m.url, name: m.name, section: sec, parent: '', type: 'link', icon: 'link' });
+    if (files.length) files.forEach(f => fileEntry(f, sec, files.length > 1 || f.name !== m.name ? m.name : '', m.time));
+    else if (m.url) add({ url: m.url, name: m.name, section: sec, parent: '', time: m.time, type: 'link', icon: 'link' });
   }));
   const seen = new Set();
   return out.filter(e => !seen.has(e.url) && seen.add(e.url));
@@ -1220,14 +1220,24 @@ function hwmOpenCourse(id) {
   document.querySelector('#page-hw-moodle .page-scroll-1col')?.scrollTo(0, 0);
 }
 
+// "hochgeladen am" wie auf der Moodle-Seite: kurz, Jahr nur wenn nicht dieses Jahr
+function hwmUp(ts) {
+  if (!ts) return '';
+  const d = new Date(ts * 1000);
+  const opts = { day: 'numeric', month: 'short' };
+  if (d.getFullYear() !== new Date().getFullYear()) opts.year = 'numeric';
+  return 'hochgeladen ' + d.toLocaleDateString('de-DE', opts);
+}
+
 function hwmRow(e) {
   const added = hwPendingFiles.some(f => f.url === e.url);
   const idx = hwmEntries.push(e) - 1;
+  const meta = [e.parent, hwmUp(e.time)].filter(Boolean).join(' · ');
   return `<button type="button" class="hwm-row${added ? ' added' : ''}" onclick="toggleHwMoodleEntry(${idx})">
       <div class="hwm-ico"><i data-lucide="${e.icon}" style="width:16px;height:16px;"></i></div>
       <div style="flex:1;min-width:0;">
         <div class="hwm-row-title">${escapeHtml(e.name)}</div>
-        ${e.parent ? `<div class="hwm-row-meta">${escapeHtml(e.parent)}</div>` : ''}
+        ${meta ? `<div class="hwm-row-meta">${escapeHtml(meta)}</div>` : ''}
       </div>
       <span class="hwm-add"><i data-lucide="${added ? 'check' : 'plus'}" style="width:16px;height:16px;"></i></span>
     </button>`;
