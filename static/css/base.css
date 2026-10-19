@@ -469,6 +469,9 @@ body.has-active-page .app-container {
    padding distance — but only as far as --ph-icon-pull allows (see
    above), not necessarily all the way to fully flush. */
 .page-header > *:first-child { margin-left: calc(-1 * var(--ph-icon-pull)); }
+/* Android: Zurueck geht ueber die Taste/Geste des Geraets, der Pfeil im Kopf entfaellt */
+html.is-android .page-header .hdr-back { display: none !important; }
+html.is-android .page-header > .hdr-back:first-child + * { margin-left: 0; }
 .page-header > *:last-child { margin-right: calc(-1 * var(--ph-icon-pull)); }
 .page-title { font-size: 1.75rem; font-weight: 700; letter-spacing: -0.01em; }
 

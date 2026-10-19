@@ -1192,7 +1192,7 @@ function openHwMoodlePicker() {
     title: 'Moodle', titleId: 'hwm-title',
     subtitle: 'Anhang hinzufügen', subtitleId: 'hwm-sub',
     backAction: 'event.stopPropagation();hwmBack();',
-    trailing: '<button type="button" class="m3-btn-tonal" id="hwm-done" onclick="history.back()" style="border-radius:14px;padding:8px 14px;flex-shrink:0;">Fertig</button>',
+    trailing: '<button type="button" class="m3-btn-tonal" id="hwm-done" onclick="hwmDone()" style="border-radius:14px;padding:8px 14px;flex-shrink:0;">Fertig</button>',
   }) + `<div style="padding:4px 16px 8px;">
       <div class="hwm-search"><i data-lucide="search" style="width:18px;height:18px;opacity:0.5;flex-shrink:0;"></i>
         <input id="hwm-q" type="search" placeholder="In Moodle suchen…" autocomplete="off" oninput="hwmQuery=this.value;renderHwMoodlePicker()">
@@ -1206,12 +1206,20 @@ function openHwMoodlePicker() {
 }
 
 // Zurück: aus einem Kurs zur Kursliste, sonst die Auswahl schließen
+// Fertig: Auswahl ganz schließen - auch aus einem Kurs heraus (der hat einen eigenen Verlaufseintrag)
+function hwmDone() {
+  const steps = hwmCourse != null ? 2 : 1;
+  hwmCourse = null;
+  history.go(-steps);
+}
+
+// (ein geöffneter Kurs hat einen eigenen Verlaufseintrag, siehe hwmOpenCourse)
 function hwmBack() {
-  if (hwmCourse != null && !hwmQuery.trim()) { hwmCourse = null; renderHwMoodlePicker(); return; }
   history.back();
 }
 
 function hwmOpenCourse(id) {
+  if (hwmCourse == null) history.pushState({ hwMoodle: true, course: id }, '', window.location.pathname);
   hwmCourse = id;
   hwmQuery = '';
   const q = document.getElementById('hwm-q');

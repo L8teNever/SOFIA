@@ -1,3 +1,7 @@
+// Android hat eine eigene Zurueck-Taste bzw. -Geste - dort blendet CSS (.is-android .hdr-back)
+// den Zurueck-Pfeil im Seitenkopf aus. iPhone/iPad und Windows behalten ihn.
+if (/Android/i.test(navigator.userAgent)) document.documentElement.classList.add('is-android');
+
 // Prevent mobile gesture & double-tap zoom
 document.addEventListener('gesturestart', e => e.preventDefault(), { passive: false });
 document.addEventListener('gesturechange', e => e.preventDefault(), { passive: false });
@@ -215,8 +219,8 @@ function pageHeader({
   style = '',        // extra inline style on the wrapper (e.g. a tighter gap)
 } = {}) {
   const back = backAction
-    ? `<button class="icon-btn${backClassName ? ' ' + backClassName : ''}" onclick="${backAction}" title="Zurück"><i data-lucide="arrow-left" style="width:22px;height:22px;"></i></button>`
-    : `<button class="back-btn${backClassName ? ' ' + backClassName : ''}" title="Zurück"><i data-lucide="arrow-left" style="width:22px;height:22px;"></i></button>`;
+    ? `<button class="icon-btn hdr-back${backClassName ? ' ' + backClassName : ''}" onclick="${backAction}" title="Zurück"><i data-lucide="arrow-left" style="width:22px;height:22px;"></i></button>`
+    : `<button class="back-btn hdr-back${backClassName ? ' ' + backClassName : ''}" title="Zurück"><i data-lucide="arrow-left" style="width:22px;height:22px;"></i></button>`;
 
   const titleBlock = titleHtml || ((subtitle || subtitleId)
     ? `<div style="flex:1;min-width:0;">
@@ -622,6 +626,11 @@ window.addEventListener('popstate', (e) => {
   if (typeof closeTopFileViewer === 'function' && closeTopFileViewer()) return;
   // Moodle-Auswahl liegt ueber dem Hausaufgaben-Fenster - erst sie schliessen, das Fenster bleibt offen
   const hwMoodlePick = document.getElementById('page-hw-moodle');
+  if (hwMoodlePick && hwMoodlePick.classList.contains('active') && typeof hwmCourse !== 'undefined' && hwmCourse != null) {
+    hwmCourse = null; // aus einem Kurs erst zurueck zur Kursliste
+    renderHwMoodlePicker();
+    return;
+  }
   if (hwMoodlePick && hwMoodlePick.classList.contains('active')) {
     hwMoodlePick.classList.remove('active');
     hwMoodlePick.classList.add('closing');
