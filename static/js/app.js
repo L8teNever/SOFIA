@@ -620,6 +620,14 @@ window.addEventListener('popstate', (e) => {
   }
   // Datei-Ansicht liegt ueber allem (auch ueber Bild-Vorschauen) - zuerst schliessen
   if (typeof closeTopFileViewer === 'function' && closeTopFileViewer()) return;
+  // Moodle-Auswahl liegt ueber dem Hausaufgaben-Fenster - erst sie schliessen, das Fenster bleibt offen
+  const hwMoodlePick = document.getElementById('page-hw-moodle');
+  if (hwMoodlePick && hwMoodlePick.classList.contains('active')) {
+    hwMoodlePick.classList.remove('active');
+    hwMoodlePick.classList.add('closing');
+    setTimeout(() => hwMoodlePick.remove(), 600);
+    return;
+  }
   const modalActive = document.getElementById('modal-scrim')?.classList.contains('active');
   const sheetActive = document.querySelector('.bottom-sheet.active');
   

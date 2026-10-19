@@ -197,6 +197,24 @@
     justify-content: center;
     flex-shrink: 0;
   }
+  /* Moodle-Auswahl beim Anhang (wie die Moodle-Seite) */
+  .hwm-search { display:flex; align-items:center; gap:10px; background:#fff; border-radius:16px; padding:10px 14px; box-shadow:0 1px 3px rgba(0,0,0,0.06); }
+  .hwm-search input { flex:1; border:none; outline:none; background:transparent; font:inherit; font-size:0.95rem; color:#1c1b1f; min-width:0; }
+  .hwm-sec-head { display:flex; justify-content:space-between; gap:8px; margin:18px 6px 8px; font-size:0.72rem; font-weight:800; text-transform:uppercase; letter-spacing:0.06em; color:#7d5260; }
+  .hwm-group { background:#fff; border-radius:20px; box-shadow:0 1px 3px rgba(0,0,0,0.06); overflow:hidden; }
+  .hwm-row { display:flex; align-items:center; gap:12px; width:100%; padding:12px 14px; background:none; border:none; text-align:left; font:inherit; color:inherit; cursor:pointer; -webkit-tap-highlight-color:transparent; }
+  .hwm-row + .hwm-row { border-top:1px solid rgba(0,0,0,0.06); }
+  .hwm-row.added { background:#f3edf7; }
+  .hwm-row-title { font-weight:600; font-size:0.92rem; color:#1c1b1f; line-height:1.3; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .hwm-row-meta { font-size:0.74rem; color:#7d5260; margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .hwm-ico { width:32px; height:32px; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0; background:#ffd8e4; color:#31111d; }
+  .hwm-ico.lg { width:40px; height:40px; border-radius:14px; }
+  .hwm-add { width:30px; height:30px; border-radius:50%; display:flex; align-items:center; justify-content:center; flex-shrink:0; background:#f3edf7; color:#6750a4; }
+  .hwm-row.added .hwm-add { background:#6750a4; color:#fff; }
+  .hwm-course { display:flex; align-items:center; gap:12px; background:#fff; border-radius:20px; padding:14px 16px; margin-bottom:10px; box-shadow:0 1px 3px rgba(0,0,0,0.06); cursor:pointer; }
+  .hwm-course-name { font-weight:700; font-size:0.95rem; color:#1c1b1f; line-height:1.3; }
+  .hwm-tag { font-weight:700; color:#6750a4; }
+  .hwm-empty { font-size:0.85rem; opacity:0.6; padding:24px 8px; text-align:center; }
   </style>
 </div>
 
@@ -1054,7 +1072,6 @@ function openHwSheet(editId) {
     +   '<input class="m3-input" id="hw-link-url" type="url" inputmode="url" placeholder="https://…" style="flex:1;margin:0;" onkeydown="if(event.key===\'Enter\'){event.preventDefault();addHwLink();}">'
     +   '<button type="button" class="m3-btn-tonal" onclick="addHwLink()" style="border-radius:14px;padding:0 16px;">Hinzufügen</button>'
     + '</div>'
-    + '<div id="hw-moodle-box" style="display:none;margin-top:8px;"></div>'
     + '<div id="hw-file-preview" style="margin-top:10px;"></div>'
     + '<button class="m3-btn-full" onclick="saveHw()" style="margin-top:16px;border-radius:16px;">Speichern</button>');
   renderHwDueSection();
@@ -1065,7 +1082,7 @@ function openHwSheet(editId) {
 
 // ---- Verknüpfungen: Moodle-Einträge und eigene Links als Anhang ----
 
-let hwMoodle = null, hwMoodleCourse = null;
+let hwMoodle = null;
 
 function hwChoiceTile(icon, label, action, id) {
   return '<button type="button"' + (id ? ' id="' + id + '"' : '') + ' onclick="' + action + '" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;background:#f5f3f9;border:none;border-radius:14px;padding:12px 6px;cursor:pointer;font:inherit;font-size:0.8rem;font-weight:600;color:#1c1b1f;">'
@@ -1082,17 +1099,15 @@ function toggleHwAttachChoice() {
 function hwPickAttach(kind) {
   document.getElementById('hw-attach-choice').style.display = 'none';
   const linkBox = document.getElementById('hw-link-box');
-  const moodleBox = document.getElementById('hw-moodle-box');
   if (kind !== 'link') linkBox.style.display = 'none';
-  if (kind !== 'moodle') moodleBox.style.display = 'none';
   if (kind === 'file') {
     document.getElementById('hw-file-input').click();
   } else if (kind === 'link') {
     linkBox.style.display = 'flex';
     document.getElementById('hw-link-url').focus();
   } else if (kind === 'moodle') {
-    if (!hwMoodle) { showToast('Moodle wird geladen…'); hwLoadMoodle().then(() => hwMoodle && toggleHwMoodle()); return; }
-    if (moodleBox.style.display === 'none') toggleHwMoodle();
+    if (!hwMoodle) { showToast('Moodle wird geladen…'); hwLoadMoodle().then(() => hwMoodle && openHwMoodlePicker()); return; }
+    openHwMoodlePicker();
   }
 }
 
@@ -1132,75 +1147,159 @@ function hwGuessCourse(courses) {
   return courses[0] && courses[0].id;
 }
 
-function toggleHwMoodle() {
-  const box = document.getElementById('hw-moodle-box');
-  if (!box) return;
-  if (box.style.display !== 'none') { box.style.display = 'none'; return; }
-  const courses = (hwMoodle && hwMoodle.courses) || [];
-  if (!courses.length) { showToast('Keine Moodle-Kurse gefunden'); return; }
-  hwMoodleCourse = hwGuessCourse(courses);
-  box.style.display = 'block';
-  box.innerHTML = '<select class="m3-select" id="hw-moodle-course" onchange="hwMoodleCourse=parseInt(this.value);renderHwMoodleList()">'
-    + courses.map(c => '<option value="' + c.id + '"' + (c.id === hwMoodleCourse ? ' selected' : '') + '>' + escapeHtml(c.name) + '</option>').join('')
-    + '</select><div id="hw-moodle-list" class="no-scrollbar" style="max-height:280px;overflow-y:auto;margin-top:6px;"></div>';
-  if (typeof enhanceDropdowns === 'function') enhanceDropdowns(box);
-  renderHwMoodleList();
-}
+// ---- Moodle-Auswahl als eigene große Seite: Kurse -> Abschnitte, mit Suche ----
 
-// Alles aus einem Kurs, was man verknüpfen kann: Aufgaben, Dateien, Links, Seiten
+let hwmCourse = null, hwmQuery = '', hwmEntries = [];
+
+// Alles aus einem Kurs, was man anhängen kann - nach Abschnitten wie auf der Moodle-Seite
 function hwMoodleEntries(c) {
   const out = [];
   const isImg = (n) => /\.(png|jpe?g|gif|webp)$/i.test(n || '');
-  const fileEntry = (f, sub) => f.url && out.push({
-    url: f.url, name: f.name || 'Datei', sub,
-    type: f.external ? 'link' : (isImg(f.name) ? 'image' : 'file'),
-    icon: f.external ? 'link' : 'file-text',
-  });
   const now = Date.now() / 1000;
-  (c.assignments || []).filter(a => !a.due || a.due >= now).forEach(a => {
-    if (a.url) out.push({ url: a.url, name: a.name, sub: 'Moodle-Aufgabe', type: 'link', icon: 'clipboard-check' });
-    (a.files || []).forEach(f => fileEntry(f, a.name));
+  const add = (e) => e.url && out.push({ course: c.id, courseName: c.name, ...e });
+  const fileEntry = (f, section, parent) => add({
+    url: f.url, name: f.name || 'Datei', section, parent,
+    type: f.external ? 'link' : (isImg(f.name) ? 'image' : 'file'),
+    icon: f.external ? 'link' : (isImg(f.name) ? 'image' : 'file-text'),
+  });
+  (c.assignments || []).filter(a => !a.due || a.due >= now).sort((x, y) => (x.due || 9e9) - (y.due || 9e9)).forEach(a => {
+    const due = a.due ? 'fällig ' + new Date(a.due * 1000).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' }) : 'Moodle-Aufgabe';
+    if (a.url) add({ url: a.url, name: a.name, section: 'Offene Aufgaben', parent: due, type: 'link', icon: 'clipboard-check' });
+    (a.files || []).forEach(f => fileEntry(f, 'Offene Aufgaben', a.name));
   });
   (c.sections || []).forEach(s => (s.modules || []).forEach(m => {
     if (m.type === 'label') return;
+    const sec = s.name || 'Allgemeines';
     const files = m.files || [];
-    if (files.length) files.forEach(f => fileEntry(f, s.name || m.name));
-    else if (m.url) out.push({ url: m.url, name: m.name, sub: s.name || 'Moodle', type: 'link', icon: 'link' });
+    if (files.length) files.forEach(f => fileEntry(f, sec, files.length > 1 || f.name !== m.name ? m.name : ''));
+    else if (m.url) add({ url: m.url, name: m.name, section: sec, parent: '', type: 'link', icon: 'link' });
   }));
-  // doppelte Links nur einmal
   const seen = new Set();
   return out.filter(e => !seen.has(e.url) && seen.add(e.url));
 }
 
-function renderHwMoodleList() {
-  const list = document.getElementById('hw-moodle-list');
-  const c = ((hwMoodle && hwMoodle.courses) || []).find(x => x.id === hwMoodleCourse);
-  if (!list || !c) return;
-  const entries = hwMoodleEntries(c);
-  list._entries = entries;
-  if (!entries.length) { list.innerHTML = '<div style="font-size:0.8rem;opacity:0.6;padding:10px 4px;">In diesem Kurs gibt es nichts zum Verknüpfen.</div>'; return; }
-  list.innerHTML = entries.map((e, i) => {
-    const added = hwPendingFiles.some(f => f.url === e.url);
-    return `<button type="button" onclick="toggleHwMoodleEntry(${i})" style="display:flex;align-items:center;gap:10px;width:100%;text-align:left;margin-top:4px;background:${added ? '#e8def8' : '#f5f3f9'};border:none;border-radius:12px;padding:8px 10px;cursor:pointer;font:inherit;color:inherit;">
-      <div class="icon-box" style="width:34px;height:34px;background:rgba(103,80,164,0.1);border-radius:8px;flex-shrink:0;"><i data-lucide="${e.icon}" style="width:16px;height:16px;color:#6750a4;"></i></div>
-      <div style="flex:1;min-width:0;">
-        <div style="font-size:0.82rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(e.name)}</div>
-        <div style="font-size:0.72rem;opacity:0.6;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(e.sub || '')}</div>
+function openHwMoodlePicker() {
+  const courses = (hwMoodle && hwMoodle.courses) || [];
+  if (!courses.length) { showToast('Keine Moodle-Kurse gefunden'); return; }
+  hwmQuery = '';
+  hwmCourse = null;
+  document.getElementById('page-hw-moodle')?.remove();
+  const page = document.createElement('div');
+  page.className = 'page page-overlay';
+  page.id = 'page-hw-moodle';
+  page.style.cssText = 'background:#fff8f9;z-index:1200;';
+  page.innerHTML = pageHeader({
+    title: 'Moodle', titleId: 'hwm-title',
+    subtitle: 'Anhang hinzufügen', subtitleId: 'hwm-sub',
+    backAction: 'event.stopPropagation();hwmBack();',
+    trailing: '<button type="button" class="m3-btn-tonal" id="hwm-done" onclick="history.back()" style="border-radius:14px;padding:8px 14px;flex-shrink:0;">Fertig</button>',
+  }) + `<div style="padding:4px 16px 8px;">
+      <div class="hwm-search"><i data-lucide="search" style="width:18px;height:18px;opacity:0.5;flex-shrink:0;"></i>
+        <input id="hwm-q" type="search" placeholder="In Moodle suchen…" autocomplete="off" oninput="hwmQuery=this.value;renderHwMoodlePicker()">
       </div>
-      <i data-lucide="${added ? 'check' : 'plus'}" style="width:18px;height:18px;flex-shrink:0;color:#6750a4;"></i>
+    </div>
+    <div class="page-scroll-1col no-scrollbar"><div class="page-inner" id="hwm-body" style="padding-bottom:90px;"></div></div>`;
+  document.body.appendChild(page);
+  renderHwMoodlePicker();
+  requestAnimationFrame(() => requestAnimationFrame(() => page.classList.add('active')));
+  history.pushState({ hwMoodle: true }, '', window.location.pathname);
+}
+
+// Zurück: aus einem Kurs zur Kursliste, sonst die Auswahl schließen
+function hwmBack() {
+  if (hwmCourse != null && !hwmQuery.trim()) { hwmCourse = null; renderHwMoodlePicker(); return; }
+  history.back();
+}
+
+function hwmOpenCourse(id) {
+  hwmCourse = id;
+  hwmQuery = '';
+  const q = document.getElementById('hwm-q');
+  if (q) q.value = '';
+  renderHwMoodlePicker();
+  document.querySelector('#page-hw-moodle .page-scroll-1col')?.scrollTo(0, 0);
+}
+
+function hwmRow(e) {
+  const added = hwPendingFiles.some(f => f.url === e.url);
+  const idx = hwmEntries.push(e) - 1;
+  return `<button type="button" class="hwm-row${added ? ' added' : ''}" onclick="toggleHwMoodleEntry(${idx})">
+      <div class="hwm-ico"><i data-lucide="${e.icon}" style="width:16px;height:16px;"></i></div>
+      <div style="flex:1;min-width:0;">
+        <div class="hwm-row-title">${escapeHtml(e.name)}</div>
+        ${e.parent ? `<div class="hwm-row-meta">${escapeHtml(e.parent)}</div>` : ''}
+      </div>
+      <span class="hwm-add"><i data-lucide="${added ? 'check' : 'plus'}" style="width:16px;height:16px;"></i></span>
     </button>`;
-  }).join('');
+}
+
+// Gruppen in der Reihenfolge, in der sie zuerst vorkommen (Kurs bzw. Abschnitt)
+function hwmGroups(entries, key) {
+  const groups = [];
+  entries.forEach(e => {
+    let g = groups.find(x => x.name === e[key]);
+    if (!g) groups.push(g = { name: e[key], items: [] });
+    g.items.push(e);
+  });
+  return groups.map(g => `
+    <div class="hwm-sec-head"><span>${escapeHtml(g.name)}</span><span>${g.items.length}</span></div>
+    <div class="hwm-group">${g.items.map(hwmRow).join('')}</div>`).join('');
+}
+
+function renderHwMoodlePicker() {
+  const body = document.getElementById('hwm-body');
+  if (!body) return;
+  const courses = (hwMoodle && hwMoodle.courses) || [];
+  const q = hwmQuery.trim().toLowerCase();
+  hwmEntries = [];
+  const title = document.getElementById('hwm-title');
+  const done = document.getElementById('hwm-done');
+  if (done) done.textContent = hwPendingFiles.length ? `Fertig (${hwPendingFiles.length})` : 'Fertig';
+  let html = '';
+
+  if (q) {
+    // Suche über alle Kurse, Treffer nach Kurs sortiert
+    const words = q.split(/\s+/).filter(Boolean);
+    const hits = courses.flatMap(hwMoodleEntries).filter(e => {
+      const hay = [e.name, e.parent, e.section, e.courseName].join(' ').toLowerCase();
+      return words.every(w => hay.includes(w));
+    });
+    if (title) title.textContent = 'Suche';
+    html = hits.length ? hwmGroups(hits, 'courseName') : '<div class="hwm-empty">Nichts gefunden.</div>';
+  } else if (hwmCourse != null) {
+    const c = courses.find(x => x.id === hwmCourse);
+    if (title) title.textContent = c ? c.name : 'Moodle';
+    const entries = c ? hwMoodleEntries(c) : [];
+    html = entries.length ? hwmGroups(entries, 'section') : '<div class="hwm-empty">In diesem Kurs gibt es nichts zum Anhängen.</div>';
+  } else {
+    // Kursliste wie auf der Moodle-Seite; der Kurs zum gewählten Fach steht oben
+    if (title) title.textContent = 'Moodle';
+    const guess = hwGuessCourse(courses);
+    const sorted = guess ? [courses.find(c => c.id === guess), ...courses.filter(c => c.id !== guess)] : courses;
+    html = '<div class="hwm-sec-head"><span>Kurse</span><span>' + courses.length + '</span></div>' + sorted.map(c => {
+      const entries = hwMoodleEntries(c);
+      const picked = entries.filter(e => hwPendingFiles.some(f => f.url === e.url)).length;
+      return `<div class="hwm-course" onclick="hwmOpenCourse(${c.id})">
+        <div class="hwm-ico lg"><i data-lucide="book-open" style="width:20px;height:20px;"></i></div>
+        <div style="flex:1;min-width:0;">
+          <div class="hwm-course-name">${escapeHtml(c.name)}</div>
+          <div class="hwm-row-meta">${c.id === guess ? '<b class="hwm-tag">Passt zum Fach</b> · ' : ''}${entries.length} Einträge${picked ? ' · ' + picked + ' ausgewählt' : ''}</div>
+        </div>
+        <i data-lucide="chevron-right" style="width:20px;height:20px;opacity:0.45;flex-shrink:0;"></i>
+      </div>`;
+    }).join('');
+  }
+  body.innerHTML = html;
   if (window.lucide) lucide.createIcons();
 }
 
 function toggleHwMoodleEntry(i) {
-  const list = document.getElementById('hw-moodle-list');
-  const e = list && list._entries && list._entries[i];
+  const e = hwmEntries[i];
   if (!e) return;
   const idx = hwPendingFiles.findIndex(f => f.url === e.url);
   if (idx >= 0) hwPendingFiles.splice(idx, 1);
   else hwPendingFiles.push({ url: e.url, type: e.type, name: e.name });
-  renderHwMoodleList();
+  renderHwMoodlePicker();
   renderHwFilePreview();
 }
 
@@ -1325,7 +1424,6 @@ function renderHwFilePreview() {
 function removeHwFile(idx) {
   hwPendingFiles.splice(idx, 1);
   renderHwFilePreview();
-  renderHwMoodleList();
 }
 
 async function saveHw() {
