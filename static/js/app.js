@@ -341,6 +341,18 @@ let _moreMenuEl = null;
 let _moreMenuBtn = null;
 let _moreMenuOutsideHandler = null;
 
+// Menue, das aus dem Seitenkopf aufgeht: im Kopf-Stil (Farbe der Seite, runde Eintraege).
+// Das Menue haengt am <body>, deshalb die Seitenfarben vom Knopf uebernehmen.
+function phMenuStyle(panel, btn) {
+  if (!btn || !btn.closest || !btn.closest('.page-header')) return;
+  const cs = getComputedStyle(btn);
+  ['--ph-sc', '--ph-on', '--ph-btn'].forEach(v => {
+    const val = cs.getPropertyValue(v).trim();
+    if (val) panel.style.setProperty(v, val);
+  });
+  panel.classList.add('ph-menu');
+}
+
 function toggleMoreMenu(btn, items) {
   const reopening = _moreMenuBtn === btn;
   closeMoreMenu();
@@ -355,6 +367,7 @@ function toggleMoreMenu(btn, items) {
     </div>`
   ).join('');
   document.body.appendChild(panel);
+  phMenuStyle(panel, btn);
   _moreMenuEl = panel;
   _moreMenuBtn = btn;
 

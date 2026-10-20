@@ -855,6 +855,7 @@ function toggleCalViewPicker(btn) {
       + `<div class="m3-dropdown-opt" data-search="1"><i data-lucide="search" style="width:16px;height:16px;margin-right:10px;flex-shrink:0;"></i>Suchen</div>`
     : '');
   document.body.appendChild(panel);
+  phMenuStyle(panel, btn);
   calViewPickerEl = panel;
   if (window.lucide) {
     try { lucide.createIcons({ root: panel }); }
@@ -1395,10 +1396,15 @@ function toggleCalFilterMenu(btn) {
   panel.innerHTML = `
     <div style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;opacity:0.5;padding:4px 12px 2px;">Kategorie</div>
     ${CAL_FILTER_OPTIONS.map(o =>
-      `<div class="m3-dropdown-opt${o.value === activeCategoryFilter ? ' dd-sel' : ''}" data-value="${o.value}">${o.label}</div>`
+      `<div class="m3-dropdown-opt${o.value === activeCategoryFilter ? ' dd-sel' : ''}" data-value="${o.value}"><i data-lucide="${o.value === 'all' ? 'layers' : 'tag'}" style="width:16px;height:16px;margin-right:10px;flex-shrink:0;"></i>${o.label}</div>`
     ).join('')}
   `;
   document.body.appendChild(panel);
+  if (window.lucide) {
+    try { lucide.createIcons({ root: panel }); }
+    catch { lucide.createIcons(); }
+  }
+  phMenuStyle(panel, btn);
   calFilterMenuEl = panel;
   const r = btn.getBoundingClientRect();
   panel.style.minWidth = '190px';
