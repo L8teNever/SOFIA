@@ -629,10 +629,30 @@ function closePage() {
 }
 
 document.addEventListener('click', e => { if (e.target.closest('.back-btn')) closePage(); });
+// iPhone/iPad: Beim Zurueck-Wischen zeigt Safari schon selbst die Animation (alte Seite
+// schiebt sich weg). Laeuft danach noch unsere eigene Schliess-Animation, blitzt die Seite
+// kurz wieder auf. Darum nach so einem Wischen ohne eigene Animation schliessen.
+// Erkennung: Safari meldet es selbst (hasUAVisualTransition), sonst Beruehrung am Bildrand.
+let _edgeSwipeAt = 0;
+document.addEventListener('touchstart', (e) => {
+  const t = e.touches && e.touches[0];
+  if (t && (t.clientX < 30 || t.clientX > window.innerWidth - 30)) _edgeSwipeAt = Date.now();
+}, { passive: true, capture: true });
+let _noAnimTimer = null;
+function skipCloseAnimation() {
+  document.documentElement.classList.add('no-anim');
+  clearTimeout(_noAnimTimer);
+  _noAnimTimer = setTimeout(() => document.documentElement.classList.remove('no-anim'), 700);
+}
+
 window.addEventListener('popstate', (e) => {
   if (isSelfPopping) {
     isSelfPopping = false;
     return;
+  }
+  if (e.hasUAVisualTransition || Date.now() - _edgeSwipeAt < 1500) {
+    _edgeSwipeAt = 0;
+    skipCloseAnimation();
   }
   // Datei-Ansicht liegt ueber allem (auch ueber Bild-Vorschauen) - zuerst schliessen
   if (typeof closeTopFileViewer === 'function' && closeTopFileViewer()) return;

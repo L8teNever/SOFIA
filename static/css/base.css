@@ -300,6 +300,8 @@ body.has-update-banner { padding-top: 52px; transition: padding-top 0.3s ease; }
 }
 .page.active  { transform: scale(1); opacity: 1; pointer-events: all; }
 .page.closing { transform: scale(0.08); opacity: 0; transition: transform 0.22s ease-in, opacity 0.18s ease-in; }
+/* nach Zurueck-Wischen auf dem iPhone: Safari hat schon animiert, eigene Animation aus (siehe skipCloseAnimation) */
+html.no-anim *, html.no-anim *::before, html.no-anim *::after { transition: none !important; animation: none !important; }
 
 /* Isolate dashboard completely when a subpage is active:
    prevents phantom text selection, accidental background scrolling, and repainting flickers */
