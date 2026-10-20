@@ -222,14 +222,13 @@ function pageHeader({
     ? `<button class="icon-btn hdr-back${backClassName ? ' ' + backClassName : ''}" onclick="${backAction}" title="Zurück"><i data-lucide="arrow-left" style="width:22px;height:22px;"></i></button>`
     : `<button class="back-btn hdr-back${backClassName ? ' ' + backClassName : ''}" title="Zurück"><i data-lucide="arrow-left" style="width:22px;height:22px;"></i></button>`;
 
-  const titleBlock = titleHtml || ((subtitle || subtitleId)
-    ? `<div style="flex:1;min-width:0;">
-        <div${subtitleId ? ` id="${subtitleId}"` : ''} style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.5;${subtitleStyle}">${subtitle}</div>
-        <span class="page-title"${titleId ? ` id="${titleId}"` : ''} style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${titleStyle}">${title}</span>
-      </div>`
-    : `<span class="page-title"${titleId ? ` id="${titleId}"` : ''} style="flex:1;min-width:0;${titleStyle}">${title}</span>`);
+  // Titel im getoenten Feld; ein Untertitel steht als eigene Zeile unter dem Kopf (.ph-sub)
+  const titleBlock = titleHtml || `<div class="ph-title"><span class="page-title"${titleId ? ` id="${titleId}"` : ''}${titleStyle ? ` style="${titleStyle}"` : ''}>${title}</span></div>`;
+  const sub = (subtitle || subtitleId)
+    ? `<div class="ph-sub"${subtitleId ? ` id="${subtitleId}"` : ''}${subtitleStyle ? ` style="${subtitleStyle}"` : ''}>${subtitle}</div>`
+    : '';
 
-  return `<div class="page-header${className ? ' ' + className : ''}"${style ? ` style="${style}"` : ''}>${back}${titleBlock}${trailing}</div>`;
+  return `<div class="page-header${className ? ' ' + className : ''}"${style ? ` style="${style}"` : ''}>${sub}${back}${titleBlock}${trailing}</div>`;
 }
 
 // The small "nothing here yet" placeholder — icon, bold one-liner, optional
