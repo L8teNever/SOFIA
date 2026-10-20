@@ -15023,21 +15023,31 @@
     for (const it of items) {
       const cy = (it.b.minY + it.b.maxY) / 2;
       const h = it.b.maxY - it.b.minY;
+      // zur Zeile, deren Mitte am naechsten liegt - nur wenn nah genug (halbe Schrifthoehe),
+      // damit Striche der Zeile darunter nicht mit hineinrutschen
       let best = null;
+      let bestD = Infinity;
       for (const l of lines) {
-        const lh = l.maxY - l.minY;
+        const ref = Math.max(l.refH, h * 0.6, 6);
+        const d = Math.abs(cy - l.cy);
         const gap = it.b.minX - l.maxX;
-        if (cy >= l.minY - lh * 0.15 && cy <= l.maxY + lh * 0.15 && gap < Math.max(lh, h) * 3.5 + 30) {
+        if (d < ref * 0.6 && gap < ref * 3.5 + 30 && d < bestD) {
           best = l;
-          break;
+          bestD = d;
         }
       }
       if (!best) {
-        best = { minX: it.b.minX, maxX: it.b.maxX, minY: it.b.minY, maxY: it.b.maxY, strokes: [], heights: [] };
+        best = { minX: it.b.minX, maxX: it.b.maxX, minY: it.b.minY, maxY: it.b.maxY, strokes: [], heights: [], centers: [], cy, refH: h };
         lines.push(best);
       }
       best.strokes.push(it.st);
       best.heights.push(h);
+      best.centers.push(cy);
+      // Zeilenmitte und typische Schrifthoehe (Median, Punkte/Striche verzerren nicht)
+      const cs = best.centers.slice().sort((x, y) => x - y);
+      best.cy = cs[Math.floor((cs.length - 1) / 2)];
+      const hs0 = best.heights.slice().sort((x, y) => x - y);
+      best.refH = hs0[Math.floor(hs0.length * 0.75)] || h;
       best.minX = Math.min(best.minX, it.b.minX);
       best.maxX = Math.max(best.maxX, it.b.maxX);
       best.minY = Math.min(best.minY, it.b.minY);
@@ -15053,6 +15063,10 @@
       const sizes = l.strokes.map((s) => s.size || 2).sort((a, b) => a - b);
       l.penSize = sizes[Math.floor(sizes.length / 2)] || 2;
       l.bbox = { minX: l.minX, maxX: l.maxX, minY: l.minY, maxY: l.maxY };
+      // Grundlinie: Median der unteren Kanten - Unterlaengen (g, p, y) und Punkte ziehen
+      // die Linie sonst nach unten
+      const bottoms = l.strokes.map((s) => (s.bbox || makeBBox(s.points)).maxY).sort((a, b) => a - b);
+      l.baseline = bottoms[Math.floor((bottoms.length - 1) / 2)];
     }
     return lines;
   }
@@ -15061,7 +15075,8 @@
     for (const s of boardStrokes.values()) {
       if (!s.extra || !s.extra.underline) continue;
       const b = s.bbox || makeBBox(s.points);
-      if (!b || b.minY < l.maxY - h * 0.2 || b.minY > l.maxY + h) continue;
+      const base = Number.isFinite(l.baseline) ? l.baseline : l.maxY;
+      if (!b || b.minY < base - h * 0.15 || b.minY > l.maxY + h) continue;
       const ov = Math.min(b.maxX, l.maxX) - Math.max(b.minX, l.minX);
       if (ov > (l.maxX - l.minX) * 0.6) return true;
     }
@@ -15123,8 +15138,10 @@
     for (const l of lines) {
       const h = Math.max(8, l.maxY - l.minY);
       const size = Math.max(1.5, Math.min(l.penSize, h * 0.12));
-      const y1 = l.maxY + Math.max(4, h * 0.14);
-      const y2 = y1 + Math.max(4, size * 2.2);
+      // dicht unter die Grundlinie der Schrift (nicht unter die tiefste Unterlaenge)
+      const base = Number.isFinite(l.baseline) ? l.baseline : l.maxY;
+      const y1 = base + Math.max(2.5, size * 1.6);
+      const y2 = y1 + Math.max(3, size * 2);
       const x0 = l.minX - 2;
       const x1 = l.maxX + 2;
       for (const y of [y1, y2]) {
