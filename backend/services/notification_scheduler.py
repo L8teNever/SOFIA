@@ -96,12 +96,20 @@ async def notify_new_homework(db: AsyncSession, hw: Homework, creator: User):
 
 async def notify_new_event(db: AsyncSession, ev: CalendarEvent, creator: User):
     """Sends notification to all class members who have event_new enabled."""
-    if not ev.class_id or str(ev.event_type) == "personal" or getattr(ev.event_type, "value", str(ev.event_type)) == "personal":
+    etype = getattr(ev.event_type, "value", str(ev.event_type))
+    if not ev.class_id or etype == "personal":
         return
 
-    users_res = await db.execute(select(User).where(User.class_id == ev.class_id, User.id != creator.id))
+    if etype == "custom":
+        # eigene Kategorie: nur deren Mitglieder (egal welche Klasse)
+        from backend.models.calendar_category import CalendarCategory
+        cat = (await db.execute(select(CalendarCategory).where(CalendarCategory.id == ev.category_id))).scalar_one_or_none()
+        ids = [i for i in (cat.member_ids if cat else []) or [] if i != creator.id]
+        users_res = await db.execute(select(User).where(User.id.in_(ids))) if ids else None
+    else:
+        users_res = await db.execute(select(User).where(User.class_id == ev.class_id, User.id != creator.id))
 
-    members = list(users_res.scalars().all())
+    members = list(users_res.scalars().all()) if users_res is not None else []
     if not members:
         return
 
@@ -418,15 +426,26 @@ async def _poll_calendar_reminders(db: AsyncSession, now: datetime):
     if not events:
         return
 
-    ev_by_class = {}
+    # Wer bekommt welchen Termin: Klassentermine die Klasse, persoenliche nur der Ersteller,
+    # Termine einer eigenen Kategorie nur deren Mitglieder (egal welche Klasse)
+    from backend.models.calendar_category import CalendarCategory
+    cats = {c.id: set(c.member_ids or []) for c in (await db.execute(select(CalendarCategory))).scalars().all()}
+    all_users = {u.id: u for u in (await db.execute(select(User))).scalars().all()}
+    ev_by_user = {}
     for ev in events:
-        ev_by_class.setdefault(ev.class_id, []).append(ev)
+        etype = getattr(ev.event_type, "value", str(ev.event_type))
+        if etype == "custom":
+            ids = cats.get(ev.category_id, set())
+        elif etype == "personal":
+            ids = {ev.created_by}
+        else:
+            ids = {uid for uid, u in all_users.items() if u.class_id == ev.class_id}
+        for uid in ids:
+            if uid in all_users:
+                ev_by_user.setdefault(uid, []).append(ev)
 
-    for class_id, ev_list in ev_by_class.items():
-        users_res = await db.execute(select(User).where(User.class_id == class_id))
-        members = list(users_res.scalars().all())
-
-        for u in members:
+    for uid, ev_list in ev_by_user.items():
+        for u in [all_users[uid]]:
             ns = await get_user_settings(db, u.id)
             if not ns.enabled:
                 continue

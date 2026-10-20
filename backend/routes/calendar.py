@@ -5,6 +5,7 @@ from backend.database import get_db
 from backend.auth import get_current_user, require_admin, require_super_admin
 from backend.config import settings
 from backend.models.calendar_event import CalendarEvent
+from backend.models.calendar_category import CalendarCategory
 from backend.models.class_group import ClassGroup
 from backend.models.user import User
 from backend.schemas import CalendarEventOut, CalendarEventCreate, HolidayImportRequest
@@ -13,6 +14,8 @@ from backend.services.audit_service import log_audit
 from backend.services.virus_scanner import scan_file
 from backend.services.compression import compress_lossless
 from typing import List, Optional
+from pydantic import BaseModel
+import re
 import logging
 import os
 import uuid
@@ -98,14 +101,123 @@ async def upload_event_file(
     )
     return {"url": f"{_CAL_URL_PREFIX}{filename}", "type": file_type, "name": file.filename}
 
+# ---- Eigene Kategorien (vom Super-Admin angelegt, nur fuer deren Mitglieder sichtbar) ----
+
+async def _my_category_ids(db: AsyncSession, user: User) -> set:
+    cats = (await db.execute(select(CalendarCategory))).scalars().all()
+    return {c.id for c in cats if user.id in (c.member_ids or [])}
+
+
+def _etype(ev) -> str:
+    return getattr(ev.event_type, "value", str(ev.event_type))
+
+
+async def _check_event_access(db: AsyncSession, event: CalendarEvent, user: User):
+    """Termin einer eigenen Kategorie: nur deren Mitglieder. Sonst: nur die eigene Klasse."""
+    if _etype(event) == "custom":
+        if event.category_id not in await _my_category_ids(db, user):
+            raise HTTPException(403)
+    elif event.class_id != user.class_id:
+        raise HTTPException(403)
+
+
+async def _resolve_type(db: AsyncSession, data, user: User):
+    """(event_type, category_id) - eine eigene Kategorie duerfen nur ihre Mitglieder benutzen."""
+    if data.event_type == "custom":
+        if not data.category_id or data.category_id not in await _my_category_ids(db, user):
+            raise HTTPException(403, "Diese Kategorie darfst du nicht benutzen")
+        return "custom", data.category_id
+    return data.event_type, None
+
+
+class CategoryIn(BaseModel):
+    name: str
+    color: str = "#6750a4"
+    member_ids: List[int] = []
+
+
+def _category_out(c: CalendarCategory, full: bool) -> dict:
+    out = {"id": c.id, "name": c.name, "color": c.color}
+    if full:
+        out["member_ids"] = list(c.member_ids or [])
+    return out
+
+
+async def _clean_category(db: AsyncSession, data: CategoryIn) -> dict:
+    name = (data.name or "").strip()[:60]
+    if not name:
+        raise HTTPException(400, "Name fehlt")
+    color = data.color if re.fullmatch(r"#[0-9a-fA-F]{6}", data.color or "") else "#6750a4"
+    wanted = {int(i) for i in data.member_ids or []}
+    existing = set((await db.execute(select(User.id).where(User.id.in_(wanted)))).scalars().all()) if wanted else set()
+    return {"name": name, "color": color, "member_ids": sorted(existing)}
+
+
+@router.get("/categories")
+async def list_categories(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Jeder sieht die Kategorien, in denen er Mitglied ist; der Super-Admin alle (mit Mitgliedern)."""
+    cats = (await db.execute(select(CalendarCategory).order_by(CalendarCategory.name))).scalars().all()
+    is_super = current_user.role == "super_admin"
+    return [{**_category_out(c, is_super), "member": current_user.id in (c.member_ids or [])}
+            for c in cats if is_super or current_user.id in (c.member_ids or [])]
+
+
+@router.post("/categories")
+async def create_category(request: Request, data: CategoryIn, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_super_admin)):
+    c = CalendarCategory(**(await _clean_category(db, data)), created_by=current_user.id)
+    db.add(c)
+    await db.commit()
+    await db.refresh(c)
+    await log_audit(db, action="calendar.category_create", user=current_user, entity_type="calendar_category",
+                    entity_id=c.id, details={"name": c.name, "members": len(c.member_ids or [])}, request=request)
+    return _category_out(c, True)
+
+
+@router.put("/categories/{cat_id}")
+async def update_category(request: Request, cat_id: int, data: CategoryIn, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_super_admin)):
+    c = (await db.execute(select(CalendarCategory).where(CalendarCategory.id == cat_id))).scalar_one_or_none()
+    if not c:
+        raise HTTPException(404)
+    for k, v in (await _clean_category(db, data)).items():
+        setattr(c, k, v)
+    await db.commit()
+    await log_audit(db, action="calendar.category_update", user=current_user, entity_type="calendar_category",
+                    entity_id=c.id, details={"name": c.name, "members": len(c.member_ids or [])}, request=request)
+    return _category_out(c, True)
+
+
+@router.delete("/categories/{cat_id}")
+async def delete_category(request: Request, cat_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_super_admin)):
+    """Loescht die Kategorie samt ihrer Termine."""
+    c = (await db.execute(select(CalendarCategory).where(CalendarCategory.id == cat_id))).scalar_one_or_none()
+    if not c:
+        raise HTTPException(404)
+    evs = (await db.execute(select(CalendarEvent).where(CalendarEvent.category_id == cat_id))).scalars().all()
+    for ev in evs:
+        _remove_dropped_files(list(ev.attachments or []), [])
+        await db.delete(ev)
+    name = c.name
+    await db.delete(c)
+    await db.commit()
+    await log_audit(db, action="calendar.category_delete", user=current_user, entity_type="calendar_category",
+                    entity_id=cat_id, details={"name": name, "events": len(evs)}, request=request)
+    return {"ok": True, "deleted_events": len(evs)}
+
+
 @router.get("/", response_model=List[CalendarEventOut])
 async def list_events(month: Optional[str] = None, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
-    query = select(CalendarEvent).where(
+    my_cats = await _my_category_ids(db, current_user)
+    class_events = and_(
         CalendarEvent.class_id == current_user.class_id,
+        CalendarEvent.event_type != "custom",
         or_(
             CalendarEvent.event_type != "personal",
             CalendarEvent.created_by == current_user.id
-        )
+        ),
+    )
+    query = select(CalendarEvent).where(
+        or_(class_events, and_(CalendarEvent.event_type == "custom", CalendarEvent.category_id.in_(my_cats)))
+        if my_cats else class_events
     )
     if month:
         first_day = f"{month}-01"
@@ -120,15 +232,23 @@ async def list_events(month: Optional[str] = None, db: AsyncSession = Depends(ge
 
 @router.post("/", response_model=CalendarEventOut)
 async def create_event(request: Request, data: CalendarEventCreate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    event_type, category_id = await _resolve_type(db, data, current_user)
+    class_id = current_user.class_id
+    if not class_id:
+        first = (await db.execute(select(ClassGroup.id).order_by(ClassGroup.id))).scalars().first()
+        if event_type != "custom" or not first:
+            raise HTTPException(400, "Keine Klasse")
+        class_id = first  # Termin einer eigenen Kategorie gehoert keiner Klasse; die Spalte braucht trotzdem eine
     event = CalendarEvent(
         title=data.title,
         description=data.description,
         date=data.date,
         end_date=data.end_date,
         time=data.time,
-        event_type=data.event_type,
-        class_id=current_user.class_id,
-        subject_id=data.subject_id,
+        event_type=event_type,
+        category_id=category_id,
+        class_id=class_id,
+        subject_id=data.subject_id if event_type != "custom" else None,
         created_by=current_user.id,
         attachments=_attachment_dicts(data.attachments),
     )
@@ -154,7 +274,8 @@ async def create_event(request: Request, data: CalendarEventCreate, db: AsyncSes
 
     try:
         from backend.services.google_sync_service import sync_event_created
-        await sync_event_created(db, event)
+        if event_type != "custom":  # synct an alle Google-Konten der Klasse - nichts fuer Kategorie-Termine
+            await sync_event_created(db, event)
     except Exception as e:
         logger.warning("Error syncing new event to Google Calendar: %s", e)
 
@@ -263,8 +384,7 @@ async def update_event(request: Request, event_id: int, data: CalendarEventCreat
     event = result.scalar_one_or_none()
     if not event:
         raise HTTPException(404, "Termin nicht gefunden")
-    if event.class_id != current_user.class_id:
-        raise HTTPException(403)
+    await _check_event_access(db, event, current_user)
     if event.event_type == "personal" and event.created_by != current_user.id:
         raise HTTPException(403, "Persönliche Termine können nur vom Ersteller bearbeitet werden")
     # Any other event is class-wide (everyone in the class can already see
@@ -277,8 +397,14 @@ async def update_event(request: Request, event_id: int, data: CalendarEventCreat
     event.date = data.date
     event.end_date = data.end_date
     event.time = data.time
-    event.event_type = data.event_type
-    event.subject_id = data.subject_id
+    new_type, new_cat = await _resolve_type(db, data, current_user)
+    if _etype(event) == "custom" and new_type != "custom":
+        if not current_user.class_id:
+            raise HTTPException(400, "Keine Klasse")
+        event.class_id = current_user.class_id  # wird ein normaler Klassentermin
+    event.event_type = new_type
+    event.category_id = new_cat
+    event.subject_id = data.subject_id if new_type != "custom" else None
     if data.attachments is not None:
         previous = list(event.attachments or [])
         event.attachments = _attachment_dicts(data.attachments)
@@ -311,8 +437,7 @@ async def delete_event(request: Request, event_id: int, db: AsyncSession = Depen
     event = result.scalar_one_or_none()
     if not event:
         raise HTTPException(404)
-    if event.class_id != current_user.class_id:
-        raise HTTPException(403)
+    await _check_event_access(db, event, current_user)
     if event.event_type == "personal" and event.created_by != current_user.id:
         raise HTTPException(403, "Persönliche Termine können nur vom Ersteller gelöscht werden")
     title = event.title

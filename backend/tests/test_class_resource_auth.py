@@ -88,8 +88,12 @@ class DepTests(unittest.TestCase):
 
     def test_calendar_update_delete_stay_class_scoped(self):
         src = inspect.getsource(update_event) + inspect.getsource(delete_event)
-        self.assertIn("event.class_id != current_user.class_id", src)
+        self.assertEqual(src.count("await _check_event_access(db, event, current_user)"), 2)
         self.assertIn('event.event_type == "personal"', src)
+        # Klassentermine: nur die eigene Klasse; Kategorie-Termine: nur Mitglieder
+        access = inspect.getsource(cal._check_event_access)
+        self.assertIn("event.class_id != user.class_id", access)
+        self.assertIn("_my_category_ids", access)
 
 
 class UiGateTests(unittest.TestCase):

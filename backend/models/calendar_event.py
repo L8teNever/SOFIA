@@ -10,6 +10,7 @@ class EventType(str, enum.Enum):
     other = "other"
     personal = "personal"
     holiday = "holiday"
+    custom = "custom"  # eigene Kategorie (category_id), nur fuer deren Mitglieder
 
 class CalendarEvent(Base):
     __tablename__ = "calendar_events"
@@ -25,6 +26,7 @@ class CalendarEvent(Base):
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     attachments = Column(JSON, default=list)  # [{"url","type","name"}]
+    category_id = Column(Integer, ForeignKey("calendar_categories.id"), nullable=True)  # nur bei event_type "custom"
 
     class_group = relationship("ClassGroup", back_populates="calendar_events")
     subject = relationship("Subject", back_populates="calendar_events")

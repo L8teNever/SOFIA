@@ -98,6 +98,7 @@ class CalendarEventOut(BaseModel):
     subject_id: Optional[int]
     created_by: int
     attachments: List[AttachmentItem] = []
+    category_id: Optional[int] = None
     class Config: from_attributes = True
 
     @field_validator("attachments", mode="before")
@@ -121,6 +122,7 @@ class CalendarEventCreate(BaseModel):
     time: Optional[str] = None
     event_type: str = "other"
     subject_id: Optional[int] = None
+    category_id: Optional[int] = None  # nur bei event_type "custom"
     # None on update means "leave the files as they are". A list replaces them.
     attachments: Optional[List[AttachmentItem]] = None
 

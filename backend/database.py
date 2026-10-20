@@ -42,7 +42,7 @@ async def init_db():
         subject_weighting, audit_log, manual_timetable_entry,
         google_account, google_sync_map, user_email_alias,
         chat_conversation, chat_participant, chat_message, chat_poll_option, chat_poll_vote,
-        chat_message_reaction
+        chat_message_reaction, calendar_category
     )
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -73,6 +73,8 @@ async def _migrate_columns(conn):
         await conn.execute(text("ALTER TABLE calendar_events ADD COLUMN description TEXT"))
     if "attachments" not in existing_cal:
         await conn.execute(text("ALTER TABLE calendar_events ADD COLUMN attachments JSON DEFAULT '[]'"))
+    if "category_id" not in existing_cal:
+        await conn.execute(text("ALTER TABLE calendar_events ADD COLUMN category_id INTEGER"))
 
     result_gr = await conn.execute(text("PRAGMA table_info(grades)"))
     existing_gr = {row[1] for row in result_gr.fetchall()}

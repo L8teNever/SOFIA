@@ -69,6 +69,10 @@ const API = {
   updateEvent:   (id, d)  => API.put(`/calendar/${id}`, d),
   uploadEventFile: (form) => API.upload('/calendar/upload', form),
   deleteEvent:   (id)     => API.delete(`/calendar/${id}`),
+  calendarCategories:     ()      => API.get('/calendar/categories'),
+  createCalendarCategory: (d)     => API.post('/calendar/categories', d),
+  updateCalendarCategory: (id, d) => API.put(`/calendar/categories/${id}`, d),
+  deleteCalendarCategory: (id)    => API.delete(`/calendar/categories/${id}`),
 
   holidayStates: ()       => API.get('/calendar/holidays/states'),
   holidayPreview:(st, yr) => API.get(`/calendar/holidays/preview?state=${st}&year=${yr}`),

@@ -598,6 +598,40 @@ const CAL_TYPE_BG = {
 };
 const CAL_WEEK_EVENT_DURATION_MIN = 60;
 
+// ---- Eigene Kategorien (Super-Admin legt sie im Admin-Bereich an, z. B. Internat) ----
+// Termine einer eigenen Kategorie kommen vom Server als event_type "custom" + category_id.
+// Im Kalender heissen sie "cat<id>", damit Farben, Namen und Filter wie bei den festen
+// Kategorien funktionieren; beim Speichern wird das wieder zurueckuebersetzt.
+var calCategories = [];
+async function calLoadCategories() {
+  try { calCategories = await API.calendarCategories(); } catch { calCategories = []; }
+  calCategories.forEach(c => {
+    const k = 'cat' + c.id;
+    CAL_TYPE_SOLID[k] = c.color;
+    CAL_TYPE_LABEL[k] = c.name;
+    CAL_TYPE_BG[k] = c.color + '1a';
+  });
+  // gespeicherter Filter auf eine Kategorie, die es nicht mehr gibt: wieder alle zeigen
+  if (/^cat\d+$/.test(activeCategoryFilter) && !CAL_TYPE_LABEL[activeCategoryFilter]) activeCategoryFilter = 'all';
+}
+// nur Kategorien, in denen man selbst Mitglied ist, darf man fuer Termine waehlen
+function calMyCategories() { return calCategories.filter(c => c.member); }
+function calNormEvent(ev) {
+  if (ev && ev.event_type === 'custom' && ev.category_id) ev.event_type = 'cat' + ev.category_id;
+  return ev;
+}
+async function calFetchEvents(month) {
+  const list = await calFetchEvents(month);
+  return (list || []).map(calNormEvent);
+}
+function calSplitType(value) {
+  const m = /^cat(\d+)$/.exec(value || '');
+  return m ? { event_type: 'custom', category_id: parseInt(m[1], 10) } : { event_type: value, category_id: null };
+}
+function calCategoryOptionsHtml(selected) {
+  return calMyCategories().map(c => `<option value="cat${c.id}"${selected === 'cat' + c.id ? ' selected' : ''}>${escapeHtml(c.name)} (nur für Mitglieder)</option>`).join('');
+}
+
 var calYear = new Date().getFullYear();
 var calMonth = new Date().getMonth();
 var calEvents = [];
@@ -610,7 +644,7 @@ var selectedCalDate = null;
     const saved = localStorage.getItem('cal_display_mode');
     if (CAL_VIEW_MODES.some(m => m.id === saved)) calDisplayMode = saved;
     const filter = localStorage.getItem('cal_category_filter');
-    if (filter && ['all', 'exam', 'holiday', 'trip', 'personal', 'other'].includes(filter)) {
+    if (filter && (['all', 'exam', 'holiday', 'trip', 'personal', 'other'].includes(filter) || /^cat\d+$/.test(filter))) {
       activeCategoryFilter = filter;
     }
   } catch {}
@@ -926,7 +960,7 @@ async function onCalSearchInput(value) {
   calSearchQuery = q;
   clearTimeout(calSearchDebounce);
   if (startingSearch) {
-    calSearchPool = await API.events().catch(() => []);
+    calSearchPool = await calFetchEvents().catch(() => []);
   }
   calSearchDebounce = setTimeout(() => renderCalSearchDropdown(), startingSearch ? 0 : 120);
 }
@@ -1013,6 +1047,7 @@ function toggleCalHeaderSearch(force) {
 async function init_calendar() {
   paintCalModeChrome();
   syncCalTodayBtn();
+  await calLoadCategories();
   const [, , me] = await Promise.all([
     loadCalEvents(),
     loadCalSubjects(),
@@ -1124,7 +1159,7 @@ function prefetchCalNeighbors() {
     keys.forEach(key => {
       if (Array.isArray(calPeriodCache.get(key)) || calPeriodCache.get(key) === null) return;
       calPeriodCache.set(key, null);
-      API.events(key).then(list => {
+      calFetchEvents(key).then(list => {
         calPeriodCache.set(key, list || []);
         refreshOpenSwipePane(dir);
       }).catch(() => { if (calPeriodCache.get(key) === null) calPeriodCache.delete(key); });
@@ -1343,13 +1378,13 @@ async function _fetchCalEventsForMode() {
   // Always refreshes the months on screen and remembers them, so the next
   // swipe can paint that period from memory while the finger is still down.
   const fetchMonth = async (key) => {
-    const list = await API.events(key).catch(() => []);
+    const list = await calFetchEvents(key).catch(() => []);
     calPeriodCache.set(key, list);
     return list;
   };
   // Agenda lists the whole calendar, so it asks for every event instead of
   // a single month like the date-bound views do.
-  if (calDisplayMode === 'agenda') return await API.events();
+  if (calDisplayMode === 'agenda') return await calFetchEvents();
   if (calDisplayMode === 'week') {
     const months = _calMonthsForWeek(calWeekAnchor);
     const results = await Promise.all([...months].map(m => fetchMonth(m)));
@@ -1395,7 +1430,7 @@ function toggleCalFilterMenu(btn) {
   panel.style.maxHeight = '360px';
   panel.innerHTML = `
     <div style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;opacity:0.5;padding:4px 12px 2px;">Kategorie</div>
-    ${CAL_FILTER_OPTIONS.map(o =>
+    ${CAL_FILTER_OPTIONS.concat(calCategories.map(c => ({ value: 'cat' + c.id, label: escapeHtml(c.name) }))).map(o =>
       `<div class="m3-dropdown-opt${o.value === activeCategoryFilter ? ' dd-sel' : ''}" data-value="${o.value}"><i data-lucide="${o.value === 'all' ? 'layers' : 'tag'}" style="width:16px;height:16px;margin-right:10px;flex-shrink:0;"></i>${o.label}</div>`
     ).join('')}
   `;
@@ -2212,6 +2247,7 @@ async function openNewEventSheet(defaultDate, defaultTime) {
         <option value="trip">Ausflug / Klassenfahrt</option>
         <option value="holiday">Ferien</option>
         <option value="personal">Persönlich (nur für dich sichtbar)</option>
+        ${calCategoryOptionsHtml('')}
       </select>
     </div>
     <div id="ev-subject-row" class="m3-field" style="display:none;">
@@ -2271,14 +2307,14 @@ async function saveEvent() {
   const isRange = document.getElementById('ev-mode-range')?.classList.contains('active');
   const endVal = document.getElementById('ev-end-date')?.value;
   const end_date = isRange && endVal && endVal >= date ? endVal : (isRange && endVal ? date : null);
-  const event_type = document.getElementById('ev-type').value;
+  const { event_type, category_id } = calSplitType(document.getElementById('ev-type').value);
   const subEl = document.getElementById('ev-subject');
   const subject_id = (event_type === 'exam' && subEl && subEl.value) ? parseInt(subEl.value, 10) : null;
   const timeEl = document.getElementById('ev-time');
   const time = (timeEl && timeEl.value) ? timeEl.value : null;
   try {
     if (calUploading) { showToast('Dateien werden noch hochgeladen'); return; }
-    await API.createEvent({ title, description, date, end_date, time, event_type, subject_id, attachments: calPendingFiles.slice() });
+    await API.createEvent({ title, description, date, end_date, time, event_type, category_id, subject_id, attachments: calPendingFiles.slice() });
     closeSheet();
     calPeriodCache.clear();
     await loadCalEvents();
@@ -2305,7 +2341,8 @@ async function openEditEventSheet(eventId) {
     { value: 'exam', label: 'Klassenarbeit' },
     { value: 'trip', label: 'Ausflug / Klassenfahrt' },
     { value: 'holiday', label: 'Ferien' },
-    { value: 'personal', label: 'Persönlich (nur für dich sichtbar)' }
+    { value: 'personal', label: 'Persönlich (nur für dich sichtbar)' },
+    ...calMyCategories().map(c => ({ value: 'cat' + c.id, label: escapeHtml(c.name) + ' (nur für Mitglieder)' })),
   ].map(t => `<option value="${t.value}" ${t.value === ev.event_type ? 'selected' : ''}>${t.label}</option>`).join('');
   const hasTime = Boolean(ev.time);
   const hasMore = isRange || hasTime;
@@ -2389,14 +2426,14 @@ async function saveEditedEvent(eventId) {
   const isRange = document.getElementById('ev-mode-range')?.classList.contains('active');
   const endVal = document.getElementById('ev-end-date')?.value;
   const end_date = isRange && endVal && endVal >= date ? endVal : (isRange && endVal ? date : null);
-  const event_type = document.getElementById('ev-type').value;
+  const { event_type, category_id } = calSplitType(document.getElementById('ev-type').value);
   const subEl = document.getElementById('ev-subject');
   const subject_id = (event_type === 'exam' && subEl && subEl.value) ? parseInt(subEl.value, 10) : null;
   const timeEl = document.getElementById('ev-time');
   const time = (timeEl && timeEl.value) ? timeEl.value : null;
   try {
     if (calUploading) { showToast('Dateien werden noch hochgeladen'); return; }
-    await API.updateEvent(eventId, { title, description, date, end_date, time, event_type, subject_id, attachments: calPendingFiles.slice() });
+    await API.updateEvent(eventId, { title, description, date, end_date, time, event_type, category_id, subject_id, attachments: calPendingFiles.slice() });
     closeSheet();
     calPeriodCache.clear();
     await loadCalEvents();
