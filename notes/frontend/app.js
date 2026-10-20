@@ -15122,6 +15122,7 @@
       return true;
     });
     renderHeadingChips();
+    if (window.sofiaOutlineRefresh) window.sofiaOutlineRefresh();
   }
   // nach dem Schreiben kurz warten, dann neu pruefen (nur wenn sich etwas geaendert hat)
   function maybeScheduleHeadingScan() {
@@ -15163,6 +15164,7 @@
     for (const s of made) putStroke(s);
     pushUndo({ type: "add_many", strokes: made.map(cloneStroke) });
     requestRedraw();
+    if (window.sofiaOutlineRefresh) setTimeout(window.sofiaOutlineRefresh, 0);
   }
   function renderHeadingChips() {
     hdOverlay.innerHTML = "";
@@ -22877,7 +22879,6 @@
         { icon: "rotate_right", label: "Drehen", run: () => rotatePage(i) },
         { icon: "wallpaper", label: "Hintergrund", sub: () => pageBgItems(i) },
         { sep: true },
-        { icon: "bookmark_add", label: "Lesezeichen setzen …", run: () => addBookmark(i) },
       ];
       if (pg.board || pg.boardOf) items.push({ icon: "open_in_full", label: "Board öffnen", run: () => enterBoardPage(pid) });
       items.push({ sep: true }, ...exportItems, { sep: true });
@@ -23095,7 +23096,7 @@
     function syncPanelTabs() {
       const mode = marksOpen ? "marks" : pageSel ? "select" : "pages";
       // Titel oben passt zum Tab
-      if (tabTitle) tabTitle.textContent = mode === "marks" ? "Lesezeichen" : mode === "select" ? "Auswahl" : "Seiten";
+      if (tabTitle) tabTitle.textContent = mode === "marks" ? "Gliederung" : mode === "select" ? "Auswahl" : "Seiten";
       document.body.classList.toggle("pages-selecting", mode === "select");
       for (const [el, m] of [[tabPages, "pages"], [tabMarks, "marks"], [tabSelect, "select"]]) {
         if (!el) continue;
@@ -23162,6 +23163,257 @@
         cv.style.height = Math.round(r.h * w / r.w) + "px";
       });
     }
+    // ---- Gliederung (statt Lesezeichen): doppelt unterstrichene Ueberschriften ----
+    // Jede doppelte Unterstreichung (extra.underline) markiert eine Ueberschrift: die
+    // Handschrift direkt darueber. Der Text kommt von der lokalen Handschrift-Erkennung
+    // (TrOCR, laeuft auf dem Geraet, local-ocr.js) und wird im Notizbuch gespeichert
+    // (nb.outline[key] = {text, star}), damit andere Geraete ihn nicht neu lesen muessen.
+    // Ebene: grosse Ueberschriften = 1, deutlich kleinere = 2.
+    let outlineOnlyStars = false;
+    const outlineLocalText = new Map(); // key -> Text (wenn man nicht speichern darf)
+    const outlineThumbs = new Map(); // key -> {sig, url}
+    let outlineQueueBusy = false;
+    function outlineData() {
+      return (notebook && notebook.outline) || {};
+    }
+    function computeOutline() {
+      if (!notebook) return [];
+      const rects = pageRects(notebook);
+      const all = [...boardStrokes.values()].filter((s) => !(s.extra && s.extra.boardPage));
+      const bb = (s) => s.bbox || makeBBox(s.points);
+      // Unterstreichungen zu Paaren (doppelt) zusammenfassen
+      const unders = all.filter((s) => s.extra && s.extra.underline).map((s) => ({ s, b: bb(s) })).sort((a, b) => a.b.minY - b.b.minY);
+      const groups = [];
+      for (const u of unders) {
+        const g = groups.find((g) => {
+          const ov = Math.min(g.maxX, u.b.maxX) - Math.max(g.minX, u.b.minX);
+          return Math.abs(u.b.minY - g.maxY) < 16 && ov > 0.7 * Math.min(g.maxX - g.minX, u.b.maxX - u.b.minX);
+        });
+        if (g) {
+          g.ids.push(u.s.id);
+          g.maxY = Math.max(g.maxY, u.b.maxY);
+        } else groups.push({ ids: [u.s.id], minX: u.b.minX, maxX: u.b.maxX, minY: u.b.minY, maxY: u.b.maxY });
+      }
+      const hand = all.filter(isHandStroke);
+      const items = [];
+      for (const g of groups) {
+        const near = hand.filter((s) => {
+          const b = bb(s);
+          const cx = (b.minX + b.maxX) / 2;
+          return cx >= g.minX - 6 && cx <= g.maxX + 6 && b.maxY <= g.minY + 30 && b.maxY >= g.minY - 220;
+        });
+        if (!near.length) continue;
+        // die Zeile direkt ueber der Unterstreichung
+        let line = null;
+        for (const l of hdLines(near)) {
+          const base = Number.isFinite(l.baseline) ? l.baseline : l.maxY;
+          if (base > g.minY + 4) continue;
+          if (!line || base > (Number.isFinite(line.baseline) ? line.baseline : line.maxY)) line = l;
+        }
+        if (!line) continue;
+        const cx = (line.minX + line.maxX) / 2;
+        const cy = (line.minY + line.maxY) / 2;
+        let page = rects.findIndex((r) => cx >= r.x && cx <= r.x + r.w && cy >= r.y && cy <= r.y + r.h);
+        if (page < 0) page = rects.findIndex((r) => cy >= r.y && cy <= r.y + r.h);
+        const key = g.ids.slice().sort()[0];
+        items.push({ key, line, page, y: line.minY, x: line.minX });
+      }
+      items.sort((a, b) => a.page - b.page || a.y - b.y || a.x - b.x);
+      const maxSize = Math.max(0, ...items.map((it) => it.line.size || 0));
+      for (const it of items) it.level = maxSize && (it.line.size || 0) < maxSize * 0.8 ? 2 : 1;
+      return items;
+    }
+    function outlineText(it) {
+      const d = outlineData()[it.key];
+      return (d && d.text) || outlineLocalText.get(it.key) || "";
+    }
+    function setOutlineEntry(key, patch) {
+      if (!notebook) return;
+      const nb = clone();
+      nb.outline = Object.assign({}, nb.outline || {});
+      nb.outline[key] = Object.assign({}, nb.outline[key] || {}, patch);
+      saveNotebook(nb);
+    }
+    function outlineThumb(it) {
+      const sig = it.line.strokes.length + ":" + Math.round(it.line.maxX - it.line.minX);
+      const c = outlineThumbs.get(it.key);
+      if (c && c.sig === sig) return c.url;
+      let url = "";
+      try {
+        url = renderInkCrop(it.line.strokes).dataUrl;
+      } catch (err) {}
+      outlineThumbs.set(it.key, { sig, url });
+      return url;
+    }
+    // fehlende Texte nacheinander lokal lesen (nur wenn die Erkennung eingeschaltet ist)
+    async function runOutlineQueue(items) {
+      if (outlineQueueBusy || !window.SofiaLocalOcr || !SofiaLocalOcr.enabled()) return;
+      const todo = items.filter((it) => !outlineText(it));
+      if (!todo.length) return;
+      outlineQueueBusy = true;
+      try {
+        for (const it of todo) {
+          if (!marksOpen) break;
+          let text = "";
+          try {
+            text = await SofiaLocalOcr.readLine(renderInkCrop(it.line.strokes).dataUrl);
+          } catch (err) {
+            break; // Modell fehlt/Fehler: Bilder bleiben stehen
+          }
+          text = String(text || "").replace(/\s+/g, " ").trim().slice(0, 80);
+          if (!text) continue;
+          if (fullRights()) setOutlineEntry(it.key, { text });
+          else outlineLocalText.set(it.key, text);
+          renderMarks();
+        }
+      } finally {
+        outlineQueueBusy = false;
+      }
+    }
+    function jumpOutline(it) {
+      activateNotebookPage(it.page);
+      // Ueberschrift oben ins Bild holen, falls sie nach dem Einpassen nicht zu sehen ist
+      setTimeout(() => {
+        const s = worldToScreen(it.line.minX, it.line.minY);
+        if (s.y < 90 || s.y > window.innerHeight * 0.7) {
+          offsetY += 110 - s.y;
+          requestRedraw();
+        }
+      }, 80);
+    }
+    async function renameOutline(it) {
+      const res = await openNameSheet({ title: "Überschrift", label: "Text", initial: outlineText(it), placeholder: "z. B. Lineare Funktionen" });
+      const text = res && String(res.value || "").trim().slice(0, 80);
+      if (!text) return;
+      if (fullRights()) setOutlineEntry(it.key, { text });
+      else outlineLocalText.set(it.key, text);
+      renderMarks();
+    }
+    function renderOutline(box) {
+      const items = computeOutline();
+      const data = outlineData();
+      const head = document.createElement("div");
+      head.className = "ol-head";
+      head.innerHTML = '<button type="button" data-f="all">Alle</button><button type="button" data-f="star"><span class="material-symbols-rounded">star</span>Markiert</button>';
+      head.querySelectorAll("button").forEach((b) => {
+        b.classList.toggle("active", (b.dataset.f === "star") === outlineOnlyStars);
+        b.addEventListener("click", (e) => {
+          e.stopPropagation();
+          outlineOnlyStars = b.dataset.f === "star";
+          renderMarks();
+        });
+      });
+      box.appendChild(head);
+      // lokale Erkennung aus: anbieten (laedt das Modell einmal auf dieses Geraet)
+      const ocr = window.SofiaLocalOcr;
+      if (items.length && ocr && !ocr.enabled() && items.some((it) => !outlineText(it))) {
+        const hint = document.createElement("button");
+        hint.type = "button";
+        hint.className = "ol-ocr";
+        hint.innerHTML = '<span class="material-symbols-rounded">text_fields</span><span>Überschriften als Text anzeigen<small>Handschrift-Erkennung auf diesem Gerät einschalten (lädt einmalig ca. 70 MB, danach auch offline)</small></span>';
+        hint.addEventListener("click", (e) => {
+          e.stopPropagation();
+          ocr.setEnabled(true);
+          showToast("Handschrift-Erkennung wird geladen…");
+          renderMarks();
+        });
+        box.appendChild(hint);
+      } else if (ocr && ocr.enabled() && !ocr.ready() && items.some((it) => !outlineText(it))) {
+        const st = ocr.status();
+        const wait = document.createElement("div");
+        wait.className = "pap-hint";
+        wait.textContent = st.state === "error" || st.state === "missing" ? "Handschrift-Erkennung nicht verfügbar" : "Handschrift-Erkennung lädt… " + Math.round((st.progress || 0) * 100) + " %";
+        box.appendChild(wait);
+      }
+      const shown = outlineOnlyStars ? items.filter((it) => data[it.key] && data[it.key].star) : items;
+      if (!shown.length) {
+        const empty = document.createElement("div");
+        empty.className = "pap-hint";
+        empty.textContent = outlineOnlyStars
+          ? "Noch nichts markiert – tippe auf den Stern neben einer Überschrift"
+          : "Noch keine Überschriften. Unterstreiche eine Überschrift doppelt (Vorschlag annehmen oder Lasso → Doppelt unterstreichen), dann erscheint sie hier.";
+        box.appendChild(empty);
+      }
+      for (const it of shown) {
+        const d = data[it.key] || {};
+        const row = document.createElement("div");
+        row.className = "ol-row ol-l" + it.level + (d.star ? " ol-starred" : "");
+        const star = document.createElement("button");
+        star.type = "button";
+        star.className = "ol-star";
+        star.title = d.star ? "Markierung entfernen" : "Markieren";
+        star.innerHTML = '<span class="material-symbols-rounded">star</span>';
+        star.addEventListener("click", (e) => {
+          e.stopPropagation();
+          if (!fullRights()) return showToast("Nur wer bearbeiten darf, kann markieren");
+          setOutlineEntry(it.key, { star: !d.star });
+          renderMarks();
+        });
+        const main = document.createElement("button");
+        main.type = "button";
+        main.className = "ol-main";
+        const text = outlineText(it);
+        if (text) {
+          const t = document.createElement("span");
+          t.className = "ol-text";
+          t.textContent = text;
+          main.appendChild(t);
+        } else {
+          const url = outlineThumb(it);
+          if (url) {
+            const img = document.createElement("img");
+            img.className = "ol-img";
+            img.alt = "";
+            img.src = url;
+            main.appendChild(img);
+          }
+        }
+        const pg = document.createElement("small");
+        pg.className = "ol-page";
+        pg.textContent = "S. " + (it.page + 1);
+        main.appendChild(pg);
+        main.title = "Zur Überschrift springen · lange drücken zum Umbenennen";
+        main.addEventListener("click", (e) => {
+          e.stopPropagation();
+          if (suppressMarkClick) {
+            suppressMarkClick = false;
+            return;
+          }
+          jumpOutline(it);
+        });
+        // lange druecken: Text von Hand aendern (falls falsch gelesen)
+        main.addEventListener("pointerdown", (e) => {
+          if (e.button > 0) return;
+          const x0 = e.clientX;
+          const y0 = e.clientY;
+          const t = setTimeout(() => {
+            suppressMarkClick = true;
+            if (navigator.vibrate) navigator.vibrate(12);
+            renameOutline(it);
+          }, 500);
+          const cancel = (ev) => {
+            if (ev.type === "pointermove" && Math.hypot(ev.clientX - x0, ev.clientY - y0) < 8) return;
+            clearTimeout(t);
+            main.removeEventListener("pointermove", cancel);
+            main.removeEventListener("pointerup", cancel);
+            main.removeEventListener("pointercancel", cancel);
+          };
+          main.addEventListener("pointermove", cancel);
+          main.addEventListener("pointerup", cancel);
+          main.addEventListener("pointercancel", cancel);
+        });
+        row.append(star, main);
+        box.appendChild(row);
+      }
+      runOutlineQueue(items);
+    }
+    // Striche geaendert (neue Unterstreichung ...): Gliederung neu, wenn sie offen ist
+    window.sofiaOutlineRefresh = () => {
+      if (marksOpen) renderMarks();
+    };
+    if (window.SofiaLocalOcr) SofiaLocalOcr.onChange(() => {
+      if (marksOpen) renderMarks();
+    });
     function renderMarks() {
       marksBtn?.classList.toggle("active", marksOpen);
       syncPanelTabs();
@@ -23173,14 +23425,14 @@
         return;
       }
       marksEl.innerHTML = "";
+      renderOutline(marksEl);
       const marks = notebookMarks();
-      if (!marks.length) {
-        const empty = document.createElement("div");
-        empty.className = "pap-hint";
-        empty.textContent = "Noch keine Lesezeichen";
-        marksEl.appendChild(empty);
-        return;
-      }
+      if (!marks.length) return;
+      // fruehere Lesezeichen bleiben erreichbar
+      const legacy = document.createElement("div");
+      legacy.className = "ol-legacy";
+      legacy.textContent = "Lesezeichen";
+      marksEl.appendChild(legacy);
       for (const m of marks) {
         const i = pageIndexById(m.pageId);
         const row = document.createElement("button");
