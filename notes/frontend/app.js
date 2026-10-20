@@ -12598,12 +12598,24 @@
       const cur = boardStrokes.get(st.id);
       if (!cur) return;
       const before = cloneStroke(cur);
-      // links oben bleibt, Groesse wieder in echten mm
+      // Lage und Groesse bleiben so, wie man sie zuletzt hingeschoben/aufgezogen hat:
+      // vergroessert/verkleinert man es, bleibt dieser Faktor auch nach dem Bearbeiten.
       const x0 = Math.min(cur.points[0].x, cur.points[1].x);
       const y0 = Math.min(cur.points[0].y, cur.points[1].y);
+      const curW = Math.abs(cur.points[1].x - cur.points[0].x);
+      const curH = Math.abs(cur.points[1].y - cur.points[0].y);
+      const oldG = cur.extra && cur.extra.koord ? window.SofiaKoord.geometry(cur.extra.koord) : null;
+      const fx = oldG && oldG.wMM > 0 && curW > 0 ? curW / (oldG.wMM * MM) : 1;
+      const fy = oldG && oldG.hMM > 0 && curH > 0 ? curH / (oldG.hMM * MM) : 1;
+      const newW = img.wMM * MM * fx;
+      const newH = img.hMM * MM * fy;
+      // gedreht: um die Mitte, sonst bleibt links oben
+      const rotated = strokeRotation(cur) !== 0;
+      const nx = rotated ? x0 + curW / 2 - newW / 2 : x0;
+      const ny = rotated ? y0 + curH / 2 - newH / 2 : y0;
       cur.points = [
-        { x: x0, y: y0, p: 1 },
-        { x: x0 + img.wMM * MM, y: y0 + img.hMM * MM, p: 1 },
+        { x: nx, y: ny, p: 1 },
+        { x: nx + newW, y: ny + newH, p: 1 },
       ];
       cur.extra = Object.assign({}, cur.extra, { mediaId: img.mediaId, nw: img.pw, nh: img.ph, crop: { l: 0, t: 0, r: 1, b: 1 }, koord: spec });
       delete cur.extra.rot;
