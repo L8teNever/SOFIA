@@ -19,6 +19,7 @@
       <div class="section-label" style="margin-top:18px;">Kurse</div>
       <div id="moodle-courses"></div>
     </div>
+    <div id="moodle-stand" style="font-size:0.75rem;opacity:0.55;text-align:center;margin:18px 0 4px;"></div>
   </div></div>
   <style>
     .md-card { background:#fff; border-radius:20px; padding:14px 16px; margin-bottom:10px; box-shadow:0 1px 3px rgba(0,0,0,0.06); }
@@ -71,8 +72,6 @@
 <script>
 document.getElementById('ph-moodle').outerHTML = pageHeader({
   title: 'Moodle',
-  subtitleId: 'moodle-sub',
-  subtitle: 'Kurse & Aufgaben',
   trailing: '<button class="icon-btn" id="moodle-refresh" onclick="moodleRefresh()" title="Neu laden"><i data-lucide="refresh-cw" style="width:20px;height:20px;"></i></button>',
 });
 
@@ -125,8 +124,14 @@ function mdRender() {
   banner.innerHTML = d.error
     ? `<div class="md-card" style="background:#ffdad6;color:#410002;"><b>Moodle gerade nicht erreichbar.</b><div style="font-size:0.8rem;margin-top:4px;opacity:0.8;">${mdEsc(d.error)}${d.updated_at ? ' · zeigt den Stand von ' + mdDate(d.updated_at) : ''}</div></div>`
     : '';
-  const sub = document.getElementById('moodle-sub');
-  if (sub && d.updated_at) sub.textContent = 'Stand ' + new Date(d.updated_at * 1000).toLocaleTimeString('de-DE', { hour:'2-digit', minute:'2-digit' });
+  // Stand: klein am Seitenende und im Neu-laden-Knopf (nicht mehr unter dem Kopf)
+  if (d.updated_at) {
+    const stand = 'Stand ' + new Date(d.updated_at * 1000).toLocaleTimeString('de-DE', { hour:'2-digit', minute:'2-digit' });
+    const standEl = document.getElementById('moodle-stand');
+    if (standEl) standEl.textContent = stand + ' Uhr · aktualisiert sich alle 20 Minuten';
+    const rb = document.getElementById('moodle-refresh');
+    if (rb) rb.title = 'Neu laden (' + stand + ' Uhr)';
+  }
   const courses = d.courses || [];
   const now = Date.now() / 1000;
 

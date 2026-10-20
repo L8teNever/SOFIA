@@ -14,8 +14,6 @@
 document.getElementById('ph-grades').outerHTML = pageHeader({
   title: 'Noten',
   titleStyle: 'color:#041e49;',
-  subtitle: 'Halbjahr 2 · 2025/26',
-  subtitleStyle: 'color:#041e49;',
   trailing: `<button onclick="openGradeWeightingSheet()" class="icon-btn" title="Notenspiegel & Gewichtung anpassen" style="background:#e8def8;color:#21005d;">
       <i data-lucide="sliders-horizontal"></i>
     </button>`
@@ -126,7 +124,7 @@ function renderGrades() {
     '<div style="background:#041e49;color:white;border-radius:28px;padding:26px 26px 22px;margin-bottom:14px;box-shadow:0 4px 16px rgba(4,30,73,0.2);">'
     + '<div style="display:flex;align-items:flex-start;justify-content:space-between;">'
     + '<div>'
-    + '<div style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;opacity:0.65;">Gesamt-Notenschnitt</div>'
+    + '<div style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;opacity:0.65;">Gesamt-Notenschnitt · Halbjahr 2 · 2025/26</div>'
     + '<div style="font-size:4.2rem;font-weight:800;line-height:1;margin-top:6px;">' + total.toFixed(1) + '</div>'
     + '<div style="display:flex;align-items:center;gap:6px;margin-top:10px;font-size:0.82rem;opacity:0.8;">'
     + '<i data-lucide="trending-up" style="width:15px;height:15px;"></i><span>' + gradeItems.length + ' Noten in ' + Object.keys(bySubject).length + ' Fächern</span>'

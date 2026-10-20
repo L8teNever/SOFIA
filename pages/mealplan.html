@@ -122,9 +122,6 @@
 document.getElementById('ph-mealplan').outerHTML = pageHeader({
   title: 'Essensplan',
   titleStyle: 'color:#072711;',
-  subtitle: 'Mensa Speiseplan',
-  subtitleId: 'meal-header-sub',
-  subtitleStyle: 'color:#072711;',
   trailing: `<button class="meal-day-pick" id="meal-day-pick" onclick="openMealDayMenu(this)" title="Tag wählen"><span id="meal-day-pick-label">Heute</span><i data-lucide="chevron-down" style="width:18px;height:18px;"></i></button>`
 });
 document.getElementById('meal-empty-slot').outerHTML = emptyState({
@@ -371,8 +368,6 @@ function paintMealSubtitle() {
   const sub = document.getElementById('meal-header-sub');
   const day = mealDays[mealDayIndex];
   if (!sub || !day) return;
-  // Das Gericht steht schon in der Karte (und im Widget), oben nicht nochmal
-  sub.textContent = 'Mensa Speiseplan';
 }
 
 function mealShowDay(index) {
@@ -660,7 +655,8 @@ function renderMealPlan(res) {
     mealActiveDate = null;
     document.getElementById('meal-empty').style.display = 'block';
     document.getElementById('meal-content').style.display = 'none';
-    if (sub) sub.textContent = isWeekend ? 'Wochenende – Noch kein Plan für nächste Woche' : 'Kein Plan für diese Woche vorhanden';
+    const emptyTitle = document.getElementById('meal-empty-title');
+    if (emptyTitle) emptyTitle.textContent = isWeekend ? 'Noch kein Plan für nächste Woche' : 'Kein Plan für diese Woche vorhanden';
     if (deleteBtn) deleteBtn.style.display = 'none';
     mealSyncChips();
     return;
