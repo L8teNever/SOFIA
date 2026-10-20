@@ -2740,6 +2740,8 @@
     positionTextEditor();
     positionInkChips();
     positionScanBoxes();
+    positionHeadingChips();
+    maybeScheduleHeadingScan();
 
     ctx.restore();
     syncBoardBar();
@@ -11953,6 +11955,7 @@
     const doneBtn = document.getElementById("btn-media-crop-done");
     const cancelBtn = document.getElementById("btn-media-crop-cancel");
     if (kiBtn) kiBtn.classList.toggle("hidden", cropping || pens.length === 0);
+    document.getElementById("btn-sel-underline")?.classList.toggle("hidden", cropping || !pens.some(isHandStroke));
     if (copyBtn) copyBtn.classList.toggle("hidden", cropping || !selection.ids.size);
     if (cutBtn) cutBtn.classList.toggle("hidden", cropping || !selection.ids.size);
     document.getElementById("btn-sel-rotate")?.classList.toggle("hidden", cropping || !selection.ids.size);
@@ -14903,6 +14906,245 @@
   function inkGroupKey(g) {
     return (g.strokeIds || []).slice().sort().join(",");
   }
+
+  // ---- Ueberschriften in der Handschrift erkennen und doppelt unterstreichen ----
+  // Eine Zeile gilt als Ueberschrift, wenn sie deutlich groesser geschrieben ist als der
+  // uebrige Text (oder in einer anderen Farbe und mindestens gleich gross). Daneben kommt
+  // ein Knopf "Ueberschrift markieren?": Ja = doppelt unterstreichen, X = an dieser Stelle
+  // nicht mehr fragen. Mit dem Lasso ausgewaehlte Schrift laesst sich ueber die
+  // Auswahl-Leiste auch von Hand doppelt unterstreichen.
+  var hdOverlay = document.createElement("div");
+  hdOverlay.id = "hd-overlay";
+  (inkOverlay && inkOverlay.parentNode ? inkOverlay.parentNode : document.body).appendChild(hdOverlay);
+  var hdCandidates = [];
+  var hdSig = "";
+  var hdTimer = null;
+  const HD_SIZE_RATIO = 1.4; // so viel hoeher als der normale Text
+  const HD_COLOR_RATIO = 1.05; // andersfarbig und mindestens etwa gleich hoch
+
+  function isHandStroke(s) {
+    if (!s || s.tool !== "pen" || !s.points || s.points.length < 2) return false;
+    const ex = s.extra || {};
+    return !ex.shape && !s.objectKind && !s.locked;
+  }
+  function hdDismissKey() {
+    return "sofianotes-hd-off-" + (currentBoardId || "");
+  }
+  function hdDismissed() {
+    try {
+      const v = JSON.parse(localStorage.getItem(hdDismissKey()) || "[]");
+      return Array.isArray(v) ? v : [];
+    } catch (err) {
+      return [];
+    }
+  }
+  function hdRemember(bbox) {
+    const list = hdDismissed();
+    list.push({ x0: bbox.minX, y0: bbox.minY, x1: bbox.maxX, y1: bbox.maxY });
+    try {
+      localStorage.setItem(hdDismissKey(), JSON.stringify(list.slice(-300)));
+    } catch (err) {}
+  }
+  function hdOverlapRatio(a, b) {
+    const w = Math.min(a.maxX, b.x1) - Math.max(a.minX, b.x0);
+    const h = Math.min(a.maxY, b.y1) - Math.max(a.minY, b.y0);
+    if (w <= 0 || h <= 0) return 0;
+    return (w * h) / Math.max(1, (a.maxX - a.minX) * (a.maxY - a.minY));
+  }
+  // Handschrift in Zeilen: gleiche Hoehe (Mitte liegt in der Zeile) und nicht zu weit daneben
+  function hdLines(strokes) {
+    const items = strokes
+      .map((st) => ({ st, b: st.bbox || makeBBox(st.points) }))
+      .filter((it) => it.b)
+      .sort((a, b) => a.b.minX - b.b.minX);
+    const lines = [];
+    for (const it of items) {
+      const cy = (it.b.minY + it.b.maxY) / 2;
+      const h = it.b.maxY - it.b.minY;
+      let best = null;
+      for (const l of lines) {
+        const lh = l.maxY - l.minY;
+        const gap = it.b.minX - l.maxX;
+        if (cy >= l.minY - lh * 0.15 && cy <= l.maxY + lh * 0.15 && gap < Math.max(lh, h) * 3.5 + 30) {
+          best = l;
+          break;
+        }
+      }
+      if (!best) {
+        best = { minX: it.b.minX, maxX: it.b.maxX, minY: it.b.minY, maxY: it.b.maxY, strokes: [], heights: [] };
+        lines.push(best);
+      }
+      best.strokes.push(it.st);
+      best.heights.push(h);
+      best.minX = Math.min(best.minX, it.b.minX);
+      best.maxX = Math.max(best.maxX, it.b.maxX);
+      best.minY = Math.min(best.minY, it.b.minY);
+      best.maxY = Math.max(best.maxY, it.b.maxY);
+    }
+    for (const l of lines) {
+      const hs = l.heights.slice().sort((a, b) => a - b);
+      // Groesse der Schrift: obere Haelfte der Strichhoehen (Punkte/i-Striche zaehlen nicht)
+      l.size = hs[Math.floor(hs.length * 0.75)] || 0;
+      const colors = new Map();
+      for (const s of l.strokes) colors.set(s.color, (colors.get(s.color) || 0) + 1);
+      l.color = [...colors.entries()].sort((a, b) => b[1] - a[1])[0][0];
+      const sizes = l.strokes.map((s) => s.size || 2).sort((a, b) => a - b);
+      l.penSize = sizes[Math.floor(sizes.length / 2)] || 2;
+      l.bbox = { minX: l.minX, maxX: l.maxX, minY: l.minY, maxY: l.maxY };
+    }
+    return lines;
+  }
+  function hdAlreadyUnderlined(l) {
+    const h = l.maxY - l.minY;
+    for (const s of boardStrokes.values()) {
+      if (!s.extra || !s.extra.underline) continue;
+      const b = s.bbox || makeBBox(s.points);
+      if (!b || b.minY < l.maxY - h * 0.2 || b.minY > l.maxY + h) continue;
+      const ov = Math.min(b.maxX, l.maxX) - Math.max(b.minX, l.minX);
+      if (ov > (l.maxX - l.minX) * 0.6) return true;
+    }
+    return false;
+  }
+  function hdScan() {
+    hdTimer = null;
+    if (!currentBoardId || viewOnly || myRole === "view") {
+      hdCandidates = [];
+      return renderHeadingChips();
+    }
+    // nur, was gerade zu sehen ist (plus etwas Rand) - schnell auch auf grossen Boards
+    const a = screenToWorld(-window.innerWidth * 0.5, -window.innerHeight * 0.5);
+    const z = screenToWorld(window.innerWidth * 1.5, window.innerHeight * 1.5);
+    const strokes = [];
+    for (const s of boardStrokes.values()) {
+      if (!isHandStroke(s)) continue;
+      const b = s.bbox || makeBBox(s.points);
+      if (b && b.maxX >= a.x && b.minX <= z.x && b.maxY >= a.y && b.minY <= z.y) strokes.push(s);
+    }
+    const lines = hdLines(strokes).filter((l) => l.strokes.length >= 2 && l.maxX - l.minX >= 40);
+    if (lines.length < 3) {
+      hdCandidates = [];
+      return renderHeadingChips();
+    }
+    // normale Schrift: Median der Zeilengroessen, gewichtet nach Strichzahl
+    const weighted = [];
+    const colorCount = new Map();
+    for (const l of lines) {
+      for (let i = 0; i < l.strokes.length; i++) weighted.push(l.size);
+      colorCount.set(l.color, (colorCount.get(l.color) || 0) + l.strokes.length);
+    }
+    weighted.sort((x, y) => x - y);
+    const body = weighted[Math.floor(weighted.length / 2)] || 1;
+    const bodyColor = [...colorCount.entries()].sort((x, y) => y[1] - x[1])[0][0];
+    const off = hdDismissed();
+    hdCandidates = lines.filter((l) => {
+      const big = l.size >= body * HD_SIZE_RATIO;
+      const colored = l.color !== bodyColor && l.size >= body * HD_COLOR_RATIO && l.strokes.length <= 40;
+      if (!big && !colored) return false;
+      if (hdAlreadyUnderlined(l)) return false;
+      if (off.some((d) => hdOverlapRatio(l.bbox, d) > 0.4)) return false;
+      return true;
+    });
+    renderHeadingChips();
+  }
+  // nach dem Schreiben kurz warten, dann neu pruefen (nur wenn sich etwas geaendert hat)
+  function maybeScheduleHeadingScan() {
+    if (!hdOverlay) return;
+    const sig = currentBoardId + ":" + boardStrokes.size + ":" + Math.round(offsetX / 200) + ":" + Math.round(offsetY / 200) + ":" + Math.round(scale * 10);
+    if (sig === hdSig) return;
+    hdSig = sig;
+    clearTimeout(hdTimer);
+    hdTimer = setTimeout(hdScan, 1500);
+  }
+  // Doppelt unterstreichen: zwei gerade Linien unter jeder Zeile, in Farbe und Stiftstaerke der Schrift
+  function underlineLines(lines) {
+    const made = [];
+    for (const l of lines) {
+      const h = Math.max(8, l.maxY - l.minY);
+      const size = Math.max(1.5, Math.min(l.penSize, h * 0.12));
+      const y1 = l.maxY + Math.max(4, h * 0.14);
+      const y2 = y1 + Math.max(4, size * 2.2);
+      const x0 = l.minX - 2;
+      const x1 = l.maxX + 2;
+      for (const y of [y1, y2]) {
+        made.push({
+          id: uuid(),
+          tool: "pen",
+          color: l.color,
+          size,
+          points: [
+            { x: x0, y, p: 0.6 },
+            { x: x1, y, p: 0.6 },
+          ],
+          extra: { shape: "line", underline: true },
+        });
+      }
+    }
+    if (!made.length) return;
+    for (const s of made) putStroke(s);
+    pushUndo({ type: "add_many", strokes: made.map(cloneStroke) });
+    requestRedraw();
+  }
+  function renderHeadingChips() {
+    hdOverlay.innerHTML = "";
+    for (const l of hdCandidates) {
+      const el = document.createElement("div");
+      el.className = "hd-chip";
+      el.innerHTML = '<span class="material-symbols-rounded hd-ico">title</span><span class="hd-txt">Überschrift markieren?</span>';
+      const yes = document.createElement("button");
+      yes.type = "button";
+      yes.className = "hd-yes";
+      yes.title = "Ja, doppelt unterstreichen";
+      yes.innerHTML = '<span class="material-symbols-rounded">check</span>';
+      const no = document.createElement("button");
+      no.type = "button";
+      no.className = "hd-no";
+      no.title = "Nein, hier nicht mehr fragen";
+      no.innerHTML = '<span class="material-symbols-rounded">close</span>';
+      for (const b of [yes, no]) b.addEventListener("pointerdown", (e) => e.stopPropagation());
+      yes.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        underlineLines([l]);
+        hdRemember(l.bbox);
+        hdCandidates = hdCandidates.filter((c) => c !== l);
+        renderHeadingChips();
+      });
+      no.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        hdRemember(l.bbox);
+        hdCandidates = hdCandidates.filter((c) => c !== l);
+        renderHeadingChips();
+      });
+      el.append(yes, no);
+      el._line = l;
+      hdOverlay.appendChild(el);
+    }
+    positionHeadingChips();
+  }
+  function positionHeadingChips() {
+    if (!hdOverlay) return; // Zeichnen kann schon vor diesem Teil laufen
+    hdOverlay.querySelectorAll(".hd-chip").forEach((el) => {
+      const l = el._line;
+      if (!l) return;
+      const s = worldToScreen(l.maxX + 10, (l.minY + l.maxY) / 2);
+      el.style.left = Math.round(s.x) + "px";
+      el.style.top = Math.round(s.y) + "px";
+    });
+  }
+  // Auswahl (Lasso) von Hand doppelt unterstreichen
+  document.getElementById("btn-sel-underline")?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (viewOnly || myRole === "view") return showToast("Nur ansehen: hier kann man nichts ändern");
+    const pens = selectedStrokes().filter(isHandStroke);
+    if (!pens.length) return;
+    const lines = hdLines(pens);
+    underlineLines(lines);
+    for (const l of lines) hdRemember(l.bbox);
+    hdCandidates = hdCandidates.filter((c) => !lines.some((l) => hdOverlapRatio(c.bbox, { x0: l.minX, y0: l.minY, x1: l.maxX, y1: l.maxY }) > 0.4));
+    renderHeadingChips();
+    showToast(lines.length === 1 ? "Doppelt unterstrichen" : lines.length + " Zeilen doppelt unterstrichen");
+  });
 
   // Striche einer Auswahl in Zeilen aufteilen (die lokale Erkennung liest nur eine Zeile auf einmal):
   // ein Strich gehoert zur Zeile, in deren Hoehe seine Mitte liegt.

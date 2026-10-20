@@ -6407,3 +6407,15 @@ html[data-theme="dark"] .mdl-group, html[data-theme="dark"] .mdl-course, html[da
 html[data-theme="dark"] .mdl-btn { background: #3a3350; color: #e8def8; }
 html[data-theme="dark"] .mdl-title { background: #1f4d48; color: #c8eee7; }
 html[data-theme="dark"] .mdl-txt small, html[data-theme="dark"] .mdl-sec { color: #d4b6c0; }
+
+/* ---- Ueberschrift erkannt: Knopf neben der Zeile (Ja = doppelt unterstreichen, X = nicht mehr fragen) ---- */
+#hd-overlay { position: fixed; inset: 0; pointer-events: none; z-index: 40; }
+.hd-chip { position: absolute; transform: translate(0, -50%); display: flex; align-items: center; gap: 4px; padding: 3px 3px 3px 10px; border-radius: 20px; background: rgba(255, 255, 255, 0.96); border: 1px solid rgba(0, 0, 0, 0.08); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.14); pointer-events: auto; font: 600 13px 'Google Sans', 'Inter', sans-serif; color: #1c1b1f; white-space: nowrap; }
+.hd-chip .hd-ico { font-size: 18px; color: #6750a4; }
+.hd-chip .hd-txt { margin-right: 4px; }
+.hd-chip button { width: 30px; height: 30px; border-radius: 50%; border: 0; display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; }
+.hd-chip button .material-symbols-rounded { font-size: 18px; }
+.hd-yes { background: #6750a4; color: #fff; }
+.hd-no { background: rgba(0, 0, 0, 0.06); color: #49454f; }
+html[data-theme="dark"] .hd-chip { background: rgba(36, 33, 46, 0.96); color: #e6e1e5; border-color: rgba(255, 255, 255, 0.08); }
+html[data-theme="dark"] .hd-no { background: rgba(255, 255, 255, 0.1); color: #e6e1e5; }
