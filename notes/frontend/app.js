@@ -15133,17 +15133,18 @@
     hdTimer = setTimeout(hdScan, 1500);
   }
   // Doppelt unterstreichen: zwei gerade Linien unter jeder Zeile, in Farbe und Stiftstaerke der Schrift
+  // dicht unter die Grundlinie der Schrift (nicht unter die tiefste Unterlaenge)
+  function underlineGeom(l) {
+    const h = Math.max(8, l.maxY - l.minY);
+    const size = Math.max(1.5, Math.min(l.penSize, h * 0.12));
+    const base = Number.isFinite(l.baseline) ? l.baseline : l.maxY;
+    const y1 = base + Math.max(2.5, size * 1.6);
+    return { size, y1, y2: y1 + Math.max(3, size * 2), x0: l.minX - 2, x1: l.maxX + 2 };
+  }
   function underlineLines(lines) {
     const made = [];
     for (const l of lines) {
-      const h = Math.max(8, l.maxY - l.minY);
-      const size = Math.max(1.5, Math.min(l.penSize, h * 0.12));
-      // dicht unter die Grundlinie der Schrift (nicht unter die tiefste Unterlaenge)
-      const base = Number.isFinite(l.baseline) ? l.baseline : l.maxY;
-      const y1 = base + Math.max(2.5, size * 1.6);
-      const y2 = y1 + Math.max(3, size * 2);
-      const x0 = l.minX - 2;
-      const x1 = l.maxX + 2;
+      const { size, y1, y2, x0, x1 } = underlineGeom(l);
       for (const y of [y1, y2]) {
         made.push({
           id: uuid(),
@@ -15166,9 +15167,31 @@
   function renderHeadingChips() {
     hdOverlay.innerHTML = "";
     for (const l of hdCandidates) {
+      // auf dem Blatt: Rahmen um die Zeile und Vorschau der Doppellinie
+      const box = document.createElement("div");
+      box.className = "hd-box";
+      box.innerHTML = '<i class="hd-u1"></i><i class="hd-u2"></i>';
+      box._line = l;
+      hdOverlay.appendChild(box);
       const el = document.createElement("div");
       el.className = "hd-chip";
-      el.innerHTML = '<span class="material-symbols-rounded hd-ico">title</span><span class="hd-txt">Überschrift markieren?</span>';
+      el.innerHTML = '<span class="material-symbols-rounded hd-ico">title</span><span class="hd-what"></span><span class="hd-txt">unterstreichen?</span>';
+      const what = el.querySelector(".hd-what");
+      if (l.text) {
+        what.classList.add("hd-what-text");
+        what.textContent = "„" + l.text + "“";
+      } else {
+        try {
+          const img = document.createElement("img");
+          img.className = "hd-prev";
+          img.alt = "";
+          img.src = renderInkCrop(l.strokes).dataUrl;
+          what.appendChild(img);
+        } catch (err) {
+          what.textContent = "Überschrift";
+        }
+        hdReadText(l);
+      }
       const yes = document.createElement("button");
       yes.type = "button";
       yes.className = "hd-yes";
@@ -15201,8 +15224,54 @@
     }
     positionHeadingChips();
   }
+  // Text der Zeile lesen (KI, wenn eingerichtet und noch Kontingent da) - einmal pro Vorschlag
+  function hdReadText(l) {
+    if (l.textTried || !cloudOcrEnabled || !(ocrRemaining > 0)) return;
+    l.textTried = true;
+    const key = inkGroupKey({ strokeIds: l.strokes.map((s) => s.id) });
+    const done = (text) => {
+      if (!text) return;
+      l.text = text.length > 40 ? text.slice(0, 38) + "…" : text;
+      if (hdCandidates.includes(l)) renderHeadingChips();
+    };
+    if (ocrCache.has(key)) return done(SofiaInk.correctText(ocrCache.get(key).text).text);
+    let crop;
+    try {
+      crop = renderInkCrop(l.strokes);
+    } catch (err) {
+      return;
+    }
+    fetch("/api/recognize", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ image: crop.dataUrl, preferDigits: false }) })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!d) return;
+        if (typeof d.remainingNeurons === "number") ocrRemaining = d.remainingNeurons;
+        if (!d.ok || !d.text) return;
+        const text = SofiaInk.correctText(SofiaInk.cleanOcrText(d.text)).text;
+        if (text && SofiaInk.ocrLooksPlausible(text, { strokes: l.strokes.length })) ocrCache.set(key, { text });
+        done(text);
+      })
+      .catch(() => {});
+  }
   function positionHeadingChips() {
     if (!hdOverlay) return; // Zeichnen kann schon vor diesem Teil laufen
+    hdOverlay.querySelectorAll(".hd-box").forEach((el) => {
+      const l = el._line;
+      if (!l) return;
+      const g = underlineGeom(l);
+      const pad = 4;
+      const a = worldToScreen(l.minX - pad, l.minY - pad);
+      const b = worldToScreen(l.maxX + pad, Math.max(l.maxY, g.y2) + pad);
+      el.style.left = Math.round(a.x) + "px";
+      el.style.top = Math.round(a.y) + "px";
+      el.style.width = Math.round(b.x - a.x) + "px";
+      el.style.height = Math.round(b.y - a.y) + "px";
+      const [u1, u2] = el.children;
+      const lx = worldToScreen(g.x0, 0).x - a.x;
+      const lw = (g.x1 - g.x0) * scale;
+      u1.style.cssText = "left:" + Math.round(lx) + "px;width:" + Math.round(lw) + "px;top:" + Math.round((g.y1 - (l.minY - pad)) * scale) + "px";
+      u2.style.cssText = "left:" + Math.round(lx) + "px;width:" + Math.round(lw) + "px;top:" + Math.round((g.y2 - (l.minY - pad)) * scale) + "px";
+    });
     hdOverlay.querySelectorAll(".hd-chip").forEach((el) => {
       const l = el._line;
       if (!l) return;
