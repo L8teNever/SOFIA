@@ -25116,7 +25116,8 @@
       const r = Number(v.toPrecision(12));
       return r.toLocaleString("de-DE", { maximumFractionDigits: 10, useGrouping: true });
     }
-    // Kleiner Rechen-Parser (kein eval): + - × ÷ ^ % ( ) √ sin cos tan log ln π e Ans, Winkel in Grad
+    // Kleiner Rechen-Parser (kein eval): + - × ÷ ^ % ( ) √ sin cos tan (und Umkehrungen) log ln π e Ans,
+    // Winkel in Grad oder Bogenmass (st.angle, Knopf DEG/RAD)
     function evaluate(src) {
       const s = src.replace(/×/g, "*").replace(/÷/g, "/").replace(/−/g, "-").replace(/,/g, ".");
       let i = 0;
@@ -25124,8 +25125,14 @@
       const ws = () => {
         while (s[i] === " ") i++;
       };
-      const rad = (d) => (d * Math.PI) / 180;
+      const useRad = st.angle === "rad";
+      const rad = (d) => (useRad ? d : (d * Math.PI) / 180);
+      const deg = (r) => (useRad ? r : (r * 180) / Math.PI);
+      // Umkehrfunktionen zuerst, sonst trifft "sin" schon bei "sin⁻¹"
       const FN = {
+        "sin⁻¹": (x) => deg(Math.asin(x)),
+        "cos⁻¹": (x) => deg(Math.acos(x)),
+        "tan⁻¹": (x) => deg(Math.atan(x)),
         sin: (x) => Math.sin(rad(x)),
         cos: (x) => Math.cos(rad(x)),
         tan: (x) => Math.tan(rad(x)),
@@ -25253,12 +25260,20 @@
     }
     let justEvaluated = false;
     function press(k) {
+      // Winkel umschalten: Grad <-> Bogenmass, Eingabe bleibt stehen
+      if (k === "ANGLE") {
+        st.angle = st.angle === "rad" ? "deg" : "rad";
+        renderKeys();
+        renderCalc();
+        save();
+        return;
+      }
       // nach "=" beginnt eine Zahl eine neue Rechnung, ein Rechenzeichen rechnet mit dem Ergebnis weiter
       if (justEvaluated && !["=", "⌫", "AC", "+", "−", "×", "÷", "xʸ", "x²", "%"].includes(k)) expr = "";
       justEvaluated = k === "=";
       if (k === "AC") expr = "";
       else if (k === "⌫") {
-        const fn = /(sin\(|cos\(|tan\(|log\(|ln\(|Ans)$/.exec(expr);
+        const fn = /(sin⁻¹\(|cos⁻¹\(|tan⁻¹\(|sin\(|cos\(|tan\(|log\(|ln\(|Ans)$/.exec(expr);
         expr = fn ? expr.slice(0, -fn[0].length) : expr.slice(0, -1);
       } else if (k === "=") {
         if (!expr) return;
@@ -25279,7 +25294,7 @@
         }
       } else if (k === "x²") expr += "²";
       else if (k === "xʸ") expr += "^";
-      else if (["sin", "cos", "tan", "log", "ln"].includes(k)) expr += k + "(";
+      else if (["sin", "cos", "tan", "sin⁻¹", "cos⁻¹", "tan⁻¹", "log", "ln"].includes(k)) expr += k + "(";
       else if (k === "√") expr += "√(";
       else expr += k;
       renderCalc();
@@ -25295,6 +25310,7 @@
         ["0", ",", "="],
       ],
       sci: [
+        ["ANGLE", "sin⁻¹", "cos⁻¹", "tan⁻¹", "e"],
         ["sin", "cos", "tan", "√", "xʸ"],
         ["(", ")", "%", "AC", "⌫"],
         ["7", "8", "9", "÷", "π"],
@@ -25312,8 +25328,9 @@
         for (const k of row) {
           const b = document.createElement("button");
           b.type = "button";
-          b.textContent = k;
-          b.className = "calc-key" + (/^[0-9,]$/.test(k) ? " num" : k === "=" ? " eq" : ["AC", "⌫"].includes(k) ? " clr" : " op") + (mode === "basic" && k === "0" ? " wide" : "");
+          b.textContent = k === "ANGLE" ? (st.angle === "rad" ? "RAD" : "DEG") : k;
+          if (k === "ANGLE") b.title = st.angle === "rad" ? "Bogenmaß – tippen für Grad" : "Grad – tippen für Bogenmaß";
+          b.className = "calc-key" + (/^[0-9,]$/.test(k) ? " num" : k === "=" ? " eq" : ["AC", "⌫"].includes(k) ? " clr" : k === "ANGLE" ? " op angle" + (st.angle === "rad" ? " on" : "") : " op") + (mode === "basic" && k === "0" ? " wide" : "");
           b.addEventListener("click", (e) => {
             e.stopPropagation();
             press(k);

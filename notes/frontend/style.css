@@ -3550,6 +3550,9 @@ body.bars-stacked #toolbar.dock-right { right: calc(var(--safe-right) + var(--vi
 .calc-key.clr { background: #ffd8e4; color: #8c1d18; font-size: 14px; }
 .calc-key.eq { background: #6750a4; color: #fff; font-size: 20px; }
 .calc-key:active { filter: brightness(0.92); }
+/* Grad/Bogenmass-Umschalter: bei RAD farbig, damit man es sofort sieht */
+.calc-key.angle { font-weight: 700; letter-spacing: 0.04em; }
+.calc-key.angle.on { background: #6750a4 !important; color: #fff !important; }
 .conv-select, .conv-input {
   border: none;
   border-radius: 14px;
