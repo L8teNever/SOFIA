@@ -512,6 +512,32 @@ async def chat_file(person_id: str, path: str) -> tuple[bytes, str] | None:
         return None
 
 
+# ---- Moodle der Klasse (fuer "Aus Moodle einfuegen") ----------------------------
+# Sofia holt Moodle mit dem Konto der Klasse; Notes fragt als die angemeldete Person.
+async def moodle(person_id: str) -> dict[str, Any]:
+    info, err = await _homework_ctx(person_id)
+    if err:
+        return {"configured": False, "error": err, "courses": []}
+    try:
+        return await asyncio.get_event_loop().run_in_executor(None, _get, "/moodle", info["email"])
+    except Exception as exc:  # noqa: BLE001
+        return {"configured": True, "error": type(exc).__name__, "courses": []}
+
+
+async def moodle_file(person_id: str, u: str) -> tuple[bytes, str] | None:
+    """Eine Moodle-Datei ueber Sofias Datei-Weg (der Moodle-Token bleibt bei Sofia)."""
+    if not u.startswith(("https://", "http://")) or len(u) > 2000:
+        return None
+    info, err = await _homework_ctx(person_id)
+    if err:
+        return None
+    from urllib.parse import quote
+    try:
+        return await asyncio.get_event_loop().run_in_executor(None, _get_bytes, "/moodle/file?u=" + quote(u, safe=""), info["email"])
+    except Exception:  # noqa: BLE001
+        return None
+
+
 # ---- Blatt als Loesung in Sofia ------------------------------------------------
 # Ein Blatt, das zu einer Hausaufgabe gehoert, wird nach dem Schreiben (kurz warten, bis
 # Ruhe ist) als PDF zu Sofia hochgeladen und dort als Loesung der Person eingetragen bzw.

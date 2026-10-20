@@ -334,6 +334,21 @@ async def sofia_file(u: str, _: dict = Depends(get_current_person)) -> Response:
     return Response(content=data, media_type=ctype, headers={"Cache-Control": "private, max-age=86400"})
 
 
+@app.get("/api/sofia/moodle")
+async def sofia_moodle(person: dict = Depends(get_current_person)) -> dict:
+    """Kurse, Abschnitte und Dateien aus dem Moodle der eigenen Klasse (ueber Sofia)."""
+    return await sofia_sync.moodle(person["id"])
+
+
+@app.get("/api/sofia/moodle-file")
+async def sofia_moodle_file(u: str, person: dict = Depends(get_current_person)) -> Response:
+    got = await sofia_sync.moodle_file(person["id"], u)
+    if got is None:
+        raise HTTPException(status_code=404, detail="Datei nicht gefunden")
+    data, ctype = got
+    return Response(content=data, media_type=ctype, headers={"Cache-Control": "private, max-age=3600"})
+
+
 @app.get("/api/boards/recent")
 async def boards_recent(person: dict = Depends(get_current_person)) -> dict:
     return {"boards": await db.recent_boards(person["id"])}

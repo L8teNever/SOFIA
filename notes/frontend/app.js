@@ -12683,13 +12683,215 @@
   }
   setTimeout(refreshImageLibrary, 4000);
   setTimeout(refreshHomeworkImages, 4500);
+  // ---- "Aus Moodle": Datei (Bild/PDF) aus dem Moodle der Klasse waehlen ----
+  // Grosse Auswahl wie auf der Moodle-Seite in Sofia: Kurse -> Abschnitte, mit Suche.
+  // Liefert eine File (ueber Notes -> Sofia -> Moodle geholt) oder null.
+  const MDL_IMG = /\.(png|jpe?g|gif|webp|heic|heif|bmp|tiff?|avif)$/i;
+  const MDL_PDF = /\.pdf$/i;
+  let mdlData = null;
+  function mdlLoad() {
+    return fetch("/api/sofia/moodle", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d && Array.isArray(d.courses)) mdlData = d;
+        return mdlData;
+      })
+      .catch(() => mdlData);
+  }
+  setTimeout(mdlLoad, 5000);
+  function mdlKind(f) {
+    const n = f.name || "";
+    const m = f.mime || "";
+    if (MDL_PDF.test(n) || m === "application/pdf") return "pdf";
+    if (MDL_IMG.test(n) || m.startsWith("image/")) return "image";
+    return "";
+  }
+  // Sofia-Link "/api/v1/moodle/file?u=<moodle-url>" -> Moodle-Adresse
+  function mdlSrc(url) {
+    try {
+      return new URL(url, location.href).searchParams.get("u") || "";
+    } catch (err) {
+      return "";
+    }
+  }
+  function mdlEntries(c, kinds) {
+    const out = [];
+    const seen = new Set();
+    const add = (f, section, parent, time) => {
+      if (!f || !f.url || f.external) return;
+      const kind = mdlKind(f);
+      const src = mdlSrc(f.url);
+      if (!kind || !kinds.includes(kind) || !src || seen.has(src)) return;
+      seen.add(src);
+      out.push({ src, name: f.name || "Datei", kind, section, parent, time: f.time || time || 0, course: c.name });
+    };
+    const now = Date.now() / 1000;
+    for (const a of c.assignments || []) if (!a.due || a.due >= now) for (const f of a.files || []) add(f, "Offene Aufgaben", a.name, a.time);
+    for (const s of c.sections || []) for (const m of s.modules || []) for (const f of m.files || []) add(f, s.name || "Allgemeines", (m.files || []).length > 1 || f.name !== m.name ? m.name : "", m.time);
+    for (const n of c.news || []) for (const f of n.files || []) add(f, "Ankündigungen", n.title, n.posted || n.time);
+    return out;
+  }
+  function mdlDate(ts) {
+    if (!ts) return "";
+    const d = new Date(ts * 1000);
+    const o = { day: "numeric", month: "short" };
+    if (d.getFullYear() !== new Date().getFullYear()) o.year = "numeric";
+    return "hochgeladen " + d.toLocaleDateString("de-DE", o);
+  }
+  window.sofiaPickMoodle = (opts) =>
+    new Promise((resolve) => {
+      const kinds = (opts && opts.kinds) || ["image", "pdf"];
+      const ov = document.createElement("div");
+      ov.className = "mdl-pick";
+      ov.innerHTML = `<div class="mdl-card" role="dialog" aria-label="Aus Moodle">
+          <div class="mdl-head">
+            <button type="button" class="mdl-btn mdl-back" title="Zurück"><span class="material-symbols-rounded">arrow_back</span></button>
+            <div class="mdl-title"><small>${kinds.length > 1 ? "Bild oder PDF" : kinds[0] === "pdf" ? "PDF" : "Bild"} aus Moodle</small><b>Kurse</b></div>
+            <button type="button" class="mdl-btn mdl-close" title="Schließen"><span class="material-symbols-rounded">close</span></button>
+          </div>
+          <label class="mdl-search"><span class="material-symbols-rounded">search</span><input type="search" placeholder="In Moodle suchen…" autocomplete="off" /></label>
+          <div class="mdl-body"><div class="mdl-empty">Moodle wird geladen…</div></div>
+        </div>`;
+      document.body.appendChild(ov);
+      const body = ov.querySelector(".mdl-body");
+      const title = ov.querySelector(".mdl-title b");
+      const q = ov.querySelector("input");
+      let course = null;
+      let busy = false;
+      const done = (file) => {
+        ov.remove();
+        document.removeEventListener("keydown", onKey, true);
+        resolve(file || null);
+      };
+      const onKey = (e) => {
+        if (e.key === "Escape") {
+          e.stopPropagation();
+          done(null);
+        }
+      };
+      document.addEventListener("keydown", onKey, true);
+      ov.addEventListener("pointerdown", (e) => {
+        if (e.target === ov) done(null);
+      });
+      ov.querySelector(".mdl-close").addEventListener("click", () => done(null));
+      ov.querySelector(".mdl-back").addEventListener("click", () => {
+        if (course != null && !q.value.trim()) {
+          course = null;
+          render();
+        } else if (q.value.trim()) {
+          q.value = "";
+          render();
+        } else done(null);
+      });
+      q.addEventListener("input", render);
+      async function pick(e) {
+        if (busy) return;
+        busy = true;
+        body.classList.add("mdl-loading");
+        showToast("„" + e.name + "“ wird aus Moodle geholt…");
+        try {
+          const r = await fetch("/api/sofia/moodle-file?u=" + encodeURIComponent(e.src));
+          if (!r.ok) throw new Error(String(r.status));
+          const blob = await r.blob();
+          let name = e.name;
+          if (e.kind === "pdf" && !MDL_PDF.test(name)) name += ".pdf";
+          const type = blob.type && blob.type !== "application/octet-stream" ? blob.type : e.kind === "pdf" ? "application/pdf" : "image/jpeg";
+          done(new File([blob], name, { type }));
+        } catch (err) {
+          busy = false;
+          body.classList.remove("mdl-loading");
+          showToast("Datei aus Moodle konnte nicht geladen werden");
+        }
+      }
+      function row(e, meta) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "mdl-row";
+        b.innerHTML = `<span class="mdl-ico material-symbols-rounded">${e.kind === "pdf" ? "picture_as_pdf" : "image"}</span><span class="mdl-txt"><b></b><small></small></span><span class="material-symbols-rounded mdl-go">add</span>`;
+        b.querySelector("b").textContent = e.name;
+        b.querySelector("small").textContent = meta;
+        b.addEventListener("click", () => pick(e));
+        return b;
+      }
+      function group(name, items, metaFn) {
+        const h = document.createElement("div");
+        h.className = "mdl-sec";
+        h.innerHTML = "<span></span><span></span>";
+        h.children[0].textContent = name;
+        h.children[1].textContent = items.length;
+        const g = document.createElement("div");
+        g.className = "mdl-group";
+        for (const e of items) g.appendChild(row(e, metaFn(e)));
+        body.append(h, g);
+      }
+      const meta = (e) => [e.parent, mdlDate(e.time)].filter(Boolean).join(" · ");
+      function render() {
+        body.innerHTML = "";
+        const courses = (mdlData && mdlData.courses) || [];
+        if (!courses.length) {
+          title.textContent = "Moodle";
+          body.innerHTML = '<div class="mdl-empty">' + (mdlData && mdlData.configured === false ? "Moodle ist für deine Klasse nicht eingerichtet." : "Keine Moodle-Kurse gefunden.") + "</div>";
+          return;
+        }
+        const words = q.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+        if (words.length) {
+          title.textContent = "Suche";
+          const hits = courses.flatMap((c) => mdlEntries(c, kinds)).filter((e) => {
+            const hay = [e.name, e.parent, e.section, e.course].join(" ").toLowerCase();
+            return words.every((w) => hay.includes(w));
+          });
+          if (!hits.length) body.innerHTML = '<div class="mdl-empty">Nichts gefunden.</div>';
+          const byCourse = new Map();
+          for (const e of hits) (byCourse.get(e.course) || byCourse.set(e.course, []).get(e.course)).push(e);
+          for (const [name, items] of byCourse) group(name, items, (e) => [e.section, meta(e)].filter(Boolean).join(" · "));
+          return;
+        }
+        if (course != null) {
+          const c = courses.find((x) => x.id === course);
+          title.textContent = c ? c.name : "Moodle";
+          const items = c ? mdlEntries(c, kinds) : [];
+          if (!items.length) body.innerHTML = '<div class="mdl-empty">In diesem Kurs gibt es keine passenden Dateien.</div>';
+          const bySec = new Map();
+          for (const e of items) (bySec.get(e.section) || bySec.set(e.section, []).get(e.section)).push(e);
+          for (const [name, list] of bySec) group(name, list, meta);
+          body.scrollTop = 0;
+          return;
+        }
+        title.textContent = "Kurse";
+        for (const c of courses) {
+          const n = mdlEntries(c, kinds).length;
+          const b = document.createElement("button");
+          b.type = "button";
+          b.className = "mdl-course";
+          b.innerHTML = '<span class="mdl-ico mdl-ico-lg material-symbols-rounded">menu_book</span><span class="mdl-txt"><b></b><small></small></span><span class="material-symbols-rounded mdl-go">chevron_right</span>';
+          b.querySelector("b").textContent = c.name;
+          b.querySelector("small").textContent = n + (n === 1 ? " Datei" : " Dateien");
+          if (!n) b.classList.add("mdl-dim");
+          b.addEventListener("click", () => {
+            course = c.id;
+            render();
+          });
+          body.appendChild(b);
+        }
+      }
+      if (mdlData) render();
+      mdlLoad().then(() => {
+        if (document.body.contains(ov)) render();
+      });
+    });
+  async function insertFromMoodle(kinds) {
+    if (viewOnly || myRole === "view") return showToast("Nur ansehen: hier kann man nichts einfügen");
+    const file = await window.sofiaPickMoodle({ kinds });
+    if (file) await importFiles([file]);
+  }
   function openImageLibrary(anchor) {
     closeImageLibrary();
     const items = imageLibItems.slice();
     const hwItems = hwImageItems.slice();
     refreshImageLibrary();
     refreshHomeworkImages();
-    if (!items.length && !hwItems.length) return pickImportFiles("image/*,.heic,.heif,.tif,.tiff,.bmp,.svg,.avif,.webp,.jfif");
+    const hasMoodle = !!(mdlData && mdlData.courses && mdlData.courses.length);
+    if (!items.length && !hwItems.length && !hasMoodle) return pickImportFiles("image/*,.heic,.heif,.tif,.tiff,.bmp,.svg,.avif,.webp,.jfif");
     const pop = document.createElement("div");
     pop.className = "image-lib-pop";
     const up = document.createElement("button");
@@ -12702,6 +12904,18 @@
       pickImportFiles("image/*,.heic,.heif,.tif,.tiff,.bmp,.svg,.avif,.webp,.jfif");
     });
     pop.appendChild(up);
+    if (hasMoodle) {
+      const md = document.createElement("button");
+      md.type = "button";
+      md.className = "lib-add-opt image-lib-upload";
+      md.innerHTML = '<span class="material-symbols-rounded">school</span>Aus Moodle';
+      md.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        closeImageLibrary();
+        insertFromMoodle(["image"]);
+      });
+      pop.appendChild(md);
+    }
     if (hwItems.length) {
       const hwTitle = document.createElement("div");
       hwTitle.className = "image-lib-title";
@@ -12791,6 +13005,11 @@
   document.addEventListener("pointerdown", (e) => {
     if (imageLibPop && !e.target.closest(".image-lib-pop")) closeImageLibrary();
   }, true);
+  document.getElementById("insert-moodle")?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    insertMenu.classList.add("hidden");
+    insertFromMoodle(["pdf", "image"]);
+  });
   document.getElementById("insert-pdf")?.addEventListener("click", (e) => {
     e.stopPropagation();
     insertMenu.classList.add("hidden");
@@ -23429,6 +23648,19 @@
           const pg = { id: newId(), paper: "blank", w: A4_W, h: A4_H, board: true };
           addPages(at, [pg]);
           enterBoardPage(pg.id);
+        } else if (b.dataset.act === "moodle") {
+          window.sofiaPickMoodle({ kinds: ["pdf", "image"] }).then(async (file) => {
+            if (!file) return;
+            try {
+              showToast("Wird hinzugefügt…");
+              const imgs = await fileToPageImages(file, 2000);
+              if (!imgs.length) return;
+              const pages = notebookPagesFromPdfImages(imgs).map((p) => ({ ...p, id: newId() }));
+              addPages(currentPage(), pages);
+            } catch (err) {
+              showToast("Hinzufügen hat nicht geklappt");
+            }
+          });
         } else if (b.dataset.act === "photo") photoInput.click();
         else if (b.dataset.act === "image") imageInput.click();
         else pdfInput.click();
