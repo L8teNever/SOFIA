@@ -353,6 +353,27 @@ function phMenuStyle(panel, btn) {
   panel.classList.add('ph-menu');
 }
 
+// Ein schon positioniertes Menue (position: fixed) ganz auf den Bildschirm holen:
+// seitlich hineinschieben und die Hoehe auf den Platz begrenzen (Rest scrollt).
+function fitPanelOnScreen(panel) {
+  if (!panel) return;
+  const vv = window.visualViewport;
+  const vTop = (vv ? vv.offsetTop : 0) + 8;
+  const vBottom = (vv ? vv.offsetTop + vv.height : window.innerHeight) - 8;
+  let r = panel.getBoundingClientRect();
+  if (r.right > window.innerWidth - 8) {
+    panel.style.right = 'auto';
+    panel.style.left = Math.max(8, window.innerWidth - 8 - r.width) + 'px';
+  } else if (r.left < 8) {
+    panel.style.right = 'auto';
+    panel.style.left = '8px';
+  }
+  r = panel.getBoundingClientRect();
+  if (r.bottom > vBottom) panel.style.maxHeight = Math.max(80, vBottom - Math.max(vTop, r.top)) + 'px';
+  else if (r.top < vTop) panel.style.maxHeight = Math.max(80, r.bottom - vTop) + 'px';
+  panel.style.overflowY = 'auto';
+}
+
 function toggleMoreMenu(btn, items) {
   const reopening = _moreMenuBtn === btn;
   closeMoreMenu();
@@ -391,6 +412,7 @@ function toggleMoreMenu(btn, items) {
     panel.style.left = '8px';
   }
   if (window.lucide) lucide.createIcons();
+  fitPanelOnScreen(panel);
 
   panel.querySelectorAll('.m3-dropdown-opt').forEach(opt => {
     opt.addEventListener('click', (e) => {
@@ -779,23 +801,38 @@ function enhanceDropdowns(root) {
       });
     }
 
+    // immer ganz auf dem Bildschirm: nach unten, wenn dort genug Platz ist (sonst nach oben,
+    // wo mehr Platz ist), Hoehe auf den Platz begrenzt - der Rest scrollt im Menue
     function posPanel() {
       const r = btn.getBoundingClientRect();
-      panel.style.left  = r.left + 'px';
-      panel.style.width = r.width + 'px';
+      const vv = window.visualViewport;
+      const vTop = vv ? vv.offsetTop : 0;
+      const vBottom = vv ? vv.offsetTop + vv.height : window.innerHeight;
+      const width = Math.min(r.width, window.innerWidth - 16);
+      panel.style.width = width + 'px';
+      panel.style.left = Math.max(8, Math.min(window.innerWidth - width - 8, r.left)) + 'px';
       panel.style.right = 'auto';
-      const below = window.innerHeight - r.bottom - 8;
-      if (below >= 120 || below >= r.top) {
-        panel.style.top    = (r.bottom + 5) + 'px';
+      const natural = Math.min(panel.scrollHeight || 228, 340);
+      const below = vBottom - r.bottom - 12;
+      const above = r.top - vTop - 12;
+      if (below >= natural || below >= above) {
+        panel.style.top = (r.bottom + 5) + 'px';
         panel.style.bottom = 'auto';
+        panel.style.maxHeight = Math.max(80, Math.min(natural, below)) + 'px';
         panel.style.transformOrigin = 'top';
       } else {
         panel.style.bottom = (window.innerHeight - r.top + 5) + 'px';
-        panel.style.top    = 'auto';
+        panel.style.top = 'auto';
+        panel.style.maxHeight = Math.max(80, Math.min(natural, above)) + 'px';
         panel.style.transformOrigin = 'bottom';
         panel.style.transform = panel.classList.contains('dd-open') ? 'none' : 'scaleY(0.9) translateY(6px)';
       }
+      // gewaehlten Eintrag zeigen
+      const cur = panel.querySelector('.dd-sel');
+      if (cur) panel.scrollTop = Math.max(0, cur.offsetTop - panel.clientHeight / 2 + cur.offsetHeight / 2);
     }
+    // Sheet scrollt / Tastatur geht auf: Menue mitnehmen
+    const onMove = (e) => { if (e && e.target instanceof Node && panel.contains(e.target)) return; posPanel(); };
 
     function open() {
       document.querySelectorAll('.m3-dropdown-panel.dd-open').forEach(p => {
@@ -806,6 +843,9 @@ function enhanceDropdowns(root) {
 
       document.body.appendChild(panel);
       posPanel();
+      window.addEventListener('scroll', onMove, true);
+      window.addEventListener('resize', onMove);
+      if (window.visualViewport) window.visualViewport.addEventListener('resize', onMove);
       wrap.classList.add('dd-open');
       requestAnimationFrame(() => panel.classList.add('dd-open'));
 
@@ -818,6 +858,9 @@ function enhanceDropdowns(root) {
       panel.classList.remove('dd-open');
       setTimeout(() => { if (panel.parentNode) panel.parentNode.removeChild(panel); }, 150);
       if (offHandler) { document.removeEventListener('click', offHandler); offHandler = null; }
+      window.removeEventListener('scroll', onMove, true);
+      window.removeEventListener('resize', onMove);
+      if (window.visualViewport) window.visualViewport.removeEventListener('resize', onMove);
     }
 
     btn.addEventListener('click', e => { e.stopPropagation(); wrap.classList.contains('dd-open') ? close() : open(); });

@@ -901,6 +901,7 @@ function toggleCalViewPicker(btn) {
   panel.style.left = 'auto';
   panel.style.right = Math.max(8, window.innerWidth - r.right) + 'px';
   panel.style.top = (r.bottom + 6) + 'px';
+  fitPanelOnScreen(panel);
 
   panel.querySelectorAll('[data-mode]').forEach(opt => {
     opt.addEventListener('click', () => {
@@ -1446,6 +1447,7 @@ function toggleCalFilterMenu(btn) {
   panel.style.left = 'auto';
   panel.style.right = Math.max(8, window.innerWidth - r.right) + 'px';
   panel.style.top = (r.bottom + 6) + 'px';
+  fitPanelOnScreen(panel);
   panel.querySelectorAll('.m3-dropdown-opt').forEach(opt => {
     opt.addEventListener('click', () => {
       setCalCategoryFilter(opt.dataset.value);
