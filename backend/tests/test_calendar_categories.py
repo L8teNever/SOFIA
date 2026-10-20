@@ -80,3 +80,14 @@ class CategoryVisibilityTests(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CalendarPageTests(unittest.TestCase):
+    def test_fetch_helper_calls_api_not_itself(self):
+        # Regression: calFetchEvents rief sich selbst auf -> Kalender fuer alle leer
+        import re
+        with open("pages/calendar.html", encoding="utf-8") as f:
+            html = f.read()
+        body = re.search(r"async function calFetchEvents\(month\) \{(.*?)\n\}", html, re.S).group(1)
+        self.assertIn("API.events(month)", body)
+        self.assertNotIn("calFetchEvents(", body)

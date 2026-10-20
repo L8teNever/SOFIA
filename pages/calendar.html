@@ -621,7 +621,7 @@ function calNormEvent(ev) {
   return ev;
 }
 async function calFetchEvents(month) {
-  const list = await calFetchEvents(month);
+  const list = await API.events(month);
   return (list || []).map(calNormEvent);
 }
 function calSplitType(value) {
