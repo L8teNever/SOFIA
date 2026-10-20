@@ -65,8 +65,15 @@ function computeSubjectAverage(grades, weighting) {
 
   const exams = grades.filter(g => (g.weight_type || 'exam') === 'exam');
   const orals = grades.filter(g => (g.weight_type || 'exam') === 'oral');
+  const quizzes = grades.filter(g => (g.weight_type || 'exam') === 'quiz');
 
-  const avgExam = exams.length ? exams.reduce((s, g) => s + (g.value * (g.weight || 1.0)), 0) / exams.reduce((s, g) => s + (g.weight || 1.0), 0) : null;
+  // Alle Kurztests zusammen zaehlen wie eine Klassenarbeit: ihr Schnitt geht als eine Arbeit mit ein
+  const examItems = exams.map(g => ({ value: g.value, weight: g.weight || 1.0 }));
+  if (quizzes.length) {
+    const qAvg = quizzes.reduce((s, g) => s + g.value * (g.weight || 1.0), 0) / quizzes.reduce((s, g) => s + (g.weight || 1.0), 0);
+    examItems.push({ value: qAvg, weight: 1.0 });
+  }
+  const avgExam = examItems.length ? examItems.reduce((s, g) => s + g.value * g.weight, 0) / examItems.reduce((s, g) => s + g.weight, 0) : null;
   const avgOral = orals.length ? orals.reduce((s, g) => s + (g.value * (g.weight || 1.0)), 0) / orals.reduce((s, g) => s + (g.weight || 1.0), 0) : null;
 
   if (avgExam !== null && avgOral !== null) {
@@ -141,6 +148,7 @@ function renderGrades() {
 
     const examCount = grades.filter(g => (g.weight_type || 'exam') === 'exam').length;
     const oralCount = grades.filter(g => (g.weight_type || 'exam') === 'oral').length;
+    const quizCount = grades.filter(g => (g.weight_type || 'exam') === 'quiz').length;
 
     return '<div class="m3-card" style="border-radius:24px;margin-bottom:14px;padding:18px 20px;box-shadow:0 1px 4px rgba(0,0,0,0.05);">'
       + '<div style="display:flex;align-items:center;gap:14px;margin-bottom:8px;">'
@@ -149,7 +157,7 @@ function renderGrades() {
       + '<div style="flex:1;min-width:0;">'
       + '<div style="font-weight:800;font-size:1.05rem;color:#1c1b1f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escapeHtml(sub.name) + '</div>'
       + '<div style="font-size:0.75rem;color:#49454f;margin-top:2px;">'
-      + 'Arbeiten: <b>' + examCount + (weighting.planned_exams ? '/' + weighting.planned_exams : '') + '</b> (' + Math.round(weighting.exam_weight) + '%) · Mündlich: <b>' + oralCount + '</b> (' + Math.round(weighting.oral_weight) + '%)'
+      + 'Arbeiten: <b>' + examCount + (weighting.planned_exams ? '/' + weighting.planned_exams : '') + '</b>' + (quizCount ? ' + <b>' + quizCount + '</b> Kurztest' + (quizCount > 1 ? 's' : '') : '') + ' (' + Math.round(weighting.exam_weight) + '%) · Mündlich: <b>' + oralCount + '</b> (' + Math.round(weighting.oral_weight) + '%)'
       + '</div>'
       + '</div>'
       + '<span style="background:' + ac + ';color:' + atc + ';padding:8px 14px;border-radius:14px;font-weight:800;font-size:1.15rem;flex-shrink:0;">Ø ' + avg.toFixed(1) + '</span>'
@@ -157,9 +165,11 @@ function renderGrades() {
       + grades.map(g => {
           const c = gradeColor(g.value);
           const tc = gradeTextColor(g.value);
-          const isExam = (g.weight_type || 'exam') === 'exam';
-          const typeBadge = isExam
+          const wt = g.weight_type || 'exam';
+          const typeBadge = wt === 'exam'
             ? '<span style="font-size:0.68rem;font-weight:700;color:#ba1a1a;background:#ffdad6;padding:2px 7px;border-radius:6px;">Arbeit</span>'
+            : wt === 'quiz'
+            ? '<span style="font-size:0.68rem;font-weight:700;color:#7d5700;background:#ffddb0;padding:2px 7px;border-radius:6px;">Kurztest</span>'
             : '<span style="font-size:0.68rem;font-weight:700;color:#006399;background:#d3e3fd;padding:2px 7px;border-radius:6px;">Mündlich</span>';
 
           return '<div data-id="' + g.id + '" style="display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid rgba(0,0,0,0.05);">'
@@ -220,6 +230,7 @@ function openGradeSheet(editGrade) {
     <label style="font-size:0.78rem;font-weight:700;color:#6750a4;display:block;margin-bottom:4px;margin-left:4px;">Notenart:</label>
     <select class="m3-select" id="g-weight-type">
       <option value="exam"${weightType === 'exam' ? ' selected' : ''}>Klassenarbeit (Schriftlich)</option>
+      <option value="quiz"${weightType === 'quiz' ? ' selected' : ''}>Kurztest (alle zusammen zählen wie eine Klassenarbeit)</option>
       <option value="oral"${weightType === 'oral' ? ' selected' : ''}>Mündlich / Sonstige Mitarbeit</option>
     </select>
 
@@ -298,7 +309,7 @@ function openGradeWeightingSheet() {
 
     <div style="background:#ffffff;border-radius:18px;padding:14px;border:1px solid rgba(103,80,164,0.15);margin:14px 0;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-        <span style="font-weight:700;font-size:0.88rem;color:#ba1a1a;">Klassenarbeiten:</span>
+        <span style="font-weight:700;font-size:0.88rem;color:#ba1a1a;">Klassenarbeiten & Kurztests:</span>
         <span id="gw-exam-label" style="font-weight:800;font-size:1rem;color:#ba1a1a;">${Math.round(initialWeighting.exam_weight)} %</span>
       </div>
       <input type="range" id="gw-slider" min="10" max="90" step="5" value="${Math.round(initialWeighting.exam_weight)}" oninput="syncWeightingSlider(this.value)" style="width:100%;accent-color:#6750a4;cursor:pointer;">
