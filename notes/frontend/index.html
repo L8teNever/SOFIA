@@ -147,6 +147,9 @@
   <button type="button" id="btn-sel-underline" class="hidden" title="Doppelt unterstreichen (Überschrift)">
     <span class="material-symbols-rounded">format_underlined</span>
   </button>
+  <button type="button" id="btn-sel-heading-level" class="hidden" title="Ebene der Überschrift wählen: Main (1), 2. Unter (2) oder 3. Unter (3)">
+    <span id="btn-sel-heading-level-text">H1</span>
+  </button>
   <button type="button" id="btn-sel-copy" title="Kopieren">
     <span class="material-symbols-rounded">content_copy</span>
   </button>
@@ -200,6 +203,12 @@
   <button type="button" class="lib-add-opt" data-layer="up"><span class="material-symbols-rounded">arrow_upward</span>Eine Ebene nach vorne</button>
   <button type="button" class="lib-add-opt" data-layer="down"><span class="material-symbols-rounded">arrow_downward</span>Eine Ebene nach hinten</button>
   <button type="button" class="lib-add-opt" data-layer="back"><span class="material-symbols-rounded">flip_to_back</span>In den Hintergrund</button>
+</div>
+<div id="heading-level-menu" class="lib-add-menu hidden heading-level-menu">
+  <button type="button" class="lib-add-opt" data-hd-level="1"><span class="material-symbols-rounded">format_h1</span>Main-Überschrift (Ebene 1)</button>
+  <button type="button" class="lib-add-opt" data-hd-level="2"><span class="material-symbols-rounded">format_h2</span>2. Unterüberschrift (Ebene 2)</button>
+  <button type="button" class="lib-add-opt" data-hd-level="3"><span class="material-symbols-rounded">format_h3</span>3. Unterüberschrift (Ebene 3)</button>
+  <button type="button" class="lib-add-opt hd-opt-remove" data-hd-level="remove"><span class="material-symbols-rounded">format_underlined</span>Unterstreichung entfernen</button>
 </div>
 <input id="import-file" type="file" accept="image/*,.heic,.heif,.tif,.tiff,.bmp,.svg,.avif,.webp,.jfif,application/pdf,.pdf" multiple hidden />
 <div id="erase-all-menu" class="erase-all-menu hidden">

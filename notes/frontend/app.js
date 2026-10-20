@@ -12017,7 +12017,22 @@
     const doneBtn = document.getElementById("btn-media-crop-done");
     const cancelBtn = document.getElementById("btn-media-crop-cancel");
     if (kiBtn) kiBtn.classList.toggle("hidden", cropping || pens.length === 0);
-    document.getElementById("btn-sel-underline")?.classList.toggle("hidden", cropping || !pens.some(isHandStroke));
+    const hasHand = pens.some(isHandStroke);
+    const existingUnderlines = hasHand ? (typeof hdFindUnderlinesForSelection === "function" ? hdFindUnderlinesForSelection() : []) : [];
+    const isUnderlined = existingUnderlines.length > 0;
+    const underBtn = document.getElementById("btn-sel-underline");
+    const lvlBtn = document.getElementById("btn-sel-heading-level");
+    if (underBtn) {
+      underBtn.classList.toggle("hidden", cropping || (!hasHand && !isUnderlined));
+      underBtn.classList.toggle("active", isUnderlined);
+      underBtn.title = isUnderlined ? "Unterstreichung entfernen" : "Doppelt unterstreichen (Überschrift)";
+    }
+    if (lvlBtn) {
+      lvlBtn.classList.toggle("hidden", cropping || (!hasHand && !isUnderlined));
+      const curLvl = isUnderlined && typeof hdGetSelectionLevel === "function" ? hdGetSelectionLevel(existingUnderlines) : 1;
+      const lvlText = document.getElementById("btn-sel-heading-level-text");
+      if (lvlText) lvlText.textContent = "H" + curLvl;
+    }
     if (copyBtn) copyBtn.classList.toggle("hidden", cropping || !selection.ids.size);
     if (cutBtn) cutBtn.classList.toggle("hidden", cropping || !selection.ids.size);
     document.getElementById("btn-sel-rotate")?.classList.toggle("hidden", cropping || !selection.ids.size);
@@ -15282,19 +15297,182 @@
       el.style.top = Math.round(s.y) + "px";
     });
   }
-  // Auswahl (Lasso) von Hand doppelt unterstreichen
+  function hdUnderlineStrokesForLine(l) {
+    const h = l.maxY - l.minY;
+    const list = [];
+    for (const s of boardStrokes.values()) {
+      if (!s.extra || !s.extra.underline) continue;
+      const b = s.bbox || makeBBox(s.points);
+      const base = Number.isFinite(l.baseline) ? l.baseline : l.maxY;
+      if (!b || b.minY < base - h * 0.15 || b.minY > l.maxY + h) continue;
+      const ov = Math.min(b.maxX, l.maxX) - Math.max(b.minX, l.minX);
+      if (ov > (l.maxX - l.minX) * 0.6) list.push(s);
+    }
+    return list;
+  }
+  function hdFindUnderlinesForSelection() {
+    const list = [];
+    for (const s of selectedStrokes()) {
+      if (s.extra && s.extra.underline && !list.some((x) => x.id === s.id)) list.push(s);
+    }
+    const pens = selectedStrokes().filter(isHandStroke);
+    const lines = hdLines(pens);
+    const texts = selectedStrokes().filter((s) => s.tool === "text");
+    for (const t of texts) {
+      const b = t.bbox || makeBBox(t.points);
+      lines.push({
+        strokes: [t],
+        color: t.color || "#1E1F22",
+        size: t.size,
+        penSize: Math.max(1.5, t.size * 0.08),
+        minX: b.minX,
+        maxX: b.maxX,
+        minY: b.minY,
+        maxY: b.maxY,
+        baseline: b.maxY - t.size * 0.2,
+        bbox: b,
+        text: (t.points[0] && t.points[0].text) || "",
+        isText: true
+      });
+    }
+    for (const l of lines) {
+      for (const u of hdUnderlineStrokesForLine(l)) {
+        if (!list.some((x) => x.id === u.id)) list.push(u);
+      }
+    }
+    return list;
+  }
+  function hdGetSelectionLevel(underlines) {
+    if (!notebook || !underlines.length) return 1;
+    const data = (notebook && notebook.outline) || {};
+    const keys = underlines.map((s) => s.id);
+    for (const k of keys) {
+      if (data[k] && data[k].level) return data[k].level;
+    }
+    return 1;
+  }
+  function hdRemoveUnderlines(underlines) {
+    if (!underlines.length) return;
+    const clones = underlines.map(cloneStroke);
+    const ids = underlines.map((s) => s.id);
+    removeStrokes(ids);
+    pushUndo({ type: "erase", strokes: clones });
+    for (const id of ids) selection.ids.delete(id);
+    requestRedraw();
+    syncSelectionToolbar();
+    if (window.sofiaOutlineRefresh) setTimeout(window.sofiaOutlineRefresh, 0);
+    showToast("Unterstreichung entfernt");
+  }
+
+  // Auswahl (Lasso) von Hand doppelt unterstreichen oder entfernen (wenn bereits unterstrichen)
   document.getElementById("btn-sel-underline")?.addEventListener("click", (e) => {
     e.stopPropagation();
     if (viewOnly || myRole === "view") return showToast("Nur ansehen: hier kann man nichts ändern");
+    const existing = hdFindUnderlinesForSelection();
+    if (existing.length > 0) {
+      // Wenn bereits markiert/unterstrichen und nochmal draufgeklickt: wieder ausgehen!
+      hdRemoveUnderlines(existing);
+      return;
+    }
     const pens = selectedStrokes().filter(isHandStroke);
-    if (!pens.length) return;
+    const texts = selectedStrokes().filter((s) => s.tool === "text");
+    if (!pens.length && !texts.length) return;
     const lines = hdLines(pens);
+    for (const t of texts) {
+      const b = t.bbox || makeBBox(t.points);
+      lines.push({
+        strokes: [t],
+        color: t.color || "#1E1F22",
+        size: t.size,
+        penSize: Math.max(1.5, t.size * 0.08),
+        minX: b.minX,
+        maxX: b.maxX,
+        minY: b.minY,
+        maxY: b.maxY,
+        baseline: b.maxY - t.size * 0.2,
+        bbox: b,
+        text: (t.points[0] && t.points[0].text) || "",
+        isText: true
+      });
+    }
     underlineLines(lines);
     for (const l of lines) hdRemember(l.bbox);
     hdCandidates = hdCandidates.filter((c) => !lines.some((l) => hdOverlapRatio(c.bbox, { x0: l.minX, y0: l.minY, x1: l.maxX, y1: l.maxY }) > 0.4));
     renderHeadingChips();
+    syncSelectionToolbar();
     showToast(lines.length === 1 ? "Doppelt unterstrichen" : lines.length + " Zeilen doppelt unterstrichen");
   });
+
+  const headingLevelMenu = document.getElementById("heading-level-menu");
+  if (headingLevelMenu) document.body.appendChild(headingLevelMenu);
+  document.getElementById("btn-sel-heading-level")?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (!headingLevelMenu) return;
+    if (!headingLevelMenu.classList.contains("hidden")) return headingLevelMenu.classList.add("hidden");
+    headingLevelMenu.classList.remove("hidden");
+    const r = e.currentTarget.getBoundingClientRect();
+    const mw = headingLevelMenu.offsetWidth || 180;
+    const mh = headingLevelMenu.offsetHeight || 140;
+    let top = r.bottom + 8;
+    if (top + mh > window.innerHeight - 8) top = Math.max(8, r.top - mh - 8);
+    headingLevelMenu.style.left = Math.max(8, Math.min(window.innerWidth - mw - 8, r.left + r.width / 2 - mw / 2)) + "px";
+    headingLevelMenu.style.top = top + "px";
+  });
+  headingLevelMenu?.querySelectorAll("[data-hd-level]").forEach((b) =>
+    b.addEventListener("click", (e) => {
+      e.stopPropagation();
+      headingLevelMenu.classList.add("hidden");
+      const act = b.dataset.hdLevel;
+      if (act === "remove") {
+        const existing = hdFindUnderlinesForSelection();
+        if (existing.length) hdRemoveUnderlines(existing);
+        return;
+      }
+      const lvl = parseInt(act, 10);
+      if (!lvl || lvl < 1 || lvl > 3) return;
+      let existing = hdFindUnderlinesForSelection();
+      if (!existing.length) {
+        const pens = selectedStrokes().filter(isHandStroke);
+        const texts = selectedStrokes().filter((s) => s.tool === "text");
+        if (!pens.length && !texts.length) return showToast("Bitte zuerst Text auswählen");
+        const lines = hdLines(pens);
+        for (const t of texts) {
+          const b = t.bbox || makeBBox(t.points);
+          lines.push({
+            strokes: [t],
+            color: t.color || "#1E1F22",
+            size: t.size,
+            penSize: Math.max(1.5, t.size * 0.08),
+            minX: b.minX,
+            maxX: b.maxX,
+            minY: b.minY,
+            maxY: b.maxY,
+            baseline: b.maxY - t.size * 0.2,
+            bbox: b,
+            text: (t.points[0] && t.points[0].text) || "",
+            isText: true
+          });
+        }
+        underlineLines(lines);
+        for (const l of lines) hdRemember(l.bbox);
+        hdCandidates = hdCandidates.filter((c) => !lines.some((l) => hdOverlapRatio(c.bbox, { x0: l.minX, y0: l.minY, x1: l.maxX, y1: l.maxY }) > 0.4));
+        renderHeadingChips();
+        existing = hdFindUnderlinesForSelection();
+      }
+      if (existing.length) {
+        const key = existing.map((s) => s.id).sort()[0];
+        setOutlineEntry(key, { level: lvl });
+        syncSelectionToolbar();
+        if (window.sofiaOutlineRefresh) setTimeout(window.sofiaOutlineRefresh, 0);
+        showToast(lvl === 1 ? "Main-Überschrift (Ebene 1)" : lvl === 2 ? "2. Unterüberschrift (Ebene 2)" : "3. Unterüberschrift (Ebene 3)");
+      }
+    })
+  );
+  document.addEventListener("pointerdown", (e) => {
+    if (headingLevelMenu && !headingLevelMenu.classList.contains("hidden") && !e.target.closest("#heading-level-menu") && !e.target.closest("#btn-sel-heading-level")) {
+      headingLevelMenu.classList.add("hidden");
+    }
+  }, true);
 
   // Striche einer Auswahl in Zeilen aufteilen (die lokale Erkennung liest nur eine Zeile auf einmal):
   // ein Strich gehoert zur Zeile, in deren Hoehe seine Mitte liegt.
@@ -23202,13 +23380,48 @@
           const cx = (b.minX + b.maxX) / 2;
           return cx >= g.minX - 6 && cx <= g.maxX + 6 && b.maxY <= g.minY + 30 && b.maxY >= g.minY - 220;
         });
-        if (!near.length) continue;
+        // auch Textfelder pruefen, die ueber der Unterstreichung liegen
+        const nearText = all.filter((s) => {
+          if (s.tool !== "text" || !s.points || !s.points[0] || !s.points[0].text) return false;
+          const b = bb(s);
+          const cx = (b.minX + b.maxX) / 2;
+          return cx >= g.minX - 10 && cx <= g.maxX + 10 && b.maxY <= g.minY + 30 && b.maxY >= g.minY - 300;
+        });
+        if (!near.length && !nearText.length) continue;
         // die Zeile direkt ueber der Unterstreichung
         let line = null;
-        for (const l of hdLines(near)) {
-          const base = Number.isFinite(l.baseline) ? l.baseline : l.maxY;
-          if (base > g.minY + 4) continue;
-          if (!line || base > (Number.isFinite(line.baseline) ? line.baseline : line.maxY)) line = l;
+        if (near.length) {
+          for (const l of hdLines(near)) {
+            const base = Number.isFinite(l.baseline) ? l.baseline : l.maxY;
+            if (base > g.minY + 4) continue;
+            if (!line || base > (Number.isFinite(line.baseline) ? line.baseline : line.maxY)) line = l;
+          }
+        }
+        if (!line && nearText.length) {
+          let bestT = null;
+          let bestDist = Infinity;
+          for (const t of nearText) {
+            const b = bb(t);
+            const dist = g.minY - b.maxY;
+            if (dist >= -4 && dist < bestDist) {
+              bestDist = dist;
+              bestT = t;
+            }
+          }
+          if (bestT) {
+            const b = bb(bestT);
+            const raw = (bestT.points[0].text || "").trim();
+            line = {
+              strokes: [bestT],
+              minX: b.minX,
+              maxX: b.maxX,
+              minY: b.minY,
+              maxY: b.maxY,
+              size: bestT.size,
+              text: raw.split("\n")[0].trim().slice(0, 80),
+              isText: true
+            };
+          }
         }
         if (!line) continue;
         const cx = (line.minX + line.maxX) / 2;
@@ -23216,16 +23429,71 @@
         let page = rects.findIndex((r) => cx >= r.x && cx <= r.x + r.w && cy >= r.y && cy <= r.y + r.h);
         if (page < 0) page = rects.findIndex((r) => cy >= r.y && cy <= r.y + r.h);
         const key = g.ids.slice().sort()[0];
-        items.push({ key, line, page, y: line.minY, x: line.minX });
+        items.push({ key, line, page, y: line.minY, x: line.minX, isText: !!line.isText });
+      }
+      // Textfelder auch ohne Strich erfassen: unterstrichener Text (r.u), Markdown (# Ueberschrift) oder outlineData
+      const coveredStrokes = new Set();
+      for (const it of items) {
+        if (it.line && it.line.strokes) {
+          for (const s of it.line.strokes) coveredStrokes.add(s.id);
+        }
+      }
+      for (const s of all) {
+        if (s.tool !== "text" || !s.points || !s.points[0] || !s.points[0].text) continue;
+        if (coveredStrokes.has(s.id)) continue;
+        const raw = (s.points[0].text || "").trim();
+        if (!raw) continue;
+        const runs = strokeRuns(s);
+        const hasU = runs.some((r) => r.u);
+        const mdMatch = raw.match(/^(#{1,3})\s+(.*)/);
+        const d = data[s.id];
+        if (hasU || mdMatch || d) {
+          const b = bb(s);
+          const cx = (b.minX + b.maxX) / 2;
+          const cy = (b.minY + b.maxY) / 2;
+          let page = rects.findIndex((r) => cx >= r.x && cx <= r.x + r.w && cy >= r.y && cy <= r.y + r.h);
+          if (page < 0) page = rects.findIndex((r) => cy >= r.y && cy <= r.y + r.h);
+          let title = mdMatch ? mdMatch[2] : raw.split("\n")[0];
+          title = title.trim().slice(0, 80);
+          const line = {
+            strokes: [s],
+            minX: b.minX,
+            maxX: b.maxX,
+            minY: b.minY,
+            maxY: b.maxY,
+            size: s.size,
+            text: title,
+            isText: true
+          };
+          const it = { key: s.id, line, page, y: b.minY, x: b.minX, isText: true };
+          if (mdMatch) it.level = mdMatch[1].length;
+          items.push(it);
+        }
       }
       items.sort((a, b) => a.page - b.page || a.y - b.y || a.x - b.x);
-      const maxSize = Math.max(0, ...items.map((it) => it.line.size || 0));
-      for (const it of items) it.level = maxSize && (it.line.size || 0) < maxSize * 0.8 ? 2 : 1;
+      const sizes = items.map((it) => it.line.size || 0).filter((s) => s > 0);
+      const maxSize = Math.max(0, ...sizes);
+      const minSize = sizes.length ? Math.min(...sizes) : 0;
+      const hasRange = maxSize > 0 && maxSize / Math.max(1, minSize) >= 1.25;
+      const data = outlineData();
+      for (const it of items) {
+        const d = data[it.key];
+        if (d && (d.level === 1 || d.level === 2 || d.level === 3)) {
+          it.level = d.level;
+        } else if (hasRange) {
+          const s = it.line.size || 0;
+          if (s >= maxSize * 0.8) it.level = 1;
+          else if (s >= maxSize * 0.58) it.level = 2;
+          else it.level = 3;
+        } else {
+          it.level = 1;
+        }
+      }
       return items;
     }
     function outlineText(it) {
       const d = outlineData()[it.key];
-      return (d && d.text) || outlineLocalText.get(it.key) || "";
+      return (d && d.text) || outlineLocalText.get(it.key) || (it.line && it.line.text) || "";
     }
     function setOutlineEntry(key, patch) {
       if (!notebook) return;
@@ -23402,7 +23670,20 @@
           main.addEventListener("pointerup", cancel);
           main.addEventListener("pointercancel", cancel);
         });
-        row.append(star, main);
+        const lvlBtn = document.createElement("button");
+        lvlBtn.type = "button";
+        lvlBtn.className = "ol-lvl";
+        lvlBtn.title = "Ebene wechseln: Main (H1) / 2. Unter (H2) / 3. Unter (H3)";
+        lvlBtn.textContent = "H" + it.level;
+        lvlBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          if (!fullRights()) return showToast("Nur wer bearbeiten darf, kann die Ebene ändern");
+          const next = it.level === 1 ? 2 : it.level === 2 ? 3 : 1;
+          setOutlineEntry(it.key, { level: next });
+          renderMarks();
+          showToast(next === 1 ? "Als Main-Überschrift (H1)" : next === 2 ? "Als 2. Unterüberschrift (H2)" : "Als 3. Unterüberschrift (H3)");
+        });
+        row.append(star, lvlBtn, main);
         box.appendChild(row);
       }
       runOutlineQueue(items);

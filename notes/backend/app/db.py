@@ -895,12 +895,36 @@ def clean_notebook(nb: Any) -> dict[str, Any] | None:
         if not pid or pid not in page_ids or not name:
             continue
         bookmarks.append({"id": bid or pid, "pageId": pid, "name": name})
+    # Gliederung: zu jeder doppelt unterstrichenen Ueberschrift (Schluessel = Strich-Id der
+    # Unterstreichung) der gelesene/geaenderte Text und ob sie mit Stern markiert ist
+    outline: dict[str, Any] = {}
+    raw_outline = nb.get("outline") if isinstance(nb.get("outline"), dict) else {}
+    for key, raw in list(raw_outline.items())[:1000]:
+        if not isinstance(raw, dict):
+            continue
+        k = str(key)[:60]
+        entry: dict[str, Any] = {}
+        text = str(raw.get("text") or "").strip()[:80]
+        if text:
+            entry["text"] = text
+        if raw.get("star"):
+            entry["star"] = True
+        try:
+            lvl = int(raw.get("level"))
+            if lvl in (1, 2, 3):
+                entry["level"] = lvl
+        except (TypeError, ValueError):
+            pass
+        if k and entry:
+            outline[k] = entry
     out = {
         "layout": "horizontal" if nb.get("layout") == "horizontal" else "vertical",
         "template": page_bg(nb.get("template")),
         "pages": pages,
         "bookmarks": bookmarks,
     }
+    if outline:
+        out["outline"] = outline
     if nb.get("centered"):
         # Seiten unterschiedlicher Breite (Hoch-/Querformat) stehen mittig untereinander
         out["centered"] = True
