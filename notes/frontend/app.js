@@ -9346,6 +9346,65 @@
     return { a: screenToWorld(x0, r.bottom + 10), b: screenToWorld(x1, window.innerHeight - 80) };
   }
 
+  // ---- Zoom-Fenster pro Blatt merken (Zeilen/Zoomstufe, Raender, Lage) ----
+  // Schliesst man das Zoom-Fenster und oeffnet es wieder (auch nach Neuladen), kommt es
+  // genau so zurueck: gleiche Zoomstufe, gleiche Raender links/rechts, gleiche Stelle.
+  // Im Notizbuch relativ zur Seite gespeichert - auf einer anderen Seite gelten dieselben
+  // Raender und dieselbe Stelle auf dieser Seite.
+  function zoomStateKey() {
+    const bid = boardEditId || currentBoardId;
+    return bid ? "sofianotes-zoomwin:" + (currentPersonId || "anon") + ":" + bid : "";
+  }
+  function zoomPageIndexAt(x, y) {
+    const rects = pageRects(notebook);
+    const i = rects.findIndex((r) => x >= r.x - 1 && x <= r.x + r.w + 1 && y >= r.y - 1 && y <= r.y + r.h + 1);
+    return i >= 0 ? i : window.sofiaCurrentPage ? window.sofiaCurrentPage() : 0;
+  }
+  function saveZoomState() {
+    const key = zoomStateKey();
+    if (!zoomWin || !key) return;
+    const st = { rows: zoomWin.rows };
+    if (zoomOnPages()) {
+      const i = zoomPageIndexAt(zoomWin.x, zoomWin.y);
+      const r = pageRects(notebook)[i];
+      if (!r) return;
+      Object.assign(st, { page: i, dl: zoomWin.left - r.x, dr: zoomWin.right - r.x, rx: zoomWin.x - r.x, ry: zoomWin.y - r.y });
+    } else {
+      Object.assign(st, { left: zoomWin.left, right: zoomWin.right, x: zoomWin.x, y: zoomWin.y });
+    }
+    try {
+      localStorage.setItem(key, JSON.stringify(st));
+    } catch (err) {}
+  }
+  function restoreZoomState() {
+    const key = zoomStateKey();
+    if (!zoomWin || !key) return false;
+    let st = null;
+    try {
+      st = JSON.parse(localStorage.getItem(key) || "null");
+    } catch (err) {}
+    if (!st) return false;
+    if (Number.isFinite(st.rows)) {
+      zoomWin.rows = Math.max(0.5, Math.min(4, st.rows));
+      zoomFitRows();
+    }
+    if (zoomOnPages() && Number.isFinite(st.dl)) {
+      const rects = pageRects(notebook);
+      const cur = window.sofiaCurrentPage ? window.sofiaCurrentPage() : 0;
+      const r = rects[cur] || rects[Math.min(st.page || 0, rects.length - 1)];
+      if (!r) return false;
+      zoomWin.left = r.x + st.dl;
+      zoomWin.right = r.x + st.dr;
+      zoomWin.x = Math.max(zoomWin.left, Math.min(zoomWin.right - zoomWin.w * 0.5, r.x + st.rx));
+      zoomWin.y = Math.max(r.y, Math.min(r.y + r.h - zoomRowH() * 3, r.y + st.ry));
+    } else if (!zoomOnPages() && Number.isFinite(st.left)) {
+      Object.assign(zoomWin, { left: st.left, right: st.right, x: st.x, y: st.y });
+    } else return false;
+    zoomNext = null;
+    keepZoomBoxVisible();
+    return true;
+  }
+
   function openZoomWindow() {
     if (textEdit) commitTextEditor();
     if (currentTool !== "pen" && currentTool !== "marker" && currentTool !== "eraser") setTool("pen");
@@ -9359,6 +9418,8 @@
     zoomWin.y = snapZoomY(a.y + (b.y - a.y) * 0.18);
     // Notizbuch: Rahmen und Raender an der aktuellen A4-Seite ausrichten
     if (zoomOnPages() && window.sofiaCurrentPage) zoomToPage(window.sofiaCurrentPage(), false);
+    // zuletzt eingestellte Zoomstufe/Raender/Stelle dieses Blatts wieder herstellen
+    restoreZoomState();
     if (zoomWinBtn) zoomWinBtn.classList.add("active");
     attachZoomInnerBar();
     layoutZoomPane();
@@ -9388,6 +9449,7 @@
   window.sofiaZoomToPage = zoomToPage;
 
   function closeZoomWindow() {
+    saveZoomState();
     clearTimeout(zoomAdvanceTimer);
     zoomAdvanceTimer = null;
     zoomAnim = null;
@@ -18104,6 +18166,7 @@
   };
   function saveOpenView() {
     if (!currentBoardId || !libraryBackdrop.classList.contains("hidden")) return;
+    if (typeof saveZoomState === "function") saveZoomState();
     if (boardEditId) saveBoardView(boardEditId);
     else saveView(currentBoardId);
   }
