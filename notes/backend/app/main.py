@@ -1311,20 +1311,21 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 if isinstance(msg.get("extra"), dict):
                     entry["extra"] = msg.get("extra")
                 client.in_progress[stroke_id] = entry
-                await manager.broadcast(
-                    {
-                        "type": "stroke_start",
-                        "id": client.id,
-                        "strokeId": stroke_id,
-                        "tool": client.in_progress[stroke_id]["tool"],
-                        "color": client.in_progress[stroke_id]["color"],
-                        "size": client.in_progress[stroke_id]["size"],
-                        "points": client.in_progress[stroke_id]["points"],
-                        "author": person,
-                    },
-                    exclude=websocket,
-                    board_id=room,
-                )
+                start_msg = {
+                    "type": "stroke_start",
+                    "id": client.id,
+                    "strokeId": stroke_id,
+                    "tool": entry["tool"],
+                    "color": entry["color"],
+                    "size": entry["size"],
+                    "points": entry["points"],
+                    "author": person,
+                }
+                # extra traegt u. a. boardPage: ohne sie zeigen die anderen den Strich im Heft
+                # statt auf dem Board (Board-Seiten haben eigene Koordinaten)
+                if "extra" in entry:
+                    start_msg["extra"] = entry["extra"]
+                await manager.broadcast(start_msg, exclude=websocket, board_id=room)
 
             elif msg_type == "stroke_points":
                 stroke_id = msg.get("strokeId")
@@ -1354,11 +1355,11 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 if entry is not None and extra is not None:
                     entry["extra"] = extra
                 # erst an die anderen Geraete, dann in die Datenbank (schnellere Live-Anzeige)
-                await manager.broadcast(
-                    {"type": "stroke_end", "id": client.id, "strokeId": stroke_id},
-                    exclude=websocket,
-                    board_id=room,
-                )
+                end_msg = {"type": "stroke_end", "id": client.id, "strokeId": stroke_id}
+                end_extra = extra if isinstance(extra, dict) else (entry.get("extra") if entry is not None else None)
+                if isinstance(end_extra, dict):
+                    end_msg["extra"] = end_extra
+                await manager.broadcast(end_msg, exclude=websocket, board_id=room)
                 if entry is not None and len(entry["points"]) >= 1:
                     entry["board_id"] = room
                     await db.insert_stroke(entry, person)

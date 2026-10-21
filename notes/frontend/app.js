@@ -2065,6 +2065,11 @@
       if (st === currentStroke) continue;
       drawStroke(st, c, st.tool === "marker" ? { alpha: 0.38 } : undefined);
     }
+    // was andere gerade auf diesem Board zeichnen: live in der Vorschau
+    for (const st of remoteInProgress.values()) {
+      if (!st.extra || st.extra.boardPage !== primary) continue;
+      drawStroke(st, c, st.tool === "marker" ? { alpha: 0.38 } : undefined);
+    }
     c.restore();
   }
   function drawBoardPagesFitted() {
@@ -5432,6 +5437,13 @@
     };
   }
 
+  // Strich ohne boardPage (z. B. von einem Geraet mit alter Version): das Board nehmen,
+  // das die Person laut Cursor gerade offen hat
+  function remoteBoardFallback(st, clientId) {
+    if (!st || (st.extra && st.extra.boardPage)) return;
+    const p = presence.get(clientId);
+    if (p && p.bp) st.extra = Object.assign({}, st.extra || {}, { boardPage: p.bp });
+  }
   function finalizeIncomingStroke(id) {
     const s = remoteInProgress.get(id);
     if (!s) return;
@@ -5572,6 +5584,7 @@
           // extra traegt u. a. boardPage: ohne sie landet der fertige Strich im Heft statt auf dem Board
           extra: msg.extra && typeof msg.extra === "object" ? msg.extra : undefined,
         });
+        remoteBoardFallback(remoteInProgress.get(msg.strokeId), msg.id);
         requestRedraw();
         break;
       }
@@ -5593,6 +5606,7 @@
       case "stroke_end": {
         const s = remoteInProgress.get(msg.strokeId);
         if (s && msg.extra && typeof msg.extra === "object") s.extra = Object.assign({}, s.extra || {}, msg.extra);
+        if (s) remoteBoardFallback(s, msg.id);
         finalizeIncomingStroke(msg.strokeId);
         requestRedraw();
         break;
