@@ -4980,18 +4980,27 @@
   }
 
   let reconnecting = false; // Offline-Knopf angetippt: Versuch laeuft
+  let lastConnMode = "live";
+  // neue Version da (updates.js): an der Stelle von "Offline" steht dann "Update"
+  window.sofiaUpdateChanged = () => setConnState(lastConnMode);
   function setConnState(mode) {
     if (reconnecting && mode === "offline") return; // Ergebnis zeigt der Knopf selbst
+    lastConnMode = mode;
+    if (mode === "live" && window.sofiaUpdateReady) mode = "update";
     const prevMode = statusEl.dataset.mode;
     statusEl.classList.toggle("connected", mode === "live");
     statusEl.classList.toggle("offline", mode === "offline");
     statusEl.classList.toggle("sync", mode === "sync");
+    statusEl.classList.toggle("update", mode === "update");
     statusEl.classList.remove("trying");
-    statusEl.classList.toggle("hidden", mode !== "offline" && mode !== "sync");
+    statusEl.classList.toggle("hidden", mode !== "offline" && mode !== "sync" && mode !== "update");
     const guest = myRole && myRole !== "owner";
     if (mode === "sync") {
       statusTextEl.textContent = "Sync…";
       statusEl.title = "Änderungen werden abgeglichen";
+    } else if (mode === "update") {
+      statusTextEl.textContent = "Update";
+      statusEl.title = "Neue Version verfügbar – antippen zum Aktualisieren";
     } else if (mode === "offline") {
       statusTextEl.textContent = "Offline";
       statusEl.title = guest
@@ -5005,7 +5014,7 @@
       showToast("Offline: Suche bleibt lokal – Änderungen am geteilten Blatt werden nicht übernommen");
     }
     const ico = statusEl.querySelector(".status-ico");
-    if (ico) ico.textContent = mode === "sync" ? "sync" : "cloud_off";
+    if (ico) ico.textContent = mode === "sync" ? "sync" : mode === "update" ? "download" : "cloud_off";
     if (typeof applyTopBarItems === "function" && statusEl.dataset.mode !== mode) {
       statusEl.dataset.mode = mode;
       try {
@@ -5025,6 +5034,16 @@
   // Offline antippen: sofort neu versuchen und Bescheid geben, ob es geklappt hat
   statusEl.addEventListener("click", async (e) => {
     e.stopPropagation();
+    // "Update" antippen: gleich aktualisieren (laedt neu)
+    if (statusEl.dataset.mode === "update") {
+      if (!window.SofiaUpdates) return;
+      statusEl.classList.add("trying");
+      statusTextEl.textContent = "Lädt…";
+      const ic = statusEl.querySelector(".status-ico");
+      if (ic) ic.textContent = "sync";
+      window.SofiaUpdates.apply();
+      return;
+    }
     if (reconnecting) return;
     reconnecting = true;
     statusEl.classList.add("trying");

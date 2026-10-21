@@ -35,6 +35,8 @@
 
   function markReady(msg) {
     updateAvailable = true;
+    window.sofiaUpdateReady = true;
+    if (window.sofiaUpdateChanged) window.sofiaUpdateChanged();
     if (statusText) statusText.textContent = "Update verfügbar";
     if (statusRow) statusRow.classList.add("update-needed");
     if (descEl) descEl.textContent = msg || "Ein neues Update ist bereit.";
@@ -44,6 +46,10 @@
 
   function markCurrent(info) {
     updateAvailable = false;
+    if (window.sofiaUpdateReady) {
+      window.sofiaUpdateReady = false;
+      if (window.sofiaUpdateChanged) window.sofiaUpdateChanged();
+    }
     if (statusText) statusText.textContent = "Auf neuestem Stand";
     if (statusRow) statusRow.classList.remove("update-needed");
     const ver = (info && info.version) || clientVersion();

@@ -306,6 +306,8 @@ button {
 #status.trying { background: #e8def8; color: #4f378b; cursor: default; }
 #status.trying .status-ico { animation: status-spin 0.9s linear infinite; }
 #status.sync { background: #fff4d6; color: #8a5300; }
+#status.update { background: #e8def8; color: #4f378b; }
+#status.update:hover { background: #ddd0f5; }
 #status.sync .status-ico { color: inherit; }
 @keyframes status-spin { to { transform: rotate(-360deg); } }
 #status.hidden { display: none; }
