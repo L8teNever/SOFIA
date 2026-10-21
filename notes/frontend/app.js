@@ -5490,6 +5490,8 @@
           const firstOpen = !notebook || notebookBoardId !== msg.board.id;
           notebook = msg.board.notebook || null;
           notebookBoardId = msg.board.id;
+          hdReadyBoards.add(msg.board.id);
+          hdSig = ""; // jetzt mit den abgelehnten Zeilen suchen
           // zuletzt angesehene Stelle wieder herstellen, sonst (Notizbuch) erste Seite
           const restored = !window.sofiaSplitBg && window.sofiaRestoreView && window.sofiaRestoreView(msg.board.id);
           if (!restored && notebook && firstOpen && window.sofiaFitPage && !window.sofiaSplitBg) window.sofiaFitPage(0);
@@ -5540,6 +5542,7 @@
         if (window.sofiaNbBusy && window.sofiaNbBusy()) break;
         if (JSON.stringify(msg.notebook || null) === JSON.stringify(notebook)) break;
         notebook = msg.notebook || null;
+        hdRecheck();
         if (window.sofiaPagesChanged) window.sofiaPagesChanged(true);
         if (currentBoardMeta) currentBoardMeta.notebook = notebook;
         saveBoardMeta(currentBoardId);
@@ -15052,6 +15055,17 @@
   (inkOverlay && inkOverlay.parentNode ? inkOverlay.parentNode : document.body).appendChild(hdOverlay);
   var hdCandidates = [];
   var hdSig = "";
+  // Blatt, dessen Daten (Heft mit den abgelehnten Zeilen, Besitzer) schon da sind - vorher
+  // nicht suchen, sonst kommen beim Oeffnen schon abgelehnte Vorschlaege wieder
+  var hdReadyBoards = new Set(); // auch die zweite Haelfte der geteilten Ansicht
+  // Heft geaendert (geladen, anderes Geraet hat abgelehnt ...): Vorschlaege neu pruefen
+  function hdRecheck() {
+    if (!hdOverlay) return;
+    const off = hdDismissed();
+    hdCandidates = hdCandidates.filter((c) => !hdIsDismissed(c.bbox, off));
+    renderHeadingChips();
+    hdSig = "";
+  }
   var hdTimer = null;
   const HD_SIZE_RATIO = 1.4; // so viel hoeher als der normale Text
   const HD_COLOR_RATIO = 1.05; // andersfarbig und mindestens etwa gleich hoch
@@ -15204,7 +15218,7 @@
   }
   function hdScan() {
     hdTimer = null;
-    if (!currentBoardId || viewOnly || myRole === "view" || !hdMayDetect()) {
+    if (!currentBoardId || viewOnly || myRole === "view" || !hdMayDetect() || !hdReadyBoards.has(currentBoardId)) {
       hdCandidates = [];
       return renderHeadingChips();
     }
@@ -18743,6 +18757,7 @@
     sofiaLog.action("Blatt öffnen " + String(id).slice(0, 8) + (opts && opts.creating ? " (neu)" : ""));
     if (window.sofiaWatchFor) window.sofiaWatchFor(id);
     if (window.sofiaSplitClose) window.sofiaSplitClose();
+    hdReadyBoards.delete(id); // bis "init" kommt: keine Ueberschrift-Vorschlaege
     if (window.sofiaHistoryClose && id !== currentBoardId) window.sofiaHistoryClose();
     // Immer trennen+neu verbinden, auch beim Wiedereroeffnen desselben
     // Boards: eine noch offene WS-Verbindung wuerde sonst keine frische
