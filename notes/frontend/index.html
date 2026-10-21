@@ -14,6 +14,19 @@
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<script>
+  // iPad (iPadOS 26): unter einer durchsichtigen Statusleiste legt das System einen
+  // Weichzeichner-Streifen ueber den oberen Rand, der auch Tipps abfaengt - dort lagen die
+  // Leisten. Auf dem iPad deshalb eine feste Statusleiste: die App beginnt darunter.
+  (function () {
+    var ua = navigator.userAgent || "";
+    var ipad = /iPad/.test(ua) || (/Macintosh/.test(ua) && (navigator.maxTouchPoints || 0) > 1);
+    if (!ipad) return;
+    document.documentElement.classList.add("is-ipad");
+    var m = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
+    if (m) m.setAttribute("content", "default");
+  })();
+</script>
 <meta name="apple-mobile-web-app-title" content="sofianotes" />
 <script>
   (function () {
@@ -38,6 +51,9 @@
           // iPad/iPhone-App: unter der Statusleiste liegt noch ein verschwommener Uebergang
           // (iPadOS), der tiefer reicht als die gemeldete Hoehe - darunter Platz lassen
           var gap = inset >= 8 ? inset + 22 : (underBar ? 36 : 0);
+          // iPad, falls die Statusleiste doch noch durchsichtig ist (alte Startbildschirm-App):
+          // Leisten unter den Weichzeichner-Streifen des Systems schieben
+          if (inset >= 8 && document.documentElement.classList.contains("is-ipad")) gap = Math.max(inset + 52, 76);
           document.documentElement.style.setProperty("--status-gap", gap + "px");
         } catch (err) {}
       };
