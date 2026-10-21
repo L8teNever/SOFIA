@@ -23156,6 +23156,8 @@
       const nb = clone();
       const [pg] = nb.pages.splice(from, 1);
       nb.pages.splice(to, 0, pg);
+      // Seitenleiste bleibt, wo man die Seite abgelegt hat (nicht zur aktuellen Seite scrollen)
+      thumbHoldUntil = performance.now() + 2500;
       withPageUndo(() => saveNotebook(nb, { moveStrokes: true }));
       fitPage(to);
     }
@@ -24702,6 +24704,11 @@
       thumbBuckets = bucketStrokes(rects);
       thumbQueue = [];
       const todo = [];
+      // Neu aufbauen ohne Springen: Scroll-Position der Leiste behalten
+      const keepScroll = grid.scrollTop;
+      requestAnimationFrame(() => {
+        if (Math.abs(grid.scrollTop - keepScroll) > 1) grid.scrollTop = keepScroll;
+      });
       grid.innerHTML = "";
       rects.forEach((r, i) => {
         const cell = document.createElement("div");
@@ -25104,6 +25111,7 @@
     // bei jedem Zeichnen: Knopf oben, aktive Seite in der Leiste
     let lastCur = -1;
     let thumbScrollPending = false;
+    var thumbHoldUntil = 0; // nach dem Verschieben einer Seite: Leiste nicht mitlaufen lassen
     let lastNb = null;
     window.sofiaRepaintPages = () => {
       if (panelOpen) renderPanel();
@@ -25136,6 +25144,7 @@
         // Leiste laeuft mit: die aktuelle Seite in die Mitte holen, sobald Wischen/Einrasten
         // vorbei ist (vorher wurde es waehrend der Geste uebersprungen und dann vergessen)
         const gesturing = !!(panState || pinchState || (fling && !fling.stop) || (window.sofiaViewBusy && window.sofiaViewBusy()) || thumbDrag);
+        if (thumbScrollPending && performance.now() < thumbHoldUntil) thumbScrollPending = false;
         if (thumbScrollPending && !gesturing && !marksOpen) {
           thumbScrollPending = false;
           const act = grid.querySelector(".page-thumb.active");
