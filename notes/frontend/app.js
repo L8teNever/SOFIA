@@ -23696,6 +23696,10 @@
       return pg;
     }
     function addPages(afterIndex, pages) {
+      if (addPopFromThumb) {
+        addPopFromThumb = false;
+        holdThumbs();
+      }
       const nb = clone();
       nb.pages.splice(afterIndex + 1, 0, ...pages);
       pageAppear = { ids: new Set(pages.map((p) => p.id)), t0: performance.now(), ms: 240 };
@@ -24070,6 +24074,21 @@
       return out;
     }
     // Menue einer Seite (▾ unter dem Vorschaubild) - aufgebaut wie in GoodNotes
+    // Aktionen aus der Seitenleiste (Duplizieren, Einfuegen, Loeschen ...): die Leiste bleibt,
+    // wo sie ist - sie laeuft der neuen aktuellen Seite nicht hinterher
+    function holdThumbs() {
+      thumbHoldUntil = performance.now() + 2500;
+    }
+    function holdRuns(items) {
+      return items.map((it) => {
+        if (!it || typeof it !== "object") return it;
+        const out = Object.assign({}, it);
+        if (typeof it.run === "function") out.run = (...a) => (holdThumbs(), it.run(...a));
+        if (typeof it.sub === "function") out.sub = (...a) => holdRuns(it.sub(...a) || []);
+        if (Array.isArray(it.seg)) out.seg = it.seg.map((o) => (typeof o.run === "function" ? Object.assign({}, o, { run: (...a) => (holdThumbs(), o.run(...a)) }) : o));
+        return out;
+      });
+    }
     function pageMenu(i, anchor) {
       const pg = notebook.pages[i];
       const pid = pg.boardOf || pg.id;
@@ -24083,7 +24102,7 @@
         const items = [];
         if (myRole !== "view") items.push({ icon: "note_add", label: "Neue Seite am Ende", run: () => addPages(notebook.pages.length - 1, [templatePage()]) }, { sep: true });
         items.push(...exportItems);
-        return openMenu(items, side, { side: true });
+        return openMenu(holdRuns(items), side, { side: true });
       }
       const items = [
         {
@@ -24104,7 +24123,7 @@
       items.push({ sep: true }, ...exportItems, { sep: true });
       items.push({ icon: "ink_eraser", label: "Seite leeren", danger: true, run: () => clearPage(i) });
       items.push({ icon: "delete", label: "Seite löschen", danger: true, run: () => deletePage(i) });
-      openMenu(items, side, { side: true });
+      openMenu(holdRuns(items), side, { side: true });
     }
     // Menue des ganzen Notizbuchs (⋯ oben in der Seiten-Leiste)
     function notebookMenu(anchor) {
@@ -25396,6 +25415,7 @@
       endPageSelect();
     });
     let renderedSig = "";
+    let gridKeep = null;
     function renderPanel() {
       if (!panelOpen || !notebook) return;
       renderedSig = JSON.stringify(notebook.pages) + notebook.layout + JSON.stringify(notebook.bookmarks || []);
@@ -25405,9 +25425,12 @@
       thumbBuckets = bucketStrokes(rects);
       thumbQueue = [];
       const todo = [];
-      // Neu aufbauen ohne Springen: Scroll-Position der Leiste behalten
-      const keepScroll = grid.scrollTop;
+      // Neu aufbauen ohne Springen: Scroll-Position der Leiste behalten (bei zwei Aufbauten kurz
+      // hintereinander gilt die Position vor dem ersten - nicht die schon zurueckgesprungene)
+      if (gridKeep == null) gridKeep = grid.scrollTop;
+      const keepScroll = gridKeep;
       requestAnimationFrame(() => {
+        gridKeep = null;
         if (Math.abs(grid.scrollTop - keepScroll) > 1) grid.scrollTop = keepScroll;
       });
       grid.innerHTML = "";
@@ -25464,6 +25487,8 @@
       add.innerHTML = '<span class="material-symbols-rounded">add</span>';
       add.addEventListener("click", (e) => {
         e.stopPropagation();
+        holdThumbs();
+        addPopFromThumb = true;
         openAddPop(add);
       });
       const addCell = document.createElement("div");
@@ -25741,7 +25766,9 @@
       });
       return b;
     }
+    let addPopFromThumb = false;
     function openAddPop(anchor) {
+      if (!(anchor && anchor.closest && anchor.closest(".page-thumb, #pages-grid"))) addPopFromThumb = false;
       const box = document.getElementById("pap-templates");
       if (myRole === "view") return showToast("Du darfst dieses Blatt nur ansehen");
       box.innerHTML = "";
@@ -25853,7 +25880,13 @@
             const gr = grid.getBoundingClientRect();
             const ar = act.getBoundingClientRect();
             if (ar.top < gr.top + 8 || ar.bottom > gr.bottom - 8) {
-              const target = grid.scrollTop + (ar.top - gr.top) - (gr.height - ar.height) / 2;
+              // weit weg (z. B. beim Blaettern im Heft): in die Mitte; knapp daneben: nur nachruecken
+              const far = ar.bottom < gr.top - gr.height * 0.5 || ar.top > gr.bottom + gr.height * 0.5;
+              const target = far
+                ? grid.scrollTop + (ar.top - gr.top) - (gr.height - ar.height) / 2
+                : ar.top < gr.top + 8
+                  ? grid.scrollTop + (ar.top - gr.top) - 12
+                  : grid.scrollTop + (ar.bottom - gr.bottom) + 12;
               grid.scrollTo({ top: Math.max(0, target), behavior: "smooth" });
             }
           }
