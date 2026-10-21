@@ -15005,7 +15005,7 @@
     return !ex.shape && !s.objectKind && !s.locked;
   }
   function hdDismissKey() {
-    return "sofianotes-hd-off-" + (currentBoardId || "");
+    return "sofianotes-hd-off-" + (currentBoardId || "") + (boardEditId ? ":" + boardEditId : "");
   }
   function hdDismissed() {
     try {
@@ -15085,10 +15085,14 @@
     }
     return lines;
   }
+  // Heft und jedes Board haben eigene Koordinaten: nur Striche der gerade offenen Ebene
+  function hdInView(s) {
+    return ((s.extra && s.extra.boardPage) || null) === (boardEditId || null);
+  }
   function hdAlreadyUnderlined(l) {
     const h = l.maxY - l.minY;
     for (const s of boardStrokes.values()) {
-      if (!s.extra || !s.extra.underline) continue;
+      if (!s.extra || !s.extra.underline || !hdInView(s)) continue;
       const b = s.bbox || makeBBox(s.points);
       const base = Number.isFinite(l.baseline) ? l.baseline : l.maxY;
       if (!b || b.minY < base - h * 0.15 || b.minY > l.maxY + h) continue;
@@ -15108,7 +15112,7 @@
     const z = screenToWorld(window.innerWidth * 1.5, window.innerHeight * 1.5);
     const strokes = [];
     for (const s of boardStrokes.values()) {
-      if (!isHandStroke(s)) continue;
+      if (!isHandStroke(s) || !hdInView(s)) continue;
       const b = s.bbox || makeBBox(s.points);
       if (b && b.maxX >= a.x && b.minX <= z.x && b.maxY >= a.y && b.minY <= z.y) strokes.push(s);
     }
@@ -15128,7 +15132,7 @@
     // getippte Textfelder: deutlich groesser als die uebrigen (oder als "# ..." geschrieben)
     const texts = [];
     for (const s of boardStrokes.values()) {
-      if (!isTypedText(s)) continue;
+      if (!isTypedText(s) || !hdInView(s)) continue;
       const b = s.bbox || strokeWorldBBox(s);
       if (b && b.maxX >= a.x && b.minX <= z.x && b.maxY >= a.y && b.minY <= z.y) texts.push(s);
     }
@@ -15157,7 +15161,7 @@
   // nach dem Schreiben kurz warten, dann neu pruefen (nur wenn sich etwas geaendert hat)
   function maybeScheduleHeadingScan() {
     if (!hdOverlay) return;
-    const sig = currentBoardId + ":" + boardStrokes.size + ":" + Math.round(offsetX / 200) + ":" + Math.round(offsetY / 200) + ":" + Math.round(scale * 10);
+    const sig = currentBoardId + ":" + (boardEditId || "") + ":" + boardStrokes.size + ":" + Math.round(offsetX / 200) + ":" + Math.round(offsetY / 200) + ":" + Math.round(scale * 10);
     if (sig === hdSig) return;
     hdSig = sig;
     clearTimeout(hdTimer);
@@ -15338,7 +15342,7 @@
     const h = l.maxY - l.minY;
     const list = [];
     for (const s of boardStrokes.values()) {
-      if (!s.extra || !s.extra.underline) continue;
+      if (!s.extra || !s.extra.underline || !hdInView(s)) continue;
       const b = s.bbox || makeBBox(s.points);
       const base = Number.isFinite(l.baseline) ? l.baseline : l.maxY;
       if (!b || b.minY < base - h * 0.15 || b.minY > l.maxY + h) continue;
