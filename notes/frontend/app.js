@@ -4935,6 +4935,22 @@
 
   // ---- websocket ------------------------------------------------------
   let ws = null;
+  // Schlechtes Netz: jede Aenderung (Strich fertig, verschoben, geloescht) bekommt eine Nummer
+  // und bleibt hier, bis der Server sie bestaetigt ("ack"). Was nicht bestaetigt ist, geht beim
+  // Wiederverbinden nochmal raus - statt vom Server-Stand ueberschrieben zu werden.
+  let wsSeq = 0;
+  const pendingOps = new Map(); // seq -> { boardId, kind: "put"|"erase", stroke?, ids? }
+  // Stand der Striche (Server-Zaehler), den das Geraet vollstaendig kennt; null = unsicher.
+  // Gleicher Stand beim Oeffnen: der Server schickt keine Striche, die gespeicherten gelten.
+  const revByBoard = new Map();
+  function revInvalidate(bid) {
+    revByBoard.set(bid || currentBoardId, null);
+  }
+  function hasPending(bid) {
+    for (const op of pendingOps.values()) if (op.boardId === bid) return true;
+    return false;
+  }
+  let lastWsMsgAt = 0;
   let myClientId = null;
   let myColor = null;
   let reconnectDelay = 1000;
@@ -4958,11 +4974,66 @@
     return p ? p.name : id;
   }
 
+  function trackOp(obj) {
+    if (!currentBoardId || !obj) return;
+    let op = null;
+    if (obj.type === "stroke_end" && currentStroke && currentStroke.id === obj.strokeId) {
+      const stroke = serializeStroke(currentStroke);
+      if (!stroke.author) stroke.author = currentPersonId;
+      if (obj.extra) stroke.extra = obj.extra;
+      op = { kind: "put", stroke };
+    } else if (obj.type === "stroke_move" && obj.stroke) op = { kind: "put", stroke: obj.stroke };
+    else if (obj.type === "erase" && obj.strokeIds && obj.strokeIds.length) op = { kind: "erase", ids: obj.strokeIds.slice() };
+    if (!op) return;
+    obj.seq = ++wsSeq;
+    op.boardId = currentBoardId;
+    pendingOps.set(obj.seq, op);
+  }
+  // nach dem (Wieder-)Verbinden: alles Unbestaetigte dieses Blatts nochmal schicken
+  function resendPending() {
+    const mine = [];
+    for (const [seq, op] of pendingOps) if (op.boardId === currentBoardId) mine.push([seq, op]);
+    for (const [seq, op] of mine) {
+      pendingOps.delete(seq);
+      if (op.kind === "put") {
+        const local = boardStrokes.get(op.stroke.id);
+        // inzwischen lokal geloescht: nicht wieder anlegen
+        if (!local && [...pendingOps.values()].some((o) => o.kind === "erase" && o.ids.includes(op.stroke.id))) continue;
+        const st = local ? serializeStroke(local) : op.stroke;
+        if (!local) {
+          const copy = cloneStroke(op.stroke);
+          copy.bbox = strokeWorldBBox(copy);
+          boardStrokes.set(copy.id, copy);
+        }
+        wsSend({ type: "stroke_move", stroke: st });
+      } else {
+        for (const id of op.ids) boardStrokes.delete(id);
+        wsSend({ type: "erase", strokeIds: op.ids });
+      }
+    }
+    if (mine.length) requestRedraw();
+  }
+  function handleAck(msg) {
+    const op = pendingOps.get(msg.seq);
+    pendingOps.delete(msg.seq);
+    if (!op) return;
+    if (msg.missing && op.kind === "put") {
+      // Anfang des Strichs kam beim Server nie an: ganz schicken
+      const local = boardStrokes.get(op.stroke.id);
+      wsSend({ type: "stroke_move", stroke: local ? serializeStroke(local) : op.stroke });
+      return;
+    }
+    const known = revByBoard.get(op.boardId);
+    if (msg.rb != null && known != null && msg.rb === known) revByBoard.set(op.boardId, msg.ra);
+    else revInvalidate(op.boardId);
+  }
   function wsSend(obj) {
     const structural = /^(stroke_end|stroke_move|stroke_replace|erase)$/.test(obj && obj.type);
     if (structural && window.sofiaHistoryChanged) window.sofiaHistoryChanged();
     if (structural && window.sofiaPagesChanged) window.sofiaPagesChanged();
     if (structural) scheduleSaveBoard();
+    trackOp(obj);
+    if (structural && !(ws && ws.readyState === WebSocket.OPEN)) revInvalidate();
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify(obj));
       return;
@@ -5137,6 +5208,8 @@
     saveBoardMeta(bid);
     // Stand jetzt festhalten - laeuft auch weiter, wenn man das Blatt schon verlassen hat
     const all = Array.from(boardStrokes.values());
+    const rev = !hasPending(bid) && revByBoard.get(bid) != null ? revByBoard.get(bid) : null;
+    const saveRev = () => SofiaOffline.setKv("rev:" + bid, { rev, n: all.length }).catch(() => {});
     const job = (saveJobs.get(bid) || 0) + 1;
     saveJobs.set(bid, job);
     const parts = [];
@@ -5161,7 +5234,8 @@
       return JSON.stringify(c);
     };
     if (sync === true) {
-      SofiaOffline.setStrokes(bid, "[" + all.map(pack).join(",") + "]").catch(() => {});
+      SofiaOffline.setKv("rev:" + bid, null).catch(() => {});
+      SofiaOffline.setStrokes(bid, "[" + all.map(pack).join(",") + "]").then(saveRev, () => {});
       return;
     }
     const step = (deadline) => {
@@ -5181,7 +5255,12 @@
       const chunks = ["["];
       for (let k = 0; k < parts.length; k++) chunks.push(k ? "," + parts[k] : parts[k]);
       chunks.push("]");
-      SofiaOffline.setStrokes(bid, new Blob(chunks, { type: "application/json" })).catch(() => {});
+      // erst den alten Stand ungueltig machen, dann Striche, dann den neuen Stand: bricht etwas
+      // dazwischen ab, wird beim naechsten Oeffnen einfach alles geladen
+      SofiaOffline.setKv("rev:" + bid, null)
+        .catch(() => {})
+        .then(() => SofiaOffline.setStrokes(bid, new Blob(chunks, { type: "application/json" })))
+        .then(saveRev, () => {});
     };
     step(null);
   }
@@ -5203,8 +5282,12 @@
   }
 
   async function probeOnline() {
+    // bei schlechtem Netz nicht minutenlang haengen: nach 5 s gilt "gerade nicht erreichbar"
+    const ctl = typeof AbortController !== "undefined" ? new AbortController() : null;
+    const timer = ctl ? setTimeout(() => ctl.abort(), 5000) : null;
     try {
-      const r = await fetch("/api/health", { cache: "no-store", redirect: "manual" });
+      const r = await fetch("/api/health", { cache: "no-store", redirect: "manual", signal: ctl ? ctl.signal : undefined });
+      clearTimeout(timer);
       if (r.type === "opaqueredirect") {
         // Cloudflare-Anmeldung abgelaufen: Seite neu laden, dann fragt Access nach dem Login
         // (hoechstens einmal pro Minute, damit nichts in einer Schleife haengt)
@@ -5431,10 +5514,12 @@
       encodeURIComponent(currentBoardId) +
       "&dev=" +
       encodeURIComponent(deviceKind()) +
+      (revByBoard.get(currentBoardId) != null && !hasPending(currentBoardId) ? "&rev=" + revByBoard.get(currentBoardId) : "") +
       (window.sofiaWatchQuery ? window.sofiaWatchQuery(currentBoardId) : "");
     ws = new WebSocket(url);
 
     ws.onopen = () => {
+      lastWsMsgAt = performance.now();
       setConnState("live");
       reconnectDelay = 1000;
     };
@@ -5466,12 +5551,42 @@
     ws.onerror = () => sock.close();
     // geteilte Ansicht: Nachrichten fuer das andere Blatt in dessen Zustand verarbeiten
     ws.onmessage = (ev) => {
+      if (sock === ws) lastWsMsgAt = performance.now();
       const msg = JSON.parse(ev.data);
       if (window.sofiaSplitRoute && window.sofiaSplitRoute(sock, () => handleMessage(msg))) return;
       handleMessage(msg);
     };
   }
 
+  // Herzschlag: alle 10 s ein "ping". Kommt 25 s lang gar nichts zurueck, haengt die Verbindung
+  // (typisch bei schlechtem Netz, ohne dass der Browser es merkt) - dann neu aufbauen, statt
+  // weiter ins Leere zu schicken. Im Hintergrund pausiert; beim Zurueckkommen gleich pruefen.
+  setInterval(() => {
+    if (document.hidden || !ws || ws.readyState !== WebSocket.OPEN) return;
+    if (performance.now() - lastWsMsgAt > 25000) return dropDeadSocket();
+    try {
+      ws.send('{"type":"ping"}');
+    } catch (err) {}
+  }, 10000);
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden || !ws || ws.readyState !== WebSocket.OPEN) return;
+    lastWsMsgAt = performance.now() - 15000; // 10 s Zeit fuer eine Antwort
+    try {
+      ws.send('{"type":"ping"}');
+    } catch (err) {}
+  });
+  function dropDeadSocket() {
+    const s = ws;
+    if (!s) return;
+    ws = null;
+    s.onclose = null;
+    s.onmessage = null;
+    try {
+      s.close();
+    } catch (err) {}
+    setConnState("offline");
+    if (wantWs) setTimeout(() => wantWs && goOnlineIfPossible(), 300);
+  }
   // Strich ohne boardPage (z. B. von einem Geraet mit alter Version): das Board nehmen,
   // das die Person laut Cursor gerade offen hat
   function remoteBoardFallback(st, clientId) {
@@ -5494,6 +5609,9 @@
   }
 
   function handleMessage(msg) {
+    if (msg.type === "ack") return handleAck(msg);
+    if (msg.type === "pong") return;
+    if (/^(stroke_end|stroke_move|erase|board_reload)$/.test(msg.type)) revInvalidate();
     if (window.sofiaHistoryChanged && /^(stroke_end|stroke_move|erase|board_reload)$/.test(msg.type)) window.sofiaHistoryChanged();
     if (window.sofiaPagesChanged && /^(stroke_end|stroke_move|erase|board_notebook)$/.test(msg.type)) window.sofiaPagesChanged();
     switch (msg.type) {
@@ -5520,19 +5638,24 @@
           if (!restored && notebook && firstOpen && window.sofiaFitPage && !window.sofiaSplitBg) window.sofiaFitPage(0);
           if (!window.sofiaSplitBg) window.sofiaViewReady && window.sofiaViewReady(msg.board.id);
         }
-        boardStrokes.clear();
-        foreignIds.clear();
+        // gleicher Stand wie gespeichert: Striche aus dem Speicher behalten (nichts uebertragen)
+        if (!msg.unchanged) {
+          boardStrokes.clear();
+          foreignIds.clear();
+        }
         if (!window.sofiaSplitBg) {
           myRole = msg.role || "owner";
           if (window.sofiaApplyRole) window.sofiaApplyRole();
         }
-        for (const s of msg.strokes) {
+        revByBoard.set(msg.board ? msg.board.id : currentBoardId, typeof msg.rev === "number" ? msg.rev : null);
+        for (const s of msg.strokes || []) {
           if (s.author !== currentPersonId) foreignIds.add(s.id);
           tagShape(s);
           s.bbox = strokeWorldBBox(s);
           boardStrokes.set(s.id, s);
           if (s.tool === "image" && s.extra && s.extra.mediaId) ensureMedia(s.extra.mediaId);
         }
+        resendPending();
         if (notebook && window.sofiaSyncAllBoards && !window.sofiaSplitBg && !boardEditId) window.sofiaSyncAllBoards();
         requestRedraw();
         scheduleSaveBoard();
@@ -19045,10 +19168,14 @@
       return;
     }
     let local = null;
+    revByBoard.delete(id);
     if (window.SofiaOffline) {
-      local = await SofiaOffline.getStrokes(id).catch(() => null);
+      const [got, saved] = await Promise.all([SofiaOffline.getStrokes(id).catch(() => null), SofiaOffline.getKv("rev:" + id).catch(() => null)]);
+      local = got;
       if (currentBoardId !== id) return;
       if (local && local.length) applyStrokeList(local);
+      // nur wenn der Speicher genau zu diesem Stand passt
+      if (saved && typeof saved.rev === "number" && local && saved.n === local.length) revByBoard.set(id, saved.rev);
     }
     requestRedraw();
     wantWs = true;
@@ -26383,6 +26510,8 @@
           redoStack: [],
           gridStyle: "graph",
         };
+        // diese Haelfte startet ohne gespeicherte Striche: immer alles vom Server holen
+        revByBoard.delete(board.id);
         splitState.panes[1] = { view: { scale: 1, offsetX: 0, offsetY: 0 }, ctx: fresh, be: null };
         splitState.active = 1;
         applyCtx(fresh);

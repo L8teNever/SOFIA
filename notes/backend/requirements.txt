@@ -5,3 +5,6 @@ tzdata==2024.2
 # Bilder umwandeln, die der Browser nicht kann (HEIC vom iPhone, TIFF ...)
 pillow
 pillow-heif==0.18.0
+# Formularfelder auf Arbeitsblaettern erkennen (CommonForms FFDNet-S als ONNX)
+onnxruntime
+numpy

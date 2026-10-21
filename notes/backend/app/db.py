@@ -238,6 +238,22 @@ def _init_sync() -> None:
         _conn.execute("ALTER TABLE people ADD COLUMN prefs_at REAL")
     if "sofia_subject_id" not in folder_cols:
         _conn.execute("ALTER TABLE folders ADD COLUMN sofia_subject_id INTEGER")
+    # Stand der Striche je Blatt: jede Aenderung (egal ueber welchen Weg) zaehlt hoch. Geraete,
+    # die genau diesen Stand gespeichert haben, bekommen beim Oeffnen keine Striche mehr geschickt.
+    if "srev" not in {row[1] for row in _conn.execute("PRAGMA table_info(boards)").fetchall()}:
+        _conn.execute("ALTER TABLE boards ADD COLUMN srev INTEGER NOT NULL DEFAULT 0")
+    _conn.execute(
+        "CREATE TRIGGER IF NOT EXISTS strokes_srev_ins AFTER INSERT ON strokes BEGIN "
+        "UPDATE boards SET srev = srev + 1 WHERE id = NEW.board_id; END"
+    )
+    _conn.execute(
+        "CREATE TRIGGER IF NOT EXISTS strokes_srev_upd AFTER UPDATE ON strokes BEGIN "
+        "UPDATE boards SET srev = srev + 1 WHERE id = NEW.board_id OR id = OLD.board_id; END"
+    )
+    _conn.execute(
+        "CREATE TRIGGER IF NOT EXISTS strokes_srev_del AFTER DELETE ON strokes BEGIN "
+        "UPDATE boards SET srev = srev + 1 WHERE id = OLD.board_id; END"
+    )
     people_cols = {row[1] for row in _conn.execute("PRAGMA table_info(people)").fetchall()}
     if "sofia_user_id" not in people_cols:
         _conn.execute("ALTER TABLE people ADD COLUMN sofia_user_id INTEGER")
@@ -503,6 +519,16 @@ def _delete_sync(stroke_ids: list[str], person_id: str | None = None) -> None:
     _conn.commit()
 
 
+def _srev_sync(board_id: str) -> int:
+    row = _conn.execute("SELECT srev FROM boards WHERE id = ?", (board_id,)).fetchone()
+    return int(row[0]) if row and row[0] is not None else 0
+
+
+async def board_srev(board_id: str) -> int:
+    async with _lock:
+        return await asyncio.get_event_loop().run_in_executor(None, _srev_sync, board_id)
+
+
 async def init() -> None:
     async with _lock:
         await asyncio.get_event_loop().run_in_executor(None, _init_sync)
@@ -543,14 +569,23 @@ async def insert_strokes(board_id: str, strokes: list[dict[str, Any]]) -> None:
         await asyncio.get_event_loop().run_in_executor(None, _insert_many_sync, board_id, strokes)
 
 
-async def insert_stroke(stroke: dict[str, Any], person_id: str | None = None) -> None:
-    async with _lock:
-        await asyncio.get_event_loop().run_in_executor(None, _insert_sync, stroke, person_id)
+def _with_rev(board_id: str | None, fn, *args) -> tuple[int, int]:
+    """fn ausfuehren und den Strich-Stand des Blatts davor/danach liefern (unter dem Lock:
+    dazwischen schreibt niemand sonst - ein Geraet kann so pruefen, ob es alles kennt)."""
+    before = _srev_sync(board_id) if board_id else 0
+    fn(*args)
+    return before, (_srev_sync(board_id) if board_id else 0)
 
 
-async def delete_strokes(stroke_ids: list[str], person_id: str | None = None) -> None:
+async def insert_stroke(stroke: dict[str, Any], person_id: str | None = None) -> tuple[int, int]:
+    board_id = stroke.get("boardId") or stroke.get("board_id")
     async with _lock:
-        await asyncio.get_event_loop().run_in_executor(None, _delete_sync, stroke_ids, person_id)
+        return await asyncio.get_event_loop().run_in_executor(None, _with_rev, board_id, _insert_sync, stroke, person_id)
+
+
+async def delete_strokes(stroke_ids: list[str], person_id: str | None = None, board_id: str | None = None) -> tuple[int, int]:
+    async with _lock:
+        return await asyncio.get_event_loop().run_in_executor(None, _with_rev, board_id, _delete_sync, stroke_ids, person_id)
 
 
 # ---- Versionsverlauf ----------------------------------------------------

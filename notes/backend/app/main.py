@@ -14,7 +14,7 @@ from pydantic import BaseModel
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.gzip import GZipMiddleware
 
-from . import board_file, clientlog, cloudflare_ocr, db, files, goodnotes_export, media, shape_learning, sofia_sync, spellcheck
+from . import board_file, clientlog, cloudflare_ocr, db, files, forms, goodnotes_export, media, shape_learning, sofia_sync, spellcheck
 from .auth import get_current_person, get_current_person_ws, require_admin
 from .version import get_version_info, inject_build
 from .ws_manager import ConnectionManager, color_for
@@ -806,6 +806,27 @@ async def add_media_library(request: Request, me: dict = Depends(get_current_per
     return {"ok": True}
 
 
+# Formularfelder: immer nur eine Erkennung gleichzeitig (CPU), Ergebnis bleibt beim Bild
+_forms_sem = asyncio.Semaphore(1)
+
+
+@app.get("/api/media/{media_id}/fields")
+async def get_media_fields(media_id: str, me: dict = Depends(get_current_person)) -> dict:
+    """Ausfuellbare Felder (Text, Ankreuzen, Unterschrift) auf einem Arbeitsblatt-Bild."""
+    if not media.valid_id(media_id):
+        raise HTTPException(status_code=400, detail="bad id")
+    if not forms.available():
+        return {"ok": False, "fields": [], "reason": "unavailable"}
+    async with _forms_sem:
+        try:
+            fields = await asyncio.get_event_loop().run_in_executor(None, forms.fields_for, media_id)
+        except Exception:  # noqa: BLE001
+            return {"ok": False, "fields": [], "reason": "error"}
+    if fields is None:
+        raise HTTPException(status_code=404, detail="not found")
+    return {"ok": True, "fields": fields}
+
+
 @app.get("/api/media/{media_id}")
 async def get_media(media_id: str) -> Response:
     blob = media.load_bytes(media_id)
@@ -1246,7 +1267,15 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
     # andere offene Fenster laden dann neu, damit niemand mit alten Positionen weiterschreibt
     if await db.center_notebook(board_id):
         await manager.broadcast({"type": "board_reload"}, exclude=websocket, board_id=board_id)
-    strokes = await db.load_all(board_id)
+    # Stand vor dem Laden lesen: kommt dazwischen etwas dazu, ist der gemerkte Stand hoechstens
+    # zu alt (naechstes Mal wird alles geschickt) - nie zu neu
+    rev = await db.board_srev(board_id)
+    try:
+        have_rev = int(websocket.query_params.get("rev") or -1)
+    except ValueError:
+        have_rev = -1
+    unchanged = have_rev == rev
+    strokes = [] if unchanged else await db.load_all(board_id)
     board = await db.get_board(board_id)
     await websocket.send_json(
         {
@@ -1257,6 +1286,8 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
             "role": client.role,
             "board": board,
             "strokes": strokes,
+            "rev": rev,
+            "unchanged": unchanged,
         }
     )
     await manager.broadcast(
@@ -1281,6 +1312,11 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
             if client.role == "view" and msg_type in ("stroke_start", "stroke_points", "stroke_end", "stroke_replace", "stroke_move", "erase", "text_live"):
                 if msg_type in ("stroke_end", "stroke_move", "erase"):
                     await websocket.send_json({"type": "board_reload"})
+                continue
+
+            if msg_type == "ping":
+                # Herzschlag: das Geraet merkt so eine haengende Verbindung und baut sie neu auf
+                await websocket.send_json({"type": "pong"})
                 continue
 
             if msg_type == "cursor":
@@ -1433,6 +1469,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                     await websocket.send_json({"type": "board_reload"})
                     continue
                 entry = client.in_progress.pop(stroke_id, None)
+                seq = msg.get("seq")
                 extra = msg.get("extra")
                 if entry is not None and extra is not None:
                     entry["extra"] = extra
@@ -1444,8 +1481,13 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 await manager.broadcast(end_msg, exclude=websocket, board_id=room)
                 if entry is not None and len(entry["points"]) >= 1:
                     entry["board_id"] = room
-                    await db.insert_stroke(entry, person)
+                    rb, ra = await db.insert_stroke(entry, person)
                     persist_changed = True
+                    if seq is not None:
+                        await websocket.send_json({"type": "ack", "seq": seq, "rb": rb, "ra": ra})
+                elif seq is not None:
+                    # Anfang des Strichs fehlt (Verbindung war weg): Geraet schickt ihn ganz
+                    await websocket.send_json({"type": "ack", "seq": seq, "missing": True})
 
             elif msg_type == "stroke_replace":
                 stroke_id = msg.get("strokeId")
@@ -1468,7 +1510,10 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
 
             elif msg_type == "stroke_move":
                 stroke = msg.get("stroke")
+                seq = msg.get("seq")
                 if stroke and stroke.get("id") and client.role == "add" and not await _writable_ids("add", person, [stroke["id"]]):
+                    if seq is not None:
+                        await websocket.send_json({"type": "ack", "seq": seq, "rejected": True})
                     await websocket.send_json({"type": "board_reload"})
                     continue
                 if stroke and stroke.get("id"):
@@ -1478,8 +1523,10 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                         exclude=websocket,
                         board_id=room,
                     )
-                    await db.insert_stroke(stroke, person)
+                    rb, ra = await db.insert_stroke(stroke, person)
                     persist_changed = True
+                    if seq is not None:
+                        await websocket.send_json({"type": "ack", "seq": seq, "rb": rb, "ra": ra})
 
             elif msg_type == "stroke_abort":
                 stroke_id = msg.get("strokeId")
@@ -1492,8 +1539,12 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
 
             elif msg_type == "erase":
                 stroke_ids = [s for s in msg.get("strokeIds", []) if s]
+                seq = msg.get("seq")
                 allowed = await _writable_ids(client.role, person, stroke_ids)
                 if len(allowed) != len(stroke_ids):
+                    if seq is not None:
+                        await websocket.send_json({"type": "ack", "seq": seq, "rejected": True})
+                        seq = None
                     await websocket.send_json({"type": "board_reload"})
                 stroke_ids = allowed
                 if stroke_ids:
@@ -1502,8 +1553,12 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                         exclude=websocket,
                         board_id=room,
                     )
-                    await db.delete_strokes(stroke_ids, person)
+                    rb, ra = await db.delete_strokes(stroke_ids, person, room)
                     persist_changed = True
+                    if seq is not None:
+                        await websocket.send_json({"type": "ack", "seq": seq, "rb": rb, "ra": ra})
+                elif seq is not None:
+                    await websocket.send_json({"type": "ack", "seq": seq})
 
             if persist_changed:
                 _board_changed(room)
