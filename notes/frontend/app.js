@@ -14728,9 +14728,17 @@
         zoomGesture = false;
         endZoomLock();
       }
+      // reines Antippen (kurz, kaum bewegt): Ansicht bleibt stehen - kein Einrasten auf eine
+      // andere Seite, sonst trifft der zweite Tipp eines Doppeltipps (Board oeffnen) daneben
+      const tapLike =
+        !!tapState &&
+        tapState.pointerId === e.pointerId &&
+        e.type === "pointerup" &&
+        performance.now() - tapState.t <= TAP_MAX_MS &&
+        Math.hypot(e.clientX - tapState.x, e.clientY - tapState.y) <= TAP_MAX_MOVE_PX;
       if (touchPointers.size === 0) {
         const addedPage = window.sofiaPagePullEnd && window.sofiaPagePullEnd();
-        if (addedPage || pinchEnded) panState = null;
+        if (addedPage || pinchEnded || tapLike) panState = null;
         else if (notebookZoomedIn() && !boardEditId) {
           const snapPan = panState;
           panState = null;
