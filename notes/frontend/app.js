@@ -15140,6 +15140,41 @@
     const gap = Math.max(d.x0 - a.maxX, a.minX - d.x1, 0);
     return gap < Math.max(300, 3 * Math.max(ah, dh));
   }
+  function hdXOverlap(a, b) {
+    return Math.min(a.maxX, b.maxX) - Math.max(a.minX, b.minX);
+  }
+  // direkt ueber/unter einer abgelehnten Zeile ist fast nie eine Ueberschrift
+  function hdNextToDismissed(bbox, off) {
+    const h = Math.max(8, bbox.maxY - bbox.minY);
+    return off.some((d) => {
+      const dh = Math.max(8, d.y1 - d.y0);
+      const gap = Math.max(d.y0 - bbox.maxY, bbox.minY - d.y1);
+      if (gap < 0 || gap > 1.6 * Math.max(h, dh)) return false;
+      return Math.min(bbox.maxX, d.x1) - Math.max(bbox.minX, d.x0) > -40;
+    });
+  }
+  // Nachbarzeilen (gleiche Spalte) und der uebliche Zeilenabstand
+  function hdNeighbours(lines) {
+    const out = new Map();
+    const gaps = [];
+    for (const l of lines) {
+      let above = null;
+      let below = null;
+      for (const o of lines) {
+        if (o === l || hdXOverlap(o, l) <= 0) continue;
+        if (o.maxY <= l.minY + 2 && (!above || o.maxY > above.maxY)) above = o;
+        if (o.minY >= l.maxY - 2 && (!below || o.minY < below.minY)) below = o;
+      }
+      const gapAbove = above ? l.minY - above.maxY : Infinity;
+      const gapBelow = below ? below.minY - l.maxY : Infinity;
+      if (Number.isFinite(gapAbove)) gaps.push(Math.max(0, gapAbove));
+      out.set(l, { above, below, gapAbove, gapBelow });
+    }
+    gaps.sort((a, b) => a - b);
+    const pitch = gaps[Math.floor(gaps.length / 2)] || 20;
+    for (const v of out.values()) v.pitch = pitch;
+    return out;
+  }
   function hdIsDismissed(bbox, off) {
     return off.some((d) => hdOverlapRatio(bbox, d) > 0.4 || hdSameRow(bbox, d));
   }
@@ -15261,15 +15296,37 @@
         return (md || big) && raw.split("\n")[0].trim().length <= 80;
       })
       .map(hdTextLine)
-      .filter((l) => !hdAlreadyUnderlined(l) && !hdIsDismissed(l.bbox, off));
-    hdCandidates = textCands.concat(lines.filter((l) => {
-      const big = l.size >= body * HD_SIZE_RATIO;
+      .filter((l) => !hdAlreadyUnderlined(l) && !hdIsDismissed(l.bbox, off) && !hdNextToDismissed(l.bbox, off));
+    // Wie Gliederungs-Erkennung in PDFs (Schriftgroesse gegen die haeufigste Groesse) plus Layout:
+    // Ueberschriften haben Luft darueber oder sind kurz, stehen nicht mitten in einem Block
+    // grosser Zeilen und nicht direkt neben einer Zeile, die schon abgelehnt wurde.
+    const nb = hdNeighbours(lines);
+    const widths = lines.map((l) => l.maxX - l.minX).sort((x, y) => x - y);
+    const typW = widths[Math.floor(widths.length / 2)] || 1;
+    const isBig = (l) => l.size >= body * HD_SIZE_RATIO;
+    const handCands = lines.filter((l) => {
+      const big = isBig(l);
       const colored = l.color !== bodyColor && l.size >= body * HD_COLOR_RATIO && l.strokes.length <= 40;
       if (!big && !colored) return false;
       if (hdAlreadyUnderlined(l)) return false;
-      if (hdIsDismissed(l.bbox, off)) return false;
-      return true;
-    }));
+      if (hdIsDismissed(l.bbox, off) || hdNextToDismissed(l.bbox, off)) return false;
+      const n = nb.get(l);
+      const h = Math.max(8, l.maxY - l.minY);
+      // Luft nach oben: deutlich mehr als der normale Zeilenabstand (oder ganz oben)
+      const airAbove = !n.above || n.gapAbove >= Math.max(n.pitch * 1.25, h * 0.6);
+      const short = l.maxX - l.minX <= typW * 0.75;
+      // mitten in einem Block grosser Schrift (darueber und darunter auch gross, dicht dran)
+      const inBlock = n.above && n.below && isBig(n.above) && isBig(n.below) && n.gapAbove < h * 0.8 && n.gapBelow < h * 0.8;
+      if (inBlock) return false;
+      if (big) return airAbove || short;
+      return airAbove && short; // nur andersfarbig: strenger
+    });
+    // zwei Vorschlaege direkt untereinander: nur der obere (der untere ist meist Text dazu)
+    const cands = textCands.concat(handCands).sort((a, b) => a.bbox.minY - b.bbox.minY);
+    hdCandidates = cands.filter((c) => {
+      const h = Math.max(8, c.bbox.maxY - c.bbox.minY);
+      return !cands.some((o) => o !== c && o.bbox.minY < c.bbox.minY && c.bbox.minY - o.bbox.maxY < h * 0.9 && hdXOverlap(o.bbox, c.bbox) > 0);
+    });
     renderHeadingChips();
     if (window.sofiaOutlineRefresh) window.sofiaOutlineRefresh();
   }
@@ -15570,7 +15627,7 @@
       }
       if (existing.length) {
         const key = existing.map((s) => s.id).sort()[0];
-        setOutlineEntry(key, { level: lvl });
+        if (window.sofiaSetOutlineEntry) window.sofiaSetOutlineEntry(key, { level: lvl });
         syncSelectionToolbar();
         if (window.sofiaOutlineRefresh) setTimeout(window.sofiaOutlineRefresh, 0);
         showToast(lvl === 1 ? "Main-Überschrift (Ebene 1)" : lvl === 2 ? "2. Unterüberschrift (Ebene 2)" : "3. Unterüberschrift (Ebene 3)");
@@ -23853,6 +23910,7 @@
       saveNotebook(nb);
       return true;
     };
+    window.sofiaSetOutlineEntry = (key, patch) => setOutlineEntry(key, patch);
     function setOutlineEntry(key, patch) {
       if (!notebook) return;
       const nb = clone();
