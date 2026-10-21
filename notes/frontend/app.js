@@ -17049,7 +17049,8 @@
           big.innerHTML = '<span class="material-symbols-rounded">tablet</span>';
           big.addEventListener("click", (e) => {
             e.stopPropagation();
-            if (window.sofiaShowOnDevice) window.sofiaShowOnDevice({ url, kind: k, name: (sol.mine ? "Deine Lösung" : "Lösung von " + sol.name) + (a.name ? " – " + a.name : "") });
+            const nm = (sol.mine ? "Deine Lösung" : "Lösung von " + sol.name) + (a.name ? " – " + a.name : "");
+            if (window.sofiaShowOnDevice) window.sofiaShowOnDevice({ title: nm, items: [{ url, kind: k, name: nm }] });
           });
           row.appendChild(big);
         }
@@ -17066,26 +17067,30 @@
     bigShowEl = null;
   }
   window.sofiaDeviceShow = async (msg) => {
-    if (!msg || !msg.url) return;
+    if (!msg) return;
+    const items = Array.isArray(msg.items) ? msg.items : msg.url ? [{ url: msg.url, kind: msg.kind, name: msg.name }] : [];
+    const title = msg.title || msg.name || (items[0] && items[0].name) || "Aufgabe";
+    if (!items.length && !msg.text) return;
     if (msg.person !== currentPersonId) {
       const ok = await askConfirm({
         title: personName(msg.person) + " möchte dir etwas zeigen",
-        text: "„" + (msg.name || "Datei") + "“ hier groß öffnen?",
+        text: "„" + title + "“ hier groß öffnen?",
         ok: "Öffnen",
         icon: "open_in_full",
         danger: false,
       });
       if (!ok) return;
     }
-    if (msg.kind !== "pdf") {
-      openLightbox(msg.url);
+    // ein einzelnes Bild: Vollbild mit Zoom
+    if (items.length === 1 && items[0].kind !== "pdf" && !msg.text) {
+      openLightbox(items[0].url);
       return;
     }
     closeBigShow();
     const el = document.createElement("div");
     el.className = "big-show";
-    el.innerHTML = '<div class="big-show-bar"><span class="big-show-name"></span><button type="button" class="hw-panel-btn big-show-close" title="Schließen"><span class="material-symbols-rounded">close</span></button></div><div class="big-show-scroll"><div class="big-show-page">Lädt…</div></div>';
-    el.querySelector(".big-show-name").textContent = msg.name || "PDF";
+    el.innerHTML = '<div class="big-show-bar"><span class="big-show-name"></span><button type="button" class="hw-panel-btn big-show-close" title="Schließen"><span class="material-symbols-rounded">close</span></button></div><div class="big-show-scroll"></div>';
+    el.querySelector(".big-show-name").textContent = title;
     el.querySelector(".big-show-close").addEventListener("click", (e) => {
       e.stopPropagation();
       closeBigShow();
@@ -17093,23 +17098,74 @@
     el.addEventListener("pointerdown", (e) => e.stopPropagation());
     document.body.appendChild(el);
     bigShowEl = el;
-    try {
-      const v = await buildPdfView(msg.url);
-      if (bigShowEl !== el) return;
-      const page = el.querySelector(".big-show-page");
-      page.textContent = "";
-      const k = Math.min(3, (el.clientWidth - 24) / PDF_VIEW_W);
-      v.el.style.width = PDF_VIEW_W + "px";
-      v.el.style.transformOrigin = "0 0";
-      v.el.style.transform = "scale(" + k + ")";
-      page.style.width = Math.round(PDF_VIEW_W * k) + "px";
-      page.style.height = Math.round(v.h * k) + "px";
-      page.appendChild(v.el);
-    } catch (err) {
-      showToast("PDF konnte nicht geöffnet werden");
-      closeBigShow();
+    const scroll = el.querySelector(".big-show-scroll");
+    const avail = () => Math.max(200, scroll.clientWidth - 24);
+    if (msg.text) {
+      const t = document.createElement("div");
+      t.className = "big-show-text";
+      t.textContent = msg.text;
+      scroll.appendChild(t);
+    }
+    for (const it of items) {
+      if (it.name && items.length > 1) {
+        const cap = document.createElement("div");
+        cap.className = "big-show-cap";
+        cap.textContent = it.name;
+        scroll.appendChild(cap);
+      }
+      const page = document.createElement("div");
+      page.className = "big-show-page";
+      scroll.appendChild(page);
+      if (it.kind !== "pdf") {
+        const im = document.createElement("img");
+        im.src = it.url;
+        im.alt = it.name || "";
+        im.className = "big-show-img";
+        im.addEventListener("click", (e) => {
+          e.stopPropagation();
+          openLightbox(it.url);
+        });
+        page.appendChild(im);
+        continue;
+      }
+      page.textContent = "PDF lädt…";
+      buildPdfView(it.url)
+        .then((v) => {
+          if (bigShowEl !== el) return;
+          page.textContent = "";
+          const k = Math.min(3, avail() / PDF_VIEW_W);
+          v.el.style.width = PDF_VIEW_W + "px";
+          v.el.style.transformOrigin = "0 0";
+          v.el.style.transform = "scale(" + k + ")";
+          page.style.width = Math.round(PDF_VIEW_W * k) + "px";
+          page.style.height = Math.round(v.h * k) + "px";
+          page.appendChild(v.el);
+        })
+        .catch(() => {
+          page.textContent = "PDF konnte nicht geöffnet werden";
+        });
     }
   };
+  // Aufgabe samt Material bzw. die gerade offene Datei aufs andere Geraet
+  function showableItems(list) {
+    return list.filter((it) => it.url && it.url.startsWith("/api/")).map((it) => ({ url: it.url, kind: it.kind === "pdf" ? "pdf" : "image", name: it.name || "" }));
+  }
+  document.getElementById("hw-panel-device")?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const items = showableItems(panelItems().filter((it) => !it.sol));
+    const title = hwBoard ? (hwBoard.subject ? hwBoard.subject + " – Aufgabe" : "Aufgabe") : "Material";
+    const text = hwBoard ? hwBoard.description || "" : "";
+    if (!items.length && !text) return showToast("Hier ist nichts, was man zeigen könnte");
+    if (window.sofiaShowOnDevice) window.sofiaShowOnDevice({ title, text, items });
+  });
+  document.getElementById("hw-viewer-device")?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (!hwView) return;
+    const it = panelItems()[hwView.i];
+    const items = it ? showableItems([it]) : [];
+    if (!items.length) return showToast("Diese Datei lädt noch hoch – gleich nochmal versuchen");
+    if (window.sofiaShowOnDevice) window.sofiaShowOnDevice({ title: items[0].name || "Datei", items });
+  });
   function saveBoardRefs(next, failText) {
     const bid = currentBoardId;
     const before = boardRefs().slice();
@@ -26277,14 +26333,14 @@
         menu.innerHTML = "";
         const h = document.createElement("div");
         h.className = "split-menu-head";
-        h.textContent = "„" + showForDevice.name + "“ groß zeigen auf …";
+        h.textContent = "„" + (showForDevice.title || "Aufgabe") + "“ groß zeigen auf …";
         menu.appendChild(h);
         if (devices === null) return add("progress_activity", "Sucht Geräte …", "Andere iPads und Geräte mit SOFIA Notes", () => {});
         if (!devices.length) return add("info", "Kein anderes Gerät gefunden", "Öffne SOFIA Notes auf dem anderen Gerät: dein eigenes mit irgendeinem Blatt, jemand anderes mit diesem Blatt", () => (showForDevice = null));
         const f = showForDevice; // closeMenu() vor dem Klick-Handler leert showForDevice
         for (const d of devices)
           add(d.device === "iPhone" || d.device === "Handy" ? "smartphone" : "tablet", deviceLabel(d), d.here ? "Hat dieses Blatt offen" : "Hat ein anderes Blatt offen", () => {
-            wsSend({ type: "device_show", target: d.id, url: f.url, kind: f.kind, name: f.name });
+            wsSend({ type: "device_show", target: d.id, title: f.title || "", text: f.text || "", items: f.items || [] });
           });
         return;
       }

@@ -83,7 +83,18 @@ class SecondDeviceTests(unittest.TestCase):
             url = "/api/sofia/file?u=%2Fuploads%2Floesung.pdf"
             a.send_json({"type": "device_show", "target": b_init["clientId"], "url": url, "kind": "pdf", "name": "Loesung von Franz"})
             got = self.next_of(b, "device_show")
-            self.assertEqual((got["url"], got["kind"], got["person"]), (url, "pdf", "simon"))
+            self.assertEqual(got["items"], [{"url": url, "kind": "pdf", "name": "Loesung von Franz"}])
+            self.assertEqual(got["person"], "simon")
+            self.next_of(a, "device_open_sent")
+            # ganze Aufgabe: Text + Dateien, fremde Adressen fliegen raus
+            a.send_json({
+                "type": "device_show", "target": b_init["clientId"], "title": "Mathe – Aufgabe", "text": "S. 12 Nr. 3",
+                "items": [{"url": "/api/media/abc", "kind": "image"}, {"url": "https://evil.example/x", "kind": "image"}, {"url": url, "kind": "pdf"}],
+            })
+            got = self.next_of(b, "device_show")
+            self.assertEqual(got["title"], "Mathe – Aufgabe")
+            self.assertEqual(got["text"], "S. 12 Nr. 3")
+            self.assertEqual([i["url"] for i in got["items"]], ["/api/media/abc", url])
             self.next_of(a, "device_open_sent")
             a.send_json({"type": "device_show", "target": b_init["clientId"], "url": "https://evil.example/x", "kind": "image"})
             self.assertEqual(self.next_of(a, "device_open_failed")["reason"], "url")

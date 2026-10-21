@@ -1334,14 +1334,23 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 await websocket.send_json({"type": "device_open_sent", "target": target_id})
 
             elif msg_type == "device_show":
-                # eine Datei (z. B. die Loesung eines Mitschuelers) auf einem anderen Geraet gross zeigen
+                # Aufgabe, Material oder eine Datei (z. B. eine Loesung) auf einem anderen Geraet gross zeigen
                 target_id = msg.get("target")
-                url = str(msg.get("url") or "")
                 target = next((c for c in manager.all_clients() if c.id == target_id), None)
                 if target is None or not (target.board_id == room or target.person_id == person):
                     await websocket.send_json({"type": "device_open_failed", "reason": "gone"})
                     continue
-                if not _SHOW_URL.match(url):
+                raw_items = msg.get("items") if isinstance(msg.get("items"), list) else [msg]
+                items = []
+                for it in raw_items[:40]:
+                    if not isinstance(it, dict):
+                        continue
+                    url = str(it.get("url") or "")
+                    if not _SHOW_URL.match(url):
+                        continue
+                    items.append({"url": url, "kind": "pdf" if it.get("kind") == "pdf" else "image", "name": str(it.get("name") or "")[:160]})
+                text = str(msg.get("text") or "")[:4000]
+                if not items and not text:
                     await websocket.send_json({"type": "device_open_failed", "reason": "url"})
                     continue
                 try:
@@ -1350,9 +1359,9 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                             "type": "device_show",
                             "from": client.id,
                             "person": person,
-                            "url": url,
-                            "kind": "pdf" if msg.get("kind") == "pdf" else "image",
-                            "name": str(msg.get("name") or "")[:160],
+                            "title": str(msg.get("title") or msg.get("name") or "")[:160],
+                            "text": text,
+                            "items": items,
                         }
                     )
                 except Exception:

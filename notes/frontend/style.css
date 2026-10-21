@@ -6495,3 +6495,7 @@ html[data-theme="dark"] .big-show { background: #1d1b20; color: #e6e1e5; }
 .big-show-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .big-show-scroll { flex: 1; overflow: auto; -webkit-overflow-scrolling: touch; padding: 0 12px 24px; }
 .big-show-page { margin: 0 auto; overflow: hidden; }
+.big-show-text { max-width: 900px; margin: 4px auto 16px; font: 400 17px/1.5 'Inter', sans-serif; white-space: pre-wrap; }
+.big-show-cap { max-width: 900px; margin: 14px auto 6px; font: 600 13px 'Google Sans', 'Inter', sans-serif; opacity: 0.75; }
+.big-show-page { margin-bottom: 14px; }
+.big-show-img { display: block; max-width: 100%; margin: 0 auto; border-radius: 8px; cursor: zoom-in; }
