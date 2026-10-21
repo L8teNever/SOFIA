@@ -15084,10 +15084,28 @@
       localStorage.setItem(hdDismissKey(), JSON.stringify(list.slice(-300)));
     } catch (err) {}
   }
+  // Einstellungen -> Schreiben & Erkennung: Ueberschrift-Vorschlaege an/aus (pro Geraet)
+  let hdSuggestEnabled = lsGetRaw("sofianotes-hd-suggest") !== "0";
   // Geteilte Dokumente: Vorschlaege bekommt nur der Besitzer (fuer alles im Dokument)
   function hdMayDetect() {
+    if (!hdSuggestEnabled) return false;
     const owner = currentBoardMeta && currentBoardMeta.ownerId;
     return !owner || owner === currentPersonId;
+  }
+  const hdToggleEl = document.getElementById("hd-suggest-toggle");
+  if (hdToggleEl) {
+    hdToggleEl.classList.toggle("active", hdSuggestEnabled);
+    hdToggleEl.addEventListener("click", (e) => {
+      e.stopPropagation();
+      hdSuggestEnabled = !hdSuggestEnabled;
+      try {
+        localStorage.setItem("sofianotes-hd-suggest", hdSuggestEnabled ? "1" : "0");
+      } catch (err) {}
+      hdToggleEl.classList.toggle("active", hdSuggestEnabled);
+      hdCandidates = [];
+      renderHeadingChips();
+      hdSig = ""; // beim Einschalten gleich neu suchen
+    });
   }
   function hdOverlapRatio(a, b) {
     const w = Math.min(a.maxX, b.x1) - Math.max(a.minX, b.x0);
