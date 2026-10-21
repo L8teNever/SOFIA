@@ -72,20 +72,108 @@ async def update_me(data: UserUpdate, db: AsyncSession = Depends(get_db), curren
     return current_user
 
 @router.patch("/{user_id}", response_model=UserOut)
-async def update_user(user_id: int, data: UserAdminUpdate, db: AsyncSession = Depends(get_db), _: User = Depends(require_super_admin)):
+async def update_user(user_id: int, data: UserAdminUpdate, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_super_admin)):
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(404, "User not found")
+    sent = data.model_fields_set
     if data.display_name is not None:
         user.display_name = data.display_name
     if data.role is not None:
+        if user_id == current_user.id and data.role != "super_admin":
+            raise HTTPException(400, "Du kannst dir die Super-Admin-Rolle nicht selbst nehmen")
         user.role = UserRole(data.role)
-    if data.class_id is not None:
-        user.class_id = data.class_id
+    if "class_id" in sent:
+        user.class_id = data.class_id  # null = keine Klasse
+    if data.is_active is not None:
+        if user_id == current_user.id and not data.is_active:
+            raise HTTPException(400, "Du kannst dich nicht selbst sperren")
+        user.is_active = data.is_active
     await db.commit()
     await db.refresh(user)
     return user
+
+@router.delete("/{user_id}")
+async def delete_user(user_id: int, request: Request, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_super_admin)):
+    """Nutzer endgueltig loeschen (nur Super-Admin).
+
+    Weg sind seine persoenlichen Daten: Noten, eigene Loesungen, persoenliche Termine,
+    Push/Benachrichtigungen, Google-Verbindung, weitere E-Mail-Adressen, geteilte Dateien,
+    Chat-Mitgliedschaften, Reaktionen und Abstimmungen. Was er fuer die Klasse angelegt
+    hat (Hausaufgaben, Klassentermine, Chat-Nachrichten, Essensplaene), bleibt stehen.
+    Meldet sich die Adresse spaeter wieder an, gibt es kein Konto mehr (403).
+    """
+    from sqlalchemy import delete as sql_delete
+    from backend.models.grade import Grade
+    from backend.models.homework import Homework
+    from backend.models.homework_solution import HomeworkSolution
+    from backend.models.calendar_event import CalendarEvent
+    from backend.models.calendar_category import CalendarCategory
+    from backend.models.shared_file import SharedFile
+    from backend.models.push_subscription import PushSubscription
+    from backend.models.notification import Notification
+    from backend.models.notification_setting import UserNotificationSetting
+    from backend.models.google_account import GoogleAccount
+    from backend.models.google_sync_map import GoogleSyncedEvent, GoogleSyncedTask
+    from backend.models.chat_participant import ChatParticipant
+    from backend.models.chat_message_reaction import ChatMessageReaction
+    from backend.models.chat_poll_vote import ChatPollVote
+
+    if user_id == current_user.id:
+        raise HTTPException(400, "Du kannst dich nicht selbst löschen")
+    user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+    if not user:
+        raise HTTPException(404, "User not found")
+    if user.role == UserRole.super_admin:
+        raise HTTPException(400, "Super-Admins erst zu Admin oder Schüler machen, dann löschen")
+
+    email = user.email
+    # Dateien auf der Platte: geteilte Dateien und Profilbild
+    files = (await db.execute(select(SharedFile).where(SharedFile.uploader_id == user_id))).scalars().all()
+    for sf in files:
+        path = os.path.join(settings.upload_dir, sf.filename)
+        try:
+            if os.path.exists(path):
+                os.remove(path)
+        except OSError:
+            pass
+    try:
+        _delete_avatar_file(user.avatar_url)
+    except OSError:
+        pass
+
+    for model, col in (
+        (Grade, Grade.user_id),
+        (HomeworkSolution, HomeworkSolution.user_id),
+        (SharedFile, SharedFile.uploader_id),
+        (PushSubscription, PushSubscription.user_id),
+        (Notification, Notification.user_id),
+        (UserNotificationSetting, UserNotificationSetting.user_id),
+        (GoogleSyncedEvent, GoogleSyncedEvent.user_id),
+        (GoogleSyncedTask, GoogleSyncedTask.user_id),
+        (GoogleAccount, GoogleAccount.user_id),
+        (UserEmailAlias, UserEmailAlias.user_id),
+        (ChatMessageReaction, ChatMessageReaction.user_id),
+        (ChatPollVote, ChatPollVote.user_id),
+        (ChatParticipant, ChatParticipant.user_id),
+    ):
+        await db.execute(sql_delete(model).where(col == user_id))
+    # persoenliche Termine gehoeren nur ihm
+    await db.execute(sql_delete(CalendarEvent).where(CalendarEvent.created_by == user_id, CalendarEvent.event_type == "personal"))
+    # aus Listen austragen: abgehakte Hausaufgaben, Mitglied in eigenen Kalender-Kategorien
+    for hw in (await db.execute(select(Homework))).scalars().all():
+        if user_id in (hw.checked_by or []):
+            hw.checked_by = [i for i in hw.checked_by if i != user_id]
+    for cat in (await db.execute(select(CalendarCategory))).scalars().all():
+        if user_id in (cat.member_ids or []):
+            cat.member_ids = [i for i in cat.member_ids if i != user_id]
+    await db.execute(sql_delete(User).where(User.id == user_id))
+    await db.commit()
+    await log_audit(db, action="user.delete", user=current_user, entity_type="user", entity_id=user_id,
+                    details={"email": email}, request=request)
+    return {"ok": True}
+
 
 @router.get("/{user_id}/emails", response_model=List[EmailAliasOut])
 async def list_user_emails(user_id: int, db: AsyncSession = Depends(get_db), _: User = Depends(require_super_admin)):

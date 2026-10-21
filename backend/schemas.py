@@ -10,6 +10,7 @@ class UserOut(BaseModel):
     role: str
     class_id: Optional[int]
     avatar_url: Optional[str] = None
+    is_active: Optional[bool] = True
     class Config: from_attributes = True
 
 class UserUpdate(BaseModel):
@@ -18,7 +19,8 @@ class UserUpdate(BaseModel):
 class UserAdminUpdate(BaseModel):
     display_name: Optional[str] = None
     role: Optional[str] = None
-    class_id: Optional[int] = None
+    class_id: Optional[int] = None  # ausdruecklich null = keine Klasse
+    is_active: Optional[bool] = None  # False = gesperrt
 
 class UserCreate(BaseModel):
     email: str

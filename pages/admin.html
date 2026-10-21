@@ -665,6 +665,7 @@ function renderAdminUsers() {
           <div style="font-size:0.72rem;margin-top:4px;display:flex;gap:6px;flex-wrap:wrap;">
             <span style="background:#eaddff;color:#21005d;padding:2px 8px;border-radius:8px;white-space:nowrap;">${roleLabel[u.role]||u.role}</span>
             ${u.class_id?`<span style="background:#d3e3fd;color:#041e49;padding:2px 8px;border-radius:8px;white-space:nowrap;">${classMap[u.class_id]?.name||'?'}</span>`:''}
+            ${u.is_active === false ? '<span style="background:#ffdad6;color:#93000a;padding:2px 8px;border-radius:8px;white-space:nowrap;">Gesperrt</span>' : ''}
           </div>
         </div>
         <button onclick="openEditUserSheet(${u.id})" style="background:#f3edf7;border:none;border-radius:12px;width:36px;height:36px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;">
@@ -738,6 +739,7 @@ async function submitNewUser() {
 async function openEditUserSheet(uid) {
   const u = adminUsers.find(x=>x.id===uid);
   if (!u) return;
+  const isMe = adminMe && adminMe.id === uid;
   let aliases = [];
   try { aliases = await API.listUserEmails(uid); } catch {}
   openSheet(`
@@ -760,8 +762,38 @@ async function openEditUserSheet(uid) {
       <input class="m3-input" id="eu-new-alias" type="email" placeholder="weitere@email.de" style="flex:1;margin-bottom:0;" onkeydown="if(event.key==='Enter'){event.preventDefault();addAliasToUser(${uid});}">
       <button class="m3-btn-tonal" style="flex-shrink:0;" onclick="addAliasToUser(${uid})">+</button>
     </div>
+    <label style="display:flex;align-items:center;gap:10px;margin-top:16px;font-size:0.88rem;cursor:pointer;${isMe ? 'opacity:0.5;pointer-events:none;' : ''}">
+      <input type="checkbox" id="eu-blocked" ${u.is_active === false ? 'checked' : ''} style="width:18px;height:18px;accent-color:#ba1a1a;">
+      <span><b>Gesperrt</b> – kann sich nicht mehr anmelden (Daten bleiben)</span>
+    </label>
     <button class="m3-btn-full" style="margin-top:18px;" onclick="saveUser(${uid})">Speichern</button>
+    ${isMe || u.role === 'super_admin' ? '' : `<button class="m3-btn-outline" style="width:100%;margin-top:8px;color:#ba1a1a;border-color:rgba(186,26,26,0.4);" onclick="confirmDeleteUser(${uid})">Nutzer löschen</button>`}
   `);
+}
+
+function confirmDeleteUser(uid) {
+  const u = adminUsers.find(x => x.id === uid);
+  if (!u) return;
+  closeSheet();
+  openModal(confirmDelete({
+    title: 'Nutzer löschen?',
+    message: `<b>${escapeHtml(u.display_name || u.email)}</b> wird endgültig gelöscht – mit Noten, eigenen Lösungen, persönlichen Terminen und geteilten Dateien. Hausaufgaben, Klassentermine und Chat-Nachrichten, die er für die Klasse angelegt hat, bleiben.<br><span style="font-size:0.82rem;opacity:0.7;">Mit dieser Adresse kommt man danach nicht mehr rein.</span>`,
+    confirmLabel: 'Endgültig löschen',
+    onConfirm: `doDeleteUser(${uid})`,
+  }));
+}
+
+async function doDeleteUser(uid) {
+  closeModal();
+  try {
+    await API.deleteUser(uid);
+  } catch (e) {
+    showToast(e.detail || 'Löschen hat nicht geklappt');
+    return;
+  }
+  adminUsers = adminUsers.filter(u => u.id !== uid);
+  renderAdminUsers();
+  showToast('Nutzer gelöscht');
 }
 
 function renderAliasChips(aliases, uid) {
@@ -797,10 +829,12 @@ async function saveUser(uid) {
     role: document.getElementById('eu-role').value,
     class_id: parseInt(document.getElementById('eu-class').value) || null,
   };
+  const blocked = document.getElementById('eu-blocked');
+  if (blocked && !(adminMe && adminMe.id === uid)) data.is_active = !blocked.checked;
   try {
     await API.updateUser(uid, data);
-  } catch {
-    showToast('Fehler beim Speichern');
+  } catch (e) {
+    showToast(e.detail || 'Fehler beim Speichern');
     return;
   }
   const idx = adminUsers.findIndex(u=>u.id===uid);

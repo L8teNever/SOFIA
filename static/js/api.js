@@ -33,6 +33,7 @@ const API = {
   createUser:    (d)      => API.post('/users/', d),
   updateMe:      (d)      => API.patch('/users/me', d),
   updateUser:    (id, d)  => API.patch(`/users/${id}`, d),
+  deleteUser:    (id)     => API.delete(`/users/${id}`),
   listUserEmails: (id)       => API.get(`/users/${id}/emails`),
   addUserEmail:   (id, email) => API.post(`/users/${id}/emails`, { email }),
   deleteUserEmail: (id, aliasId) => API.delete(`/users/${id}/emails/${aliasId}`),

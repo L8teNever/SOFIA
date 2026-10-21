@@ -62,6 +62,8 @@ async def get_current_user(request: Request, db: AsyncSession = Depends(get_db))
     user = await _resolve_user_by_email(email, db)
     if user is None:
         raise HTTPException(status_code=403, detail="Account not activated")
+    if user.is_active is False:
+        raise HTTPException(status_code=403, detail="Konto gesperrt")
     return user
 
 async def get_current_user_ws(websocket: WebSocket, db: AsyncSession) -> Optional[User]:
@@ -77,7 +79,10 @@ async def get_current_user_ws(websocket: WebSocket, db: AsyncSession) -> Optiona
     email = settings.dev_email or websocket.headers.get("Cf-Access-Authenticated-User-Email")
     if not email:
         return None
-    return await _resolve_user_by_email(email, db)
+    user = await _resolve_user_by_email(email, db)
+    if user is not None and user.is_active is False:
+        return None  # gesperrt
+    return user
 
 async def require_admin(user: User = Depends(get_current_user)) -> User:
     if user.role not in (UserRole.admin, UserRole.super_admin):
