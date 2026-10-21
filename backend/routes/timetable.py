@@ -355,10 +355,12 @@ async def _apply_subject_name_overrides(db: AsyncSession, class_id: int, lessons
     return lessons
 
 @router.get("/")
-async def get_timetable(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
-    if not current_user.class_id:
+async def get_timetable(class_id: int | None = None, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    # Stundenplaene sind fuer alle einsehbar (nur ansehen): ohne class_id die eigene Klasse
+    target = class_id or current_user.class_id
+    if not target:
         raise HTTPException(400, "No class assigned")
-    result = await db.execute(select(ClassGroup).where(ClassGroup.id == current_user.class_id))
+    result = await db.execute(select(ClassGroup).where(ClassGroup.id == target))
     cls = result.scalar_one_or_none()
     if not cls:
         return {"configured": False}

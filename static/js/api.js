@@ -93,7 +93,7 @@ const API = {
   createGrade:   (d)      => API.post('/grades/', d),
   updateGrade:   (id, d)  => API.put(`/grades/${id}`, d),
   deleteGrade:   (id)     => API.delete(`/grades/${id}`),
-  timetable:     ()       => API.get('/timetable/'),
+  timetable:     (classId) => API.get('/timetable/' + (classId ? `?class_id=${classId}` : '')),
   mealplanCurrent:  ()       => API.get('/mealplan/current'),
   mealplanStatus:   ()       => API.get('/mealplan/status'),
   uploadMealPlan:   (form)   => API.upload('/mealplan/upload', form),

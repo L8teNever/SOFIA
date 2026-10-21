@@ -58,6 +58,17 @@ document.getElementById('ph-timetable').outerHTML = pageHeader({
     <button onclick="ttNav(-1)" class="icon-btn tt-nav-arrow"><i data-lucide="chevron-left" style="width:20px;height:20px;"></i></button>
     <button onclick="ttNav(1)"  class="icon-btn tt-nav-arrow"><i data-lucide="chevron-right" style="width:20px;height:20px;"></i></button>`
 });
+// Titel im Kopf: antippen = Stundenplan einer anderen Klasse ansehen
+(function () {
+  const t = document.querySelector('#page-timetable .ph-title');
+  if (!t) return;
+  t.id = 'tt-title-btn';
+  t.setAttribute('role', 'button');
+  t.title = 'Stundenplan einer anderen Klasse ansehen';
+  t.style.cursor = 'pointer';
+  t.insertAdjacentHTML('beforeend', '<i data-lucide="chevron-down" id="tt-title-chev" style="width:18px;height:18px;margin-left:auto;flex-shrink:0;opacity:0.7;display:none;"></i>');
+  t.addEventListener('click', (e) => { e.stopPropagation(); ttOpenClassMenu(t); });
+})();
 document.getElementById('tt-chips-slot').innerHTML = chipRow({
   onclick: 'ttSetMode',
   idPrefix: 'tt-chip',
@@ -190,13 +201,62 @@ function _thisMonday() {
   return _addDays(t, dow === 0 ? -6 : 1 - dow);
 }
 
+// Stundenplan anderer Klassen ansehen: null = eigene Klasse
+var ttClassId = null;
+var ttClasses = [];
+function ttClassName(id) {
+  const c = ttClasses.find(x => x.id === id);
+  return c ? c.name : '';
+}
+function ttSyncTitle() {
+  const t = document.querySelector('#page-timetable .ph-title .page-title');
+  const own = currentUser && currentUser.class_id;
+  if (t) t.textContent = ttClassId && ttClassId !== own ? ttClassName(ttClassId) || 'Stundenplan' : 'Stundenplan';
+  const chev = document.getElementById('tt-title-chev');
+  if (chev) chev.style.display = ttClasses.length > 1 ? '' : 'none';
+}
+function ttOpenClassMenu(btn) {
+  if (ttClasses.length < 2) return;
+  const own = currentUser && currentUser.class_id;
+  const cur = ttClassId || own;
+  const items = ttClasses
+    .slice()
+    .sort((a, b) => (b.id === own) - (a.id === own) || String(a.name).localeCompare(String(b.name), 'de', { numeric: true }))
+    .map(c => ({
+      icon: c.id === cur ? 'check' : (c.id === own ? 'home' : 'calendar-days'),
+      label: escapeHtml(c.name) + (c.id === own ? ' · deine Klasse' : ''),
+      onclick: () => ttSwitchClass(c.id === own ? null : c.id),
+    }));
+  toggleMoreMenu(btn, items);
+}
+async function ttSwitchClass(id) {
+  ttClassId = id;
+  ttSyncTitle();
+  ttLessons = [];
+  for (const k of Object.keys(ttColorMap)) delete ttColorMap[k];
+  await ttLoad();
+}
+
 async function init_timetable() {
+  API.classes().then(list => {
+    ttClasses = Array.isArray(list) ? list : [];
+    ttSyncTitle();
+  }).catch(() => {});
+  await ttLoad();
+}
+
+async function ttLoad() {
+  ['tt-not-configured', 'tt-error', 'tt-day-view', 'tt-week-view', 'tt-admin-cta'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+  });
+  document.getElementById('tt-loading').style.display = 'block';
   try {
-    const data = await API.timetable();
+    const data = await API.timetable(ttClassId);
     document.getElementById('tt-loading').style.display = 'none';
     if (!data.configured) {
       document.getElementById('tt-not-configured').style.display='block';
-      if (currentUser && (currentUser.role === 'admin' || currentUser.role === 'super_admin')) {
+      if (!ttClassId && currentUser && (currentUser.role === 'admin' || currentUser.role === 'super_admin')) {
         document.getElementById('tt-admin-cta').style.display = 'inline-block';
       }
       return;
