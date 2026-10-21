@@ -252,7 +252,13 @@ function ttOpenClassMenu(btn) {
     }));
   toggleMoreMenu(btn, items);
 }
+function ttSyncClassHistory(other) {
+  if (typeof pushSubView !== 'function') return;
+  if (other) pushSubView('klasse', () => { if (ttUntisClass || ttClassId) ttSwitchClass(null); });
+  else leaveSubView('klasse');
+}
 async function ttSwitchUntisClass(name) {
+  ttSyncClassHistory(!!name);
   ttUntisClass = name;
   ttClassId = null;
   ttSyncTitle();
@@ -261,6 +267,7 @@ async function ttSwitchUntisClass(name) {
   await ttLoad();
 }
 async function ttSwitchClass(id) {
+  ttSyncClassHistory(!!id);
   ttUntisClass = null;
   ttClassId = id;
   ttSyncTitle();

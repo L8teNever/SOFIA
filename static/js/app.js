@@ -637,11 +637,55 @@ function goBackOnePage(fromPopstate) {
   }
 }
 
+// ---- Unteransichten einer Seite mit eigenem Schritt im Verlauf ----
+// z. B. Kalender: Tag aus der Monatsansicht geoeffnet, Monatsuebersicht, Suche;
+// Stundenplan einer anderen Klasse. Die Adresse bekommt ein #..., und die Zurueck-Taste
+// (Android, Browser, Wischen, Pfeil im Kopf) fuehrt erst zur vorigen Ansicht zurueck,
+// statt die ganze Seite zu schliessen.
+const _subViews = []; // [{key, close, page, overlays}]
+function _activePageId() {
+  const p = document.querySelector('.page.active:not(.page-overlay)');
+  return p ? p.id : null;
+}
+function pushSubView(key, close) {
+  const page = _activePageId();
+  if (!page) return;
+  const top = _subViews[_subViews.length - 1];
+  if (top && top.key === key && top.page === page) return; // schon offen: nicht doppelt
+  _subViews.push({ key, close, page, overlays: document.querySelectorAll('.page-overlay.active').length });
+  history.pushState(Object.assign({}, history.state || {}, { subView: key }), '', location.pathname + location.search + '#' + key);
+}
+// Ansicht wurde von Hand verlassen (z. B. andere Ansicht im Menue): Verlaufsschritt still zuruecknehmen
+function leaveSubView(key) {
+  const top = _subViews[_subViews.length - 1];
+  if (!top || top.key !== key || top.page !== _activePageId()) return;
+  _subViews.pop();
+  isSelfPopping = true;
+  history.back();
+}
+function hasSubView() {
+  const page = _activePageId();
+  return _subViews.some(v => v.page === page);
+}
+// beim Zurueck: oberste Unteransicht der aktiven Seite schliessen (true = erledigt)
+function popSubView() {
+  const page = _activePageId();
+  while (_subViews.length && _subViews[_subViews.length - 1].page !== page) _subViews.pop(); // Seite schon zu
+  const top = _subViews[_subViews.length - 1];
+  if (!top) return false;
+  // ein spaeter geoeffnetes Overlay (z. B. Termin-Details) geht zuerst zu
+  if (document.querySelectorAll('.page-overlay.active').length > top.overlays) return false;
+  _subViews.pop();
+  try { top.close(); } catch (e) { console.error(e); }
+  return true;
+}
+
 function closePage() {
   closeSheet(true);
   closeModal(true);
   const page = document.querySelector('.page.active');
   if (!page) return;
+  for (let i = _subViews.length - 1; i >= 0; i--) if (_subViews[i].page === page.id) _subViews.splice(i, 1);
   const wasNotifications = currentPage === 'notifications';
   page.classList.remove('active');
   page.classList.add('closing');
@@ -650,7 +694,11 @@ function closePage() {
   if (wasNotifications) refreshNotifBadge();
 }
 
-document.addEventListener('click', e => { if (e.target.closest('.back-btn')) closePage(); });
+document.addEventListener('click', e => {
+  if (!e.target.closest('.back-btn')) return;
+  if (hasSubView()) history.back(); // wie die Zurueck-Taste: erst die Unteransicht
+  else closePage();
+});
 // iPhone/iPad: Beim Zurueck-Wischen zeigt Safari schon selbst die Animation (alte Seite
 // schiebt sich weg). Laeuft danach noch unsere eigene Schliess-Animation, blitzt die Seite
 // kurz wieder auf. Darum nach so einem Wischen ohne eigene Animation schliessen.
@@ -725,6 +773,9 @@ window.addEventListener('popstate', (e) => {
     closeChatConversation(true);
     return;
   }
+
+  // Unteransicht der Seite (z. B. Kalender-Tag aus dem Monat): erst dorthin zurueck
+  if (popSubView()) return;
 
   // Detail overlays (e.g. a homework item opened on top of the list page)
   // stack on top of a regular .page rather than replacing it — close the
