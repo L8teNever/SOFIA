@@ -365,17 +365,29 @@ UNTIS_CLASS_LIST_TTL = 3600
 OTHER_TT_TTL = 300
 
 
-def _fetch_untis_classes(server: str, school: str, username: str, password: str) -> list:
+def _fetch_untis_classes(server: str, school: str, username: str, password: str, own: str) -> tuple[list, bool]:
+    """Alle Klassen der Schule - und ob dieser Zugang fremde Klassenplaene sehen darf
+    (Schueler-Konten duerfen das an vielen Schulen nicht: "no right for timetable")."""
     sess = webuntis.Session(server=server, username=username, password=password, school=school, useragent="SofiaApp/1.0")
     sess.login()
     try:
         out = []
-        for k in sess.klassen() or []:
+        klassen = list(sess.klassen() or [])
+        for k in klassen:
             name = str(getattr(k, "name", "") or "").strip()
             if name:
                 out.append({"name": name, "long": str(getattr(k, "long_name", "") or "").strip()})
         out.sort(key=lambda c: c["name"].lower())
-        return out
+        allowed = True
+        other = next((k for k in klassen if str(getattr(k, "name", "")).lower() != (own or "").lower()), None)
+        if other is not None:
+            try:
+                day = date.today()
+                list(sess.timetable_extended(klasse=other, start=day, end=day))
+            except Exception as e:  # noqa: BLE001
+                if "right" in str(e).lower():
+                    allowed = False
+        return out, allowed
     finally:
         try:
             sess.logout()
@@ -421,16 +433,19 @@ async def untis_classes(db: AsyncSession = Depends(get_db), current_user: User =
         return {"classes": [], "own": None}
     hit = _untis_class_list.get(cls.id)
     if hit and time.time() - hit[0] < UNTIS_CLASS_LIST_TTL:
-        return {"classes": hit[1], "own": cls.untis_class or None}
+        return {"classes": hit[1], "own": cls.untis_class or None, "restricted": not hit[1]}
     try:
         password = decrypt_password(cls.untis_password_enc) if cls.untis_password_enc else ""
-        classes = await asyncio.get_event_loop().run_in_executor(
-            None, _fetch_untis_classes, _strip_server(cls.untis_url), cls.untis_school, cls.untis_user, password)
+        classes, allowed = await asyncio.get_event_loop().run_in_executor(
+            None, _fetch_untis_classes, _strip_server(cls.untis_url), cls.untis_school, cls.untis_user, password, cls.untis_class or "")
     except Exception:
         logger.info("Untis-Klassenliste fuer Klasse %s nicht abrufbar", cls.id, exc_info=True)
         return {"classes": hit[1] if hit else [], "own": cls.untis_class or None}
+    # darf der Zugang fremde Plaene nicht sehen: keine Liste anbieten (nur Fehlermeldungen)
+    if not allowed:
+        classes = []
     _untis_class_list[cls.id] = (time.time(), classes)
-    return {"classes": classes, "own": cls.untis_class or None}
+    return {"classes": classes, "own": cls.untis_class or None, "restricted": not allowed}
 
 
 async def _other_class_timetable(db: AsyncSession, current_user: User, name: str) -> dict:

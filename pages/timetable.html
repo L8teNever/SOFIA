@@ -205,7 +205,7 @@ function _thisMonday() {
 var ttClassId = null;
 var ttClasses = [];
 // alle Klassen der Schule aus Untis: [{name, long}], eigene = ttUntisOwn; gewaehlt = ttUntisClass
-var ttUntis = [], ttUntisOwn = null, ttUntisClass = null;
+var ttUntis = [], ttUntisOwn = null, ttUntisClass = null, ttUntisRestricted = false;
 function ttClassName(id) {
   const c = ttClasses.find(x => x.id === id);
   return c ? c.name : '';
@@ -236,7 +236,10 @@ function ttOpenClassMenu(btn) {
     toggleMoreMenu(btn, items);
     return;
   }
-  if (ttClasses.length < 2) return;
+  if (ttClasses.length < 2) {
+    if (ttUntisRestricted) showToast('Euer Untis-Zugang darf nur den eigenen Stundenplan sehen');
+    return;
+  }
   const own = currentUser && currentUser.class_id;
   const cur = ttClassId || own;
   const items = ttClasses
@@ -274,6 +277,7 @@ async function init_timetable() {
   API.untisClasses().then(d => {
     ttUntis = (d && Array.isArray(d.classes)) ? d.classes : [];
     ttUntisOwn = d && d.own;
+    ttUntisRestricted = !!(d && d.restricted);
     ttSyncTitle();
   }).catch(() => {});
   await ttLoad();
