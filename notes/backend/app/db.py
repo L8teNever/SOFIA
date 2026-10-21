@@ -919,6 +919,21 @@ def clean_notebook(nb: Any) -> dict[str, Any] | None:
             pass
         if k and entry:
             outline[k] = entry
+    # Ueberschrift-Vorschlaege, die der Besitzer abgelehnt hat (Zeilen-Rechtecke, bp = Board-Seite):
+    # gelten fuer das ganze Dokument, auf allen Geraeten
+    hd_off: list[dict[str, Any]] = []
+    for raw in (nb.get("hdOff") if isinstance(nb.get("hdOff"), list) else [])[-500:]:
+        if not isinstance(raw, dict):
+            continue
+        try:
+            box = {k: round(float(raw.get(k)), 1) for k in ("x0", "y0", "x1", "y1")}
+        except (TypeError, ValueError):
+            continue
+        if not all(abs(v) < 1e7 for v in box.values()):
+            continue
+        if raw.get("bp"):
+            box["bp"] = str(raw["bp"])[:60]
+        hd_off.append(box)
     out = {
         "layout": "horizontal" if nb.get("layout") == "horizontal" else "vertical",
         "template": page_bg(nb.get("template")),
@@ -927,6 +942,8 @@ def clean_notebook(nb: Any) -> dict[str, Any] | None:
     }
     if outline:
         out["outline"] = outline
+    if hd_off:
+        out["hdOff"] = hd_off
     if nb.get("centered"):
         # Seiten unterschiedlicher Breite (Hoch-/Querformat) stehen mittig untereinander
         out["centered"] = True

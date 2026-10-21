@@ -15036,7 +15036,7 @@
   function hdDismissKey() {
     return "sofianotes-hd-off-" + (currentBoardId || "") + (boardEditId ? ":" + boardEditId : "");
   }
-  function hdDismissed() {
+  function hdLocalDismissed() {
     try {
       const v = JSON.parse(localStorage.getItem(hdDismissKey()) || "[]");
       return Array.isArray(v) ? v : [];
@@ -15044,12 +15044,25 @@
       return [];
     }
   }
+  // abgelehnte Zeilen: im Heft gespeichert (gilt auf allen Geraeten), dazu aeltere lokale
+  function hdDismissed() {
+    const bp = boardEditId || null;
+    const shared = ((notebook && notebook.hdOff) || []).filter((d) => (d.bp || null) === bp);
+    return shared.concat(hdLocalDismissed());
+  }
   function hdRemember(bbox) {
-    const list = hdDismissed();
-    list.push({ x0: bbox.minX, y0: bbox.minY, x1: bbox.maxX, y1: bbox.maxY });
+    const box = { x0: bbox.minX, y0: bbox.minY, x1: bbox.maxX, y1: bbox.maxY };
+    if (notebook && window.sofiaAddHdOff && window.sofiaAddHdOff(Object.assign({ bp: boardEditId || undefined }, box))) return;
+    const list = hdLocalDismissed();
+    list.push(box);
     try {
       localStorage.setItem(hdDismissKey(), JSON.stringify(list.slice(-300)));
     } catch (err) {}
+  }
+  // Geteilte Dokumente: Vorschlaege bekommt nur der Besitzer (fuer alles im Dokument)
+  function hdMayDetect() {
+    const owner = currentBoardMeta && currentBoardMeta.ownerId;
+    return !owner || owner === currentPersonId;
   }
   function hdOverlapRatio(a, b) {
     const w = Math.min(a.maxX, b.x1) - Math.max(a.minX, b.x0);
@@ -15145,7 +15158,7 @@
   }
   function hdScan() {
     hdTimer = null;
-    if (!currentBoardId || viewOnly || myRole === "view") {
+    if (!currentBoardId || viewOnly || myRole === "view" || !hdMayDetect()) {
       hdCandidates = [];
       return renderHeadingChips();
     }
@@ -23553,6 +23566,14 @@
       const d = outlineData()[it.key];
       return (d && d.text) || outlineLocalText.get(it.key) || (it.line && it.line.text) || "";
     }
+    // abgelehnten Ueberschrift-Vorschlag im Heft merken (nur wer bearbeiten darf)
+    window.sofiaAddHdOff = (box) => {
+      if (!notebook || !fullRights()) return false;
+      const nb = clone();
+      nb.hdOff = (nb.hdOff || []).concat([box]).slice(-500);
+      saveNotebook(nb);
+      return true;
+    };
     function setOutlineEntry(key, patch) {
       if (!notebook) return;
       const nb = clone();
