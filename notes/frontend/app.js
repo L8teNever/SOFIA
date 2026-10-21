@@ -14071,6 +14071,8 @@
       rememberBoardTap(preview.page.boardOf || preview.id, e.clientX, e.clientY);
       return;
     }
+    // Finger auf eine Ueberschrift: Gliederung oeffnen (Stift schreibt weiter wie gewohnt)
+    if (currentTool !== "text" && !selectionHitAt(world, "touch") && window.sofiaOutlineTapAt && window.sofiaOutlineTapAt(world)) return;
     if (currentTool === "text") {
       if (textTapSuppressed === e.pointerId) {
         textTapSuppressed = null;
@@ -23467,7 +23469,7 @@
         const cy = (line.minY + line.maxY) / 2;
         const page = pageOf(cx, cy);
         const key = g.ids.slice().sort()[0];
-        items.push({ key, line, page, board: boardId, y: line.minY, x: line.minX, isText: !!line.isText });
+        items.push({ key, ids: g.ids.slice(), line, page, board: boardId, y: line.minY, x: line.minX, isText: !!line.isText });
       }
       // Textfelder auch ohne Strich erfassen: unterstrichener Text (r.u) oder Markdown (# Ueberschrift).
       // Ein alter Eintrag in outlineData allein reicht nicht: Unterstreichung weg = raus aus der Gliederung
@@ -23576,6 +23578,62 @@
         }
       }, 80);
     }
+    // Ueberschrift aus der Gliederung nehmen: die Schrift bleibt, nur die Markierung geht weg
+    // (doppelte Unterstreichung loeschen bzw. bei Textfeldern Unterstrichen/# entfernen). Rueckgaengig moeglich.
+    function removeOutline(it) {
+      if (viewOnly || myRole === "view") return showToast("Nur ansehen: hier kann man nichts ändern");
+      if (it.ids && it.ids.length) {
+        const gone = it.ids.map((id) => boardStrokes.get(id)).filter(Boolean);
+        if (!gone.length) return;
+        const clones = gone.map(cloneStroke);
+        removeStrokes(gone.map((st) => st.id));
+        pushUndo({ type: "erase", strokes: clones });
+        for (const st of gone) selection.ids.delete(st.id);
+      } else {
+        const t = boardStrokes.get(it.key);
+        if (!t || t.tool !== "text") return;
+        const before = cloneStroke(t);
+        let runs = strokeRuns(t).map((r) => ({ ...r, u: 0 }));
+        const first = runs.findIndex((r) => String(r.t || "").trim());
+        if (first >= 0) runs[first] = { ...runs[first], t: String(runs[first].t).replace(/^(\s*)#{1,3}\s+/, "$1") };
+        runs = normalizeRuns(runs);
+        const ex = Object.assign({}, t.extra || {});
+        if (runs.every((r) => !r.b && !r.i && !r.s && !r.u)) delete ex.runs;
+        else ex.runs = runs;
+        t.extra = ex;
+        t.points[0] = Object.assign({}, t.points[0], { text: runsText(runs) });
+        relayoutBoxText(t);
+        wsSend({ type: "stroke_move", stroke: serializeStroke(t) });
+        pushUndo({ type: "replace", before, after: cloneStroke(t) });
+      }
+      requestRedraw();
+      renderMarks();
+      showToast("Überschrift aus der Gliederung entfernt");
+    }
+    // Mit dem Finger auf eine Ueberschrift tippen: Gliederung oeffnen und den Eintrag zeigen
+    window.sofiaOutlineTapAt = (w) => {
+      if (!notebook || !w) return false;
+      const pad = 10 / Math.max(0.05, scale);
+      const hit = computeOutline().find((it) => {
+        if ((it.board || null) !== (boardEditId || null)) return false;
+        const l = it.line;
+        const h = Math.max(8, l.maxY - l.minY);
+        return w.x >= l.minX - pad && w.x <= l.maxX + pad && w.y >= l.minY - pad && w.y <= l.maxY + h * 0.6 + pad;
+      });
+      if (!hit) return false;
+      if (!panelOpen) setPanel(true);
+      if (pageSel) endPageSelect();
+      marksOpen = true;
+      outlineOnlyStars = false;
+      renderMarks();
+      const row = marksEl && marksEl.querySelector('.ol-row[data-key="' + CSS.escape(hit.key) + '"]');
+      if (row) {
+        row.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        row.classList.add("ol-flash");
+        setTimeout(() => row.classList.remove("ol-flash"), 1400);
+      }
+      return true;
+    };
     async function renameOutline(it) {
       const res = await openNameSheet({ title: "Überschrift", label: "Text", initial: outlineText(it), placeholder: "z. B. Lineare Funktionen" });
       const text = res && String(res.value || "").trim().slice(0, 80);
@@ -23633,6 +23691,7 @@
         const d = data[it.key] || {};
         const row = document.createElement("div");
         row.className = "ol-row ol-l" + it.level + (d.star ? " ol-starred" : "");
+        row.dataset.key = it.key;
         const star = document.createElement("button");
         star.type = "button";
         star.className = "ol-star";
@@ -23710,7 +23769,16 @@
           renderMarks();
           showToast(next === 1 ? "Als Main-Überschrift (H1)" : next === 2 ? "Als 2. Unterüberschrift (H2)" : "Als 3. Unterüberschrift (H3)");
         });
-        row.append(star, lvlBtn, main);
+        const del = document.createElement("button");
+        del.type = "button";
+        del.className = "ol-del";
+        del.title = "Aus der Gliederung entfernen (die Schrift bleibt)";
+        del.innerHTML = '<span class="material-symbols-rounded">close</span>';
+        del.addEventListener("click", (e) => {
+          e.stopPropagation();
+          removeOutline(it);
+        });
+        row.append(star, lvlBtn, main, del);
         box.appendChild(row);
       }
       runOutlineQueue(items);

@@ -6457,6 +6457,12 @@ html[data-theme="dark"] .ol-l3 .ol-lvl { background: rgba(255, 255, 255, 0.15); 
 .selection-toolbar button.active { background: #d3e3fd; color: #0b57d0; }
 html[data-theme="dark"] .selection-toolbar button.active { background: #d0bcff; color: #241b33; }
 .ol-row.ol-starred { background: rgba(255, 193, 7, 0.12); }
+.ol-row { transition: background-color 0.3s ease; }
+.ol-row.ol-flash { background: rgba(103, 80, 164, 0.22); }
+.ol-del { width: 30px; height: 30px; flex-shrink: 0; border: 0; background: none; border-radius: 50%; color: rgba(0, 0, 0, 0.35); cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.ol-del .material-symbols-rounded { font-size: 18px; }
+.ol-del:active { background: rgba(179, 38, 30, 0.12); color: #b3261e; }
+html[data-theme="dark"] .ol-del { color: rgba(255, 255, 255, 0.45); }
 .ol-star { width: 32px; height: 32px; flex-shrink: 0; border: 0; background: none; border-radius: 50%; color: rgba(0, 0, 0, 0.3); cursor: pointer; display: flex; align-items: center; justify-content: center; }
 .ol-star .material-symbols-rounded { font-size: 20px; }
 .ol-starred .ol-star { color: #e6a700; }
