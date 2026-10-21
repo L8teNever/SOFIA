@@ -11084,7 +11084,10 @@
   let pinchState = null; // {initialDist, anchorWorld:{x,y}}
   let panState = null; // {lastX,lastY, pointerId|null}
   let pullArm = null; // Stift/Maus: Wischen ueber die letzte Seite wird zur Seiten-Geste
-  let wheelPan = { vx: 0, vy: 0, t: 0 };
+  let wheelPan = { vx: 0, vy: 0, t: 0, sum: 0 };
+  // Nach dem Einrasten schickt das Trackpad noch Schwung-Reste (immer kleinere Schritte).
+  // Die gehoeren zum alten Wisch und duerfen nicht nochmal blaettern.
+  let wheelTail = { until: 0, last: 0 };
   // Schwung: nach schnellem Wischen laeuft das Blatt weiter und bremst sanft ab
   let fling = null;
   function startFling(ps) {
@@ -14978,14 +14981,32 @@
           requestViewRedraw();
           return;
         }
+        const now = performance.now();
+        const mag = Math.hypot(mx, my);
+        if (notebookPagingOn() && now < wheelTail.until && mag < 50 && mag <= wheelTail.last * 1.3 + 2) {
+          // Schwung-Rest: schlucken, solange er weiter abklingt
+          wheelTail.until = now + 260;
+          wheelTail.last = mag;
+          return;
+        }
+        wheelTail.until = 0;
         releaseZoomHold();
         beginNbHold();
         offsetX += mx;
         offsetY += my;
-        const now = performance.now();
-        const dt = Math.max(8, now - (wheelPan.t || now - 16));
-        wheelPan.vx = 0.55 * (mx / dt) + 0.45 * (wheelPan.vx || 0);
-        wheelPan.vy = 0.55 * (my / dt) + 0.45 * (wheelPan.vy || 0);
+        // erstes Ereignis eines neuen Wischs: noch keine Geschwindigkeit (frueher wurde hier
+        // 16 ms angenommen - ein einzelner kleiner Rest-Schritt galt dann als schneller Wisch)
+        const dt = wheelPan.t ? Math.max(8, now - wheelPan.t) : 0;
+        wheelPan.vx = dt ? 0.55 * (mx / dt) + 0.45 * (wheelPan.vx || 0) : 0;
+        wheelPan.vy = dt ? 0.55 * (my / dt) + 0.45 * (wheelPan.vy || 0) : 0;
+        // Mausrad-Raste (ein einzelner grosser Schritt): zaehlt wie ein Wisch
+        if (!dt && mag >= 50) {
+          wheelPan.vx = mx / 120;
+          wheelPan.vy = my / 120;
+        }
+        wheelPan.sum = (wheelPan.sum || 0) + (notebook.layout === "horizontal" ? mx : my);
+        wheelPan.lastX = mx;
+        wheelPan.lastY = my;
         wheelPan.t = now;
         requestViewRedraw();
         clearTimeout(wheelSnapTimer);
@@ -14999,8 +15020,11 @@
             window.sofiaPagePullArm("wheel");
             return;
           }
-          const ps = { vx: wheelPan.vx, vy: wheelPan.vy, t: performance.now(), wheel: true };
-          wheelPan = { vx: 0, vy: 0, t: 0 };
+          // kaum bewegt (z. B. ein Rest-Schritt): nicht ueber die Geschwindigkeit blaettern
+          const moved = Math.abs(wheelPan.sum || 0) >= 40;
+          const ps = { vx: moved ? wheelPan.vx : 0, vy: moved ? wheelPan.vy : 0, t: performance.now(), wheel: true };
+          wheelTail = { until: performance.now() + 260, last: Math.max(4, Math.hypot(wheelPan.lastX || 0, wheelPan.lastY || 0)) };
+          wheelPan = { vx: 0, vy: 0, t: 0, sum: 0 };
           endNbHold();
           if (window.sofiaPageSnap) window.sofiaPageSnap(ps);
         }, 180);
