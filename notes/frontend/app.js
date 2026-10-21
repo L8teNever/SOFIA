@@ -2802,6 +2802,10 @@
   let laser = null; // { pointerId, color, points: [{x,y,t}] }
   const LASER_MS = 720;
   let objectKind = null; // null | rect | line | circle | triangle | arrow
+  // zuletzt benutzte Form: beim Zurueckwechseln zu "Formen" ist sie gleich wieder gewaehlt
+  const OBJECT_KINDS = ["rect", "line", "circle", "triangle", "arrow"];
+  const OBJECT_ICONS = { rect: "rectangle", line: "horizontal_rule", circle: "circle", triangle: "change_history", arrow: "east" };
+  let lastObjectKind = OBJECT_KINDS.includes(lsGetRaw("sofianotes-object-kind")) ? lsGetRaw("sofianotes-object-kind") : "rect";
   let objectDash = lsGetRaw("sofianotes-object-dash") === "1";
   let objectArrowHeads = ["end", "start", "both"].includes(lsGetRaw("sofianotes-object-arrow"))
     ? lsGetRaw("sofianotes-object-arrow")
@@ -7046,7 +7050,7 @@
       const pts = (s.shapeBase || s.points).map((pt) => ({ x: pt.x, y: pt.y, p: pt.p }));
       const i = (s.shapeHandle && s.shapeHandle.i) || pts.length - 1;
       const other = pts[i ? 0 : pts.length - 1];
-      const snapped = s.shape === "arrow" ? snapCardinalFrom(other, world) : world;
+      const snapped = s.shape === "arrow" ? snapAngleFrom(other, world) : world;
       pts[i] = { x: snapped.x, y: snapped.y, p };
       s.points = pts;
     } else if (s.shape === "triangle") {
@@ -10905,7 +10909,7 @@
   function setMode(mode) {
     if (textEdit) commitTextEditor();
     if (mode === "shapes") {
-      if (!objectKind) objectKind = "rect";
+      if (!objectKind) objectKind = lastObjectKind;
     } else objectKind = null;
     // Auswahl gehoert zu Lasso/Tabelle - beim Wechsel zu Stift/Text aufheben
     if (mode !== "lasso" && selection.ids.size) clearSelection();
@@ -13179,6 +13183,9 @@
   function syncObjectsMenu() {
     const on = currentMode === "shapes";
     objectsBtn?.classList.toggle("active", on);
+    // der Knopf zeigt die Form, die beim Antippen kommt
+    const ico = objectsBtn && objectsBtn.querySelector(".material-symbols-rounded");
+    if (ico) ico.textContent = OBJECT_ICONS[(on && objectKind) || lastObjectKind] || "shapes";
     if (toolbarEl) toolbarEl.dataset.kind = on ? (objectKind || "") : "";
     document.querySelectorAll("#shape-tools [data-obj]").forEach((b) => b.classList.toggle("active", b.dataset.obj === objectKind));
     document.querySelectorAll("#obj-dash [data-dash]").forEach((b) => b.classList.toggle("active", (b.dataset.dash === "1") === objectDash));
@@ -13187,6 +13194,12 @@
   }
   function setObjectKind(kind) {
     objectKind = kind || null;
+    if (objectKind && objectKind !== lastObjectKind) {
+      lastObjectKind = objectKind;
+      try {
+        localStorage.setItem("sofianotes-object-kind", objectKind);
+      } catch (err) {}
+    }
     if (!objectKind) {
       if (currentMode === "shapes") setMode("pen");
       else syncObjectsMenu();
@@ -13464,6 +13477,19 @@
     return e.pressure > 0 ? e.pressure : 0.5;
   }
 
+  // freie Richtung; liegt sie kaum neben einem 45-Grad-Schritt, rastet sie dort ein (Laenge bleibt)
+  function snapAngleFrom(a, b) {
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const len = Math.hypot(dx, dy);
+    if (len < 1e-6) return { x: b.x, y: b.y };
+    const ang = Math.atan2(dy, dx);
+    const step = Math.PI / 4;
+    const near = Math.round(ang / step) * step;
+    if (Math.abs(ang - near) > (5 * Math.PI) / 180) return { x: b.x, y: b.y };
+    return { x: a.x + Math.cos(near) * len, y: a.y + Math.sin(near) * len };
+  }
+
   function snapCardinalFrom(a, b) {
     const dx = b.x - a.x;
     const dy = b.y - a.y;
@@ -13541,7 +13567,7 @@
         ],
       };
     }
-    const end = snapCardinalFrom(a, b);
+    const end = snapAngleFrom(a, b);
     return {
       type: kind === "arrow" ? "arrow" : "line",
       guide: null,
