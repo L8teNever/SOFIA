@@ -5386,6 +5386,16 @@
     setConnected(false);
   }
 
+  // Geraeteart, damit man beim "anderen Geraet" erkennt, welches gemeint ist
+  function deviceKind() {
+    const ua = navigator.userAgent || "";
+    if (/iPad/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) return "iPad";
+    if (/iPhone/.test(ua)) return "iPhone";
+    if (/Android/.test(ua)) return /Mobile/.test(ua) ? "Handy" : "Tablet";
+    if (/Macintosh/.test(ua)) return "Mac";
+    if (/Windows/.test(ua)) return "PC";
+    return "Gerät";
+  }
   function connectWS() {
     if (!currentPersonId || !currentBoardId) return;
     wantWs = true;
@@ -5396,6 +5406,8 @@
       encodeURIComponent(currentPersonId) +
       "&board=" +
       encodeURIComponent(currentBoardId) +
+      "&dev=" +
+      encodeURIComponent(deviceKind()) +
       (window.sofiaWatchQuery ? window.sofiaWatchQuery(currentBoardId) : "");
     ws = new WebSocket(url);
 
@@ -5571,6 +5583,19 @@
       }
       case "text_live":
         applyTextLive(msg);
+        break;
+      case "devices":
+        if (window.sofiaDevicesUpdate) window.sofiaDevicesUpdate(msg.list || []);
+        break;
+      case "device_open":
+        // ausserhalb einer Split-Haelfte oeffnen (die Nachricht kann ueber deren Verbindung kommen)
+        if (window.sofiaDeviceOpen) setTimeout(() => window.sofiaDeviceOpen(msg), 0);
+        break;
+      case "device_open_sent":
+        showToast("Auf dem anderen Gerät geöffnet");
+        break;
+      case "device_open_failed":
+        showToast(msg.reason === "access" ? "Das andere Gerät darf dieses Blatt nicht öffnen – erst freigeben" : "Das andere Gerät ist nicht mehr da");
         break;
       case "stroke_start": {
         remoteInProgress.set(msg.strokeId, {
@@ -25993,6 +26018,7 @@
         });
         add("close_fullscreen", "Geteilte Ansicht beenden", "Die Hälfte, in der du schreibst, bleibt", () => close(), true);
       }
+      deviceSection(add, gap);
       menu.classList.remove("hidden");
       const r = btn.getBoundingClientRect();
       const mw = menu.offsetWidth;
@@ -26002,8 +26028,104 @@
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
       if (!menu.classList.contains("hidden")) return closeMenu();
+      devices = null;
+      deviceTarget = null;
+      wsSend({ type: "devices" });
       openMenu();
     });
+
+    // ---- Zweites Geraet: ein Blatt (z. B. die Aufgabe) auf dem anderen iPad gross zeigen,
+    // hier wird weiter geschrieben. Eigene Geraete ueberall, andere Personen am selben Blatt.
+    let devices = null; // null = wird gesucht
+    let deviceTarget = null; // gewaehltes Geraet im Menue
+    let pickForDevice = null; // Blatt-Auswahl schickt an dieses Geraet statt Split
+    function ownClientIds() {
+      const ids = new Set([myClientId]);
+      if (splitState) for (const p of splitState.panes) if (p && p.ctx && p.ctx.myClientId) ids.add(p.ctx.myClientId);
+      return ids;
+    }
+    function deviceLabel(d) {
+      return d.mine ? "Dein " + (d.device || "Gerät") : personName(d.person) + (d.device ? " · " + d.device : "");
+    }
+    window.sofiaDevicesUpdate = (list) => {
+      const own = ownClientIds();
+      devices = list.filter((d) => !own.has(d.id));
+      if (deviceTarget && !devices.some((d) => d.id === deviceTarget.id)) deviceTarget = null;
+      if (!menu.classList.contains("hidden")) openMenu();
+    };
+    function sendToDevice(d, board) {
+      if (!d || !board || !board.id) return;
+      wsSend({ type: "device_open", target: d.id, board: board.id, title: board.title || "" });
+    }
+    function otherPaneBoard() {
+      if (!splitState) return null;
+      const p = splitState.panes[1 - splitState.active];
+      const c = p && p.ctx;
+      if (!c || !c.currentBoardId || c.currentBoardId === currentBoardId) return null;
+      return { id: c.currentBoardId, title: (c.currentBoardMeta && c.currentBoardMeta.title) || "Blatt" };
+    }
+    function deviceSection(add, gap) {
+      gap();
+      const head = document.createElement("div");
+      head.className = "split-menu-head";
+      head.textContent = deviceTarget ? "Auf " + deviceLabel(deviceTarget) + " zeigen" : "Anderes Gerät";
+      menu.appendChild(head);
+      if (deviceTarget) {
+        const d = deviceTarget;
+        const other = otherPaneBoard();
+        if (other)
+          add("open_in_full", "„" + other.title + "“ dort groß", "Die andere Hälfte geht aufs andere Gerät, hier bleibt deine Hälfte groß", () => {
+            sendToDevice(d, other);
+            close();
+            deviceTarget = null;
+          });
+        const here = { id: currentBoardId, title: (currentBoardMeta && currentBoardMeta.title) || (filenameInput && filenameInput.value) || "Blatt" };
+        add("open_in_full", "Dieses Blatt dort groß", "„" + here.title + "“ auf dem anderen Gerät öffnen", () => {
+          sendToDevice(d, here);
+          deviceTarget = null;
+        });
+        add("description", "Anderes Blatt dort …", "Z. B. die Aufgabe wählen – dort groß, hier schreibst du", () => {
+          pickForDevice = d;
+          deviceTarget = null;
+          openPicker();
+        });
+        add("arrow_back", "Zurück", "Anderes Gerät wählen", () => {
+          deviceTarget = null;
+          setTimeout(openMenu, 0);
+        });
+        return;
+      }
+      if (devices === null) {
+        add("progress_activity", "Sucht Geräte …", "Andere iPads und Geräte mit SOFIA Notes", () => {});
+        return;
+      }
+      if (!devices.length) {
+        add("info", "Kein anderes Gerät gefunden", "Öffne SOFIA Notes auf dem anderen Gerät: dein eigenes mit irgendeinem Blatt, jemand anderes mit diesem Blatt", () => {});
+        return;
+      }
+      for (const d of devices)
+        add(d.device === "iPhone" || d.device === "Handy" ? "smartphone" : "tablet", deviceLabel(d), d.here ? "Hat dieses Blatt offen" : "Hat ein anderes Blatt offen", () => {
+          deviceTarget = d;
+          setTimeout(openMenu, 0);
+        });
+    }
+    // Empfangen: eigenes Geraet oeffnet direkt, bei jemand anderem erst fragen
+    window.sofiaDeviceOpen = async (msg) => {
+      if (!msg || !msg.board) return;
+      const title = msg.title || "Blatt";
+      if (msg.person !== currentPersonId) {
+        const ok = await askConfirm({
+          title: personName(msg.person) + " möchte dir ein Blatt zeigen",
+          text: "„" + title + "“ hier groß öffnen?",
+          ok: "Öffnen",
+          icon: "open_in_full",
+          danger: false,
+        });
+        if (!ok) return;
+      }
+      if (msg.board !== currentBoardId || splitState) await openBoard(msg.board, title);
+      showToast(msg.person === currentPersonId ? "Von deinem anderen Gerät geöffnet" : "Von " + personName(msg.person) + " geöffnet");
+    };
     document.addEventListener("pointerdown", (e) => {
       if (!menu.classList.contains("hidden") && !e.target.closest("#split-menu") && !e.target.closest("#btn-split")) closeMenu();
     }, true);
@@ -26029,6 +26151,11 @@
     }
     function choose(b) {
       pickScrim.classList.add("hidden");
+      if (pickForDevice) {
+        const d = pickForDevice;
+        pickForDevice = null;
+        return sendToDevice(d, b);
+      }
       start("other", b);
     }
     function renderPicker() {
@@ -26122,7 +26249,10 @@
       );
     }
     document.getElementById("split-pick-search").addEventListener("input", renderPicker);
-    document.getElementById("split-pick-close").addEventListener("click", () => pickScrim.classList.add("hidden"));
+    document.getElementById("split-pick-close").addEventListener("click", () => {
+      pickScrim.classList.add("hidden");
+      pickForDevice = null;
+    });
     pickScrim.addEventListener("click", (e) => {
       if (e.target === pickScrim) pickScrim.classList.add("hidden");
     });

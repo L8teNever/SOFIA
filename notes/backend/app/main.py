@@ -1225,6 +1225,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
     client.person_id = person
     client.board_id = board_id
     client.watch = watch
+    client.device = (websocket.query_params.get("dev") or "")[:20]
     client.color = (await db.person_color(person)) or color_for(person) or client.color
     client.role = "view" if watch else ((await db.board_role(person, board_id)) or "edit")
 
@@ -1286,6 +1287,38 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                     exclude=websocket,
                     board_id=room,
                 )
+
+            elif msg_type == "devices":
+                # Zweites Geraet: wer sitzt am selben Blatt, und wo sind meine anderen Geraete?
+                found = []
+                for other in manager.all_clients():
+                    if other.websocket is websocket or other.watch or not other.person_id:
+                        continue
+                    here = other.board_id == room
+                    if not here and other.person_id != person:
+                        continue
+                    found.append({"id": other.id, "person": other.person_id, "device": other.device, "here": here, "mine": other.person_id == person})
+                await websocket.send_json({"type": "devices", "list": found})
+
+            elif msg_type == "device_open":
+                # ein Blatt auf einem anderen Geraet gross oeffnen (eigenes Geraet oder jemand am selben Blatt)
+                target_id = msg.get("target")
+                open_id = str(msg.get("board") or "")
+                target = next((c for c in manager.all_clients() if c.id == target_id), None)
+                if target is None or not open_id or not (target.board_id == room or target.person_id == person):
+                    await websocket.send_json({"type": "device_open_failed", "reason": "gone"})
+                    continue
+                if not await db.can_access(person, open_id) or not await db.can_access(target.person_id, open_id):
+                    await websocket.send_json({"type": "device_open_failed", "reason": "access"})
+                    continue
+                try:
+                    await target.websocket.send_json(
+                        {"type": "device_open", "from": client.id, "person": person, "board": open_id, "title": str(msg.get("title") or "")[:120]}
+                    )
+                except Exception:
+                    await websocket.send_json({"type": "device_open_failed", "reason": "gone"})
+                    continue
+                await websocket.send_json({"type": "device_open_sent", "target": target_id})
 
             elif msg_type == "text_live":
                 # Text, der gerade getippt wird: nur weiterreichen, nicht speichern

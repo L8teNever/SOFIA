@@ -26,6 +26,7 @@ class ClientState:
     board_id: str | None = None
     role: str = "edit"  # owner / edit / add / view
     watch: bool = False  # schaut nur zu (ueber "Freunde"), sitzt nicht selbst am Blatt
+    device: str = ""  # Geraeteart fuer die Anzeige (iPad, Mac, ...)
     since: float = 0.0
     in_progress: dict[str, dict[str, Any]] = field(default_factory=dict)
 

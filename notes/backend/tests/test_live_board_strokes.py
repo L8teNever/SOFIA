@@ -23,6 +23,7 @@ class LiveBoardStrokeTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         db.use_database(str(Path(self.tmp.name) / "t.db"))
+        db._lock = asyncio.Lock()  # jeder Test hat seinen eigenen Event-Loop
         run(db.add_person_email("simon", "simon@example.com"))
         self.client = TestClient(app)
         self.board = run(db.create_board("simon", "Heft", None))
