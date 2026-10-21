@@ -12017,8 +12017,8 @@
     const doneBtn = document.getElementById("btn-media-crop-done");
     const cancelBtn = document.getElementById("btn-media-crop-cancel");
     if (kiBtn) kiBtn.classList.toggle("hidden", cropping || pens.length === 0);
-    const hasHand = pens.some(isHandStroke);
-    const existingUnderlines = hasHand ? (typeof hdFindUnderlinesForSelection === "function" ? hdFindUnderlinesForSelection() : []) : [];
+    const hasHand = pens.some(isHandStroke) || selectedStrokes().some(isTypedText);
+    const existingUnderlines = typeof hdFindUnderlinesForSelection === "function" ? hdFindUnderlinesForSelection() : [];
     const isUnderlined = existingUnderlines.length > 0;
     const underBtn = document.getElementById("btn-sel-underline");
     const lvlBtn = document.getElementById("btn-sel-heading-level");
@@ -15112,11 +15112,8 @@
       const b = s.bbox || makeBBox(s.points);
       if (b && b.maxX >= a.x && b.minX <= z.x && b.maxY >= a.y && b.minY <= z.y) strokes.push(s);
     }
-    const lines = hdLines(strokes).filter((l) => l.strokes.length >= 2 && l.maxX - l.minX >= 40);
-    if (lines.length < 3) {
-      hdCandidates = [];
-      return renderHeadingChips();
-    }
+    let lines = hdLines(strokes).filter((l) => l.strokes.length >= 2 && l.maxX - l.minX >= 40);
+    if (lines.length < 3) lines = []; // zu wenig Handschrift zum Vergleichen
     // normale Schrift: Median der Zeilengroessen, gewichtet nach Strichzahl
     const weighted = [];
     const colorCount = new Map();
@@ -15126,16 +15123,34 @@
     }
     weighted.sort((x, y) => x - y);
     const body = weighted[Math.floor(weighted.length / 2)] || 1;
-    const bodyColor = [...colorCount.entries()].sort((x, y) => y[1] - x[1])[0][0];
+    const bodyColor = colorCount.size ? [...colorCount.entries()].sort((x, y) => y[1] - x[1])[0][0] : null;
     const off = hdDismissed();
-    hdCandidates = lines.filter((l) => {
+    // getippte Textfelder: deutlich groesser als die uebrigen (oder als "# ..." geschrieben)
+    const texts = [];
+    for (const s of boardStrokes.values()) {
+      if (!isTypedText(s)) continue;
+      const b = s.bbox || strokeWorldBBox(s);
+      if (b && b.maxX >= a.x && b.minX <= z.x && b.maxY >= a.y && b.minY <= z.y) texts.push(s);
+    }
+    const textSizes = texts.map((t) => t.size || 0).sort((x, y) => x - y);
+    const textBody = textSizes[Math.floor(textSizes.length / 2)] || 0;
+    const textCands = texts
+      .filter((t) => {
+        const raw = String(t.points[0].text || "");
+        const md = /^#{1,3}\s+\S/.test(raw);
+        const big = texts.length >= 3 && textBody && (t.size || 0) >= textBody * 1.3;
+        return (md || big) && raw.split("\n")[0].trim().length <= 80;
+      })
+      .map(hdTextLine)
+      .filter((l) => !hdAlreadyUnderlined(l) && !off.some((d) => hdOverlapRatio(l.bbox, d) > 0.4));
+    hdCandidates = textCands.concat(lines.filter((l) => {
       const big = l.size >= body * HD_SIZE_RATIO;
       const colored = l.color !== bodyColor && l.size >= body * HD_COLOR_RATIO && l.strokes.length <= 40;
       if (!big && !colored) return false;
       if (hdAlreadyUnderlined(l)) return false;
       if (off.some((d) => hdOverlapRatio(l.bbox, d) > 0.4)) return false;
       return true;
-    });
+    }));
     renderHeadingChips();
     if (window.sofiaOutlineRefresh) window.sofiaOutlineRefresh();
   }
@@ -15297,6 +15312,28 @@
       el.style.top = Math.round(s.y) + "px";
     });
   }
+  // Getipptes Textfeld wie eine Handschrift-Zeile behandeln (Unterstreichen, Vorschlag, Gliederung)
+  function hdTextLine(t) {
+    const b = t.bbox || strokeWorldBBox(t) || makeBBox(t.points);
+    const raw = String((t.points[0] && t.points[0].text) || "");
+    return {
+      strokes: [t],
+      color: t.color || "#1E1F22",
+      size: t.size,
+      penSize: Math.max(1.5, (t.size || 20) * 0.08),
+      minX: b.minX,
+      maxX: b.maxX,
+      minY: b.minY,
+      maxY: b.maxY,
+      baseline: b.maxY - (t.size || 20) * 0.2,
+      bbox: { minX: b.minX, maxX: b.maxX, minY: b.minY, maxY: b.maxY },
+      text: raw.replace(/^#{1,3}\s+/, "").split("\n")[0].trim().slice(0, 80),
+      isText: true,
+    };
+  }
+  function isTypedText(s) {
+    return !!(s && s.tool === "text" && s.points && s.points[0] && String(s.points[0].text || "").trim());
+  }
   function hdUnderlineStrokesForLine(l) {
     const h = l.maxY - l.minY;
     const list = [];
@@ -15317,24 +15354,8 @@
     }
     const pens = selectedStrokes().filter(isHandStroke);
     const lines = hdLines(pens);
-    const texts = selectedStrokes().filter((s) => s.tool === "text");
-    for (const t of texts) {
-      const b = t.bbox || makeBBox(t.points);
-      lines.push({
-        strokes: [t],
-        color: t.color || "#1E1F22",
-        size: t.size,
-        penSize: Math.max(1.5, t.size * 0.08),
-        minX: b.minX,
-        maxX: b.maxX,
-        minY: b.minY,
-        maxY: b.maxY,
-        baseline: b.maxY - t.size * 0.2,
-        bbox: b,
-        text: (t.points[0] && t.points[0].text) || "",
-        isText: true
-      });
-    }
+    const texts = selectedStrokes().filter(isTypedText);
+    for (const t of texts) lines.push(hdTextLine(t));
     for (const l of lines) {
       for (const u of hdUnderlineStrokesForLine(l)) {
         if (!list.some((x) => x.id === u.id)) list.push(u);
@@ -15375,26 +15396,10 @@
       return;
     }
     const pens = selectedStrokes().filter(isHandStroke);
-    const texts = selectedStrokes().filter((s) => s.tool === "text");
+    const texts = selectedStrokes().filter(isTypedText);
     if (!pens.length && !texts.length) return;
     const lines = hdLines(pens);
-    for (const t of texts) {
-      const b = t.bbox || makeBBox(t.points);
-      lines.push({
-        strokes: [t],
-        color: t.color || "#1E1F22",
-        size: t.size,
-        penSize: Math.max(1.5, t.size * 0.08),
-        minX: b.minX,
-        maxX: b.maxX,
-        minY: b.minY,
-        maxY: b.maxY,
-        baseline: b.maxY - t.size * 0.2,
-        bbox: b,
-        text: (t.points[0] && t.points[0].text) || "",
-        isText: true
-      });
-    }
+    for (const t of texts) lines.push(hdTextLine(t));
     underlineLines(lines);
     for (const l of lines) hdRemember(l.bbox);
     hdCandidates = hdCandidates.filter((c) => !lines.some((l) => hdOverlapRatio(c.bbox, { x0: l.minX, y0: l.minY, x1: l.maxX, y1: l.maxY }) > 0.4));
@@ -15433,26 +15438,10 @@
       let existing = hdFindUnderlinesForSelection();
       if (!existing.length) {
         const pens = selectedStrokes().filter(isHandStroke);
-        const texts = selectedStrokes().filter((s) => s.tool === "text");
+        const texts = selectedStrokes().filter(isTypedText);
         if (!pens.length && !texts.length) return showToast("Bitte zuerst Text auswählen");
         const lines = hdLines(pens);
-        for (const t of texts) {
-          const b = t.bbox || makeBBox(t.points);
-          lines.push({
-            strokes: [t],
-            color: t.color || "#1E1F22",
-            size: t.size,
-            penSize: Math.max(1.5, t.size * 0.08),
-            minX: b.minX,
-            maxX: b.maxX,
-            minY: b.minY,
-            maxY: b.maxY,
-            baseline: b.maxY - t.size * 0.2,
-            bbox: b,
-            text: (t.points[0] && t.points[0].text) || "",
-            isText: true
-          });
-        }
+        for (const t of texts) lines.push(hdTextLine(t));
         underlineLines(lines);
         for (const l of lines) hdRemember(l.bbox);
         hdCandidates = hdCandidates.filter((c) => !lines.some((l) => hdOverlapRatio(c.bbox, { x0: l.minX, y0: l.minY, x1: l.maxX, y1: l.maxY }) > 0.4));
@@ -23373,6 +23362,7 @@
         } else groups.push({ ids: [u.s.id], minX: u.b.minX, maxX: u.b.maxX, minY: u.b.minY, maxY: u.b.maxY });
       }
       const hand = all.filter(isHandStroke);
+      const data = outlineData();
       const items = [];
       for (const g of groups) {
         const near = hand.filter((s) => {
@@ -23475,11 +23465,12 @@
       const maxSize = Math.max(0, ...sizes);
       const minSize = sizes.length ? Math.min(...sizes) : 0;
       const hasRange = maxSize > 0 && maxSize / Math.max(1, minSize) >= 1.25;
-      const data = outlineData();
       for (const it of items) {
         const d = data[it.key];
         if (d && (d.level === 1 || d.level === 2 || d.level === 3)) {
           it.level = d.level;
+        } else if (it.level) {
+          // schon festgelegt (Markdown # / ## / ###)
         } else if (hasRange) {
           const s = it.line.size || 0;
           if (s >= maxSize * 0.8) it.level = 1;
