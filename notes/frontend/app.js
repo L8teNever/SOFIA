@@ -5713,6 +5713,9 @@
   const liveTexts = new Map();
   function applyTextLive(msg) {
     if (!msg.editId) return;
+    // das bin ich selbst (zweite Verbindung dieses Geraets, z. B. geteilte Ansicht oder alte
+    // Verbindung nach dem Wiederverbinden): weder Cursor noch Text doppelt anzeigen
+    if (textEdit && textEdit.liveId === msg.editId && msg.person && msg.person === currentPersonId) return;
     // pro Person ein Eintrag - im selben Feld koennen mehrere gleichzeitig tippen
     const id = msg.editId + "|" + msg.id;
     if (msg.done) {
@@ -8053,6 +8056,7 @@
       width: (s.extra && s.extra.width) || null,
       before: cloneStroke(s),
       fromLabel: bold,
+      onLines: !!(s.extra && s.extra.autoW),
     };
     showTextEditor(a.text || "", strokeRuns(s));
     requestRedraw();
@@ -8216,11 +8220,12 @@
       top = p.y;
       size = textEdit.size * scale;
       color = themeInk(textEdit.color);
-      if (textEdit.width) width = textEdit.width * scale;
+      if (textEdit.width && !textEdit.onLines) width = textEdit.width * scale;
       else {
         measureCtx.font = textFont(size);
         const lay = layoutRuns(serializeEditor(), size, null);
         width = Math.max(...lay.widths, size * 3) + size;
+        if (textEdit.width) width = Math.min(width, textEdit.width * scale);
       }
       minH = size * TEXT_LINE;
     }
@@ -8256,13 +8261,31 @@
     for (const h of [teHandleL, teHandleR, teMoveEl]) if (h) h.classList.toggle("hidden", !show);
     if (!show) return;
     const cy = top + height / 2;
-    teHandleL.style.left = left - 6 + "px";
+    teHandleL.style.left = left - 12 + "px";
     teHandleL.style.top = cy + "px";
-    teHandleR.style.left = left + width + 6 + "px";
+    teHandleR.style.left = left + width + 12 + "px";
     teHandleR.style.top = cy + "px";
     if (teMoveEl) {
-      teMoveEl.style.left = left + width / 2 + "px";
-      teMoveEl.style.top = top - 18 + "px";
+      // Platz der Format-Leiste (sie steht ueber dem Feld, links buendig)
+      const bw = textFormatBar.offsetWidth || 260;
+      const bh = textFormatBar.offsetHeight || 44;
+      const barShown = !textFormatBar.classList.contains("hidden");
+      const barX = Math.max(8, Math.min(window.innerWidth - bw - 8, left));
+      let bx = Math.min(left + width - 20, window.innerWidth - 32);
+      let by = top - 22;
+      if (barShown) {
+        let barY = top - bh - 14;
+        if (barY < 8) barY = top + height + 14;
+        // rechts neben die Leiste, auf gleiche Hoehe - sonst laege er im Text oder darauf
+        bx = barX + bw + 30;
+        by = barY + bh / 2;
+        if (bx > window.innerWidth - 28) {
+          bx = barX - 30;
+          if (bx < 28) bx = Math.min(window.innerWidth - 28, Math.max(28, left + width + 34));
+        }
+      }
+      teMoveEl.style.left = Math.max(28, Math.min(window.innerWidth - 28, bx)) + "px";
+      teMoveEl.style.top = Math.max(18, by) + "px";
     }
   }
   for (const [h, side] of [
@@ -8287,6 +8310,7 @@
       const d = teHandleDrag;
       if (!d || d.id !== e.pointerId || !textEdit) return;
       const min = textEdit.size * scale * 2;
+      textEdit.onLines = false;
       if (d.side === "r") {
         textEdit.width = Math.max(min, e.clientX - d.left) / scale;
       } else {
@@ -8400,6 +8424,9 @@
   // Textfeld als Strich (fuers Speichern und fuer die Live-Ansicht der anderen)
   function textStrokeFrom(ed, runs) {
     const extra = Object.assign({}, (ed.before && ed.before.extra) || {}, { box: true, width: ed.width || null });
+    // Breite ist nur die Umbruchgrenze (Text auf den Linien): Rahmen nur so breit wie der Text
+    if (ed.onLines && ed.width) extra.autoW = true;
+    else delete extra.autoW;
     if (runs.every((r) => !r.b && !r.i && !r.s && !r.u)) delete extra.runs;
     else extra.runs = runs;
     return {
