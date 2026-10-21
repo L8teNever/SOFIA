@@ -377,6 +377,38 @@ async def homework_get(person_id: str, hw_id: int) -> dict[str, Any] | None:
     return _pack_homework(hw, info, boards)
 
 
+async def homework_solutions(person_id: str, hw_id: int) -> list[dict[str, Any]] | None:
+    """Loesungen der Klasse zu einer Hausaufgabe (so wie in Sofia), neueste zuerst."""
+    info, err = await _homework_ctx(person_id)
+    if err:
+        return None
+    try:
+        raw = await asyncio.get_event_loop().run_in_executor(None, _get, f"/homework/{hw_id}/solutions", info["email"])
+    except Exception:  # noqa: BLE001
+        return None
+    me = (info.get("email") or "").lower()
+    out = []
+    for sol in raw or []:
+        user = sol.get("user") or {}
+        atts = []
+        for a in sol.get("attachments") or []:
+            url = str(a.get("url") or "")
+            if not url:
+                continue
+            atts.append({"url": url, "type": a.get("type") or "file", "name": a.get("name") or ""})
+        out.append(
+            {
+                "id": sol.get("id"),
+                "name": user.get("display_name") or (user.get("email") or "").split("@")[0] or "Jemand",
+                "mine": (user.get("email") or "").lower() == me,
+                "text": sol.get("text") or "",
+                "createdAt": sol.get("created_at"),
+                "attachments": atts,
+            }
+        )
+    return out
+
+
 async def homework_toggle(person_id: str, hw_id: int) -> dict[str, Any] | None:
     info, err = await _homework_ctx(person_id)
     if err:

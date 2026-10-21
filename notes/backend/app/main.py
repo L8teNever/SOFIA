@@ -1,3 +1,4 @@
+import re
 import asyncio
 import math
 import hashlib
@@ -304,6 +305,14 @@ async def sofia_homework_one(hw_id: int, person: dict = Depends(get_current_pers
     if hw is None:
         raise HTTPException(status_code=404, detail="Hausaufgabe nicht gefunden")
     return hw
+
+
+@app.get("/api/sofia/homework/{hw_id}/solutions")
+async def sofia_homework_solutions(hw_id: int, person: dict = Depends(get_current_person)) -> dict:
+    sols = await sofia_sync.homework_solutions(person["id"], hw_id)
+    if sols is None:
+        raise HTTPException(status_code=502, detail="Sofia nicht erreichbar")
+    return {"solutions": sols}
 
 
 @app.post("/api/sofia/homework/{hw_id}/check")
@@ -1202,6 +1211,10 @@ async def _kick_watchers_of(person_id: str) -> None:
                 pass
 
 
+# was "auf anderem Geraet zeigen" darf: nur Dateien aus Sofia (ueber Notes) und aus Notes selbst
+_SHOW_URL = re.compile(r"^/api/(sofia/file\?u=%2Fuploads%2F|media/|files/)[^\s]*$")
+
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket) -> None:
     board_id = websocket.query_params.get("board") or ""
@@ -1314,6 +1327,33 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 try:
                     await target.websocket.send_json(
                         {"type": "device_open", "from": client.id, "person": person, "board": open_id, "title": str(msg.get("title") or "")[:120]}
+                    )
+                except Exception:
+                    await websocket.send_json({"type": "device_open_failed", "reason": "gone"})
+                    continue
+                await websocket.send_json({"type": "device_open_sent", "target": target_id})
+
+            elif msg_type == "device_show":
+                # eine Datei (z. B. die Loesung eines Mitschuelers) auf einem anderen Geraet gross zeigen
+                target_id = msg.get("target")
+                url = str(msg.get("url") or "")
+                target = next((c for c in manager.all_clients() if c.id == target_id), None)
+                if target is None or not (target.board_id == room or target.person_id == person):
+                    await websocket.send_json({"type": "device_open_failed", "reason": "gone"})
+                    continue
+                if not _SHOW_URL.match(url):
+                    await websocket.send_json({"type": "device_open_failed", "reason": "url"})
+                    continue
+                try:
+                    await target.websocket.send_json(
+                        {
+                            "type": "device_show",
+                            "from": client.id,
+                            "person": person,
+                            "url": url,
+                            "kind": "pdf" if msg.get("kind") == "pdf" else "image",
+                            "name": str(msg.get("name") or "")[:160],
+                        }
                     )
                 except Exception:
                     await websocket.send_json({"type": "device_open_failed", "reason": "gone"})

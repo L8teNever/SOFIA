@@ -6478,3 +6478,20 @@ html[data-theme="dark"] .ol-head button { background: rgba(255, 255, 255, 0.08);
 html[data-theme="dark"] .ol-star { color: rgba(255, 255, 255, 0.35); }
 html[data-theme="dark"] .ol-ocr { background: #3a3350; color: #e8def8; }
 html[data-theme="dark"] .ol-img { filter: invert(0.9) hue-rotate(180deg); }
+
+/* Loesungen der Klasse im Aufgabenfenster */
+.hw-sols { margin-top: 12px; }
+.hw-sol { margin: 6px 0; padding: 8px 10px; border-radius: 12px; background: rgba(0, 0, 0, 0.04); }
+html[data-theme="dark"] .hw-sol { background: rgba(255, 255, 255, 0.06); }
+.hw-sol-who { font-weight: 700; font-size: 13px; margin-bottom: 4px; }
+.hw-sol-text { font-size: 13px; white-space: pre-wrap; opacity: 0.9; margin-bottom: 4px; }
+.hw-sol-file { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+.hw-sol-file .hw-file { flex: 1; min-width: 0; border: 0; cursor: pointer; font: inherit; text-align: left; }
+.hw-sol-dev { flex-shrink: 0; }
+/* Datei vom anderen Geraet gross */
+.big-show { position: fixed; inset: 0; z-index: 9000; display: flex; flex-direction: column; background: #f3eff7; }
+html[data-theme="dark"] .big-show { background: #1d1b20; color: #e6e1e5; }
+.big-show-bar { display: flex; align-items: center; gap: 8px; padding: 10px 14px; padding-top: max(10px, env(safe-area-inset-top)); font: 600 15px 'Google Sans', 'Inter', sans-serif; }
+.big-show-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.big-show-scroll { flex: 1; overflow: auto; -webkit-overflow-scrolling: touch; padding: 0 12px 24px; }
+.big-show-page { margin: 0 auto; overflow: hidden; }

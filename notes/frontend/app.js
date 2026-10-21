@@ -5591,6 +5591,9 @@
         // ausserhalb einer Split-Haelfte oeffnen (die Nachricht kann ueber deren Verbindung kommen)
         if (window.sofiaDeviceOpen) setTimeout(() => window.sofiaDeviceOpen(msg), 0);
         break;
+      case "device_show":
+        if (window.sofiaDeviceShow) setTimeout(() => window.sofiaDeviceShow(msg), 0);
+        break;
       case "device_open_sent":
         showToast("Auf dem anderen Gerät geöffnet");
         break;
@@ -16930,8 +16933,169 @@
     const ownPdfs = boardRefs()
       .filter((r) => r.fileId && isPdfItem(r))
       .map((r) => ({ kind: "pdf", url: ownFileUrl(r), name: r.name, fileId: r.fileId }));
-    return panelImages().map((a) => ({ ...a, kind: "image" })).concat(hwPdfs, ownPdfs);
+    return panelImages().map((a) => ({ ...a, kind: "image" })).concat(hwPdfs, ownPdfs, solutionItems());
   }
+  // ---- Loesungen der Klasse (aus Sofia) im Aufgabenfenster ----
+  const solCache = new Map(); // hwId -> {list, t, loading, error}
+  function sofiaUrl(u) {
+    return String(u || "").startsWith("/uploads/") ? "/api/sofia/file?u=" + encodeURIComponent(u) : u;
+  }
+  function solutionItems() {
+    const c = hwBoard && hwBoard.id && solCache.get(hwBoard.id);
+    if (!c || !c.list) return [];
+    const out = [];
+    for (const sol of c.list) {
+      for (const a of sol.attachments) {
+        const url = sofiaUrl(a.url);
+        if (!url.startsWith("/api/")) continue; // Links nach draussen nicht im Fenster
+        const kind = a.type === "image" ? "image" : isPdfItem(a) ? "pdf" : null;
+        if (!kind) continue;
+        out.push({ kind, url, name: (sol.mine ? "Deine Lösung" : "Lösung von " + sol.name) + (a.name ? " – " + a.name : ""), sol: true });
+      }
+    }
+    return out;
+  }
+  async function loadSolutions(hwId, force) {
+    const c = solCache.get(hwId);
+    if (c && (c.loading || (!force && performance.now() - c.t < 60000))) return;
+    solCache.set(hwId, Object.assign({}, c || {}, { loading: true }));
+    let next;
+    try {
+      const r = await api("/api/sofia/homework/" + encodeURIComponent(hwId) + "/solutions");
+      next = { list: r.solutions || [], t: performance.now(), loading: false };
+    } catch (err) {
+      next = Object.assign({}, c || {}, { t: performance.now(), loading: false, error: true });
+    }
+    solCache.set(hwId, next);
+    if (hwBoard && hwBoard.id === hwId && !hwView) renderHwPanel();
+  }
+  function renderSolutions(hwId) {
+    const box = document.createElement("div");
+    box.className = "hw-sols";
+    const head = document.createElement("div");
+    head.className = "hw-regions-title";
+    head.textContent = "Lösungen";
+    box.appendChild(head);
+    const c = solCache.get(hwId);
+    if (!c || (!c.list && c.loading !== false)) {
+      loadSolutions(hwId);
+      const w = document.createElement("div");
+      w.className = "hw-hint";
+      w.textContent = "Lädt…";
+      box.appendChild(w);
+      return box;
+    }
+    loadSolutions(hwId); // im Hintergrund auffrischen (hoechstens einmal pro Minute)
+    if (!c.list || !c.list.length) {
+      const w = document.createElement("div");
+      w.className = "hw-hint";
+      w.textContent = c.error && !c.list ? "Sofia gerade nicht erreichbar" : "Noch hat niemand eine Lösung geteilt.";
+      box.appendChild(w);
+      return box;
+    }
+    const items = panelItems();
+    for (const sol of c.list) {
+      const card = document.createElement("div");
+      card.className = "hw-sol";
+      const who = document.createElement("div");
+      who.className = "hw-sol-who";
+      who.textContent = sol.mine ? "Du" : sol.name;
+      card.appendChild(who);
+      if (sol.text) {
+        const t = document.createElement("div");
+        t.className = "hw-sol-text";
+        t.textContent = sol.text;
+        card.appendChild(t);
+      }
+      for (const a of sol.attachments) {
+        const url = sofiaUrl(a.url);
+        const row = document.createElement("div");
+        row.className = "hw-sol-file";
+        const open = document.createElement("button");
+        open.type = "button";
+        open.className = "hw-file";
+        const isImg = a.type === "image";
+        open.innerHTML = '<span class="material-symbols-rounded"></span><span></span>';
+        open.firstChild.textContent = isImg ? "image" : isPdfItem(a) ? "picture_as_pdf" : "attach_file";
+        open.lastChild.textContent = a.name || (isImg ? "Bild" : "Datei");
+        open.title = "Im Fenster öffnen";
+        open.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const i = items.findIndex((it) => it.sol && it.url === url);
+          if (i >= 0) openHwViewer(i);
+          else window.open(url, "_blank", "noopener");
+        });
+        row.appendChild(open);
+        const k = isImg ? "image" : isPdfItem(a) ? "pdf" : null;
+        if (k && url.startsWith("/api/")) {
+          const big = document.createElement("button");
+          big.type = "button";
+          big.className = "hw-panel-btn hw-sol-dev";
+          big.title = "Auf einem anderen Gerät groß zeigen";
+          big.innerHTML = '<span class="material-symbols-rounded">tablet</span>';
+          big.addEventListener("click", (e) => {
+            e.stopPropagation();
+            if (window.sofiaShowOnDevice) window.sofiaShowOnDevice({ url, kind: k, name: (sol.mine ? "Deine Lösung" : "Lösung von " + sol.name) + (a.name ? " – " + a.name : "") });
+          });
+          row.appendChild(big);
+        }
+        card.appendChild(row);
+      }
+      box.appendChild(card);
+    }
+    return box;
+  }
+  // Empfangen: Datei vom anderen Geraet hier gross zeigen
+  let bigShowEl = null;
+  function closeBigShow() {
+    if (bigShowEl) bigShowEl.remove();
+    bigShowEl = null;
+  }
+  window.sofiaDeviceShow = async (msg) => {
+    if (!msg || !msg.url) return;
+    if (msg.person !== currentPersonId) {
+      const ok = await askConfirm({
+        title: personName(msg.person) + " möchte dir etwas zeigen",
+        text: "„" + (msg.name || "Datei") + "“ hier groß öffnen?",
+        ok: "Öffnen",
+        icon: "open_in_full",
+        danger: false,
+      });
+      if (!ok) return;
+    }
+    if (msg.kind !== "pdf") {
+      openLightbox(msg.url);
+      return;
+    }
+    closeBigShow();
+    const el = document.createElement("div");
+    el.className = "big-show";
+    el.innerHTML = '<div class="big-show-bar"><span class="big-show-name"></span><button type="button" class="hw-panel-btn big-show-close" title="Schließen"><span class="material-symbols-rounded">close</span></button></div><div class="big-show-scroll"><div class="big-show-page">Lädt…</div></div>';
+    el.querySelector(".big-show-name").textContent = msg.name || "PDF";
+    el.querySelector(".big-show-close").addEventListener("click", (e) => {
+      e.stopPropagation();
+      closeBigShow();
+    });
+    el.addEventListener("pointerdown", (e) => e.stopPropagation());
+    document.body.appendChild(el);
+    bigShowEl = el;
+    try {
+      const v = await buildPdfView(msg.url);
+      if (bigShowEl !== el) return;
+      const page = el.querySelector(".big-show-page");
+      page.textContent = "";
+      const k = Math.min(3, (el.clientWidth - 24) / PDF_VIEW_W);
+      v.el.style.width = PDF_VIEW_W + "px";
+      v.el.style.transformOrigin = "0 0";
+      v.el.style.transform = "scale(" + k + ")";
+      page.style.width = Math.round(PDF_VIEW_W * k) + "px";
+      page.style.height = Math.round(v.h * k) + "px";
+      page.appendChild(v.el);
+    } catch (err) {
+      showToast("PDF konnte nicht geöffnet werden");
+      closeBigShow();
+    }
+  };
   function saveBoardRefs(next, failText) {
     const bid = currentBoardId;
     const before = boardRefs().slice();
@@ -17109,6 +17273,7 @@
       hwPanelBody.appendChild(desc);
       hwAttachmentsHtml(hwPanelBody, hwBoard);
       if (hwBoard.id) hwPanelBody.appendChild(renderHwRegions(hwBoard.id));
+      if (hwBoard.id) hwPanelBody.appendChild(renderSolutions(hwBoard.id));
     }
     hwPanelBody.appendChild(renderOwnRefs());
     // PDF-Anhaenge der Aufgabe im Fenster oeffnen statt in einem neuen Tab
@@ -25980,6 +26145,7 @@
     // ---- Menue + Blatt-Auswahl ----
     function closeMenu() {
       menu.classList.add("hidden");
+      showForDevice = null;
     }
     function openMenu() {
       menu.innerHTML = "";
@@ -26057,6 +26223,14 @@
     let devices = null; // null = wird gesucht
     let deviceTarget = null; // gewaehltes Geraet im Menue
     let pickForDevice = null; // Blatt-Auswahl schickt an dieses Geraet statt Split
+    let showForDevice = null; // Datei (z. B. Loesung), die aufs andere Geraet soll
+    window.sofiaShowOnDevice = (file) => {
+      showForDevice = file;
+      devices = null;
+      deviceTarget = null;
+      wsSend({ type: "devices" });
+      openMenu();
+    };
     function ownClientIds() {
       const ids = new Set([myClientId]);
       if (splitState) for (const p of splitState.panes) if (p && p.ctx && p.ctx.myClientId) ids.add(p.ctx.myClientId);
@@ -26083,6 +26257,22 @@
       return { id: c.currentBoardId, title: (c.currentBoardMeta && c.currentBoardMeta.title) || "Blatt" };
     }
     function deviceSection(add, gap) {
+      if (showForDevice) {
+        // nur die Geraeteliste: antippen schickt die Datei hin
+        menu.innerHTML = "";
+        const h = document.createElement("div");
+        h.className = "split-menu-head";
+        h.textContent = "„" + showForDevice.name + "“ groß zeigen auf …";
+        menu.appendChild(h);
+        if (devices === null) return add("progress_activity", "Sucht Geräte …", "Andere iPads und Geräte mit SOFIA Notes", () => {});
+        if (!devices.length) return add("info", "Kein anderes Gerät gefunden", "Öffne SOFIA Notes auf dem anderen Gerät: dein eigenes mit irgendeinem Blatt, jemand anderes mit diesem Blatt", () => (showForDevice = null));
+        const f = showForDevice; // closeMenu() vor dem Klick-Handler leert showForDevice
+        for (const d of devices)
+          add(d.device === "iPhone" || d.device === "Handy" ? "smartphone" : "tablet", deviceLabel(d), d.here ? "Hat dieses Blatt offen" : "Hat ein anderes Blatt offen", () => {
+            wsSend({ type: "device_show", target: d.id, url: f.url, kind: f.kind, name: f.name });
+          });
+        return;
+      }
       gap();
       const head = document.createElement("div");
       head.className = "split-menu-head";

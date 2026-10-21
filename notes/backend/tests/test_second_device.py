@@ -74,6 +74,45 @@ class SecondDeviceTests(unittest.TestCase):
             a.send_json({"type": "device_open", "target": f_init["clientId"], "board": self.heft["id"]})
             self.assertEqual(self.next_of(a, "device_open_failed")["reason"], "gone")
 
+    def test_show_file_on_own_device_only_safe_urls(self):
+        with self.client as c, c.websocket_connect("/ws?board=" + self.heft["id"], headers=SIMON) as a, c.websocket_connect(
+            "/ws?board=" + self.aufgabe["id"], headers=SIMON
+        ) as b:
+            a.receive_json()
+            b_init = b.receive_json()
+            url = "/api/sofia/file?u=%2Fuploads%2Floesung.pdf"
+            a.send_json({"type": "device_show", "target": b_init["clientId"], "url": url, "kind": "pdf", "name": "Loesung von Franz"})
+            got = self.next_of(b, "device_show")
+            self.assertEqual((got["url"], got["kind"], got["person"]), (url, "pdf", "simon"))
+            self.next_of(a, "device_open_sent")
+            a.send_json({"type": "device_show", "target": b_init["clientId"], "url": "https://evil.example/x", "kind": "image"})
+            self.assertEqual(self.next_of(a, "device_open_failed")["reason"], "url")
+
+
+class SolutionsListTests(unittest.TestCase):
+    def test_pack_solutions(self):
+        from unittest import mock
+
+        from app import sofia_sync
+
+        raw = [
+            {"id": 3, "text": "", "created_at": "2026-10-21T10:00:00", "user": {"display_name": "Franz", "email": "franz@x.de"},
+             "attachments": [{"url": "/uploads/a.pdf", "type": "file", "name": "a.pdf"}, {"url": ""}]},
+            {"id": 2, "text": "siehe Heft", "user": {"display_name": None, "email": "Simon@x.de"}, "attachments": []},
+        ]
+
+        async def ctx(_pid):
+            return {"email": "simon@x.de"}, None
+
+        with mock.patch.object(sofia_sync, "_homework_ctx", ctx), mock.patch.object(sofia_sync, "_get", lambda path, who: raw):
+            out = run(sofia_sync.homework_solutions("simon", 7))
+        self.assertEqual(out[0]["name"], "Franz")
+        self.assertFalse(out[0]["mine"])
+        self.assertEqual(out[0]["attachments"], [{"url": "/uploads/a.pdf", "type": "file", "name": "a.pdf"}])
+        self.assertTrue(out[1]["mine"])
+        self.assertEqual(out[1]["name"], "Simon")
+        self.assertEqual(out[1]["text"], "siehe Heft")
+
 
 if __name__ == "__main__":
     unittest.main()
