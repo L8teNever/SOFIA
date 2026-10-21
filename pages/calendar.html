@@ -106,11 +106,45 @@
   content: ''; position: absolute; top: -3px; left: 3px; right: 3px;
   height: 2px; background: currentColor; border-radius: 1px;
 }
-/* On a phone, Heute and Suche live in the view menu so the title stays
-   readable. Tablet and desktop keep both buttons in the header. */
-#cal-today-btn, #cal-header-search-btn { display: none; }
+/* Am Handy liegt "Heute" im Ansicht-Menue (Platz fuer den Titel); die Suche hat
+   ueberall einen eigenen Knopf. Tablet/Desktop: Heute auch im Kopf. */
+#cal-today-btn { display: none; }
 @media (min-width: 760px) {
-  #cal-today-btn, #cal-header-search-btn { display: flex; }
+  #cal-today-btn { display: flex; }
+}
+/* Suche im Kopf: Pille im Stil des Titelfelds, klappt vom Lupen-Knopf aus auf */
+.cal-search-pill {
+  align-items: center; gap: 8px; width: 100%; height: 40px; box-sizing: border-box;
+  padding: 0 4px 0 14px; border-radius: 20px;
+  background: var(--ph-sc, #e8def8); color: var(--ph-on, #1d192b);
+  transform-origin: right center;
+  animation: calSearchIn 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.cal-search-pill .cal-search-ico { width: 18px; height: 18px; opacity: 0.6; flex-shrink: 0; }
+.cal-search-pill input {
+  flex: 1; min-width: 0; border: none; outline: none; background: none; -webkit-appearance: none;
+  font: 600 16px 'Google Sans', 'Inter', sans-serif; color: inherit;
+}
+.cal-search-pill input::placeholder { color: inherit; opacity: 0.55; }
+.cal-search-pill input::-webkit-search-cancel-button { display: none; }
+.cal-search-close {
+  width: 32px; height: 32px; border-radius: 50%; border: 0; flex-shrink: 0; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0, 0, 0, 0.06); color: inherit;
+}
+.cal-search-close svg { width: 18px; height: 18px; }
+@keyframes calSearchIn {
+  from { opacity: 0; clip-path: inset(0 0 0 75% round 20px); }
+  to { opacity: 1; clip-path: inset(0 0 0 0 round 20px); }
+}
+/* waehrend der Suche: Feld nimmt die ganze Breite, die Knoepfe gleiten weg */
+.cal-header-row .cal-nav-row { transition: opacity 0.18s ease; }
+.cal-header-row.cal-searching .cal-nav-row { display: none; }
+@media (min-width: 600px) {
+  .cal-search-pill { height: 44px; border-radius: 22px; }
+}
+@media (min-width: 1100px) {
+  .cal-search-pill { height: 48px; border-radius: 24px; }
 }
 .cal-period-nav { display: none; }
 @media (min-width: 600px) {
@@ -551,12 +585,11 @@ document.getElementById('ph-calendar').outerHTML = pageHeader({
         <span class="page-title cal-month-title" id="cal-month-title">Kalender</span>
         <i data-lucide="chevron-down" id="cal-title-chevron"></i>
       </button>
-      <div id="cal-header-search-wrap" style="display:none;align-items:center;height:100%;width:100%;">
-        <i data-lucide="search" style="width:18px;height:18px;opacity:0.45;flex-shrink:0;margin-right:8px;"></i>
-        <input type="text" id="cal-header-search-input" placeholder="Termine durchsuchen..." autocomplete="off"
-          style="flex:1;min-width:0;border:none;outline:none;background:none;font-family:inherit;font-size:1.05rem;font-weight:700;color:#1c1b1f;"
+      <div id="cal-header-search-wrap" class="cal-search-pill" style="display:none;">
+        <i data-lucide="search" class="cal-search-ico"></i>
+        <input type="search" id="cal-header-search-input" placeholder="Termine durchsuchen" autocomplete="off" enterkeyhint="search"
           oninput="onCalSearchInput(this.value)" onkeydown="if(event.key==='Escape')toggleCalHeaderSearch(false)">
-        <button type="button" class="icon-btn cal-nav-btn" onclick="toggleCalHeaderSearch(false)" title="Suche schließen" style="flex-shrink:0;">
+        <button type="button" class="cal-search-close" onclick="toggleCalHeaderSearch(false)" title="Suche schließen">
           <i data-lucide="x"></i>
         </button>
       </div>
@@ -566,13 +599,13 @@ document.getElementById('ph-calendar').outerHTML = pageHeader({
       <button onclick="calToday()" class="icon-btn cal-nav-btn" title="Heute" id="cal-today-btn"><span class="cal-today-icon" id="cal-today-num"></span></button>
       <button onclick="calNav(1)" class="icon-btn cal-nav-btn cal-period-nav" title="Weiter" id="cal-nav-next"><i data-lucide="chevron-right"></i></button>
       <button type="button" id="cal-viewmode-btn" class="icon-btn cal-nav-btn" onclick="toggleCalViewPicker(this)" title="Ansicht">
-        <i data-lucide="layout-grid" id="cal-viewmode-icon"></i>
+        <i data-lucide="calendar-days" id="cal-viewmode-icon"></i>
       </button>
       <button type="button" id="cal-header-search-btn" class="icon-btn cal-nav-btn" onclick="toggleCalHeaderSearch()" title="Termine durchsuchen">
         <i data-lucide="search"></i>
       </button>
       <button type="button" id="cal-filter-btn" class="icon-btn cal-nav-btn" onclick="toggleCalFilterMenu(this)" title="Nach Kategorie filtern" style="position:relative;">
-        <i data-lucide="filter"></i>
+        <i data-lucide="list-filter"></i>
         <span id="cal-filter-dot" style="display:none;position:absolute;top:6px;right:6px;width:8px;height:8px;border-radius:50%;background:#6750a4;border:2px solid #f9f6fc;"></span>
       </button>
     </div>`
@@ -586,9 +619,9 @@ const CAL_MONTHS_PILL = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep',
 const CAL_WEEKDAY_SHORT = ['Mo','Di','Mi','Do','Fr','Sa','So'];
 const CAL_VIEW_MODES = [
   { id: 'agenda', label: 'Terminübersicht', icon: 'list' },
-  { id: 'day',    label: 'Tag',             icon: 'calendar-range' },
-  { id: 'week',   label: 'Woche',           icon: 'calendar-days' },
-  { id: 'month',  label: 'Monat',           icon: 'layout-grid' },
+  { id: 'day',    label: 'Tag',             icon: 'calendar-1' },
+  { id: 'week',   label: 'Woche',           icon: 'calendar-range' },
+  { id: 'month',  label: 'Monat',           icon: 'calendar-days' },
 ];
 const CAL_TYPE_SOLID = { exam: '#ba1a1a', holiday: '#8a5a00', trip: '#006d3a', personal: '#006399', other: '#6750a4' };
 const CAL_TYPE_LABEL = { exam: 'Klassenarbeit', holiday: 'Schulferien', trip: 'Ausflug', personal: 'Persönlich', other: 'Sonstiges' };
@@ -889,7 +922,6 @@ function toggleCalViewPicker(btn) {
     </div>`
   ).join('') + (onPhone
     ? `<div class="m3-dropdown-opt" data-today="1"><span class="cal-today-icon" style="width:18px;height:18px;font-size:9px;margin-right:10px;">${new Date().getDate()}</span>Heute</div>`
-      + `<div class="m3-dropdown-opt" data-search="1"><i data-lucide="search" style="width:16px;height:16px;margin-right:10px;flex-shrink:0;"></i>Suchen</div>`
     : '');
   document.body.appendChild(panel);
   phMenuStyle(panel, btn);
@@ -1044,15 +1076,20 @@ function toggleCalHeaderSearch(force) {
   if (calHeaderSearchOpen) {
     if (typeof pushSubView === 'function') pushSubView('suche', () => { if (calHeaderSearchOpen) toggleCalHeaderSearch(false); });
     if (titleBlock) titleBlock.style.display = 'none';
-    if (searchWrap) searchWrap.style.display = 'flex';
-    if (searchBtn) searchBtn.style.display = 'none';
+    if (searchWrap) {
+      searchWrap.style.display = 'flex';
+      searchWrap.style.animation = 'none';
+      void searchWrap.offsetWidth; // Animation bei jedem Oeffnen neu starten
+      searchWrap.style.animation = '';
+    }
+    searchWrap?.closest('.page-header')?.classList.add('cal-searching');
     if (input) { input.value = calSearchQuery; input.focus(); }
     if (calSearchQuery) renderCalSearchDropdown();
   } else {
     if (typeof leaveSubView === 'function') leaveSubView('suche');
     if (titleBlock) titleBlock.style.display = 'flex';
     if (searchWrap) searchWrap.style.display = 'none';
-    if (searchBtn) searchBtn.style.display = '';
+    searchWrap?.closest('.page-header')?.classList.remove('cal-searching');
     clearCalSearch();
   }
   if (window.lucide) lucide.createIcons();
