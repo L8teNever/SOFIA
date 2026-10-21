@@ -241,6 +241,8 @@ def _init_sync() -> None:
     people_cols = {row[1] for row in _conn.execute("PRAGMA table_info(people)").fetchall()}
     if "sofia_user_id" not in people_cols:
         _conn.execute("ALTER TABLE people ADD COLUMN sofia_user_id INTEGER")
+    if "sofia_class_id" not in people_cols:
+        _conn.execute("ALTER TABLE people ADD COLUMN sofia_class_id INTEGER")
     if "active" not in people_cols:
         _conn.execute("ALTER TABLE people ADD COLUMN active INTEGER NOT NULL DEFAULT 1")
     if "sofia_email" not in people_cols:
@@ -1507,11 +1509,18 @@ async def person_color(person_id: str) -> str | None:
         return await asyncio.get_event_loop().run_in_executor(None, _person_color_sync, person_id)
 
 
-def _people_sync() -> list[dict[str, Any]]:
+def _people_sync(class_id: Any = None) -> list[dict[str, Any]]:
     _ensure_colors_sync()
-    rows = _conn.execute(
-        "SELECT id, name, is_admin, sofia_user_id, color FROM people WHERE active = 1 ORDER BY created_at ASC, rowid ASC"
-    ).fetchall()
+    if class_id is None:
+        rows = _conn.execute(
+            "SELECT id, name, is_admin, sofia_user_id, color FROM people WHERE active = 1 ORDER BY created_at ASC, rowid ASC"
+        ).fetchall()
+    else:
+        # nur die eigene Klasse (dazu von Hand angelegte Personen ohne Sofia-Konto)
+        rows = _conn.execute(
+            "SELECT id, name, is_admin, sofia_user_id, color FROM people WHERE active = 1 AND (sofia_class_id = ? OR sofia_user_id IS NULL) ORDER BY created_at ASC, rowid ASC",
+            (class_id,),
+        ).fetchall()
     return [{"id": r[0], "name": r[1], "isAdmin": bool(r[2]), "fromSofia": r[3] is not None, "color": r[4]} for r in rows]
 
 
@@ -1692,8 +1701,8 @@ def _apply_sofia_sync(snapshot: dict[str, Any]) -> dict[str, Any]:
             created_people += 1
         is_admin = 1 if str(u.get("role") or "") in SOFIA_ADMIN_ROLES else None
         _conn.execute(
-            "UPDATE people SET name = ?, sofia_user_id = ?, active = 1, sofia_email = ?, is_admin = COALESCE(?, is_admin) WHERE id = ?",
-            (name, uid, primary, is_admin, pid),
+            "UPDATE people SET name = ?, sofia_user_id = ?, active = 1, sofia_email = ?, is_admin = COALESCE(?, is_admin), sofia_class_id = ? WHERE id = ?",
+            (name, uid, primary, is_admin, u.get("class_id"), pid),
         )
         for e in emails:
             _conn.execute("DELETE FROM person_emails WHERE email = ? AND person_id != ?", (e, pid))
@@ -1879,9 +1888,20 @@ async def sofia_person(person_id: str) -> dict[str, Any] | None:
         return await asyncio.get_event_loop().run_in_executor(None, _sofia_person_sync, person_id)
 
 
-async def people() -> list[dict[str, Any]]:
+async def people(class_id: Any = None) -> list[dict[str, Any]]:
     async with _lock:
-        return await asyncio.get_event_loop().run_in_executor(None, _people_sync)
+        return await asyncio.get_event_loop().run_in_executor(None, _people_sync, class_id)
+
+
+def _person_class_sync(person_id: str) -> Any:
+    row = _conn.execute("SELECT sofia_class_id FROM people WHERE id = ?", (person_id,)).fetchone()
+    return row[0] if row else None
+
+
+async def person_class(person_id: str) -> Any:
+    """Sofia-Klasse der Person (None = unbekannt / nicht aus Sofia)."""
+    async with _lock:
+        return await asyncio.get_event_loop().run_in_executor(None, _person_class_sync, person_id)
 
 
 async def people_admin() -> list[dict[str, Any]]:

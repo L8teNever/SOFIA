@@ -79,7 +79,8 @@ async def save_untis(class_id: int, data: UntisCredentials, db: AsyncSession = D
     return {"ok": True}
 
 @router.get("/{class_id}/untis")
-async def get_untis_status(class_id: int, db: AsyncSession = Depends(get_db), _: User = Depends(require_admin)):
+async def get_untis_status(class_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_admin)):
+    _check_class_access(current_user, class_id)  # Zugangsdaten anderer Klassen gehen niemanden etwas an
     result = await db.execute(select(ClassGroup).where(ClassGroup.id == class_id))
     cls = result.scalar_one_or_none()
     if not cls:
@@ -93,7 +94,8 @@ async def get_untis_status(class_id: int, db: AsyncSession = Depends(get_db), _:
     }
 
 @router.post("/{class_id}/untis/test")
-async def test_untis(class_id: int, data: UntisCredentials, _: User = Depends(require_admin)):
+async def test_untis(class_id: int, data: UntisCredentials, current_user: User = Depends(require_admin)):
+    _check_class_access(current_user, class_id)
     base = data.url.rstrip("/")
     try:
         async with httpx.AsyncClient(timeout=10, verify=False) as client:

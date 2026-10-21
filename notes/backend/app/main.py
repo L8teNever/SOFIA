@@ -236,8 +236,10 @@ async def shape_feedback(request: Request, _person: dict = Depends(get_current_p
 
 
 @app.get("/api/people")
-async def list_people() -> dict:
-    return {"people": await db.people()}
+async def list_people(person: dict = Depends(get_current_person)) -> dict:
+    """Personen zum Teilen usw.: nur die eigene Klasse (Verwaltung aller Personen: /api/admin/...)."""
+    cls = await db.person_class(person["id"])
+    return {"people": await db.people(cls) if cls is not None else await db.people()}
 
 
 @app.get("/api/sofia/now")
