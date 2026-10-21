@@ -15043,6 +15043,19 @@
     if (w <= 0 || h <= 0) return 0;
     return (w * h) / Math.max(1, (a.maxX - a.minX) * (a.maxY - a.minY));
   }
+  // "Nein" gilt fuer die ganze Zeile: die Erkennung teilt eine Zeile oft in Stuecke und der
+  // Kasten waechst beim Weiterschreiben - sonst kaeme dieselbe Zeile immer wieder
+  function hdSameRow(a, d) {
+    const ah = a.maxY - a.minY;
+    const dh = d.y1 - d.y0;
+    const vov = Math.min(a.maxY, d.y1) - Math.max(a.minY, d.y0);
+    if (vov < 0.5 * Math.max(1, Math.min(ah, dh))) return false;
+    const gap = Math.max(d.x0 - a.maxX, a.minX - d.x1, 0);
+    return gap < Math.max(300, 3 * Math.max(ah, dh));
+  }
+  function hdIsDismissed(bbox, off) {
+    return off.some((d) => hdOverlapRatio(bbox, d) > 0.4 || hdSameRow(bbox, d));
+  }
   // Handschrift in Zeilen: gleiche Hoehe (Mitte liegt in der Zeile) und nicht zu weit daneben
   function hdLines(strokes) {
     const items = strokes
@@ -15161,13 +15174,13 @@
         return (md || big) && raw.split("\n")[0].trim().length <= 80;
       })
       .map(hdTextLine)
-      .filter((l) => !hdAlreadyUnderlined(l) && !off.some((d) => hdOverlapRatio(l.bbox, d) > 0.4));
+      .filter((l) => !hdAlreadyUnderlined(l) && !hdIsDismissed(l.bbox, off));
     hdCandidates = textCands.concat(lines.filter((l) => {
       const big = l.size >= body * HD_SIZE_RATIO;
       const colored = l.color !== bodyColor && l.size >= body * HD_COLOR_RATIO && l.strokes.length <= 40;
       if (!big && !colored) return false;
       if (hdAlreadyUnderlined(l)) return false;
-      if (off.some((d) => hdOverlapRatio(l.bbox, d) > 0.4)) return false;
+      if (hdIsDismissed(l.bbox, off)) return false;
       return true;
     }));
     renderHeadingChips();
@@ -15266,7 +15279,8 @@
         e.preventDefault();
         e.stopPropagation();
         hdRemember(l.bbox);
-        hdCandidates = hdCandidates.filter((c) => c !== l);
+        const d = { x0: l.bbox.minX, y0: l.bbox.minY, x1: l.bbox.maxX, y1: l.bbox.maxY };
+        hdCandidates = hdCandidates.filter((c) => c !== l && !hdSameRow(c.bbox, d));
         renderHeadingChips();
       });
       el.append(yes, no);
