@@ -204,6 +204,8 @@ function _thisMonday() {
 // Stundenplan anderer Klassen ansehen: null = eigene Klasse
 var ttClassId = null;
 var ttClasses = [];
+// alle Klassen der Schule aus Untis: [{name, long}], eigene = ttUntisOwn; gewaehlt = ttUntisClass
+var ttUntis = [], ttUntisOwn = null, ttUntisClass = null;
 function ttClassName(id) {
   const c = ttClasses.find(x => x.id === id);
   return c ? c.name : '';
@@ -211,11 +213,29 @@ function ttClassName(id) {
 function ttSyncTitle() {
   const t = document.querySelector('#page-timetable .ph-title .page-title');
   const own = currentUser && currentUser.class_id;
-  if (t) t.textContent = ttClassId && ttClassId !== own ? ttClassName(ttClassId) || 'Stundenplan' : 'Stundenplan';
+  if (t) t.textContent = ttUntisClass ? ttUntisClass : ttClassId && ttClassId !== own ? ttClassName(ttClassId) || 'Stundenplan' : 'Stundenplan';
   const chev = document.getElementById('tt-title-chev');
-  if (chev) chev.style.display = ttClasses.length > 1 ? '' : 'none';
+  if (chev) chev.style.display = ttClasses.length > 1 || ttUntis.length > 1 ? '' : 'none';
 }
 function ttOpenClassMenu(btn) {
+  // Untis kennt alle Klassen der Schule - dann diese Liste
+  if (ttUntis.length > 1) {
+    const ownName = (ttUntisOwn || '').toLowerCase();
+    const cur = (ttUntisClass || ttUntisOwn || '').toLowerCase();
+    const items = ttUntis
+      .slice()
+      .sort((a, b) => (b.name.toLowerCase() === ownName) - (a.name.toLowerCase() === ownName) || a.name.localeCompare(b.name, 'de', { numeric: true }))
+      .map(c => {
+        const own = c.name.toLowerCase() === ownName;
+        return {
+          icon: c.name.toLowerCase() === cur ? 'check' : (own ? 'home' : 'calendar-days'),
+          label: escapeHtml(c.name) + (own ? ' · deine Klasse' : (c.long && c.long !== c.name ? ' · ' + escapeHtml(c.long) : '')),
+          onclick: () => ttSwitchUntisClass(own ? null : c.name),
+        };
+      });
+    toggleMoreMenu(btn, items);
+    return;
+  }
   if (ttClasses.length < 2) return;
   const own = currentUser && currentUser.class_id;
   const cur = ttClassId || own;
@@ -229,7 +249,16 @@ function ttOpenClassMenu(btn) {
     }));
   toggleMoreMenu(btn, items);
 }
+async function ttSwitchUntisClass(name) {
+  ttUntisClass = name;
+  ttClassId = null;
+  ttSyncTitle();
+  ttLessons = [];
+  for (const k of Object.keys(ttColorMap)) delete ttColorMap[k];
+  await ttLoad();
+}
 async function ttSwitchClass(id) {
+  ttUntisClass = null;
   ttClassId = id;
   ttSyncTitle();
   ttLessons = [];
@@ -242,6 +271,11 @@ async function init_timetable() {
     ttClasses = Array.isArray(list) ? list : [];
     ttSyncTitle();
   }).catch(() => {});
+  API.untisClasses().then(d => {
+    ttUntis = (d && Array.isArray(d.classes)) ? d.classes : [];
+    ttUntisOwn = d && d.own;
+    ttSyncTitle();
+  }).catch(() => {});
   await ttLoad();
 }
 
@@ -252,7 +286,7 @@ async function ttLoad() {
   });
   document.getElementById('tt-loading').style.display = 'block';
   try {
-    const data = await API.timetable(ttClassId);
+    const data = await API.timetable(ttClassId, ttUntisClass);
     document.getElementById('tt-loading').style.display = 'none';
     if (!data.configured) {
       document.getElementById('tt-not-configured').style.display='block';
@@ -263,8 +297,9 @@ async function ttLoad() {
     }
     if (data.error) {
       document.getElementById('tt-error').style.display = 'block';
-      document.getElementById('tt-error').textContent =
-        'Untis hat den Stundenplan gerade nicht vollständig geliefert. Bitte gleich nochmal öffnen.';
+      document.getElementById('tt-error').textContent = ttUntisClass && data.error
+        ? data.error
+        : 'Untis hat den Stundenplan gerade nicht vollständig geliefert. Bitte gleich nochmal öffnen.';
       return;
     }
     ttLessons = [...(data.this_week?.lessons||[]), ...(data.next_week?.lessons||[])];

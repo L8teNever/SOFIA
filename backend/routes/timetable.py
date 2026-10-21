@@ -12,6 +12,7 @@ from backend.routes.vapid import push_to_users
 from cryptography.fernet import Fernet
 from datetime import date, datetime, timedelta
 import asyncio
+import time
 import logging
 import requests
 import webuntis
@@ -354,8 +355,116 @@ async def _apply_subject_name_overrides(db: AsyncSession, class_id: int, lessons
             l["subject"] = override_map[short]
     return lessons
 
+
+# ---- Stundenplaene anderer Klassen der Schule (aus Untis, nur ansehen) ----
+# Mit dem Untis-Zugang der eigenen Klasse: Liste aller Klassen der Schule und der Plan
+# einer gewaehlten Klasse. Zwischengespeichert, damit Untis nicht bei jedem Tipp gefragt wird.
+_untis_class_list: dict[int, tuple[float, list]] = {}  # class_id -> (zeit, [{name, long}])
+_other_tt_cache: dict[tuple[int, str], tuple[float, dict]] = {}  # (class_id, name) -> (zeit, antwort)
+UNTIS_CLASS_LIST_TTL = 3600
+OTHER_TT_TTL = 300
+
+
+def _fetch_untis_classes(server: str, school: str, username: str, password: str) -> list:
+    sess = webuntis.Session(server=server, username=username, password=password, school=school, useragent="SofiaApp/1.0")
+    sess.login()
+    try:
+        out = []
+        for k in sess.klassen() or []:
+            name = str(getattr(k, "name", "") or "").strip()
+            if name:
+                out.append({"name": name, "long": str(getattr(k, "long_name", "") or "").strip()})
+        out.sort(key=lambda c: c["name"].lower())
+        return out
+    finally:
+        try:
+            sess.logout()
+        except Exception:
+            pass
+
+
+def _fetch_other_class_two_weeks(server: str, school: str, username: str, password: str,
+                                 class_name: str, this_monday: date) -> tuple[list, list, list]:
+    """Plan einer bestimmten Untis-Klasse (nicht der eigene Plan des Kontos)."""
+    next_monday = this_monday + timedelta(days=7)
+    sess = webuntis.Session(server=server, username=username, password=password, school=school, useragent="SofiaApp/1.0")
+    sess.login()
+    try:
+        matched = [k for k in (sess.klassen() or []) if str(getattr(k, "name", "")).lower() == class_name.lower()]
+        if not matched:
+            raise ValueError("Klasse nicht gefunden")
+        def week(start: date) -> list:
+            return _periods_to_lessons(list(sess.timetable_extended(klasse=matched[0], start=start, end=start + timedelta(days=4))))
+        return week(this_monday), week(next_monday), _fetch_holidays(sess)
+    finally:
+        try:
+            sess.logout()
+        except Exception:
+            pass
+
+
+async def _own_untis_class(db: AsyncSession, current_user: User) -> ClassGroup:
+    if not current_user.class_id:
+        raise HTTPException(400, "No class assigned")
+    cls = (await db.execute(select(ClassGroup).where(ClassGroup.id == current_user.class_id))).scalar_one_or_none()
+    if not cls or not cls.untis_url:
+        raise HTTPException(404, "Untis ist für deine Klasse nicht eingerichtet")
+    return cls
+
+
+@router.get("/classes")
+async def untis_classes(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Alle Klassen der Schule laut Untis (fuer das Umschalten auf der Stundenplan-Seite)."""
+    try:
+        cls = await _own_untis_class(db, current_user)
+    except HTTPException:
+        return {"classes": [], "own": None}
+    hit = _untis_class_list.get(cls.id)
+    if hit and time.time() - hit[0] < UNTIS_CLASS_LIST_TTL:
+        return {"classes": hit[1], "own": cls.untis_class or None}
+    try:
+        password = decrypt_password(cls.untis_password_enc) if cls.untis_password_enc else ""
+        classes = await asyncio.get_event_loop().run_in_executor(
+            None, _fetch_untis_classes, _strip_server(cls.untis_url), cls.untis_school, cls.untis_user, password)
+    except Exception:
+        logger.info("Untis-Klassenliste fuer Klasse %s nicht abrufbar", cls.id, exc_info=True)
+        return {"classes": hit[1] if hit else [], "own": cls.untis_class or None}
+    _untis_class_list[cls.id] = (time.time(), classes)
+    return {"classes": classes, "own": cls.untis_class or None}
+
+
+async def _other_class_timetable(db: AsyncSession, current_user: User, name: str) -> dict:
+    cls = await _own_untis_class(db, current_user)
+    key = (cls.id, name.lower())
+    hit = _other_tt_cache.get(key)
+    if hit and time.time() - hit[0] < OTHER_TT_TTL:
+        return hit[1]
+    try:
+        password = decrypt_password(cls.untis_password_enc) if cls.untis_password_enc else ""
+        this_monday = date.today() - timedelta(days=date.today().weekday())
+        this_lessons, next_lessons, holidays = await asyncio.get_event_loop().run_in_executor(
+            None, _fetch_other_class_two_weeks, _strip_server(cls.untis_url), cls.untis_school,
+            cls.untis_user, password, name, this_monday)
+    except Exception as e:
+        msg = str(e)
+        if "no right" in msg.lower():
+            msg = "Untis gibt den Stundenplan dieser Klasse für euren Zugang nicht frei."
+        return {"configured": True, "error": msg}
+    out = {
+        "configured": True,
+        "this_week": {"start": this_monday.isoformat(), "lessons": this_lessons},
+        "next_week": {"start": (this_monday + timedelta(days=7)).isoformat(), "lessons": next_lessons},
+        "holidays": holidays,
+        "untis_class": name,
+    }
+    _other_tt_cache[key] = (time.time(), out)
+    return out
+
 @router.get("/")
-async def get_timetable(class_id: int | None = None, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+async def get_timetable(class_id: int | None = None, untis_class: str | None = None, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    # andere Klasse der Schule aus Untis (nur ansehen)
+    if untis_class and untis_class.strip():
+        return await _other_class_timetable(db, current_user, untis_class.strip()[:40])
     # Stundenplaene sind fuer alle einsehbar (nur ansehen): ohne class_id die eigene Klasse
     target = class_id or current_user.class_id
     if not target:
