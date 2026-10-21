@@ -23346,7 +23346,53 @@
     function computeOutline() {
       if (!notebook) return [];
       const rects = pageRects(notebook);
-      const all = [...boardStrokes.values()].filter((s) => !(s.extra && s.extra.boardPage));
+      // Heft-Seiten und jedes unendliche Board (Board-Seite im Heft) getrennt lesen:
+      // Board-Striche haben eigene Koordinaten und stehen als Ganzes auf ihrer Seite
+      const scopes = new Map([[null, []]]);
+      for (const s of boardStrokes.values()) {
+        const bp = (s.extra && s.extra.boardPage) || null;
+        if (!scopes.has(bp)) scopes.set(bp, []);
+        scopes.get(bp).push(s);
+      }
+      const items = [];
+      for (const [boardId, list] of scopes) {
+        let boardPage = -1;
+        if (boardId) {
+          boardPage = notebook.pages.findIndex((p) => p.id === boardId);
+          if (boardPage < 0) continue; // Board-Seite geloescht
+        }
+        outlineScope(list, rects, boardId, boardPage, items);
+      }
+      items.sort((a, b) => a.page - b.page || a.y - b.y || a.x - b.x);
+      const data = outlineData();
+      const sizes = items.map((it) => it.line.size || 0).filter((s) => s > 0);
+      const maxSize = Math.max(0, ...sizes);
+      const minSize = sizes.length ? Math.min(...sizes) : 0;
+      const hasRange = maxSize > 0 && maxSize / Math.max(1, minSize) >= 1.25;
+      for (const it of items) {
+        const d = data[it.key];
+        if (d && (d.level === 1 || d.level === 2 || d.level === 3)) {
+          it.level = d.level;
+        } else if (it.level) {
+          // schon festgelegt (Markdown # / ## / ###)
+        } else if (hasRange) {
+          const s = it.line.size || 0;
+          if (s >= maxSize * 0.8) it.level = 1;
+          else if (s >= maxSize * 0.58) it.level = 2;
+          else it.level = 3;
+        } else {
+          it.level = 1;
+        }
+      }
+      return items;
+    }
+    function outlineScope(all, rects, boardId, boardPage, items) {
+      const pageOf = (cx, cy) => {
+        if (boardId) return boardPage;
+        let page = rects.findIndex((r) => cx >= r.x && cx <= r.x + r.w && cy >= r.y && cy <= r.y + r.h);
+        if (page < 0) page = rects.findIndex((r) => cy >= r.y && cy <= r.y + r.h);
+        return page;
+      };
       const bb = (s) => s.bbox || makeBBox(s.points);
       // Unterstreichungen zu Paaren (doppelt) zusammenfassen
       const unders = all.filter((s) => s.extra && s.extra.underline).map((s) => ({ s, b: bb(s) })).sort((a, b) => a.b.minY - b.b.minY);
@@ -23362,8 +23408,7 @@
         } else groups.push({ ids: [u.s.id], minX: u.b.minX, maxX: u.b.maxX, minY: u.b.minY, maxY: u.b.maxY });
       }
       const hand = all.filter(isHandStroke);
-      const data = outlineData();
-      const items = [];
+      const ownStart = items.length;
       for (const g of groups) {
         const near = hand.filter((s) => {
           const b = bb(s);
@@ -23416,14 +23461,14 @@
         if (!line) continue;
         const cx = (line.minX + line.maxX) / 2;
         const cy = (line.minY + line.maxY) / 2;
-        let page = rects.findIndex((r) => cx >= r.x && cx <= r.x + r.w && cy >= r.y && cy <= r.y + r.h);
-        if (page < 0) page = rects.findIndex((r) => cy >= r.y && cy <= r.y + r.h);
+        const page = pageOf(cx, cy);
         const key = g.ids.slice().sort()[0];
-        items.push({ key, line, page, y: line.minY, x: line.minX, isText: !!line.isText });
+        items.push({ key, line, page, board: boardId, y: line.minY, x: line.minX, isText: !!line.isText });
       }
-      // Textfelder auch ohne Strich erfassen: unterstrichener Text (r.u), Markdown (# Ueberschrift) oder outlineData
+      // Textfelder auch ohne Strich erfassen: unterstrichener Text (r.u) oder Markdown (# Ueberschrift).
+      // Ein alter Eintrag in outlineData allein reicht nicht: Unterstreichung weg = raus aus der Gliederung
       const coveredStrokes = new Set();
-      for (const it of items) {
+      for (const it of items.slice(ownStart)) {
         if (it.line && it.line.strokes) {
           for (const s of it.line.strokes) coveredStrokes.add(s.id);
         }
@@ -23436,13 +23481,9 @@
         const runs = strokeRuns(s);
         const hasU = runs.some((r) => r.u);
         const mdMatch = raw.match(/^(#{1,3})\s+(.*)/);
-        const d = data[s.id];
-        if (hasU || mdMatch || d) {
+        if (hasU || mdMatch) {
           const b = bb(s);
-          const cx = (b.minX + b.maxX) / 2;
-          const cy = (b.minY + b.maxY) / 2;
-          let page = rects.findIndex((r) => cx >= r.x && cx <= r.x + r.w && cy >= r.y && cy <= r.y + r.h);
-          if (page < 0) page = rects.findIndex((r) => cy >= r.y && cy <= r.y + r.h);
+          const page = pageOf((b.minX + b.maxX) / 2, (b.minY + b.maxY) / 2);
           let title = mdMatch ? mdMatch[2] : raw.split("\n")[0];
           title = title.trim().slice(0, 80);
           const line = {
@@ -23455,32 +23496,11 @@
             text: title,
             isText: true
           };
-          const it = { key: s.id, line, page, y: b.minY, x: b.minX, isText: true };
+          const it = { key: s.id, line, page, board: boardId, y: b.minY, x: b.minX, isText: true };
           if (mdMatch) it.level = mdMatch[1].length;
           items.push(it);
         }
       }
-      items.sort((a, b) => a.page - b.page || a.y - b.y || a.x - b.x);
-      const sizes = items.map((it) => it.line.size || 0).filter((s) => s > 0);
-      const maxSize = Math.max(0, ...sizes);
-      const minSize = sizes.length ? Math.min(...sizes) : 0;
-      const hasRange = maxSize > 0 && maxSize / Math.max(1, minSize) >= 1.25;
-      for (const it of items) {
-        const d = data[it.key];
-        if (d && (d.level === 1 || d.level === 2 || d.level === 3)) {
-          it.level = d.level;
-        } else if (it.level) {
-          // schon festgelegt (Markdown # / ## / ###)
-        } else if (hasRange) {
-          const s = it.line.size || 0;
-          if (s >= maxSize * 0.8) it.level = 1;
-          else if (s >= maxSize * 0.58) it.level = 2;
-          else it.level = 3;
-        } else {
-          it.level = 1;
-        }
-      }
-      return items;
     }
     function outlineText(it) {
       const d = outlineData()[it.key];
@@ -23530,6 +23550,18 @@
       }
     }
     function jumpOutline(it) {
+      if (it.board) {
+        // Ueberschrift auf einem unendlichen Board: Board oeffnen und dorthin fahren
+        if (boardEditId !== it.board) enterBoardPage(it.board);
+        if (boardEditId !== it.board) return activateNotebookPage(it.page);
+        const sc = clampZoom(Math.max(scale, 0.6));
+        scale = sc;
+        offsetX = viewLeft + 48 - it.line.minX * sc;
+        offsetY = 110 - it.line.minY * sc;
+        if (window.sofiaCancelViewAnim) window.sofiaCancelViewAnim();
+        requestRedraw();
+        return;
+      }
       activateNotebookPage(it.page);
       // Ueberschrift oben ins Bild holen, falls sie nach dem Einpassen nicht zu sehen ist
       setTimeout(() => {
@@ -23683,6 +23715,22 @@
     window.sofiaOutlineRefresh = () => {
       if (marksOpen) renderMarks();
     };
+    // Radiert, Text geaendert, Board bearbeitet ...: offene Gliederung nachziehen,
+    // aber nur neu zeichnen, wenn sich an den Ueberschriften wirklich etwas geaendert hat
+    let outlineSeenGen = -1;
+    let outlineSig = "";
+    const outlineSigOf = () =>
+      computeOutline()
+        .map((it) => [it.key, it.page, it.level, outlineText(it), it.line.strokes.length, Math.round(it.line.maxX - it.line.minX)].join(":"))
+        .join("|");
+    setInterval(() => {
+      if (!marksOpen || !notebook || contentGen === outlineSeenGen) return;
+      outlineSeenGen = contentGen;
+      const sig = outlineSigOf();
+      if (sig === outlineSig) return;
+      outlineSig = sig;
+      renderMarks();
+    }, 800);
     if (window.SofiaLocalOcr) SofiaLocalOcr.onChange(() => {
       if (marksOpen) renderMarks();
     });
