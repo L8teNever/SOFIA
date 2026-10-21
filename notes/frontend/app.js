@@ -1913,6 +1913,11 @@
     if (!pageId) return;
     st.extra = Object.assign({}, st.extra || {}, { boardPage: pageId });
   }
+  // Strich eines anderen, der gerade entsteht: nur in der Ebene zeigen, in der er liegt
+  // (Heft oder genau dieses Board) - die Koordinaten passen sonst nicht
+  function remoteHere(st) {
+    return ((st.extra && st.extra.boardPage) || null) === (boardEditId || null);
+  }
   function strokesForBoard(pageId) {
     const list = [];
     for (const st of boardStrokes.values()) {
@@ -2358,7 +2363,7 @@
       drawStroke(st, ctx, { alpha: 0.38 });
       ctx.restore();
     };
-    for (const st of remoteInProgress.values()) live(st);
+    for (const st of remoteInProgress.values()) if (remoteHere(st)) live(st);
     const pageId = currentStroke.extra && currentStroke.extra.boardPage;
     if (!pageId || pageId === boardEditId) live(currentStroke);
     if (clipPages) {
@@ -2682,7 +2687,7 @@
 
     for (const stroke of back) drawLoose(stroke);
     for (const stroke of imgs) drawStroke(stroke);
-    if (!cacheable) for (const stroke of remoteInProgress.values()) if (stroke.tool === "image") drawStroke(stroke);
+    if (!cacheable) for (const stroke of remoteInProgress.values()) if (stroke.tool === "image" && remoteHere(stroke)) drawStroke(stroke);
     // Tabellen liegen wie Papier unter der Tinte, damit man direkt in die Zellen schreiben kann.
     for (const stroke of tables) drawStroke(stroke);
 
@@ -2690,13 +2695,13 @@
     // draufgelegt — so entstehen keine dunklen Perlen durch Selbstueberlagerung.
     // Nach den Bildern, damit Textmarker auf Fotos und PDFs liegt.
     const liveMarker = !cacheable && live && currentStroke && currentStroke.tool === "marker";
-    const hasMarkers = markers.length > 0 || liveMarker || (!cacheable && Array.from(remoteInProgress.values()).some((st) => st.tool === "marker"));
+    const hasMarkers = markers.length > 0 || liveMarker || (!cacheable && Array.from(remoteInProgress.values()).some((st) => st.tool === "marker" && remoteHere(st)));
     if (hasMarkers || markerLayerUsed) syncMarkerLayer();
     if (hasMarkers) {
       markerLayerUsed = true;
       markerCtx.setTransform(scale * dpr, 0, 0, scale * dpr, (offsetX - canvasLeft) * dpr, offsetY * dpr);
       for (const stroke of markers) drawStroke(stroke, markerCtx, { alpha: 1 });
-      if (!cacheable) for (const stroke of remoteInProgress.values()) if (stroke.tool === "marker") drawStroke(stroke, markerCtx, { alpha: 1 });
+      if (!cacheable) for (const stroke of remoteInProgress.values()) if (stroke.tool === "marker" && remoteHere(stroke)) drawStroke(stroke, markerCtx, { alpha: 1 });
       if (liveMarker) drawStroke(currentStroke, markerCtx, { alpha: 1 });
       ctx.save();
       ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -2708,7 +2713,7 @@
 
     for (const stroke of main) drawLoose(stroke);
     drawHistoryGhosts();
-    if (!cacheable) for (const stroke of remoteInProgress.values()) if (stroke.tool !== "marker" && stroke.tool !== "image") drawStroke(stroke);
+    if (!cacheable) for (const stroke of remoteInProgress.values()) if (stroke.tool !== "marker" && stroke.tool !== "image" && remoteHere(stroke)) drawStroke(stroke);
     if (!cacheable && live && currentStroke && currentStroke.tool && currentStroke.tool !== "marker") {
       const pageId = currentStroke.extra && currentStroke.extra.boardPage;
       if (!pageId || pageId === boardEditId) drawStroke(currentStroke);
@@ -5437,6 +5442,7 @@
       s.bbox = strokeWorldBBox(s);
       s.endedAt = performance.now();
       boardStrokes.set(s.id, s);
+      if (s.extra && s.extra.boardPage) boardLayoutCache.delete(s.extra.boardPage);
     }
   }
 
@@ -5563,6 +5569,8 @@
           points: msg.points || [],
           ownerId: msg.id,
           author: msg.author || undefined,
+          // extra traegt u. a. boardPage: ohne sie landet der fertige Strich im Heft statt auf dem Board
+          extra: msg.extra && typeof msg.extra === "object" ? msg.extra : undefined,
         });
         requestRedraw();
         break;
@@ -5582,10 +5590,13 @@
         requestRedraw();
         break;
       }
-      case "stroke_end":
+      case "stroke_end": {
+        const s = remoteInProgress.get(msg.strokeId);
+        if (s && msg.extra && typeof msg.extra === "object") s.extra = Object.assign({}, s.extra || {}, msg.extra);
         finalizeIncomingStroke(msg.strokeId);
         requestRedraw();
         break;
+      }
       case "stroke_abort":
         remoteInProgress.delete(msg.strokeId);
         requestRedraw();
@@ -5596,7 +5607,9 @@
         if (s && s.id) {
           if (s.author ? s.author !== currentPersonId : !boardStrokes.has(s.id)) foreignIds.add(s.id);
           s.bbox = strokeWorldBBox(s);
+          const old = boardStrokes.get(s.id);
           boardStrokes.set(s.id, s);
+          for (const bp of [old && old.extra && old.extra.boardPage, s.extra && s.extra.boardPage]) if (bp) boardLayoutCache.delete(bp);
           if (s.tool === "image" && s.extra && s.extra.mediaId) {
             const im = ensureMedia(s.extra.mediaId);
             // fehlte das Bild bisher (noch nicht hochgeladen): jetzt gleich nochmal holen
