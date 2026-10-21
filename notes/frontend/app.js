@@ -2737,6 +2737,7 @@
 
   // Bedienelemente ueber dem Blatt (Auswahl, Lineal, Zoom-Rahmen ...); schliesst das ctx.save() von drawScene
   function drawSceneOverlays() {
+    drawFormFields();
     drawTextDragPreview();
     drawZoomBoxOnPage();
     drawAutoBox();
@@ -3212,6 +3213,8 @@
     if (window.__sofiaSwitchPalette) window.__sofiaSwitchPalette(tool);
     savePrefs();
     syncModeFromTool(tool);
+    // Formularfelder sind nur im Text-Werkzeug zu sehen: sofort ein-/ausblenden
+    if (typeof requestRedraw === "function") requestRedraw();
     toolbarEl.querySelectorAll(".tool-btn[data-tool]").forEach((b) => {
       b.classList.toggle("active", b.dataset.tool === tool);
     });
@@ -8138,6 +8141,10 @@
       if (!r) return requestRedraw();
       if (dragged) b = { x: Math.max(r.x, Math.min(r.x + r.w, b.x)), y: Math.max(r.y, Math.min(r.y + r.h, b.y)) };
     }
+    if (!dragged) {
+      const field = formFieldAt(a);
+      if (field) return fillFormField(field);
+    }
     const spot = !dragged && textOnLines ? lineTypingSpot(a) : null;
     if (spot) {
       textEdit = { kind: "text", strokeId: null, x: spot.x, y: spot.y, size: spot.size, color: currentColor, width: spot.width, before: null, onLines: true };
@@ -9303,6 +9310,18 @@
         commitTextEditor();
         return;
       }
+      // Formularfeld: Tab (und Enter in einzeiligen Feldern) springt ins naechste Feld
+      if (textEdit && textEdit.formField && !e.isComposing && (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey && !textEdit.formMulti))) {
+        e.preventDefault();
+        const key = textEdit.formField;
+        commitTextEditor();
+        const nf = nextFormField(key, (f) => f.t !== "check");
+        if (nf) {
+          revealFormField(nf);
+          requestAnimationFrame(() => fillFormField(nf));
+        }
+        return;
+      }
       // Markdown: Tab/Shift+Tab ruecken ein, Enter fuehrt Listen fort
       if (textEdit && textEdit.kind === "text" && !e.ctrlKey && !e.metaKey && !e.altKey && !e.isComposing) {
         if (e.key === "Tab") {
@@ -9651,6 +9670,12 @@
     if (zoomOnPages() && window.sofiaCurrentPage) zoomToPage(window.sofiaCurrentPage(), false);
     // zuletzt eingestellte Zoomstufe/Raender/Stelle dieses Blatts wieder herstellen
     restoreZoomState();
+    // Arbeitsblatt mit Feldern: gleich ins erste noch leere Feld der Seite
+    if (zoomOnPages() && window.sofiaCurrentPage) {
+      const pi = window.sofiaCurrentPage();
+      const first = formFieldsAll().find((f) => f.page === pi && f.t !== "check" && !formFieldFilled(f));
+      if (first) zoomToField(first, false);
+    }
     if (zoomWinBtn) zoomWinBtn.classList.add("active");
     attachZoomInnerBar();
     layoutZoomPane();
@@ -9740,6 +9765,7 @@
 
   function moveZoomBox(nx, ny, animate) {
     zoomNext = null;
+    if (zoomWin) zoomWin.field = null;
     if (!animate) {
       zoomAnim = null;
       zoomWin.x = nx;
@@ -9753,6 +9779,11 @@
   }
 
   function zoomNextLine(animate) {
+    const cur = zoomCurrentField();
+    if (cur) {
+      const nf = nextFormField(cur.key, (f) => f.t !== "check");
+      if (nf) return zoomToField(nf, animate);
+    }
     const ny = snapZoomY(zoomWin.y + zoomLineStep());
     moveZoomBox(zoomRowBounds(ny).left, ny, animate);
   }
@@ -9817,11 +9848,372 @@
     return { left: L, right: R };
   }
 
+
+  // ---- Formularfelder auf Arbeitsblaettern ------------------------------------------
+  // Der Server erkennt Text-, Ankreuz- und Unterschriftsfelder (CommonForms) einmal pro Bild.
+  // Hier: im Text-Werkzeug und mit Zoom-Fenster sichtbar, Antippen fuellt das Feld passgenau,
+  // Enter springt ins naechste Feld, das Zoom-Fenster geht von Feld zu Feld.
+  const formFieldCache = new Map(); // mediaId -> Feldliste | Promise (laeuft)
+  const formFieldFail = new Map(); // mediaId -> Zeitpunkt des letzten Fehlschlags
+  const formFieldsOff = () => lsGetRaw("sofianotes-form-fields") === "0";
+  let formFlashUntil = 0;
+  function loadMediaFields(mediaId, force) {
+    if (!mediaId) return Promise.resolve(null);
+    const hit = formFieldCache.get(mediaId);
+    if (!force && Array.isArray(hit)) return Promise.resolve(hit);
+    if (!force && hit && hit.then) return hit;
+    const p = fetch("/api/media/" + encodeURIComponent(mediaId) + "/fields" + (force ? "?force=1" : ""), { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!d || !d.ok) throw new Error("fields");
+        const list = (d.fields || []).map((f, i) => Object.assign({}, f, { i }));
+        formFieldCache.set(mediaId, list);
+        formFieldFail.delete(mediaId);
+        if (window.SofiaOffline) SofiaOffline.setKv("fields:" + mediaId, list).catch(() => {});
+        requestRedraw();
+        return list;
+      })
+      .catch(async () => {
+        formFieldCache.delete(mediaId);
+        formFieldFail.set(mediaId, performance.now());
+        // offline: zuletzt bekanntes Ergebnis
+        const saved = window.SofiaOffline ? await SofiaOffline.getKv("fields:" + mediaId).catch(() => null) : null;
+        if (Array.isArray(saved)) {
+          formFieldCache.set(mediaId, saved);
+          requestRedraw();
+          return saved;
+        }
+        return null;
+      });
+    formFieldCache.set(mediaId, p);
+    return p;
+  }
+  // Felder, die schon da sind; sonst (nur fuer sichtbare Bilder) im Hintergrund holen
+  function mediaFieldsNow(mediaId, fetchIt) {
+    const hit = formFieldCache.get(mediaId);
+    if (Array.isArray(hit)) return hit;
+    if (!hit && fetchIt && !formFieldsOff() && !viewOnly) {
+      const failed = formFieldFail.get(mediaId);
+      if (!failed || performance.now() - failed > 30000) loadMediaFields(mediaId);
+    }
+    return null;
+  }
+  // Feld (0..1 im Bild) auf eine Heft-Seite mit Hintergrundbild, ggf. gedreht
+  function pageFieldBox(f, r) {
+    const rot = ((r.page && r.page.rot) || 0) % 4;
+    const odd = rot % 2 === 1;
+    const w0 = odd ? r.h : r.w;
+    const h0 = odd ? r.w : r.h;
+    const cx = r.x + r.w / 2;
+    const cy = r.y + r.h / 2;
+    const pt = (u, v) => {
+      const px = -w0 / 2 + u * w0;
+      const py = -h0 / 2 + v * h0;
+      if (rot === 1) return { x: cx - py, y: cy + px };
+      if (rot === 2) return { x: cx - px, y: cy - py };
+      if (rot === 3) return { x: cx + py, y: cy - px };
+      return { x: cx + px, y: cy + py };
+    };
+    const a = pt(f.x0, f.y0);
+    const b = pt(f.x1, f.y1);
+    return { x0: Math.min(a.x, b.x), y0: Math.min(a.y, b.y), x1: Math.max(a.x, b.x), y1: Math.max(a.y, b.y) };
+  }
+  function imageFieldBox(f, dest, crop) {
+    const cw = crop.r - crop.l || 1;
+    const ch = crop.b - crop.t || 1;
+    const u0 = (f.x0 - crop.l) / cw;
+    const v0 = (f.y0 - crop.t) / ch;
+    const u1 = (f.x1 - crop.l) / cw;
+    const v1 = (f.y1 - crop.t) / ch;
+    if (u1 <= 0 || v1 <= 0 || u0 >= 1 || v0 >= 1) return null;
+    const cl = (v) => Math.max(0, Math.min(1, v));
+    return { x0: dest.minX + cl(u0) * dest.w, y0: dest.minY + cl(v0) * dest.h, x1: dest.minX + cl(u1) * dest.w, y1: dest.minY + cl(v1) * dest.h };
+  }
+  // alle bekannten Felder des Blatts in Weltkoordinaten, in Leserichtung (Seite fuer Seite)
+  let formFieldFrame = { frame: -1, list: [] };
+  function formFieldsAll() {
+    if (formFieldFrame.frame === drawFrameNo) return formFieldFrame.list;
+    const list = [];
+    const va = screenToWorld(viewLeft, 0);
+    const vb = screenToWorld(window.innerWidth - viewRight, window.innerHeight);
+    const visible = (x0, y0, x1, y1) => x1 >= va.x && x0 <= vb.x && y1 >= va.y && y0 <= vb.y;
+    if (notebook && !boardEditId) {
+      pageRects(notebook).forEach((r, pi) => {
+        const mid = r.page && r.page.mediaId;
+        if (!mid || r.page.board || r.page.boardOf) return;
+        const fs = mediaFieldsNow(mid, visible(r.x, r.y, r.x + r.w, r.y + r.h));
+        if (!fs) return;
+        for (const f of fs) list.push(Object.assign(pageFieldBox(f, r), { t: f.t, key: r.page.id + ":" + f.i, src: r.page.id, page: pi }));
+      });
+    }
+    for (const st of boardStrokes.values()) {
+      const ex = st.extra;
+      if (st.tool !== "image" || !ex || !ex.mediaId || ex.koord) continue;
+      const pageId = ex.boardPage;
+      if (boardEditId ? pageId !== boardEditId : pageId) continue;
+      if (strokeRotation(st)) continue;
+      const dest = imageDestRect(st);
+      if (!dest || dest.w < 20 || dest.h < 20) continue;
+      const fs = mediaFieldsNow(ex.mediaId, visible(dest.minX, dest.minY, dest.minX + dest.w, dest.minY + dest.h));
+      if (!fs) continue;
+      const crop = imageCrop(st);
+      const mx = dest.minX + dest.w / 2;
+      const my = dest.minY + dest.h / 2;
+      const pi = notebook && !boardEditId ? pageRects(notebook).findIndex((q) => mx >= q.x && mx <= q.x + q.w && my >= q.y && my <= q.y + q.h) : -1;
+      for (const f of fs) {
+        const b = imageFieldBox(f, dest, crop);
+        if (b && b.x1 - b.x0 > 2 && b.y1 - b.y0 > 2) list.push(Object.assign(b, { t: f.t, key: st.id + ":" + f.i, src: st.id, page: pi >= 0 ? pi : null }));
+      }
+    }
+    formFieldFrame = { frame: drawFrameNo, list };
+    return list;
+  }
+  // Was schon in einem Feld steht (Text oder Tinte): Mittelpunkte aller Eintraege, einmal pro Aenderung
+  let formInkCache = { gen: -1, pts: [] };
+  function formInkPoints() {
+    if (formInkCache.gen === contentGen) return formInkCache.pts;
+    const pts = [];
+    for (const st of boardStrokes.values()) {
+      if (st.tool !== "text" && st.tool !== "pen") continue;
+      if (st.extra && (st.extra.underline || st.extra.shape)) continue;
+      const b = st.bbox || strokeWorldBBox(st);
+      if (b && Number.isFinite(b.minX)) pts.push({ x: (b.minX + b.maxX) / 2, y: (b.minY + b.maxY) / 2, st });
+    }
+    formInkCache = { gen: contentGen, pts };
+    return pts;
+  }
+  function inField(f, x, y, pad) {
+    const p = pad || 0;
+    return x >= f.x0 - p && x <= f.x1 + p && y >= f.y0 - p && y <= f.y1 + p;
+  }
+  function formFieldFilled(f) {
+    const pad = Math.min(6, (f.y1 - f.y0) * 0.3);
+    return formInkPoints().some((q) => inField(f, q.x, q.y, pad));
+  }
+  function formTextIn(f) {
+    const pad = Math.min(6, (f.y1 - f.y0) * 0.3);
+    const hit = formInkPoints().find((q) => q.st.tool === "text" && inField(f, q.x, q.y, pad));
+    return hit ? boardStrokes.get(hit.st.id) || null : null;
+  }
+  function formFieldAt(w) {
+    if (formFieldsOff()) return null;
+    const pad = 4 / Math.max(scale, 0.05);
+    let best = null;
+    for (const f of formFieldsAll()) {
+      if (!inField(f, w.x, w.y, pad)) continue;
+      const area = (f.x1 - f.x0) * (f.y1 - f.y0);
+      if (!best || area < best.area) best = { f, area };
+    }
+    return best ? best.f : null;
+  }
+  function formFieldByKey(key) {
+    return formFieldsAll().find((f) => f.key === key) || null;
+  }
+  function nextFormField(key, pred) {
+    const list = formFieldsAll();
+    const i = list.findIndex((f) => f.key === key);
+    for (let k = i + 1; k < list.length; k++) if (!pred || pred(list[k])) return list[k];
+    return null;
+  }
+  // Schreibfeld fuer Text: einzeilig auf der Linie, grosse Felder oben links mit Umbruch
+  function formTextGeom(f) {
+    const w = f.x1 - f.x0;
+    const h = f.y1 - f.y0;
+    const pad = Math.max(1.5, Math.min(6, w * 0.03, h * 0.15));
+    const multi = h >= 64;
+    if (multi) {
+      const size = 18;
+      return { x: f.x0 + pad, y: f.y0 + pad + size * 0.95, size, width: Math.max(size * 2, w - pad * 2), multi };
+    }
+    const size = Math.max(9, Math.min(26, h * 0.58));
+    const base = f.y1 - Math.max(h * 0.2, size * 0.28);
+    return { x: f.x0 + pad, y: base - size * 0.065, size, width: Math.max(size * 2, w - pad * 2), multi };
+  }
+  function revealFormField(f) {
+    const a = worldToScreen(f.x0, f.y0);
+    const b = worldToScreen(f.x1, f.y1);
+    if (a.x >= viewLeft && b.x <= window.innerWidth - viewRight && a.y >= 90 && b.y <= window.innerHeight - 120) return;
+    if (f.page != null && notebook && !boardEditId && window.sofiaCurrentPage && window.sofiaCurrentPage() !== f.page && window.sofiaFitPage) {
+      window.sofiaFitPage(f.page);
+      return;
+    }
+    offsetY += 160 - a.y;
+    requestRedraw();
+  }
+  function fillFormField(f) {
+    if (viewOnly || myRole === "view") return showToast("Nur ansehen: hier kann man nichts ändern");
+    clearSelection();
+    if (f.t === "check") return toggleFormCheck(f);
+    const inside = formTextIn(f);
+    if (inside) return openTextEditorFor(inside);
+    const g = formTextGeom(f);
+    textEdit = { kind: "text", strokeId: null, x: g.x, y: g.y, size: g.size, color: currentColor, width: g.width, before: null, onLines: true, formField: f.key, formMulti: g.multi };
+    showTextEditor("");
+    for (const [cmd, ff] of Object.entries(FMT)) if (textDefaults[ff.flag]) toggleAtCaret(cmd);
+    syncFormatBar();
+    requestRedraw();
+  }
+  function toggleFormCheck(f) {
+    const ex = formTextIn(f);
+    if (ex) {
+      const before = cloneStroke(ex);
+      removeStrokes([ex.id]);
+      pushUndo({ type: "replace", before, after: null });
+      return requestRedraw();
+    }
+    const side = Math.min(f.x1 - f.x0, f.y1 - f.y0);
+    const size = Math.max(8, side * 1.1);
+    measureCtx.font = textFont(size);
+    const tw = measureCtx.measureText("X").width;
+    const ed = { x: (f.x0 + f.x1) / 2 - tw / 2, y: (f.y0 + f.y1) / 2 + size * 0.3, size, color: currentColor, width: null };
+    const stroke = textStrokeFrom(ed, [{ t: "X" }]);
+    putStroke(stroke);
+    pushUndo({ type: "replace", before: null, after: cloneStroke(stroke) });
+    requestRedraw();
+  }
+  function drawFormFields() {
+    const list = formFieldsAll();
+    if (!list.length || formFieldsOff() || viewOnly) return;
+    const flash = performance.now() < formFlashUntil;
+    if (!flash && currentTool !== "text" && !zoomWin) return;
+    const r = 4 / scale;
+    ctx.save();
+    ctx.lineWidth = 1.3 / scale;
+    for (const f of list) {
+      const done = formFieldFilled(f);
+      const active = (zoomWin && zoomWin.field === f.key) || (textEdit && textEdit.formField === f.key);
+      if (done && !active && !flash) {
+        ctx.strokeStyle = darkMode ? "rgba(208,188,255,0.22)" : "rgba(103,80,164,0.2)";
+        ctx.setLineDash([]);
+      } else {
+        ctx.fillStyle = active ? "rgba(103,80,164,0.14)" : darkMode ? "rgba(208,188,255,0.08)" : "rgba(103,80,164,0.07)";
+        ctx.strokeStyle = active ? "rgba(103,80,164,0.9)" : darkMode ? "rgba(208,188,255,0.6)" : "rgba(103,80,164,0.5)";
+        ctx.setLineDash(active ? [] : [4 / scale, 3 / scale]);
+      }
+      ctx.beginPath();
+      const w = f.x1 - f.x0;
+      const h = f.y1 - f.y0;
+      if (ctx.roundRect) ctx.roundRect(f.x0, f.y0, w, h, Math.min(r, h / 3));
+      else ctx.rect(f.x0, f.y0, w, h);
+      if (!(done && !active && !flash)) ctx.fill();
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+  // "Textfelder erkennen": (neu) erkennen lassen und kurz alle Felder zeigen
+  window.sofiaDetectFields = async (mediaIds) => {
+    const ids = Array.from(new Set((mediaIds || []).filter(Boolean)));
+    if (!ids.length) return showToast("Hier ist kein Arbeitsblatt und kein Bild");
+    if (formFieldsOff()) {
+      try {
+        localStorage.removeItem("sofianotes-form-fields");
+      } catch (err) {}
+    }
+    showToast(ids.length > 1 ? "Suche Textfelder auf " + ids.length + " Blättern …" : "Suche Textfelder …");
+    let n = 0;
+    let failed = 0;
+    for (const id of ids) {
+      const got = await loadMediaFields(id, true);
+      if (got) n += got.length;
+      else failed++;
+    }
+    formFlashUntil = performance.now() + 3200;
+    requestRedraw();
+    setTimeout(requestRedraw, 3300);
+    if (failed && !n) showToast(navigator.onLine === false ? "Offline – Textfelder werden online erkannt" : "Textfelder konnten gerade nicht erkannt werden");
+    else if (!n) showToast("Keine Felder gefunden");
+    else showToast(n + (n === 1 ? " Feld" : " Felder") + " erkannt – mit dem Text-Werkzeug antippen zum Ausfüllen");
+  };
+  // Bilder, die zum aktuellen Blatt gehoeren: Auswahl > aktuelle Heft-Seite (+ Bilder darauf) > Bilder im Bild
+  window.sofiaFieldTargets = () => {
+    const sel = selectedImageStroke();
+    if (sel && sel.extra && sel.extra.mediaId) return [sel.extra.mediaId];
+    const ids = [];
+    const va = screenToWorld(viewLeft, 0);
+    const vb = screenToWorld(window.innerWidth - viewRight, window.innerHeight);
+    let area = { x0: va.x, y0: va.y, x1: vb.x, y1: vb.y };
+    if (notebook && !boardEditId && window.sofiaCurrentPage) {
+      const r = pageRects(notebook)[window.sofiaCurrentPage()];
+      if (r) {
+        if (r.page.mediaId && !r.page.board && !r.page.boardOf) ids.push(r.page.mediaId);
+        area = { x0: r.x, y0: r.y, x1: r.x + r.w, y1: r.y + r.h };
+      }
+    }
+    for (const st of boardStrokes.values()) {
+      const ex = st.extra;
+      if (st.tool !== "image" || !ex || !ex.mediaId || ex.koord) continue;
+      const pageId = ex.boardPage;
+      if (boardEditId ? pageId !== boardEditId : pageId) continue;
+      const b = st.bbox || strokeWorldBBox(st);
+      if (b && b.maxX >= area.x0 && b.minX <= area.x1 && b.maxY >= area.y0 && b.minY <= area.y1) ids.push(ex.mediaId);
+    }
+    return ids;
+  };
+
+  // Zoom-Fenster auf ein Feld: Schreibzeile so hoch wie das Feld, Feld in der mittleren Zeile
+  function zoomFieldSpot(f) {
+    const rowH = zoomRowH();
+    const h = f.y1 - f.y0;
+    const y = h <= rowH * 1.3 ? f.y1 - 2 * rowH + Math.min(rowH * 0.12, h * 0.1) : f.y0 - rowH * 0.5;
+    return { x: f.x0 - zoomWin.w * 0.04, y };
+  }
+  function zoomToField(f, animate) {
+    if (!zoomWin || !f) return;
+    const unit = zoomGrid().unit;
+    const h = f.y1 - f.y0;
+    if (h <= unit * 4.5) {
+      const rows = Math.max(0.5, Math.min(4, Math.round((h / unit) * 2) / 2 || 0.5));
+      if (rows !== zoomWin.rows) {
+        zoomWin.rows = rows;
+        zoomFitRows();
+      }
+    }
+    const spot = zoomFieldSpot(f);
+    moveZoomBox(spot.x, spot.y, animate);
+    zoomWin.field = f.key;
+    requestRedraw();
+  }
+  // Feld unter der Schreibzeile des Zoom-Fensters (oder das zuletzt angesprungene)
+  function zoomCurrentField() {
+    if (!zoomWin) return null;
+    const rowH = zoomRowH();
+    const y0 = zoomWin.y + rowH;
+    const y1 = zoomWin.y + rowH * 2;
+    const x0 = zoomWin.x;
+    const x1 = zoomWin.x + zoomWin.w;
+    const near = (f) => f.x1 > x0 && f.x0 < x1 && Math.min(f.y1, y1) - Math.max(f.y0, y0) > Math.min(rowH, f.y1 - f.y0) * 0.3;
+    if (zoomWin.field) {
+      const f = formFieldByKey(zoomWin.field);
+      if (f && near(f)) return f;
+    }
+    const list = formFieldsAll().filter((f) => f.t !== "check" && near(f));
+    return list[0] || null;
+  }
+
   // Nach einem Strich weit rechts: Fortsetzung vorbereiten (Kasten links). Kurze Striche
   // weiter links (i-Punkt, Korrektur) lassen ein vorhandenes Angebot stehen.
   function offerZoomContinuation(stroke) {
     if (!zoomWin || !stroke || !stroke.points || !stroke.points.length) return;
     const b = makeBBox(stroke.points);
+    // im Formularfeld: am Feldende geht es im naechsten Feld weiter
+    const ff = zoomWin.field ? zoomCurrentField() : null;
+    if (ff && ff.key === zoomWin.field) {
+      const nf = nextFormField(ff.key, (f) => f.t !== "check");
+      const nx = b.maxX - zoomWin.w * ZOOM_LEAD;
+      if (b.maxX >= ff.x1 - zoomWin.w * 0.15 || nx > ff.x1 - zoomWin.w * 0.3) {
+        if (nf) {
+          const spot = zoomFieldSpot(nf);
+          zoomNext = { x: spot.x, y: spot.y, field: nf.key };
+          requestRedraw();
+        }
+        return;
+      }
+      if (b.maxX >= zoomWin.x + zoomWin.w * ZOOM_OFFER_FROM) {
+        zoomNext = { x: Math.max(ff.x0 - zoomWin.w * 0.04, nx), y: zoomWin.y, field: ff.key };
+        requestRedraw();
+      }
+      return;
+    }
     // an (oder ueber) der rechten Randlinie: wie am Zeilenende -> naechste Zeile links
     // frueher anbieten: schon kurz vor der Randlinie (nicht erst, wenn man darueber ist)
     const bounds = zoomRowBounds(zoomWin.y);
@@ -10045,6 +10437,7 @@
           // im Kasten angesetzt: sofort dorthin - gleicher Massstab, also kein Versatz
           zoomWin.x = zoomNext.x;
           zoomWin.y = zoomNext.y;
+          zoomWin.field = zoomNext.field || null;
           zoomNext = null;
           keepZoomBoxVisible();
         }
@@ -12277,6 +12670,7 @@
     if (pasteBtn) pasteBtn.classList.toggle("hidden", cropping || !strokeClipboard.length);
     if (cropBtn) cropBtn.classList.toggle("hidden", cropping || !img || !!(img && img.extra && img.extra.koord));
     document.getElementById("btn-koord-edit")?.classList.toggle("hidden", cropping || !(img && img.extra && img.extra.koord));
+    document.getElementById("btn-sel-fields")?.classList.toggle("hidden", cropping || !img || !!(img && img.extra && img.extra.koord));
     document.getElementById("btn-koord-points")?.classList.toggle("hidden", cropping || !(img && img.extra && img.extra.koord));
     const table = cropping ? null : selectedTable();
     // im Tabellen-/Text-Modus stehen diese Knoepfe schon unten in der Leiste
@@ -12891,6 +13285,11 @@
     const s = selectedImageStroke();
     return s && s.extra && s.extra.koord ? s : null;
   }
+  document.getElementById("btn-sel-fields")?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const img = selectedImageStroke();
+    if (img && img.extra && img.extra.mediaId) window.sofiaDetectFields([img.extra.mediaId]);
+  });
   document.getElementById("btn-koord-edit")?.addEventListener("click", (e) => {
     e.stopPropagation();
     editKoord("axes");
@@ -20867,6 +21266,11 @@
     document.getElementById("canvas-menu-find")?.classList.toggle("hidden", !boardEditId && !!notebook);
     canvasMenu.classList.toggle("hidden");
   });
+  document.getElementById("canvas-menu-fields")?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    closeCanvasMenus();
+    if (window.sofiaDetectFields) window.sofiaDetectFields(window.sofiaFieldTargets());
+  });
   document.getElementById("canvas-menu-find")?.addEventListener("click", (e) => {
     e.stopPropagation();
     closeCanvasMenus();
@@ -23695,6 +24099,7 @@
         { icon: "wallpaper", label: "Hintergrund", sub: () => pageBgItems(i) },
         { sep: true },
       ];
+      if (pg.mediaId && !pg.board && !pg.boardOf) items.splice(items.length - 1, 0, { icon: "edit_note", label: "Textfelder erkennen", run: () => window.sofiaDetectFields && window.sofiaDetectFields([pg.mediaId]) });
       if (pg.board || pg.boardOf) items.push({ icon: "open_in_full", label: "Board öffnen", run: () => enterBoardPage(pid) });
       items.push({ sep: true }, ...exportItems, { sep: true });
       items.push({ icon: "ink_eraser", label: "Seite leeren", danger: true, run: () => clearPage(i) });

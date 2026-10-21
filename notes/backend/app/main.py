@@ -811,7 +811,7 @@ _forms_sem = asyncio.Semaphore(1)
 
 
 @app.get("/api/media/{media_id}/fields")
-async def get_media_fields(media_id: str, me: dict = Depends(get_current_person)) -> dict:
+async def get_media_fields(media_id: str, force: int = 0, me: dict = Depends(get_current_person)) -> dict:
     """Ausfuellbare Felder (Text, Ankreuzen, Unterschrift) auf einem Arbeitsblatt-Bild."""
     if not media.valid_id(media_id):
         raise HTTPException(status_code=400, detail="bad id")
@@ -819,7 +819,7 @@ async def get_media_fields(media_id: str, me: dict = Depends(get_current_person)
         return {"ok": False, "fields": [], "reason": "unavailable"}
     async with _forms_sem:
         try:
-            fields = await asyncio.get_event_loop().run_in_executor(None, forms.fields_for, media_id)
+            fields = await asyncio.get_event_loop().run_in_executor(None, forms.fields_for, media_id, bool(force))
         except Exception:  # noqa: BLE001
             return {"ok": False, "fields": [], "reason": "error"}
     if fields is None:

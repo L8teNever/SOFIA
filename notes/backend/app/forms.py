@@ -168,10 +168,10 @@ def detect_bytes(blob: bytes) -> list[dict[str, Any]]:
     return [f for row in rows for f in sorted(row, key=lambda g: g["x0"])]
 
 
-def fields_for(media_id: str) -> list[dict[str, Any]] | None:
-    """Gespeichertes Ergebnis oder neu berechnen. None = Bild fehlt."""
+def fields_for(media_id: str, force: bool = False) -> list[dict[str, Any]] | None:
+    """Gespeichertes Ergebnis oder neu berechnen (force: immer neu). None = Bild fehlt."""
     path = _fields_path(media_id)
-    if path.is_file():
+    if path.is_file() and not force:
         try:
             cached = json.loads(path.read_text("utf-8"))
             if cached.get("v") == VERSION:
