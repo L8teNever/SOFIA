@@ -6421,7 +6421,15 @@ html[data-theme="dark"] .hd-chip { background: rgba(36, 33, 46, 0.96); color: #e
 html[data-theme="dark"] .hd-no { background: rgba(255, 255, 255, 0.1); color: #e6e1e5; }
 
 /* Ueberschrift-Vorschlag: was unterstrichen wird (Rahmen + gestrichelte Doppellinie, Vorschau im Knopf) */
-.hd-box { position: absolute; border: 2px dashed rgba(103, 80, 164, 0.55); border-radius: 8px; background: rgba(103, 80, 164, 0.06); pointer-events: none; box-sizing: border-box; }
+/* Vorschlag: die Schrift selbst wird lila und pulsiert. "lighten" macht dunkle Tinte lila und
+   laesst weisses Papier weiss; im Dunkelmodus umgekehrt mit "darken". */
+#hd-overlay { mix-blend-mode: lighten; }
+html[data-theme="dark"] #hd-overlay { mix-blend-mode: darken; }
+.hd-box { position: absolute; border-radius: 6px; background: #7c4dff; pointer-events: none; animation: hd-pulse 1.6s ease-in-out infinite; }
+html[data-theme="dark"] .hd-box { background: #c7b3ff; }
+@keyframes hd-pulse { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .hd-box { animation: none; opacity: 0.85; } }
+.hd-pop { position: fixed; z-index: 9500; min-width: 240px; right: auto; bottom: auto; }
 .hd-box i { position: absolute; height: 0; border-top: 2px dashed #6750a4; opacity: 0.8; }
 .hd-what { display: flex; align-items: center; max-width: 220px; overflow: hidden; }
 .hd-what-text { font-weight: 700; color: #6750a4; white-space: nowrap; text-overflow: ellipsis; display: block; }

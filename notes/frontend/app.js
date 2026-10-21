@@ -14130,6 +14130,7 @@
       return;
     }
     // Finger auf eine Ueberschrift: Gliederung oeffnen (Stift schreibt weiter wie gewohnt)
+    if (currentTool !== "text" && !selectionHitAt(world, "touch") && window.sofiaHeadingTapAt && window.sofiaHeadingTapAt(world, e.clientX, e.clientY)) return;
     if (currentTool !== "text" && !selectionHitAt(world, "touch") && window.sofiaOutlineTapAt && window.sofiaOutlineTapAt(world)) return;
     if (currentTool === "text") {
       if (textTapSuppressed === e.pointerId) {
@@ -15366,73 +15367,103 @@
         });
       }
     }
-    if (!made.length) return;
+    if (!made.length) return made;
     for (const s of made) putStroke(s);
     pushUndo({ type: "add_many", strokes: made.map(cloneStroke) });
     requestRedraw();
     if (window.sofiaOutlineRefresh) setTimeout(window.sofiaOutlineRefresh, 0);
+    return made;
   }
   function renderHeadingChips() {
     hdOverlay.innerHTML = "";
+    if (hdPop && !hdCandidates.includes(hdPop._line)) closeHdPop();
     for (const l of hdCandidates) {
-      // auf dem Blatt: Rahmen um die Zeile und Vorschau der Doppellinie
+      // die Schrift selbst leuchtet lila und pulsiert (Mischmodus im Overlay faerbt nur die Tinte)
       const box = document.createElement("div");
       box.className = "hd-box";
-      box.innerHTML = '<i class="hd-u1"></i><i class="hd-u2"></i>';
       box._line = l;
       hdOverlay.appendChild(box);
-      const el = document.createElement("div");
-      el.className = "hd-chip";
-      el.innerHTML = '<span class="material-symbols-rounded hd-ico">title</span><span class="hd-what"></span><span class="hd-txt">unterstreichen?</span>';
-      const what = el.querySelector(".hd-what");
-      if (l.text) {
-        what.classList.add("hd-what-text");
-        what.textContent = "„" + l.text + "“";
-      } else {
-        try {
-          const img = document.createElement("img");
-          img.className = "hd-prev";
-          img.alt = "";
-          img.src = renderInkCrop(l.strokes).dataUrl;
-          what.appendChild(img);
-        } catch (err) {
-          what.textContent = "Überschrift";
-        }
-        hdReadText(l);
-      }
-      const yes = document.createElement("button");
-      yes.type = "button";
-      yes.className = "hd-yes";
-      yes.title = "Ja, doppelt unterstreichen";
-      yes.innerHTML = '<span class="material-symbols-rounded">check</span>';
-      const no = document.createElement("button");
-      no.type = "button";
-      no.className = "hd-no";
-      no.title = "Nein, hier nicht mehr fragen";
-      no.innerHTML = '<span class="material-symbols-rounded">close</span>';
-      for (const b of [yes, no]) b.addEventListener("pointerdown", (e) => e.stopPropagation());
-      yes.addEventListener("click", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        underlineLines([l]);
-        hdRemember(l.bbox);
-        hdCandidates = hdCandidates.filter((c) => c !== l);
-        renderHeadingChips();
-      });
-      no.addEventListener("click", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        hdRemember(l.bbox);
-        const d = { x0: l.bbox.minX, y0: l.bbox.minY, x1: l.bbox.maxX, y1: l.bbox.maxY };
-        hdCandidates = hdCandidates.filter((c) => c !== l && !hdSameRow(c.bbox, d));
-        renderHeadingChips();
-      });
-      el.append(yes, no);
-      el._line = l;
-      hdOverlay.appendChild(el);
     }
     positionHeadingChips();
   }
+  // ---- Antippen eines Vorschlags: kleines Menue "als welche Ueberschrift?" ----
+  var hdPop = null;
+  function closeHdPop() {
+    if (hdPop) hdPop.remove();
+    hdPop = null;
+  }
+  function hdCandidateAt(w) {
+    const pad = 10 / Math.max(0.05, scale);
+    return hdCandidates.find((l) => w.x >= l.minX - pad && w.x <= l.maxX + pad && w.y >= l.minY - pad && w.y <= l.maxY + pad) || null;
+  }
+  function hdAccept(l, level) {
+    const made = underlineLines([l]);
+    hdRemember(l.bbox);
+    hdCandidates = hdCandidates.filter((c) => c !== l);
+    renderHeadingChips();
+    if (made && made.length && window.sofiaSetOutlineEntry) window.sofiaSetOutlineEntry(made.map((s) => s.id).sort()[0], { level });
+    showToast(level === 1 ? "Als Überschrift in der Gliederung" : level === 2 ? "Als Unterüberschrift in der Gliederung" : "Als 3. Ebene in der Gliederung");
+  }
+  function hdDecline(l) {
+    hdRemember(l.bbox);
+    const d = { x0: l.bbox.minX, y0: l.bbox.minY, x1: l.bbox.maxX, y1: l.bbox.maxY };
+    hdCandidates = hdCandidates.filter((c) => c !== l && !hdSameRow(c.bbox, d));
+    renderHeadingChips();
+  }
+  function openHdPop(l, x, y) {
+    closeHdPop();
+    const pop = document.createElement("div");
+    pop.className = "lib-add-menu hd-pop";
+    pop._line = l;
+    const head = document.createElement("div");
+    head.className = "split-menu-head";
+    head.textContent = l.text ? "„" + l.text + "“ in die Gliederung?" : "Als Überschrift in die Gliederung?";
+    pop.appendChild(head);
+    const opts = [
+      ["format_h1", "Überschrift", "Hauptebene (H1)", () => hdAccept(l, 1)],
+      ["format_h2", "Unterüberschrift", "2. Ebene (H2)", () => hdAccept(l, 2)],
+      ["format_h3", "Kleine Überschrift", "3. Ebene (H3)", () => hdAccept(l, 3)],
+      ["close", "Keine Überschrift", "Hier nicht mehr vorschlagen", () => hdDecline(l)],
+    ];
+    opts.forEach(([icon, label, hint, run], i) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "lib-add-opt page-menu-item split-menu-item" + (i === 0 ? " first" : "") + (i === 3 ? " danger" : "");
+      b.innerHTML = '<span class="material-symbols-rounded"></span><span class="pmi-label"><span class="smi-title"></span><small></small></span>';
+      b.children[0].textContent = icon;
+      b.querySelector(".smi-title").textContent = label;
+      b.querySelector("small").textContent = hint;
+      b.addEventListener("click", (e) => {
+        e.stopPropagation();
+        closeHdPop();
+        run();
+      });
+      pop.appendChild(b);
+    });
+    pop.addEventListener("pointerdown", (e) => e.stopPropagation());
+    document.body.appendChild(pop);
+    hdPop = pop;
+    const mw = pop.offsetWidth || 240;
+    const mh = pop.offsetHeight || 220;
+    const below = worldToScreen(l.minX, l.maxY);
+    let top = below.y + 10;
+    if (top + mh > window.innerHeight - 8) top = Math.max(8, worldToScreen(l.minX, l.minY).y - mh - 10);
+    pop.style.left = Math.max(8, Math.min(window.innerWidth - mw - 8, x - mw / 2)) + "px";
+    pop.style.top = top + "px";
+  }
+  document.addEventListener(
+    "pointerdown",
+    (e) => {
+      if (hdPop && !e.target.closest(".hd-pop")) closeHdPop();
+    },
+    true
+  );
+  window.sofiaHeadingTapAt = (w, x, y) => {
+    const l = hdCandidateAt(w);
+    if (!l) return false;
+    openHdPop(l, x, y);
+    return true;
+  };
   // Text der Zeile lesen (KI, wenn eingerichtet und noch Kontingent da) - einmal pro Vorschlag
   function hdReadText(l) {
     if (l.textTried || !cloudOcrEnabled || !(ocrRemaining > 0)) return;
@@ -15467,27 +15498,15 @@
     hdOverlay.querySelectorAll(".hd-box").forEach((el) => {
       const l = el._line;
       if (!l) return;
-      const g = underlineGeom(l);
-      const pad = 4;
+      const pad = 3;
       const a = worldToScreen(l.minX - pad, l.minY - pad);
-      const b = worldToScreen(l.maxX + pad, Math.max(l.maxY, g.y2) + pad);
+      const b = worldToScreen(l.maxX + pad, l.maxY + pad);
       el.style.left = Math.round(a.x) + "px";
       el.style.top = Math.round(a.y) + "px";
       el.style.width = Math.round(b.x - a.x) + "px";
       el.style.height = Math.round(b.y - a.y) + "px";
-      const [u1, u2] = el.children;
-      const lx = worldToScreen(g.x0, 0).x - a.x;
-      const lw = (g.x1 - g.x0) * scale;
-      u1.style.cssText = "left:" + Math.round(lx) + "px;width:" + Math.round(lw) + "px;top:" + Math.round((g.y1 - (l.minY - pad)) * scale) + "px";
-      u2.style.cssText = "left:" + Math.round(lx) + "px;width:" + Math.round(lw) + "px;top:" + Math.round((g.y2 - (l.minY - pad)) * scale) + "px";
     });
-    hdOverlay.querySelectorAll(".hd-chip").forEach((el) => {
-      const l = el._line;
-      if (!l) return;
-      const s = worldToScreen(l.maxX + 10, (l.minY + l.maxY) / 2);
-      el.style.left = Math.round(s.x) + "px";
-      el.style.top = Math.round(s.y) + "px";
-    });
+    if (hdPop && hdPop._line && !hdCandidates.includes(hdPop._line)) closeHdPop();
   }
   // Getipptes Textfeld wie eine Handschrift-Zeile behandeln (Unterstreichen, Vorschlag, Gliederung)
   function hdTextLine(t) {
