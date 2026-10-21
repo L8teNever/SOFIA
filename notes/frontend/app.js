@@ -23807,6 +23807,8 @@
     // (nb.outline[key] = {text, star}), damit andere Geraete ihn nicht neu lesen muessen.
     // Ebene: grosse Ueberschriften = 1, deutlich kleinere = 2.
     let outlineOnlyStars = false;
+    // aufgeklappte Ueberschriften (sonst ist alles unter einer Ueberschrift eingeklappt)
+    const outlineOpen = new Set();
     const outlineLocalText = new Map(); // key -> Text (wenn man nicht speichern darf)
     const outlineThumbs = new Map(); // key -> {sig, url}
     let outlineQueueBusy = false;
@@ -24087,13 +24089,22 @@
     window.sofiaOutlineTapAt = (w) => {
       if (!notebook || !w) return false;
       const pad = 10 / Math.max(0.05, scale);
-      const hit = computeOutline().find((it) => {
+      const all = computeOutline();
+      const hit = all.find((it) => {
         if ((it.board || null) !== (boardEditId || null)) return false;
         const l = it.line;
         const h = Math.max(8, l.maxY - l.minY);
         return w.x >= l.minX - pad && w.x <= l.maxX + pad && w.y >= l.minY - pad && w.y <= l.maxY + h * 0.6 + pad;
       });
       if (!hit) return false;
+      // eingeklappte Ueberschriften darueber aufklappen, damit der Eintrag sichtbar ist
+      let lvl = hit.level;
+      for (let i = all.indexOf(hit) - 1; i >= 0 && lvl > 1; i--) {
+        if (all[i].level < lvl) {
+          outlineOpen.add(all[i].key);
+          lvl = all[i].level;
+        }
+      }
       if (!panelOpen) setPanel(true);
       if (pageSel) endPageSelect();
       marksOpen = true;
@@ -24151,7 +24162,25 @@
         wait.textContent = st.state === "error" || st.state === "missing" ? "Handschrift-Erkennung nicht verfügbar" : "Handschrift-Erkennung lädt… " + Math.round((st.progress || 0) * 100) + " %";
         box.appendChild(wait);
       }
-      const shown = outlineOnlyStars ? items.filter((it) => data[it.key] && data[it.key].star) : items;
+      const parentOf = new Map();
+      const kids = new Map();
+      {
+        const stack = [];
+        for (const it of items) {
+          while (stack.length && stack[stack.length - 1].level >= it.level) stack.pop();
+          const par = stack[stack.length - 1] || null;
+          parentOf.set(it, par);
+          it.depth = par ? par.depth + 1 : 0;
+          if (par) kids.set(par, (kids.get(par) || 0) + 1);
+          stack.push(it);
+        }
+      }
+      const visible = (it) => {
+        for (let p = parentOf.get(it); p; p = parentOf.get(p)) if (!outlineOpen.has(p.key)) return false;
+        return true;
+      };
+      // "Markiert": flache Liste, nichts eingeklappt
+      const shown = outlineOnlyStars ? items.filter((it) => data[it.key] && data[it.key].star) : items.filter(visible);
       if (!shown.length) {
         const empty = document.createElement("div");
         empty.className = "pap-hint";
@@ -24165,6 +24194,23 @@
         const row = document.createElement("div");
         row.className = "ol-row ol-l" + it.level + (d.star ? " ol-starred" : "");
         row.dataset.key = it.key;
+        row.style.marginLeft = 4 + (outlineOnlyStars ? 0 : it.depth) * 16 + "px";
+        const tw = document.createElement("button");
+        tw.type = "button";
+        tw.className = "ol-tw";
+        const nKids = outlineOnlyStars ? 0 : kids.get(it) || 0;
+        if (nKids) {
+          const open = outlineOpen.has(it.key);
+          tw.classList.toggle("open", open);
+          tw.title = open ? "Einklappen" : "Aufklappen (" + nKids + ")";
+          tw.innerHTML = '<span class="material-symbols-rounded">chevron_right</span>';
+          tw.addEventListener("click", (e) => {
+            e.stopPropagation();
+            if (outlineOpen.has(it.key)) outlineOpen.delete(it.key);
+            else outlineOpen.add(it.key);
+            renderMarks();
+          });
+        } else tw.disabled = true;
         const star = document.createElement("button");
         star.type = "button";
         star.className = "ol-star";
@@ -24251,7 +24297,7 @@
           e.stopPropagation();
           removeOutline(it);
         });
-        row.append(star, lvlBtn, main, del);
+        row.append(tw, star, lvlBtn, main, del);
         box.appendChild(row);
       }
       runOutlineQueue(items);
