@@ -1891,6 +1891,34 @@ html[data-theme="dark"] .app-toast {
 .text-format-bar .material-symbols-rounded { font-size: 22px; }
 .fmt-divider { width: 1px; height: 22px; background: #e0e3e7; margin: 0 4px; }
 
+/* Tabellen-Leiste ueber der Tabelle, solange eine Zelle bearbeitet wird */
+.table-cell-bar {
+  z-index: 76;
+  max-width: calc(100vw - 16px);
+  overflow-x: auto;
+  scrollbar-width: none;
+  touch-action: pan-x;
+}
+.table-cell-bar::-webkit-scrollbar { display: none; }
+.table-cell-bar .fmt-divider { flex: 0 0 1px; }
+.tcb-group { display: inline-flex; align-items: center; gap: 2px; flex: 0 0 auto; }
+.tcb-label {
+  font: 600 11px Inter, sans-serif;
+  letter-spacing: 0.02em;
+  color: #5f6368;
+  padding: 0 4px 0 6px;
+  user-select: none;
+}
+.table-cell-bar button { flex: 0 0 auto; }
+.table-cell-bar button:hover:not(:disabled) { background: #f1f3f4; }
+.table-cell-bar button.active { background: #d3e3fd; color: #0b57d0; }
+.table-cell-bar button.tcb-del:hover:not(:disabled) { background: #fce8e6; color: #c5221f; }
+.table-cell-bar button:disabled { opacity: 0.35; cursor: default; }
+html[data-theme="dark"] .tcb-label { color: #c8c2d0; }
+html[data-theme="dark"] .table-cell-bar button:hover:not(:disabled) { background: #2b2930; }
+html[data-theme="dark"] .table-cell-bar button.active { background: #3a3350; color: #d0bcff; }
+html[data-theme="dark"] .table-cell-bar button.tcb-del:hover:not(:disabled) { background: #4a2523; color: #f2b8b5; }
+
 /* ---- Modus-Auswahl oben + kontextabhaengige Werkzeugleiste ---- */
 .mode-switch { display: flex; align-items: center; gap: 2px; flex: 0 0 auto; }
 .mode-btn.active,
@@ -2145,6 +2173,16 @@ html[data-theme="dark"] .app-toast {
   color: #1a73e8;
   cursor: pointer;
 }
+.td-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #3c4043;
+}
+.td-toggle .material-symbols-rounded { font-size: 18px; }
+.td-toggle.active { background: #d3e3fd; border-color: #d3e3fd; color: #0b57d0; }
+.td-toggle + .td-chip { margin-left: 0; }
+html[data-theme="dark"] .td-toggle.active { background: #3a3350; color: #d0bcff; }
 .td-preview {
   width: 100%;
   height: min(300px, 42vh);
@@ -4284,6 +4322,7 @@ body.view-only #selection-toolbar,
 body.view-only #te-move,
 body.view-only .te-handle,
 body.view-only #text-format-bar,
+body.view-only #table-cell-bar,
 body.view-only #paste-menu { display: none !important; }
 body.view-only #undo-redo-dock > .bar-divider { display: none; }
 .page-thumb-acts { display: inline-flex; align-items: center; gap: 2px; }

@@ -2739,6 +2739,7 @@
   function drawSceneOverlays() {
     drawFormFields();
     drawTextDragPreview();
+    drawTableEditOverlay();
     drawZoomBoxOnPage();
     drawAutoBox();
     drawLassoAndSelection();
@@ -6333,6 +6334,17 @@
       if (target) putStroke(target);
       else if (other) removeStrokes([other.id]);
       if (selection.ids.size) selectStrokeIds(Array.from(selection.ids));
+    } else if (action.type === "replace_many") {
+      // mehrere ganze Striche auf einmal (Tabelle samt mitgewanderter Handschrift)
+      const list = direction === 1 ? action.changes : action.changes.slice().reverse();
+      const gone = [];
+      for (const c of list) {
+        const target = direction === 1 ? c.after : c.before;
+        if (target) putStroke(target);
+        else if (boardStrokes.has(c.id)) gone.push(c.id);
+      }
+      if (gone.length) removeStrokes(gone);
+      if (selection.ids.size) selectStrokeIds(Array.from(selection.ids));
     } else if (action.type === "add_many") {
       if (direction === 1) for (const s of action.strokes) putStroke(s);
       else removeStrokes(action.strokes.map((s) => s.id));
@@ -7495,39 +7507,78 @@
     return t.size * 0.4;
   }
 
+  function tableHasHeader(t) {
+    return !!(t && t.extra && t.extra.header);
+  }
+  function cellFont(t, r, size) {
+    return `${tableHasHeader(t) && r === 0 ? 700 : 400} ${size}px Inter, sans-serif`;
+  }
+
   function drawTable(c, t) {
     const g = tableGeom(t);
     const cells = (t.extra && t.extra.cells) || {};
+    const header = tableHasHeader(t) && g.rows > 1;
     c.save();
-    c.fillStyle = darkMode ? "rgba(28,27,34,0.94)" : "rgba(255,255,255,0.92)";
+    c.fillStyle = darkMode ? "rgba(28,27,34,0.94)" : "rgba(255,255,255,0.94)";
     c.fillRect(g.x0, g.y0, g.W, g.H);
-    c.strokeStyle = themeInk(t.color || "#5f6368");
-    c.lineWidth = Math.max(1 / scale, t.size * 0.05);
-    c.beginPath();
-    for (const x of g.xs) {
-      c.moveTo(x, g.y0);
-      c.lineTo(x, g.y0 + g.H);
+    // Kopfzeile: leicht getoent, Text fett
+    if (header) {
+      c.fillStyle = darkMode ? "rgba(168,199,250,0.12)" : "rgba(26,115,232,0.07)";
+      c.fillRect(g.x0, g.y0, g.W, g.ys[1] - g.y0);
     }
-    for (const y of g.ys) {
-      c.moveTo(g.x0, y);
-      c.lineTo(g.x0 + g.W, y);
+    const line = themeInk(t.color || "#5f6368");
+    const lw = Math.max(1 / scale, t.size * 0.05);
+    // innere Linien etwas feiner und heller, der Rahmen kraeftiger - wirkt ruhiger
+    c.strokeStyle = line;
+    c.globalAlpha = 0.55;
+    c.lineWidth = lw * 0.8;
+    c.beginPath();
+    for (let i = 1; i < g.xs.length - 1; i++) {
+      c.moveTo(g.xs[i], g.y0);
+      c.lineTo(g.xs[i], g.y0 + g.H);
+    }
+    for (let i = 1; i < g.ys.length - 1; i++) {
+      if (header && i === 1) continue;
+      c.moveTo(g.x0, g.ys[i]);
+      c.lineTo(g.x0 + g.W, g.ys[i]);
     }
     c.stroke();
+    c.globalAlpha = 1;
+    c.lineWidth = lw;
+    if (header) {
+      c.beginPath();
+      c.moveTo(g.x0, g.ys[1]);
+      c.lineTo(g.x0 + g.W, g.ys[1]);
+      c.stroke();
+    }
+    c.strokeRect(g.x0, g.y0, g.W, g.H);
     c.fillStyle = themeInk("#1E1F22");
-    c.font = textFont(t.size);
     c.textBaseline = "alphabetic";
     const pad = cellPad(t);
     const lh = t.size * TEXT_LINE;
     for (let r = 0; r < g.rows; r++) {
+      c.font = cellFont(t, r, t.size);
       for (let col = 0; col < g.cols; col++) {
         const text = cells[r + "," + col];
         if (!text) continue;
         if (textEdit && textEdit.kind === "cell" && textEdit.tableId === t.id && textEdit.r === r && textEdit.c === col) continue;
-        const lines = wrapText(text, t.size, Math.max(4, g.xs[col + 1] - g.xs[col] - pad * 2));
-        lines.forEach((line, i) => c.fillText(line, g.xs[col] + pad, g.ys[r] + pad + t.size * 0.95 + i * lh));
+        const lines = wrapCellText(t, r, text, Math.max(4, g.xs[col + 1] - g.xs[col] - pad * 2));
+        c.save();
+        c.beginPath();
+        c.rect(g.xs[col], g.ys[r], g.xs[col + 1] - g.xs[col], g.ys[r + 1] - g.ys[r]);
+        c.clip();
+        lines.forEach((ln, i) => c.fillText(ln, g.xs[col] + pad, g.ys[r] + pad + t.size * 0.95 + i * lh));
+        c.restore();
       }
     }
     c.restore();
+  }
+
+  // Umbruch wie beim Zeichnen (Kopfzeile ist fett und damit etwas breiter)
+  function wrapCellText(t, r, text, width) {
+    if (!(tableHasHeader(t) && r === 0)) return wrapText(text, t.size, width);
+    const lay = layoutRuns([{ t: String(text || ""), b: 1 }], t.size, width);
+    return lay.lines.map((l) => l.map((p) => p.t).join("").trimEnd());
   }
 
   function withTableContents(ids) {
@@ -7590,6 +7641,50 @@
     return tables.length === 1 ? tables[0] : null;
   }
 
+  // Absolute Groessen (Weltkoordinaten) einer Tabelle. rhMin = Mindesthoehe je Zeile
+  // (vom Nutzer gesetzt); die echte Hoehe waechst mit dem Text und schrumpft wieder darauf zurueck.
+  function tableAbs(t) {
+    const g = tableGeom(t);
+    const ex = t.extra || {};
+    const cw = g.xs.slice(1).map((x, i) => x - g.xs[i]);
+    const rh = g.ys.slice(1).map((y, i) => y - g.ys[i]);
+    let rhMin;
+    if (Array.isArray(ex.rhMin) && ex.rhMin.length === rh.length && Array.isArray(ex.rh) && ex.rh.length === rh.length) {
+      const fy = g.H / (ex.rh.reduce((a, b) => a + b, 0) || 1);
+      rhMin = ex.rhMin.map((v) => Number(v) * fy || 0);
+    } else {
+      // aeltere Tabellen: Zeilen mit Text gelten als mitgewachsen
+      const cells = ex.cells || {};
+      const base = t.size * 2.3;
+      rhMin = rh.map((h, r) => {
+        const hasText = Object.keys(cells).some((k) => Number(k.split(",")[0]) === r && cells[k]);
+        return hasText ? Math.min(h, base) : h;
+      });
+    }
+    return { g, cw, rh, rhMin, cells: JSON.parse(JSON.stringify(ex.cells || {})) };
+  }
+  function tableRowMin(t) {
+    return t.size * 1.5;
+  }
+  function tableColMin(t) {
+    return t.size * 1.6;
+  }
+  // Neue Struktur schreiben (absolute Groessen); oben links bleibt stehen
+  function setTableAbs(t, x0, y0, cw, rh, rhMin, patch) {
+    const ex = Object.assign({}, t.extra || {}, patch || {});
+    ex.cw = cw.slice();
+    ex.rh = rh.slice();
+    ex.rhMin = rhMin.map((v, i) => Math.min(v, rh[i]));
+    ex.cols = cw.length;
+    ex.rows = rh.length;
+    t.extra = ex;
+    t.points = [
+      { x: x0, y: y0, p: 1 },
+      { x: x0 + cw.reduce((a, b) => a + b, 0), y: y0 + rh.reduce((a, b) => a + b, 0), p: 1 },
+    ];
+    t.bbox = strokeWorldBBox(t);
+  }
+
   function insertTable(spec) {
     if (textEdit) commitTextEditor();
     const center = screenToWorld(window.innerWidth / 2, window.innerHeight / 2);
@@ -7600,19 +7695,26 @@
     const rhAbs = spec ? spec.rh.slice() : new Array(rows).fill(46 * k);
     const W = cwAbs.reduce((a, b) => a + b, 0);
     const H = rhAbs.reduce((a, b) => a + b, 0);
-    const x0 = center.x - W / 2;
-    const y0 = center.y - H / 2;
+    let x0 = center.x - W / 2;
+    let y0 = center.y - H / 2;
+    // im Notizbuch: auf der Seite bleiben
+    const page = tablePageRect({ x: center.x, y: center.y });
+    if (page) {
+      x0 = Math.max(page.x + 4 * MM, Math.min(x0, page.x + page.w - 4 * MM - W));
+      y0 = Math.max(page.y + 4 * MM, Math.min(y0, page.y + page.h - 4 * MM - H));
+    }
     const t = {
       id: uuid(),
       tool: "table",
       color: "#5f6368",
-      size: 20 * k,
+      size: (spec && spec.size) || 20 * k,
       points: [
         { x: x0, y: y0, p: 1 },
         { x: x0 + W, y: y0 + H, p: 1 },
       ],
-      extra: { rows, cols, cw: cwAbs, rh: rhAbs, cells: {} },
+      extra: { rows, cols, cw: cwAbs, rh: rhAbs, rhMin: rhAbs.slice(), cells: {} },
     };
+    if (spec && spec.header) t.extra.header = true;
     putStroke(t);
     pushUndo({ type: "replace", before: null, after: cloneStroke(t) });
     lastTableId = t.id;
@@ -7623,46 +7725,217 @@
     requestRedraw();
   }
 
-  // Zeile/Spalte anfuegen oder die letzte entfernen. Gewichte werden dabei in absolute
-  // Weltgroessen umgerechnet, damit die vorhandenen Zellen ihre Groesse behalten.
+  // Seite (Notizbuch), auf der ein Punkt liegt - fuer "nicht ueber den Rand wachsen"
+  function tablePageRect(w) {
+    if (!notebook || boardEditId || typeof pageRects !== "function") return null;
+    return pageRects(notebook).find((p) => w.x >= p.x && w.x <= p.x + p.w && w.y >= p.y && w.y <= p.y + p.h) || null;
+  }
+
+  // Zeilen/Spalten an einer bestimmten Stelle einfuegen oder loeschen, Kopfzeile, gleich verteilen.
+  // op: rowAbove, rowBelow, colLeft, colRight, delRow, delCol, header, even
+  function tableStructOp(t, op, r, c) {
+    const A = tableAbs(t);
+    let { cw, rh, rhMin, cells } = A;
+    const x0 = A.g.x0, y0 = A.g.y0;
+    let header = tableHasHeader(t);
+    // alte Zeilen-/Spaltennummer -> neue (-1 = geloescht); damit wandert Handschrift mit
+    const oldRows = rh.length;
+    const oldCols = cw.length;
+    const map = { r: null, c: null };
+    const shift = (axis, from, d) => {
+      const n = axis === "r" ? oldRows : oldCols;
+      map[axis] = Array.from({ length: n }, (_, i) => (d < 0 ? (i === from ? -1 : i > from ? i - 1 : i) : i >= from ? i + 1 : i));
+      const out = {};
+      for (const [key, v] of Object.entries(cells)) {
+        let [rr, cc] = key.split(",").map(Number);
+        if (axis === "r") {
+          if (d < 0 && rr === from) continue;
+          if (rr >= from + (d < 0 ? 1 : 0)) rr += d;
+        } else {
+          if (d < 0 && cc === from) continue;
+          if (cc >= from + (d < 0 ? 1 : 0)) cc += d;
+        }
+        out[rr + "," + cc] = v;
+      }
+      cells = out;
+    };
+    if (op === "rowAbove" || op === "rowBelow") {
+      if (rh.length >= 60) return false;
+      const at = op === "rowAbove" ? r : r + 1;
+      // neue Zeile so hoch wie die "leere" Hoehe der Nachbarzeile (nicht wie deren Text)
+      const h = Math.max(tableRowMin(t), rhMin[r] || t.size * 2.3);
+      rh.splice(at, 0, h);
+      rhMin.splice(at, 0, h);
+      shift("r", at, 1);
+    } else if (op === "colLeft" || op === "colRight") {
+      if (cw.length >= 30) return false;
+      const at = op === "colLeft" ? c : c + 1;
+      cw.splice(at, 0, cw[c]);
+      shift("c", at, 1);
+      // nicht ueber den Seitenrand wachsen: dann alle Spalten etwas schmaler
+      const page = tablePageRect({ x: x0 + 1, y: y0 + 1 });
+      if (page) {
+        const maxW = page.x + page.w - 4 * MM - x0;
+        const W = cw.reduce((a, b) => a + b, 0);
+        if (W > maxW && maxW > tableColMin(t) * cw.length) cw = cw.map((w) => (w * maxW) / W);
+      }
+    } else if (op === "delRow") {
+      if (rh.length <= 1) return false;
+      rh.splice(r, 1);
+      rhMin.splice(r, 1);
+      shift("r", r, -1);
+      if (r === 0) header = false;
+    } else if (op === "delCol") {
+      if (cw.length <= 1) return false;
+      cw.splice(c, 1);
+      shift("c", c, -1);
+    } else if (op === "header") {
+      header = !header;
+    } else if (op === "even") {
+      const W = cw.reduce((a, b) => a + b, 0);
+      cw = cw.map(() => W / cw.length);
+    } else return false;
+    setTableAbs(t, x0, y0, cw, rh, rhMin, { cells });
+    if (header) t.extra.header = true;
+    else delete t.extra.header;
+    growTableRows(t);
+    return map;
+  }
+
+  // ---- Handschrift (und Textfelder) in den Zellen wandert mit der Tabelle mit ----
+  // Anker: welche Striche in welcher Zelle liegen (nach ihrer Mitte), mit Originalpunkten und
+  // der alten Zellecke. Aendert sich die Tabelle (Zeile waechst, Linie gezogen, Zeile eingefuegt),
+  // verschiebt reflowTableInk sie um genau so viel, wie sich ihre Zelle verschoben hat.
+  function tableInkAnchors(t) {
+    if (!t) return [];
+    const g = tableGeom(t);
+    const pageId = t.extra && t.extra.boardPage;
+    const out = [];
+    for (const s of boardStrokes.values()) {
+      if (s.id === t.id || s.tool === "table" || s.tool === "image") continue;
+      if (((s.extra && s.extra.boardPage) || null) !== (pageId || null)) continue;
+      const b = s.bbox || strokeWorldBBox(s);
+      if (!b) continue;
+      const cx = (b.minX + b.maxX) / 2;
+      const cy = (b.minY + b.maxY) / 2;
+      if (cx < g.x0 || cx > g.x0 + g.W || cy < g.y0 || cy > g.y0 + g.H) continue;
+      const cell = cellAt(t, { x: cx, y: cy });
+      if (!cell) continue;
+      out.push({ id: s.id, r: cell.r, c: cell.c, ox: g.xs[cell.c], oy: g.ys[cell.r], orig: cloneStroke(s) });
+    }
+    return out;
+  }
+  // Handschrift in einer Zelle, die unten ueber die Zeile hinausgeht: Zeile wird so hoch,
+  // dass sie hineinpasst (die Zeilen darunter rutschen samt Inhalt mit). Die neue Hoehe gilt
+  // als eingestellte Mindesthoehe, damit die Zeile beim naechsten Tippen nicht wieder schrumpft.
+  function fitTableRowToInk(s) {
+    if (!s || s.tool !== "pen" || s.rulerEdge || viewOnly) return;
+    const b = s.bbox || strokeWorldBBox(s);
+    if (!b) return;
+    const cx = (b.minX + b.maxX) / 2;
+    const cy = (b.minY + b.maxY) / 2;
+    const pageId = (s.extra && s.extra.boardPage) || null;
+    const list = Array.from(boardStrokes.values());
+    let t = null;
+    for (let i = list.length - 1; i >= 0; i--) {
+      const x = list[i];
+      if (x.tool !== "table" || !canEditStroke(x) || ((x.extra && x.extra.boardPage) || null) !== pageId) continue;
+      if (cellAt(x, { x: cx, y: cy })) {
+        t = x;
+        break;
+      }
+    }
+    if (!t) return;
+    const g = tableGeom(t);
+    const cell = cellAt(t, { x: cx, y: cy });
+    const r = cell.r;
+    const pad = cellPad(t);
+    // nur, wenn der Strich in dieser Zeile anfaengt und unten heraushaengt - eine lange Linie
+    // quer ueber die Tabelle soll nichts aufblasen
+    if (b.minY < g.ys[r] - pad || b.maxY <= g.ys[r + 1] - pad * 0.25) return;
+    const anchors = tableInkAnchors(t);
+    let bottom = b.maxY;
+    for (const an of anchors) {
+      if (an.r !== r) continue;
+      const ab = an.orig.bbox || strokeWorldBBox(an.orig);
+      if (ab && ab.minY >= g.ys[r] - pad) bottom = Math.max(bottom, ab.maxY);
+    }
+    const need = bottom - g.ys[r] + pad * 0.6;
+    const cur = g.ys[r + 1] - g.ys[r];
+    if (need <= cur + 0.5 || need > cur + t.size * 20) return;
+    const before = cloneStroke(t);
+    const A = tableAbs(t);
+    A.rh[r] = need;
+    A.rhMin[r] = need;
+    setTableAbs(t, g.x0, g.y0, A.cw, A.rh, A.rhMin);
+    growTableRows(t);
+    commitTableChange(t, before, null, anchors);
+    if (textEdit && textEdit.kind === "cell" && textEdit.tableId === t.id) {
+      textEdit.before = cloneStroke(t);
+      textEdit.inkAnchors = tableInkAnchors(t);
+      positionTextEditor();
+    }
+  }
+
+  // map: {r: [alt->neu], c: [...]} oder null (gleiche Nummern; was ueber das Ende faellt = geloescht).
+  // Gibt die Aenderungen zurueck: [{id, before, after}] (after null = geloescht, nur bei commit).
+  function reflowTableInk(anchors, t, map, commit) {
+    const changes = [];
+    if (!anchors || !anchors.length || !t) return changes;
+    const g = tableGeom(t);
+    const remove = [];
+    for (const a of anchors) {
+      const s = boardStrokes.get(a.id);
+      if (!s) continue;
+      let r = map && map.r ? map.r[a.r] : a.r;
+      let c = map && map.c ? map.c[a.c] : a.c;
+      if (r == null) r = a.r;
+      if (c == null) c = a.c;
+      if (r < 0 || c < 0 || r >= g.rows || c >= g.cols) {
+        // Zeile/Spalte geloescht: Inhalt geht mit (wie der getippte Text)
+        if (commit) {
+          remove.push(a.id);
+          changes.push({ id: a.id, before: a.orig, after: null });
+        }
+        continue;
+      }
+      const dx = g.xs[c] - a.ox;
+      const dy = g.ys[r] - a.oy;
+      s.points = a.orig.points.map((p) => ({ ...p, x: p.x + dx, y: p.y + dy }));
+      s.bbox = strokeWorldBBox(s);
+      if (commit && (Math.abs(dx) > 0.01 || Math.abs(dy) > 0.01)) {
+        wsSend({ type: "stroke_move", stroke: serializeStroke(s) });
+        changes.push({ id: a.id, before: a.orig, after: cloneStroke(s) });
+      }
+    }
+    if (remove.length) removeStrokes(remove);
+    return changes;
+  }
+
+  // Aenderung an einer Tabelle speichern, teilen und rueckgaengig machbar machen
+  // anchors: vorher gemerkte Lage der Handschrift (bei live gezogenen Aenderungen);
+  // sonst wird sie aus dem Stand "before" bestimmt
+  function commitTableChange(t, before, map, anchors) {
+    t.bbox = strokeWorldBBox(t);
+    lastTableId = t.id;
+    const ink = reflowTableInk(anchors || (before ? tableInkAnchors(before) : []), t, map, true);
+    wsSend({ type: "stroke_move", stroke: serializeStroke(t) });
+    if (ink.length) pushUndo({ type: "replace_many", changes: [{ id: t.id, before, after: cloneStroke(t) }, ...ink] });
+    else pushUndo({ type: "replace", before, after: cloneStroke(t) });
+    if (selection.ids.size) selectStrokeIds(Array.from(selection.ids));
+    syncSelectionToolbar();
+    requestRedraw();
+  }
+
+  // Zeile/Spalte am Ende anfuegen oder die letzte entfernen (fuer aeltere Aufrufer)
   function changeTable(kind, delta, explicit) {
     const t = explicit || selectedTable();
     if (!t) return;
-    lastTableId = t.id;
     const before = cloneStroke(t);
     const g = tableGeom(t);
-    const ex = JSON.parse(JSON.stringify(t.extra || {}));
-    let cw = g.xs.slice(1).map((x, i) => x - g.xs[i]);
-    let rh = g.ys.slice(1).map((y, i) => y - g.ys[i]);
-    const cells = ex.cells || {};
-    if (kind === "row") {
-      if (delta > 0) rh.push(rh[rh.length - 1] || t.size * 2.3);
-      else if (rh.length > 1) {
-        rh.pop();
-        for (const key of Object.keys(cells)) if (Number(key.split(",")[0]) >= rh.length) delete cells[key];
-      } else return;
-    } else {
-      if (delta > 0) cw.push(cw[cw.length - 1] || t.size * 7);
-      else if (cw.length > 1) {
-        cw.pop();
-        for (const key of Object.keys(cells)) if (Number(key.split(",")[1]) >= cw.length) delete cells[key];
-      } else return;
-    }
-    ex.cw = cw;
-    ex.rh = rh;
-    ex.rows = rh.length;
-    ex.cols = cw.length;
-    ex.cells = cells;
-    t.extra = ex;
-    t.points = [
-      { x: g.x0, y: g.y0, p: 1 },
-      { x: g.x0 + cw.reduce((a, b) => a + b, 0), y: g.y0 + rh.reduce((a, b) => a + b, 0), p: 1 },
-    ];
-    t.bbox = strokeWorldBBox(t);
-    wsSend({ type: "stroke_move", stroke: serializeStroke(t) });
-    pushUndo({ type: "replace", before, after: cloneStroke(t) });
-    if (selection.ids.size) selectStrokeIds(Array.from(selection.ids));
-    syncSelectionToolbar();
+    const op = kind === "row" ? (delta > 0 ? "rowBelow" : "delRow") : delta > 0 ? "colRight" : "delCol";
+    const map = tableStructOp(t, op, g.rows - 1, g.cols - 1);
+    if (map) commitTableChange(t, before, map);
   }
 
   // Tabelle, auf die sich die Zeilen/Spalten-Knoepfe beziehen: ausgewaehlt (Lasso), gerade in
@@ -7676,77 +7949,102 @@
     return last && last.tool === "table" ? last : null;
   }
 
-  // Waechst der Text in einer Zelle ueber ihre Hoehe hinaus, wird die Zeile hoeher.
-  function growTableRows(t) {
-    const g = tableGeom(t);
+  // Zeilenhoehe passt sich dem Text an: waechst mit, und schrumpft wieder bis zur
+  // eingestellten Hoehe, wenn Text geloescht wird. extraCell = {r, c, text} fuer die gerade
+  // bearbeitete Zelle (Live-Vorschau beim Tippen, noch nicht gespeichert).
+  function growTableRows(t, extraCell) {
+    const A = tableAbs(t);
+    const { g, cw, rhMin } = A;
+    const rh = A.rh.slice();
     const pad = cellPad(t);
     const lh = t.size * TEXT_LINE;
     const cells = (t.extra && t.extra.cells) || {};
-    const rh = g.ys.slice(1).map((y, i) => y - g.ys[i]);
-    const cw = g.xs.slice(1).map((x, i) => x - g.xs[i]);
     let changed = false;
     for (let r = 0; r < rh.length; r++) {
       let need = 0;
       for (let col = 0; col < cw.length; col++) {
-        const text = cells[r + "," + col];
+        let text = cells[r + "," + col];
+        if (extraCell && extraCell.r === r && extraCell.c === col) text = extraCell.text;
         if (!text) continue;
-        const n = wrapText(text, t.size, Math.max(4, cw[col] - pad * 2)).length;
+        const n = wrapCellText(t, r, text, Math.max(4, cw[col] - pad * 2)).length;
         need = Math.max(need, pad * 2 + t.size * 0.35 + (n - 1) * lh + t.size * 0.95);
       }
-      if (need > rh[r] + 0.5) {
-        rh[r] = need;
+      const want = Math.max(rhMin[r], need);
+      if (Math.abs(want - rh[r]) > 0.5) {
+        rh[r] = want;
         changed = true;
       }
     }
-    if (!changed) return;
-    t.extra = Object.assign({}, t.extra, { rh, cw });
-    t.points = [
-      { x: g.x0, y: g.y0, p: 1 },
-      { x: g.x0 + cw.reduce((a, b) => a + b, 0), y: g.y0 + rh.reduce((a, b) => a + b, 0), p: 1 },
-    ];
+    // Mindesthoehen immer mitschreiben (auch aeltere Tabellen bekommen sie so)
+    if (!changed && Array.isArray(t.extra && t.extra.rhMin)) return false;
+    setTableAbs(t, g.x0, g.y0, cw, rh, rhMin);
+    return changed;
   }
 
-  // innere Tabellenlinie unter dem Punkt (Toleranz in Bildschirm-Pixeln)
-  function tableLineAt(t, world, tolPx) {
+  // Tabellenlinie unter dem Punkt (Toleranz in Bildschirm-Pixeln). Innere Linien verteilen
+  // den Platz zwischen den Nachbarn; mit outer=true auch der rechte/untere Rand (waechst).
+  function tableLineAt(t, world, tolPx, outer) {
     const g = tableGeom(t);
     const tol = tolPx / scale;
     let best = null;
-    const grip = tol;
-    if (world.y >= g.y0 - grip && world.y <= g.y0 + g.H + tol) {
-      for (let i = 1; i < g.xs.length - 1; i++) {
+    const lastX = outer ? g.xs.length : g.xs.length - 1;
+    const lastY = outer ? g.ys.length : g.ys.length - 1;
+    if (world.y >= g.y0 - tol && world.y <= g.y0 + g.H + tol) {
+      for (let i = 1; i < lastX; i++) {
         const d = Math.abs(world.x - g.xs[i]);
         if (d <= tol && (!best || d < best.d)) best = { axis: "x", i, d };
       }
     }
-    if (world.x >= g.x0 - grip && world.x <= g.x0 + g.W + tol) {
-      for (let i = 1; i < g.ys.length - 1; i++) {
+    if (world.x >= g.x0 - tol && world.x <= g.x0 + g.W + tol) {
+      for (let i = 1; i < lastY; i++) {
         const d = Math.abs(world.y - g.ys[i]);
         if (d <= tol && (!best || d < best.d)) best = { axis: "y", i, d };
       }
     }
     return best;
   }
+  // Linie i um delta verschieben (ausgehend von den Startgroessen d.cw0/d.rh0/d.rhMin0)
+  function applyTableLineDrag(t, d, world) {
+    const x = d.axis === "x";
+    const arr = (x ? d.cw0 : d.rh0).slice();
+    const delta = x ? world.x - d.startWorld.x : world.y - d.startWorld.y;
+    const min = x ? tableColMin(t) : tableRowMin(t);
+    const i = d.i - 1;
+    let rhMin = d.rhMin0.slice();
+    if (i < arr.length - 1) {
+      const sum = arr[i] + arr[i + 1];
+      const a = Math.max(min, Math.min(sum - min, arr[i] + delta));
+      arr[i] = a;
+      arr[i + 1] = sum - a;
+      if (!x) {
+        rhMin[i] = a;
+        rhMin[i + 1] = sum - a;
+      }
+    } else {
+      // aeusserer Rand: letzte Spalte/Zeile waechst oder schrumpft
+      arr[i] = Math.max(min, arr[i] + delta);
+      if (!x) rhMin[i] = arr[i];
+    }
+    const g = tableGeom(t);
+    if (x) setTableAbs(t, g.x0, g.y0, arr, d.rh0, rhMin);
+    else setTableAbs(t, g.x0, g.y0, d.cw0, arr, rhMin);
+    // Text, der nicht mehr passt, macht die Zeilen wieder hoeher
+    growTableRows(t);
+  }
+  function tableLineDragStart(t, line, world) {
+    const A = tableAbs(t);
+    return { tableId: t.id, axis: line.axis, i: line.i, startWorld: world, cw0: A.cw, rh0: A.rh, rhMin0: A.rhMin, before: cloneStroke(t) };
+  }
   function updateTableLineDrag(world) {
     const t = boardStrokes.get(dragState.tableId);
     if (!t) return;
-    const x = dragState.axis === "x";
-    const arr = (x ? dragState.cw0 : dragState.rh0).slice();
-    const delta = x ? world.x - dragState.startWorld.x : world.y - dragState.startWorld.y;
-    const min = t.size * (x ? 1.6 : 1.5);
-    const i = dragState.i - 1;
-    const sum = arr[i] + arr[i + 1];
-    const a = Math.max(min, Math.min(sum - min, arr[i] + delta));
-    arr[i] = a;
-    arr[i + 1] = sum - a;
-    const ex = Object.assign({}, t.extra);
-    if (x) {
-      ex.cw = arr;
-      ex.rh = dragState.rh0.slice();
-    } else {
-      ex.rh = arr;
-      ex.cw = dragState.cw0.slice();
+    if (!dragState.rhMin0) dragState.rhMin0 = tableAbs(t).rhMin;
+    if (!dragState.tblBefore) {
+      dragState.tblBefore = cloneStroke(t);
+      dragState.inkAnchors = tableInkAnchors(t);
     }
-    t.extra = ex;
+    applyTableLineDrag(t, dragState, world);
+    reflowTableInk(dragState.inkAnchors, t);
     requestRedraw();
   }
 
@@ -7769,9 +8067,26 @@
         cw: g.xs.slice(1).map((x, i) => x - g.xs[i]),
         rh: g.ys.slice(1).map((y, i) => y - g.ys[i]),
         cells: JSON.parse(JSON.stringify((t.extra && t.extra.cells) || {})),
+        header: tableHasHeader(t),
+        rh0: g.ys.slice(1).map((y, i) => y - g.ys[i]),
+        rhMin0: tableAbs(t).rhMin,
       };
     } else {
-      tdState = { tableId: null, size: 20 * k, cw: [150 * k, 150 * k, 150 * k], rh: [46 * k, 46 * k, 46 * k], cells: {} };
+      // Voreinstellung: 3 x 3 mit Kopfzeile - die zuletzt gewaehlte Form wird gemerkt
+      let last = null;
+      try {
+        last = JSON.parse(localStorage.getItem("sn-table-last") || "null");
+      } catch (err) {}
+      const cols = Math.max(1, Math.min(30, (last && last.cols) || 3));
+      const rows = Math.max(1, Math.min(60, (last && last.rows) || 3));
+      tdState = {
+        tableId: null,
+        size: 20 * k,
+        cw: new Array(cols).fill((cols > 4 ? 600 / cols : 150) * k),
+        rh: new Array(rows).fill(46 * k),
+        cells: {},
+        header: last ? !!last.header : true,
+      };
     }
     document.getElementById("td-title").textContent = t ? "Tabelle bearbeiten" : "Tabelle einfügen";
     document.getElementById("td-ok").textContent = t ? "Übernehmen" : "Einfügen";
@@ -7809,6 +8124,8 @@
     if (!tdState) return;
     document.getElementById("td-cols").textContent = String(tdState.cw.length);
     document.getElementById("td-rows").textContent = String(tdState.rh.length);
+    document.getElementById("td-header")?.classList.toggle("active", !!tdState.header);
+    document.getElementById("td-header")?.setAttribute("aria-pressed", tdState.header ? "true" : "false");
     const d = window.devicePixelRatio || 1;
     const L = tdLayout();
     tdPreview.width = Math.round(L.r.width * d);
@@ -7819,6 +8136,10 @@
     const x0 = L.xs[0], x1 = L.xs[L.xs.length - 1], y0 = L.ys[0], y1 = L.ys[L.ys.length - 1];
     c.fillStyle = pagePaperColor();
     c.fillRect(x0, y0, x1 - x0, y1 - y0);
+    if (tdState.header && tdState.rh.length > 1) {
+      c.fillStyle = "rgba(26,115,232,0.10)";
+      c.fillRect(x0, y0, x1 - x0, L.ys[1] - y0);
+    }
     // Text wie auf dem Blatt (gleicher Umbruch, nur verkleinert)
     const size = tdState.size;
     const pad = size * 0.4;
@@ -7837,7 +8158,9 @@
         c.beginPath();
         c.rect(cx, cy, tdState.cw[col], tdState.rh[r]);
         c.clip();
-        wrapText(text, size, Math.max(4, tdState.cw[col] - pad * 2)).forEach((line, i) =>
+        const head = tdState.header && r === 0;
+        c.font = `${head ? 700 : 400} ${size}px Inter, sans-serif`;
+        wrapCellText({ size, extra: { header: head } }, r, text, Math.max(4, tdState.cw[col] - pad * 2)).forEach((line, i) =>
           c.fillText(line, cx + pad, cy + pad + size * 0.95 + i * lh)
         );
         c.restore();
@@ -7887,7 +8210,7 @@
     if (!tdState) return;
     const arr = kind === "cols" ? tdState.cw : tdState.rh;
     if (d > 0) {
-      if (arr.length >= 30) return;
+      if (arr.length >= (kind === "cols" ? 30 : 60)) return;
       arr.push(arr[arr.length - 1] || (kind === "cols" ? tdState.size * 7 : tdState.size * 2.3));
     } else {
       if (arr.length <= 1) return;
@@ -7918,6 +8241,12 @@
       const H = tdState.rh.reduce((a, b) => a + b, 0);
       tdState.cw = tdState.cw.map(() => W / tdState.cw.length);
       tdState.rh = tdState.rh.map(() => H / tdState.rh.length);
+      renderTableDialog();
+    });
+    document.getElementById("td-header")?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (!tdState) return;
+      tdState.header = !tdState.header;
       renderTableDialog();
     });
     document.getElementById("td-close").addEventListener("click", closeTableDialog);
@@ -8002,33 +8331,25 @@
     const st = tdState;
     closeTableDialog();
     if (!st.tableId) {
-      insertTable({ cw: st.cw, rh: st.rh });
+      try {
+        localStorage.setItem("sn-table-last", JSON.stringify({ cols: st.cw.length, rows: st.rh.length, header: !!st.header }));
+      } catch (err) {}
+      insertTable({ cw: st.cw, rh: st.rh, header: st.header });
       return;
     }
     const t = boardStrokes.get(st.tableId);
     if (!t) return;
     const before = cloneStroke(t);
     const g = tableGeom(t);
-    const ex = JSON.parse(JSON.stringify(t.extra || {}));
-    ex.cw = st.cw.slice();
-    ex.rh = st.rh.slice();
-    ex.cols = ex.cw.length;
-    ex.rows = ex.rh.length;
-    ex.cells = st.cells;
-    t.extra = ex;
-    t.points = [
-      { x: g.x0, y: g.y0, p: 1 },
-      { x: g.x0 + ex.cw.reduce((a, b) => a + b, 0), y: g.y0 + ex.rh.reduce((a, b) => a + b, 0), p: 1 },
-    ];
+    // Hoehen aus dem Dialog gelten als eingestellte Mindesthoehen; Text darf sie vergroessern
+    // unveraenderte Zeilen behalten ihre Mindesthoehe (duerfen also wieder schrumpfen)
+    const rhMin = st.rh.map((h, i) => (st.rh0 && Math.abs(h - st.rh0[i]) < 0.01 ? st.rhMin0[i] : h));
+    setTableAbs(t, g.x0, g.y0, st.cw, st.rh, rhMin, { cells: st.cells });
+    if (st.header) t.extra.header = true;
+    else delete t.extra.header;
     growTableRows(t);
-    t.bbox = strokeWorldBBox(t);
-    lastTableId = t.id;
-    wsSend({ type: "stroke_move", stroke: serializeStroke(t) });
-    pushUndo({ type: "replace", before, after: cloneStroke(t) });
-    if (selection.ids.size) selectStrokeIds(Array.from(selection.ids));
-    syncSelectionToolbar();
+    commitTableChange(t, before);
     syncModeBar();
-    requestRedraw();
   }
 
   function topTextAt(world) {
@@ -8123,6 +8444,18 @@
   // Tippen: bestehendes Textfeld bearbeiten, Tabellenzelle bearbeiten oder neues Feld.
   // Ziehen: neues Feld mit dieser Breite (Text bricht dann automatisch um).
   function finishTextDrag(drag) {
+    if (drag.tline && drag.tline.moved) {
+      const t = boardStrokes.get(drag.tline.tableId);
+      if (t) {
+        commitTableChange(t, drag.tline.before, null, drag.tline.inkAnchors);
+        if (textEdit && textEdit.kind === "cell" && textEdit.tableId === t.id) {
+          textEdit.before = cloneStroke(t);
+          textEdit.inkAnchors = tableInkAnchors(t);
+        }
+        positionTextEditor();
+      }
+      return;
+    }
     const a = drag.startWorld;
     let b = drag.cur || a;
     const dragged = Math.hypot(b.x - a.x, b.y - a.y) * scale > 24;
@@ -8192,14 +8525,306 @@
     requestRedraw();
   }
 
-  function openCellEditor(t, cell) {
-    if (!cell) return;
+  // caret: "end" (Standard), "start" oder "all" (Inhalt markiert - Tippen ersetzt ihn)
+  function openCellEditor(t, cell, caret) {
+    if (!t || !cell) return;
+    const g = tableGeom(t);
+    if (cell.r < 0 || cell.c < 0 || cell.r >= g.rows || cell.c >= g.cols) return;
     lastTableId = t.id;
     clearSelection();
-    textEdit = { kind: "cell", tableId: t.id, r: cell.r, c: cell.c, before: cloneStroke(t), size: t.size, color: "#1E1F22" };
+    textEdit = { kind: "cell", tableId: t.id, r: cell.r, c: cell.c, before: cloneStroke(t), size: t.size, color: "#1E1F22", inkAnchors: tableInkAnchors(t) };
     const text = ((t.extra && t.extra.cells) || {})[cell.r + "," + cell.c] || "";
     showTextEditor(text);
+    if (caret === "start" || caret === "all") {
+      const range = document.createRange();
+      range.selectNodeContents(textEditorEl);
+      if (caret === "start") range.collapse(true);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      editorRange = range.cloneRange();
+    }
+    syncTableCellBar();
     requestRedraw();
+  }
+
+  // Cursor ganz am Anfang / am Ende des offenen Felds? (fuer Pfeiltasten zwischen Zellen)
+  function caretAtEdge(which) {
+    const sel = window.getSelection();
+    if (!sel || !sel.rangeCount || !sel.isCollapsed || !textEditorEl.contains(sel.focusNode)) return false;
+    const r = document.createRange();
+    r.selectNodeContents(textEditorEl);
+    if (which === "start") r.setEnd(sel.focusNode, sel.focusOffset);
+    else r.setStart(sel.focusNode, sel.focusOffset);
+    if (r.toString().length) return false;
+    const brs = r.cloneContents().querySelectorAll("br").length;
+    return which === "start" ? brs === 0 : brs <= 1;
+  }
+
+  // In eine andere Zelle springen. wrap: am Zeilenende in die naechste Zeile (Tab);
+  // grow: hinter der letzten Zelle eine neue Zeile anlegen (Tab in der letzten Zelle).
+  function moveCell(dr, dc, opts) {
+    const ed = textEdit;
+    if (!ed || ed.kind !== "cell") return false;
+    const t0 = boardStrokes.get(ed.tableId);
+    if (!t0) return false;
+    const g = tableGeom(t0);
+    let r = ed.r + dr;
+    let c = ed.c + dc;
+    if (opts && opts.wrap) {
+      if (c >= g.cols) {
+        c = 0;
+        r++;
+      } else if (c < 0) {
+        c = g.cols - 1;
+        r--;
+      }
+    }
+    if (r < 0 || c < 0 || c >= g.cols) return false;
+    if (r >= g.rows && !(opts && opts.grow)) return false;
+    const id = ed.tableId;
+    commitTextEditor();
+    const t = boardStrokes.get(id);
+    if (!t) return true;
+    if (r >= tableGeom(t).rows) {
+      const before = cloneStroke(t);
+      if (tableStructOp(t, "rowBelow", tableGeom(t).rows - 1, 0)) commitTableChange(t, before);
+    }
+    openCellEditor(t, { r, c }, (opts && opts.caret) || "end");
+    revealTableCell(t, r, c);
+    return true;
+  }
+
+  // Zelle sichtbar halten (z. B. nach Tab in eine neue Zeile unten am Bildschirmrand)
+  function revealTableCell(t, r, c) {
+    const g = tableGeom(t);
+    const a = worldToScreen(g.xs[c], g.ys[r]);
+    const b = worldToScreen(g.xs[c + 1], g.ys[r + 1]);
+    const vh = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+    let dx = 0;
+    let dy = 0;
+    if (b.y > vh - 24) dy = vh - 24 - b.y;
+    if (a.y + dy < 80) dy = 80 - a.y;
+    if (b.x > window.innerWidth - 16) dx = window.innerWidth - 16 - b.x;
+    if (a.x + dx < 16) dx = 16 - a.x;
+    if (!dx && !dy) return;
+    offsetX += dx;
+    offsetY += dy;
+    requestViewRedraw();
+    positionTextEditor();
+  }
+
+  // Aus einer Tabellenkalkulation kopierten Bereich (Tab = Spalte, Zeilenumbruch = Zeile)
+  // ab der offenen Zelle einfuegen
+  function pasteGridIntoTable(text) {
+    const ed = textEdit;
+    if (!ed || ed.kind !== "cell") return false;
+    const grid = String(text)
+      .replace(/\r\n?/g, "\n")
+      .replace(/\n+$/, "")
+      .split("\n")
+      .map((line) => line.split("\t").map((v) => v.replace(/^"(.*)"$/s, "$1").replace(/""/g, '"').trim()));
+    if (!grid.length || (grid.length === 1 && grid[0].length < 2)) return false;
+    const id = ed.tableId;
+    const r0 = ed.r;
+    const c0 = ed.c;
+    commitTextEditor();
+    const t = boardStrokes.get(id);
+    if (!t) return true;
+    const before = cloneStroke(t);
+    const needR = Math.min(60, r0 + grid.length);
+    const needC = Math.min(30, c0 + Math.max(...grid.map((row) => row.length)));
+    while (tableGeom(t).rows < needR && tableStructOp(t, "rowBelow", tableGeom(t).rows - 1, 0));
+    while (tableGeom(t).cols < needC && tableStructOp(t, "colRight", 0, tableGeom(t).cols - 1));
+    const cells = Object.assign({}, (t.extra && t.extra.cells) || {});
+    grid.forEach((row, i) =>
+      row.forEach((v, j) => {
+        if (r0 + i >= needR || c0 + j >= needC) return;
+        const key = r0 + i + "," + (c0 + j);
+        if (v) cells[key] = v;
+        else delete cells[key];
+      })
+    );
+    t.extra = Object.assign({}, t.extra, { cells });
+    growTableRows(t);
+    commitTableChange(t, before);
+    openCellEditor(t, { r: r0, c: c0 });
+    return true;
+  }
+
+  // ---- Tabellen-Leiste: erscheint ueber der Tabelle, solange eine Zelle offen ist ----
+  function tableCellBarEl() {
+    return document.getElementById("table-cell-bar");
+  }
+  function syncTableCellBar() {
+    const bar = tableCellBarEl();
+    if (!bar) return;
+    const on = !!(textEdit && textEdit.kind === "cell" && !viewOnly);
+    bar.classList.toggle("hidden", !on);
+    if (!on) return;
+    const t = boardStrokes.get(textEdit.tableId);
+    if (!t) return;
+    const g = tableGeom(t);
+    const set = (op, dis) => {
+      const b = bar.querySelector(`[data-op="${op}"]`);
+      if (b) b.disabled = dis;
+    };
+    set("delRow", g.rows <= 1);
+    set("delCol", g.cols <= 1);
+    set("rowAbove", g.rows >= 60);
+    set("rowBelow", g.rows >= 60);
+    set("colLeft", g.cols >= 30);
+    set("colRight", g.cols >= 30);
+    const hb = bar.querySelector('[data-op="header"]');
+    if (hb) {
+      hb.classList.toggle("active", tableHasHeader(t));
+      hb.setAttribute("aria-pressed", tableHasHeader(t) ? "true" : "false");
+    }
+    positionTableCellBar();
+  }
+  function positionTableCellBar() {
+    const bar = tableCellBarEl();
+    if (!bar || bar.classList.contains("hidden") || !textEdit || textEdit.kind !== "cell") return;
+    const t = boardStrokes.get(textEdit.tableId);
+    if (!t) return;
+    const g = tableGeom(t);
+    const tl = worldToScreen(g.x0, g.y0);
+    const br = worldToScreen(g.x0 + g.W, g.y0 + g.H);
+    const cellTop = worldToScreen(g.xs[textEdit.c], g.ys[textEdit.r]).y;
+    const bw = bar.offsetWidth || 420;
+    const bh = bar.offsetHeight || 44;
+    const vh = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+    const topLimit = 64; // unter der oberen Leiste bleiben
+    const fits = (y) => y >= topLimit && y + bh <= vh - 8;
+    const edBottom = cellTop + textEditorEl.offsetHeight;
+    let y = tl.y - bh - 12;
+    if (!fits(y)) y = br.y + 12;
+    if (!fits(y)) y = cellTop - bh - 10;
+    if (!fits(y)) y = edBottom + 10;
+    y = Math.max(topLimit, Math.min(vh - bh - 8, y));
+    const cx = (tl.x + br.x) / 2;
+    const x = Math.max(8, Math.min(window.innerWidth - bw - 8, cx - bw / 2));
+    bar.style.left = x + "px";
+    bar.style.top = y + "px";
+  }
+  function runTableCellOp(op) {
+    const ed = textEdit;
+    if (!ed || ed.kind !== "cell") return;
+    const id = ed.tableId;
+    let { r, c } = ed;
+    if (op === "dialog") {
+      commitTextEditor();
+      const t0 = boardStrokes.get(id);
+      if (t0) openTableDialog(t0);
+      return;
+    }
+    commitTextEditor();
+    const t = boardStrokes.get(id);
+    if (!t) return;
+    const before = cloneStroke(t);
+    if (op === "deleteTable") {
+      // Inhalt der Zellen (Handschrift, Textfelder) geht mit - Rueckgaengig holt alles zurueck
+      const inside = tableInkAnchors(t);
+      removeStrokes([t.id, ...inside.map((x) => x.id)]);
+      if (inside.length) pushUndo({ type: "replace_many", changes: [{ id: t.id, before, after: null }, ...inside.map((x) => ({ id: x.id, before: x.orig, after: null }))] });
+      else pushUndo({ type: "replace", before, after: null });
+      lastTableId = null;
+      showToast("Tabelle gelöscht – rückgängig mit ↶");
+      requestRedraw();
+      return;
+    }
+    const map = tableStructOp(t, op, r, c);
+    if (!map) {
+      openCellEditor(t, { r, c });
+      return;
+    }
+    commitTableChange(t, before, map);
+    // Cursor dorthin, wo man weiterschreiben will
+    const g = tableGeom(t);
+    if (op === "rowBelow") r = r + 1;
+    else if (op === "colRight") c = c + 1;
+    else if (op === "delRow") r = Math.min(r, g.rows - 1);
+    else if (op === "delCol") c = Math.min(c, g.cols - 1);
+    openCellEditor(t, { r, c });
+    revealTableCell(t, r, c);
+  }
+  {
+    const bar = tableCellBarEl();
+    if (bar) {
+      // Fokus bleibt im Feld (Tastatur geht nicht zu); ausgeloest wird beim Loslassen,
+      // weil das iPad den "click" nach preventDefault verschluckt
+      bar.addEventListener("mousedown", (e) => e.preventDefault());
+      bar.addEventListener("pointerdown", (e) => {
+        e.stopPropagation();
+        if (e.cancelable) e.preventDefault();
+        const b = e.target.closest("button[data-op]");
+        bar._pressed = b && !b.disabled ? { b, id: e.pointerId } : null;
+      });
+      bar.addEventListener("pointerup", (e) => {
+        e.stopPropagation();
+        const p = bar._pressed;
+        bar._pressed = null;
+        const b = e.target.closest("button[data-op]");
+        if (!p || p.id !== e.pointerId || p.b !== b) return;
+        e.preventDefault();
+        runTableCellOp(b.dataset.op);
+      });
+      bar.addEventListener("click", (e) => {
+        e.stopPropagation();
+        // nur Tastatur (Enter/Leertaste auf dem Knopf) - Zeiger loesen schon bei pointerup aus
+        if (e.detail !== 0) return;
+        const b = e.target.closest("button[data-op]");
+        if (b && !b.disabled) runTableCellOp(b.dataset.op);
+      });
+    }
+  }
+
+  // Rahmen um die offene Zelle (ueber allem, damit man sieht, wo man schreibt)
+  function drawTableEditOverlay() {
+    let t = null;
+    if (textEdit && textEdit.kind === "cell") t = boardStrokes.get(textEdit.tableId);
+    const drag = textDrag && textDrag.tline && textDrag.tline.moved ? textDrag.tline : null;
+    if (!t && drag) t = boardStrokes.get(drag.tableId);
+    if (!t) return;
+    const g = tableGeom(t);
+    ctx.save();
+    ctx.strokeStyle = "#1A73E8";
+    ctx.globalAlpha = 0.45;
+    ctx.lineWidth = 1.5 / scale;
+    ctx.strokeRect(g.x0, g.y0, g.W, g.H);
+    ctx.globalAlpha = 1;
+    if (textEdit && textEdit.kind === "cell" && textEdit.tableId === t.id && textEdit.r < g.rows && textEdit.c < g.cols) {
+      ctx.lineWidth = 2.5 / scale;
+      ctx.strokeRect(g.xs[textEdit.c], g.ys[textEdit.r], g.xs[textEdit.c + 1] - g.xs[textEdit.c], g.ys[textEdit.r + 1] - g.ys[textEdit.r]);
+    }
+    if (drag && drag.tableId === t.id) {
+      ctx.lineWidth = 3 / scale;
+      ctx.beginPath();
+      if (drag.axis === "x") {
+        ctx.moveTo(g.xs[drag.i], g.y0);
+        ctx.lineTo(g.xs[drag.i], g.y0 + g.H);
+      } else {
+        ctx.moveTo(g.x0, g.ys[drag.i]);
+        ctx.lineTo(g.x0 + g.W, g.ys[drag.i]);
+      }
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // Textmodus: Linie einer Tabelle unter dem Zeiger (auch rechter/unterer Rand)
+  function tableLineHitAt(world, pointerType) {
+    const tol = pointerType === "touch" ? 14 : pointerType === "pen" ? 9 : 6;
+    const list = Array.from(boardStrokes.values());
+    for (let i = list.length - 1; i >= 0; i--) {
+      const s = list[i];
+      if (s.tool !== "table" || !canEditStroke(s)) continue;
+      const pageId = s.extra && s.extra.boardPage;
+      if (boardEditId ? pageId !== boardEditId : pageId) continue;
+      const line = tableLineAt(s, world, tol, true);
+      if (line) return { t: s, line };
+    }
+    return null;
   }
 
   function escapeHtml(t) {
@@ -8299,6 +8924,7 @@
     textMergeQueue.length = 0;
     textEditorEl.classList.remove("hidden");
     textFormatBar.classList.toggle("hidden", !textEdit || textEdit.kind !== "text");
+    syncTableCellBar();
     positionTextEditor();
     textEditorEl.focus({ preventScroll: true });
     const range = document.createRange();
@@ -8344,7 +8970,9 @@
       minH = (g.ys[textEdit.r + 1] - g.ys[textEdit.r] - pad * 2) * scale;
       size = t.size * scale;
       color = themeInk("#1E1F22");
+      textEditorEl.style.fontWeight = tableHasHeader(t) && textEdit.r === 0 ? "700" : "";
     } else {
+      textEditorEl.style.fontWeight = "";
       const p = worldToScreen(textEdit.x, textEdit.y - textEdit.size * 0.95);
       left = p.x;
       top = p.y;
@@ -8369,6 +8997,7 @@
     st.height = "auto";
     st.height = Math.max(minH, textEditorEl.scrollHeight) + "px";
     syncTextHandles(left, top, Math.max(24, width), textEditorEl.offsetHeight);
+    positionTableCellBar();
     if (!textFormatBar.classList.contains("hidden")) {
       const bw = textFormatBar.offsetWidth || 260;
       const bh = textFormatBar.offsetHeight || 44;
@@ -8492,6 +9121,15 @@
     textEdit = null;
     endTextLive(ed);
     syncTextHandles();
+    syncTableCellBar();
+    // live mitgewachsene Zeile wieder auf den gespeicherten Stand
+    if (ed && ed.kind === "cell") {
+      const t = boardStrokes.get(ed.tableId);
+      if (t) {
+        growTableRows(t);
+        reflowTableInk(ed.inkAnchors, t);
+      }
+    }
     textFormatBar.classList.add("hidden");
     textEditorEl.classList.add("hidden");
     textEditorEl.blur();
@@ -8508,6 +9146,7 @@
     // kommen sie auch bei den anderen an
     queueMicrotask(() => endTextLive(ed));
     syncTextHandles();
+    syncTableCellBar();
     textFormatBar.classList.add("hidden");
     textEditorEl.classList.add("hidden");
     textEditorEl.blur();
@@ -8518,14 +9157,18 @@
       const key = ed.r + "," + ed.c;
       const cells = Object.assign({}, (t.extra && t.extra.cells) || {});
       const was = ((ed.before && ed.before.extra && ed.before.extra.cells) || {})[key] || "";
-      if (was === value && (cells[key] || "") === value) return requestRedraw();
+      if (was === value && (cells[key] || "") === value) {
+        // nichts geaendert: live mitgewachsene Zeile und Handschrift wieder zurueck
+        growTableRows(t);
+        reflowTableInk(ed.inkAnchors, t);
+        return requestRedraw();
+      }
       if (value) cells[key] = value;
       else delete cells[key];
       t.extra = Object.assign({}, t.extra, { cells });
       growTableRows(t);
-      t.bbox = strokeWorldBBox(t);
-      wsSend({ type: "stroke_move", stroke: serializeStroke(t) });
-      pushUndo({ type: "replace", before: ed.before, after: cloneStroke(t) });
+      // Handschrift in den Zellen darunter rutscht mit, wenn die Zeile hoeher/niedriger wird
+      commitTableChange(t, ed.before, null, ed.inkAnchors);
       return requestRedraw();
     }
     if (!value.trim()) {
@@ -9301,6 +9944,9 @@
     textEditorEl.addEventListener("paste", (e) => {
       e.preventDefault();
       const text = (e.clipboardData && e.clipboardData.getData("text/plain")) || "";
+      // aus Excel/Numbers/Google Tabellen kopiert (Tabulator zwischen den Spalten):
+      // auf die Zellen ab hier verteilen, die Tabelle waechst bei Bedarf mit
+      if (textEdit && textEdit.kind === "cell" && /\t/.test(text) && pasteGridIntoTable(text)) return;
       document.execCommand("insertText", false, text);
     });
     textEditorEl.addEventListener("keydown", (e) => {
@@ -9336,6 +9982,27 @@
           return;
         }
       }
+      // Tabellenzelle: Tab/Shift+Tab zur naechsten/vorigen Zelle (Tab in der letzten Zelle legt
+      // eine neue Zeile an), Pfeiltasten am Textanfang/-ende in die Nachbarzelle
+      if (textEdit && textEdit.kind === "cell" && !e.ctrlKey && !e.metaKey && !e.altKey && !e.isComposing) {
+        if (e.key === "Tab") {
+          e.preventDefault();
+          moveCell(0, e.shiftKey ? -1 : 1, { wrap: true, grow: !e.shiftKey, caret: "all" });
+          return;
+        }
+        if (!e.shiftKey) {
+          const nav = {
+            ArrowUp: ["start", -1, 0, "end"],
+            ArrowDown: ["end", 1, 0, "end"],
+            ArrowLeft: ["start", 0, -1, "end"],
+            ArrowRight: ["end", 0, 1, "start"],
+          }[e.key];
+          if (nav && caretAtEdge(nav[0]) && moveCell(nav[1], nav[2], { caret: nav[3] })) {
+            e.preventDefault();
+            return;
+          }
+        }
+      }
       // Strg/Cmd+B/I/U wie gewohnt; Tabellenzellen bleiben unformatiert
       const meta = e.ctrlKey || e.metaKey;
       if (meta && textEdit && textEdit.kind === "cell" && /^[biu]$/i.test(e.key)) e.preventDefault();
@@ -9353,6 +10020,15 @@
       lastExpandedRange = null;
       cleanupPlaceholders();
       markdownAfterInput(e);
+      // Tabellenzelle: Zeile waechst/schrumpft schon beim Tippen mit (gespeichert wird beim Verlassen)
+      if (textEdit && textEdit.kind === "cell") {
+        const t = boardStrokes.get(textEdit.tableId);
+        if (t && growTableRows(t, { r: textEdit.r, c: textEdit.c, text: editorPlainText() })) {
+          reflowTableInk(textEdit.inkAnchors, t);
+          positionTextEditor();
+          requestRedraw();
+        }
+      }
     });
     // Live teilen: jede Aenderung im Feld (Tippen, Formatieren) und jede Cursor-Bewegung
     textLiveObserver = new MutationObserver((list) => {
@@ -12311,6 +12987,14 @@
   }
 
   function finalizeSelectionDrag() {
+    // Tabellenlinie gezogen: Tabelle samt mitgewanderter Handschrift in einem Schritt speichern
+    if (dragState && dragState.kind === "tblline") {
+      const t = boardStrokes.get(dragState.tableId);
+      const d = dragState;
+      dragState = null;
+      if (t && d.tblBefore) commitTableChange(t, d.tblBefore, null, d.inkAnchors);
+      return;
+    }
     const moves = [];
     for (const [id, beforePts] of dragState.snapshot) {
       const s = boardStrokes.get(id);
@@ -14542,8 +15226,10 @@
     lastEndedStroke = { id: currentStroke.id, t: performance.now() };
     boardStrokes.set(currentStroke.id, currentStroke);
     pushUndo({ type: "add", stroke: cloneStroke(currentStroke) });
+    const finished = currentStroke;
     currentStroke = null;
     if (selectShape) selectStrokeIds([finishedId]);
+    fitTableRowToInk(finished);
     requestRedraw();
   }
 
@@ -14776,7 +15462,13 @@
     if (notebook && !boardEditId && currentTool !== "eraser" && currentTool !== "select" && !onSomePage(world)) return;
     lastPointerWorld = world;
     if (currentTool === "text") {
-      textDrag = { pointerId: e.pointerId, startWorld: world, cur: world };
+      // auf eine Tabellenlinie: Spalte/Zeile breiter oder schmaler ziehen
+      const hit = tableLineHitAt(world, e.pointerType);
+      textDrag = { pointerId: e.pointerId, startWorld: world, cur: world, tline: hit ? tableLineDragStart(hit.t, hit.line, world) : null };
+      if (textDrag.tline) {
+        textDrag.tline.screen = { x: e.clientX, y: e.clientY };
+        textDrag.tline.inkAnchors = tableInkAnchors(hit.t);
+      }
       return;
     }
     // Stift/Marker greifen nur eine gerade eingerastete, noch ausgewaehlte Form (an ihren
@@ -14857,7 +15549,11 @@
     // alles, was der Tap tut (wie in GoodNotes) - sonst entstuende sofort das naechste Feld.
     if (textEdit) {
       commitTextEditor();
-      if (currentTool === "text") {
+      // Tabelle: Tipp auf eine andere Zelle (oder eine Linie) wechselt direkt dorthin -
+      // nicht erst schliessen und dann nochmal tippen
+      const tw = currentTool === "text" ? screenToWorld(e.clientX, e.clientY) : null;
+      const toTable = !!tw && (!!topTableAt(tw) || !!tableLineHitAt(tw, e.pointerType));
+      if (currentTool === "text" && !toTable) {
         if (e.pointerType !== "touch" || fingerDrawEnabled) return;
         textTapSuppressed = e.pointerId; // dieser Finger-Tap hat nur die Eingabe beendet
       }
@@ -15161,9 +15857,26 @@
     if (currentTool === "eraser") {
       updateEraserCursor(e.clientX, e.clientY);
     }
+    // Textmodus: ueber einer Tabellenlinie zeigt der Zeiger, dass man sie ziehen kann
+    if (currentTool === "text" && e.pointerType !== "touch") {
+      const tl = textDrag && textDrag.pointerId === e.pointerId ? textDrag.tline : !textDrag ? tableLineHitAt(world, e.pointerType) : null;
+      const axis = tl ? (tl.line ? tl.line.axis : tl.axis) : null;
+      const cur = axis === "x" ? "col-resize" : axis === "y" ? "row-resize" : "";
+      if (canvas.style.cursor !== cur) canvas.style.cursor = cur;
+    } else if (canvas.style.cursor) canvas.style.cursor = "";
 
     if (textDrag && textDrag.pointerId === e.pointerId) {
       textDrag.cur = world;
+      const tl = textDrag.tline;
+      if (tl && (tl.moved || Math.hypot(e.clientX - tl.screen.x, e.clientY - tl.screen.y) > 4)) {
+        tl.moved = true;
+        const t = boardStrokes.get(tl.tableId);
+        if (t) {
+          applyTableLineDrag(t, tl, world);
+          reflowTableInk(tl.inkAnchors, t);
+          positionTextEditor();
+        }
+      }
       requestRedraw();
     } else if (pendingShapeDrag && pendingShapeDrag.pointerId === e.pointerId) {
       const moved = Math.hypot(e.clientX - pendingShapeDrag.clientX, e.clientY - pendingShapeDrag.clientY);
@@ -15398,6 +16111,16 @@
     if (textDrag && textDrag.pointerId === e.pointerId) {
       const drag = textDrag;
       textDrag = null;
+      if (e.type !== "pointerup" && drag.tline && drag.tline.moved) {
+        // abgebrochen: Linie zurueck
+        const t = boardStrokes.get(drag.tline.tableId);
+        if (t) {
+          t.points = drag.tline.before.points.map((p) => ({ ...p }));
+          t.extra = JSON.parse(JSON.stringify(drag.tline.before.extra));
+          t.bbox = strokeWorldBBox(t);
+          reflowTableInk(drag.tline.inkAnchors, t);
+        }
+      }
       if (e.type === "pointerup") finishTextDrag(drag);
       requestRedraw();
       return;

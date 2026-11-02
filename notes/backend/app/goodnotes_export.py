@@ -300,6 +300,11 @@ def _render_strokes(c, strokes: list[dict[str, Any]], tx, ty, scale: float) -> N
         size = float(stroke.get("size") or 20)
         c.setFillColor(Color(1, 1, 1, alpha=0.92))
         c.rect(tx(x0), ty(y0 + h), w * scale, h * scale, stroke=0, fill=1)
+        header = bool(extra.get("header")) and rows > 1
+        if header:
+            # Kopfzeile wie in der App: leicht blau hinterlegt, Text fett
+            c.setFillColor(Color(26 / 255, 115 / 255, 232 / 255, alpha=0.07))
+            c.rect(tx(x0), ty(ys[1]), w * scale, (ys[1] - y0) * scale, stroke=0, fill=1)
         c.setStrokeColor(_hex_color(str(stroke.get("color") or "#5f6368"), 1.0))
         c.setLineWidth(max(0.4, size * 0.05 * scale))
         for x in xs:
@@ -310,7 +315,6 @@ def _render_strokes(c, strokes: list[dict[str, Any]], tx, ty, scale: float) -> N
         font_size = max(5.0, size * scale)
         pad = size * 0.4
         c.setFillColor(HexColor("#1E1F22"))
-        c.setFont("Helvetica", font_size)
         for key, text in cells.items():
             try:
                 r, col = (int(v) for v in str(key).split(","))
@@ -318,7 +322,9 @@ def _render_strokes(c, strokes: list[dict[str, Any]], tx, ty, scale: float) -> N
                 continue
             if not text or r >= rows or col >= cols:
                 continue
-            lines = _wrap_pdf_text(str(text), "Helvetica", font_size, max(4.0, (xs[col + 1] - xs[col] - pad * 2) * scale))
+            font = "Helvetica-Bold" if header and r == 0 else "Helvetica"
+            c.setFont(font, font_size)
+            lines = _wrap_pdf_text(str(text), font, font_size, max(4.0, (xs[col + 1] - xs[col] - pad * 2) * scale))
             for i, line in enumerate(lines):
                 c.drawString(tx(xs[col] + pad), ty(ys[r] + pad + size * 0.95) - i * font_size * 1.3, line)
 

@@ -70,6 +70,9 @@ class GoodnotesExportTests(unittest.TestCase):
         ]
         data = build_pdf(strokes)
         self.assertTrue(data.startswith(b"%PDF"))
+        # Kopfzeile (fett, hinterlegt) und Mindesthoehen stoeren den Export nicht
+        strokes[1]["extra"].update({"header": True, "rhMin": [46, 46]})
+        self.assertTrue(build_pdf(strokes).startswith(b"%PDF"))
 
     def test_pdf_with_formatted_runs(self):
         runs = [{"t": "Hallo "}, {"t": "Welt", "b": 1}, {"t": " weg", "s": 1, "u": 1}, {"t": "\nkursiv", "i": 1}]
