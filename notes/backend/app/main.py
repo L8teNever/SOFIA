@@ -1362,7 +1362,16 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                     continue
                 try:
                     await target.websocket.send_json(
-                        {"type": "device_open", "from": client.id, "person": person, "board": open_id, "title": str(msg.get("title") or "")[:120]}
+                        {
+                            "type": "device_open",
+                            "from": client.id,
+                            "person": person,
+                            "board": open_id,
+                            "title": str(msg.get("title") or "")[:120],
+                            # Heft: diese Seite dort aufschlagen (enter = Board-Seite gleich oeffnen)
+                            "page": str(msg.get("page") or "")[:64],
+                            "enter": bool(msg.get("enter")),
+                        }
                     )
                 except Exception:
                     await websocket.send_json({"type": "device_open_failed", "reason": "gone"})

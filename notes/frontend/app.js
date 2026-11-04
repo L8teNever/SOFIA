@@ -225,6 +225,8 @@
   let notebookBoardId = null;
   let notebook = null; // {layout, template: {paper, mediaId?}, pages: [{id, paper, mediaId?, w, h, board?}]}
   let boardEditId = null; // Seite, deren unendliches Board gerade offen ist
+  let boardLeftAt = -1e9; // wann das offene Board zuletzt verlassen wurde
+  let pendingPageOpen = null; // Seite, die nach dem Laden des Hefts aufgehen soll (anderes Geraet)
   let pendingBoardTap = null; // Tippen auf eine schreibgeschuetzte Vorschau
   let boardLastOpenTap = null;
   // Lage der Seiten in Weltkoordinaten (gleich wie auf dem Server fuer den PDF-Export)
@@ -2207,6 +2209,7 @@
     if (!boardEditId) return false;
     const id = boardEditId;
     saveBoardView(id);
+    boardLeftAt = performance.now();
     // Zoom-Fenster stand in Board-Koordinaten: schliessen, sonst zeigt es Unsinn
     if (typeof closeZoomWindow === "function") closeZoomWindow();
     boardEditId = null;
@@ -2750,6 +2753,7 @@
     drawRemoteCarets();
     drawPagePullRing();
     positionTextEditor();
+    if (window.sofiaSyncNbScroll) window.sofiaSyncNbScroll();
     positionInkChips();
     positionScanBoxes();
     positionHeadingChips();
@@ -5661,6 +5665,12 @@
         }
         resendPending();
         if (notebook && window.sofiaSyncAllBoards && !window.sofiaSplitBg && !boardEditId) window.sofiaSyncAllBoards();
+        // vom anderen Geraet gewuenschte Seite: erst jetzt, sonst ueberschreibt sie die gespeicherte Stelle
+        if (pendingPageOpen && !window.sofiaSplitBg && msg.board && pendingPageOpen.board === msg.board.id) {
+          const want = pendingPageOpen;
+          pendingPageOpen = null;
+          if (window.sofiaOpenPage) window.sofiaOpenPage(want.page, want.enter);
+        }
         requestRedraw();
         scheduleSaveBoard();
         if (!window.sofiaSplitBg && window.sofiaBoardLoading) window.sofiaBoardLoading(false);
@@ -24132,7 +24142,12 @@
       const v = viewFor(i);
       if (!v) return;
       if (typeof endZoomLock === "function") endZoomLock();
-      if (animate) return animateView(v);
+      // gerade aus dem offenen Board gekommen: die Ansicht steht noch in Board-Koordinaten, eine
+      // Animation von dort saehe aus wie Scrollen von ganz oben im Heft - also direkt hin
+      if (animate && performance.now() - boardLeftAt > 80) {
+        shortenTravel(v);
+        return animateView(v);
+      }
       viewAnim = null;
       scale = v.scale;
       offsetX = v.offsetX;
@@ -24262,9 +24277,237 @@
       const from = pageAnchor;
       pageAnchor = target;
       if (target !== from && window.sofiaZoomToPage) window.sofiaZoomToPage(target);
-      animateView(viewFor(target, end));
+      const v = viewFor(target, end);
+      shortenTravel(v);
+      animateView(v);
       return true;
     }
+
+    // Lange Wege nicht durchscrollen: sonst sieht ein Seitenwechsel (z. B. von weit oben in einer
+    // langen Board-Seite oder ein Sprung ueber viele Seiten) aus, als kaeme man von ganz oben.
+    // Die Animation startet hoechstens gut eine Bildschirmlaenge vor dem Ziel.
+    function shortenTravel(v) {
+      if (!v || !notebook) return;
+      const horiz = notebook.layout === "horizontal";
+      const max = (horiz ? window.innerWidth : window.innerHeight) * 1.1;
+      const d = (horiz ? offsetX : offsetY) - (horiz ? v.offsetX : v.offsetY);
+      if (Math.abs(d) <= max) return;
+      if (horiz) offsetX = v.offsetX + Math.sign(d) * max;
+      else offsetY = v.offsetY + Math.sign(d) * max;
+    }
+
+    // Einen Schritt weiter (dir = 1) oder zurueck (dir = -1): Pfeiltasten am PC.
+    // Lange Seite: erst innerhalb scrollen. Reingezoomt oder durchgehend: um eine Bildschirmhoehe.
+    function pageStep(dir) {
+      if (!notebook || boardEditId) return false;
+      const horiz = notebook.layout === "horizontal";
+      const availW = window.innerWidth - viewLeft - viewRight;
+      const availH = window.innerHeight - 76 - 16;
+      if (notebookZoomedIn() || !nbPaging()) {
+        animateView({ scale, offsetX: horiz ? offsetX - dir * availW * 0.85 : offsetX, offsetY: horiz ? offsetY : offsetY - dir * availH * 0.85 }, 200);
+        setTimeout(() => window.sofiaFollowPanPage && window.sofiaFollowPanPage(), 220);
+        return true;
+      }
+      const cur = currentPage();
+      const tall = !horiz && tallPage(cur);
+      if (tall) {
+        const cy = Math.max(tall.oyBottom, Math.min(tall.oyTop, offsetY));
+        const room = dir > 0 ? cy - tall.oyBottom : tall.oyTop - cy;
+        if (room > 4) {
+          pageAnchor = cur;
+          animateView({ scale: tall.scale, offsetX: tall.ox, offsetY: cy - dir * Math.min(room, availH * 0.85) }, 200);
+          return true;
+        }
+      }
+      const [a] = groupOf(cur);
+      const target = Math.max(0, Math.min(notebook.pages.length - 1, a + dir * (nbSpread() ? 2 : 1)));
+      if (target === a) return true;
+      return goToPage(target, dir < 0 ? "bottom" : "top");
+    }
+    const OVERLAYS = ".library-backdrop:not(.hidden), .dlg-scrim:not(.hidden), .settings-backdrop:not(.hidden), .table-dialog:not(.hidden), .lightbox:not(.hidden), .scan-scrim:not(.hidden), .who-backdrop:not(.hidden)";
+    let lastKeyStep = 0;
+    window.addEventListener("keydown", (e) => {
+      if (e.ctrlKey || e.metaKey || e.altKey || e.isComposing) return;
+      const dir = { ArrowDown: 1, PageDown: 1, ArrowRight: 1, ArrowUp: -1, PageUp: -1, ArrowLeft: -1 }[e.key];
+      const edge = e.key === "Home" || e.key === "End";
+      if (!dir && !edge) return;
+      if (!notebook || boardEditId || textEdit || historyView) return;
+      const a = document.activeElement;
+      if (a && (a.tagName === "INPUT" || a.tagName === "TEXTAREA" || a.tagName === "SELECT" || a.isContentEditable)) return;
+      if (document.querySelector(OVERLAYS)) return;
+      e.preventDefault();
+      // Taste gedrueckt halten: zuegig blaettern, aber die Seiten bleiben erkennbar
+      const now = performance.now();
+      if (e.repeat && now - lastKeyStep < 140) return;
+      lastKeyStep = now;
+      if (edge) goToPage(e.key === "Home" ? 0 : notebook.pages.length - 1, "top");
+      else pageStep(dir);
+    });
+
+    // Seite gezielt oeffnen (Auftrag vom anderen Geraet). enter: Board-Seite gleich aufmachen.
+    window.sofiaOpenPage = (pageId, enter, retried) => {
+      if (!notebook || !pageId) return false;
+      const i = notebook.pages.findIndex((p) => p.id === pageId);
+      if (i < 0) {
+        // gerade erst angelegt: das Heft kommt evtl. kurz nach dem Auftrag an
+        if (!retried) setTimeout(() => window.sofiaOpenPage(pageId, enter, true), 700);
+        else showToast("Die Seite gibt es hier nicht mehr");
+        return false;
+      }
+      if (textEdit) commitTextEditor();
+      const pg = notebook.pages[i];
+      if (enter && (pg.board || pg.boardOf)) {
+        enterBoardPage(pg.boardOf || pg.id);
+        return true;
+      }
+      if (boardEditId) exitBoardPage({ fit: false });
+      fitPage(i, true);
+      return true;
+    };
+
+    // ---- Scrollbar am PC (Maus): zeigt, wo man im Heft ist; ziehen oder in die Leiste klicken ----
+    const nbFine = window.matchMedia ? window.matchMedia("(hover: hover) and (pointer: fine)") : { matches: false };
+    const sbEl = document.createElement("div");
+    sbEl.id = "nb-scroll";
+    sbEl.className = "nb-scroll hidden";
+    sbEl.innerHTML = '<div class="nb-scroll-thumb"></div><div class="nb-scroll-tip hidden"></div>';
+    document.body.appendChild(sbEl);
+    const sbThumb = sbEl.firstChild;
+    const sbTip = sbEl.lastChild;
+    let sbDrag = null;
+    let sbSig = "";
+    // Laenge und Lage des Griffs aus dem sichtbaren Ausschnitt (a..b) im Heft (lo, Laenge total)
+    function nbScrollMetrics(lo, total, a, b, L) {
+      const span = Math.min(1, Math.max(0, (b - a) / total));
+      const len = Math.min(L, Math.max(32, span * L));
+      const f = Math.max(0, Math.min(1 - span, (a - lo) / total));
+      return { span, len, pos: span >= 1 ? 0 : (f / (1 - span)) * (L - len) };
+    }
+    function sbGeom() {
+      const rects = pageRects(notebook);
+      if (!rects.length) return null;
+      const horiz = notebook.layout === "horizontal";
+      const last = rects[rects.length - 1];
+      const lo = horiz ? rects[0].x : rects[0].y;
+      const total = Math.max(1, (horiz ? last.x + last.w : last.y + last.h) - lo);
+      const s0 = horiz ? viewLeft : 76;
+      const s1 = horiz ? window.innerWidth - viewRight : window.innerHeight - 20;
+      const off = horiz ? offsetX : offsetY;
+      const a = (s0 - off) / scale;
+      const b = (s1 - off) / scale;
+      const L = horiz ? window.innerWidth - viewLeft - viewRight - 32 : window.innerHeight - 108;
+      return { rects, horiz, lo, total, s0, a, b, L, m: nbScrollMetrics(lo, total, a, b, L) };
+    }
+    function syncNbScroll() {
+      const on = nbFine.matches && !!notebook && !boardEditId && !historyView && !splitOn() && libraryBackdrop.classList.contains("hidden");
+      const g = on ? sbGeom() : null;
+      if (!g || g.m.span >= 0.995) {
+        if (sbSig !== "off") {
+          sbSig = "off";
+          sbEl.classList.add("hidden");
+        }
+        return;
+      }
+      const pos = sbDrag ? sbDrag.pos : g.m.pos;
+      const sig = [g.horiz, viewLeft, viewRight, g.L, Math.round(g.m.len), Math.round(pos)].join("|");
+      if (sig === sbSig) return;
+      sbSig = sig;
+      sbEl.classList.remove("hidden");
+      sbEl.classList.toggle("horiz", g.horiz);
+      sbEl.style.cssText = g.horiz ? `left:${viewLeft + 16}px;right:${viewRight + 16}px` : `right:${viewRight + 2}px`;
+      sbThumb.style.cssText = g.horiz ? `width:${g.m.len}px;transform:translateX(${pos}px)` : `height:${g.m.len}px;transform:translateY(${pos}px)`;
+    }
+    window.sofiaSyncNbScroll = syncNbScroll;
+    // Griff-Position -> Ansicht. Seite fuer Seite: die Seite unter dem Griff, sonst stufenlos.
+    function sbSeek(pos, animate) {
+      const g = sbGeom();
+      if (!g) return;
+      const room = Math.max(1, g.L - g.m.len);
+      const viewLen = g.b - g.a;
+      const start = g.lo + (Math.max(0, Math.min(room, pos)) / room) * Math.max(0, g.total - viewLen);
+      const c = start + viewLen / 2;
+      let i = 0;
+      let best = Infinity;
+      g.rects.forEach((r, k) => {
+        const p0 = g.horiz ? r.x : r.y;
+        const d = Math.max(p0 - c, 0, c - (p0 + (g.horiz ? r.w : r.h)));
+        if (d < best) {
+          best = d;
+          i = k;
+        }
+      });
+      if (sbTip) sbTip.textContent = "Seite " + (i + 1) + " / " + g.rects.length;
+      const free = notebookZoomedIn() || !nbPaging();
+      if (free) {
+        const off = g.s0 - start * scale;
+        const v = { scale, offsetX: g.horiz ? off : offsetX, offsetY: g.horiz ? offsetY : off };
+        if (animate) animateView(v, 220);
+        else {
+          viewAnim = null;
+          offsetX = v.offsetX;
+          offsetY = v.offsetY;
+          requestViewRedraw();
+        }
+        if (window.sofiaFollowPanPage) window.sofiaFollowPanPage();
+        return;
+      }
+      const tall = tallPage(i);
+      if (tall) {
+        pageAnchor = i;
+        const v = { scale: tall.scale, offsetX: tall.ox, offsetY: Math.max(tall.oyBottom, Math.min(tall.oyTop, 76 - start * tall.scale)) };
+        if (animate) return animateView(v, 220);
+        viewAnim = null;
+        scale = v.scale;
+        offsetX = v.offsetX;
+        offsetY = v.offsetY;
+        requestViewRedraw();
+        return;
+      }
+      if (animate || i !== pageAnchor) fitPage(i, animate);
+    }
+    sbEl.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const g = notebook && sbGeom();
+      if (!g) return;
+      if (textEdit) commitTextEditor();
+      const box = sbEl.getBoundingClientRect();
+      const at = (g.horiz ? e.clientX - box.left : e.clientY - box.top);
+      if (e.target !== sbThumb) return sbSeek(at - g.m.len / 2, true);
+      try {
+        sbEl.setPointerCapture(e.pointerId);
+      } catch (err) {}
+      sbDrag = { id: e.pointerId, grab: at - g.m.pos, pos: g.m.pos, box };
+      sbEl.classList.add("dragging");
+      sbTip.classList.remove("hidden");
+      sbTip.style.cssText = g.horiz ? `left:${g.m.pos + g.m.len / 2}px` : `top:${g.m.pos + g.m.len / 2}px`;
+      sbSeek(g.m.pos, false);
+    });
+    sbEl.addEventListener("pointermove", (e) => {
+      if (!sbDrag || sbDrag.id !== e.pointerId || !notebook) return;
+      const g = sbGeom();
+      if (!g) return;
+      const at = g.horiz ? e.clientX - sbDrag.box.left : e.clientY - sbDrag.box.top;
+      sbDrag.pos = Math.max(0, Math.min(g.L - g.m.len, at - sbDrag.grab));
+      sbTip.style.cssText = g.horiz ? `left:${sbDrag.pos + g.m.len / 2}px` : `top:${sbDrag.pos + g.m.len / 2}px`;
+      sbSeek(sbDrag.pos, false);
+      syncNbScroll();
+    });
+    const sbEnd = (e) => {
+      if (!sbDrag || sbDrag.id !== e.pointerId) return;
+      sbDrag = null;
+      sbEl.classList.remove("dragging");
+      sbTip.classList.add("hidden");
+      sbSig = "";
+      requestViewRedraw();
+    };
+    sbEl.addEventListener("pointerup", sbEnd);
+    sbEl.addEventListener("pointercancel", sbEnd);
+    // Mausrad ueber der Leiste blaettert wie ueber dem Blatt
+    sbEl.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      canvas.dispatchEvent(new WheelEvent("wheel", e));
+    }, { passive: false });
 
     // Rueckgaengig fuer Seiten-Aktionen: Notizbuch vorher/nachher plus alle Striche,
     // die dabei verschoben, gedreht oder geloescht wurden.
@@ -24819,6 +25062,7 @@
       const exportItems = [
         { icon: "ios_share", label: "Exportieren", run: () => window.sofiaExportPagesPdf([pid]) },
         { icon: "check_circle", label: "Seiten auswählen", run: () => window.sofiaPageSelect(pid) },
+        { icon: "tablet", label: "Auf anderem Gerät öffnen", run: () => window.sofiaPageToDevice && window.sofiaPageToDevice(i) },
       ];
       // eingeschraenkte Freigabe: Seiten nur hinten anhaengen, sonst nichts veraendern
       if (!fullRights()) {
@@ -27743,6 +27987,8 @@
     function closeMenu() {
       menu.classList.add("hidden");
       showForDevice = null;
+      pageForDevice = null;
+      pagePickFor = null;
     }
     function openMenu() {
       menu.innerHTML = "";
@@ -27821,6 +28067,15 @@
     let deviceTarget = null; // gewaehltes Geraet im Menue
     let pickForDevice = null; // Blatt-Auswahl schickt an dieses Geraet statt Split
     let showForDevice = null; // Datei (z. B. Loesung), die aufs andere Geraet soll
+    let pageForDevice = null; // Heft-Seite (Nummer), die aufs andere Geraet soll: nur noch Geraet waehlen
+    let pagePickFor = null; // Geraet, fuer das gerade eine Seite gewaehlt wird
+    window.sofiaPageToDevice = (i) => {
+      pageForDevice = { i };
+      devices = null;
+      deviceTarget = null;
+      wsSend({ type: "devices" });
+      openMenu();
+    };
     window.sofiaShowOnDevice = (file) => {
       showForDevice = file;
       devices = null;
@@ -27846,6 +28101,21 @@
       if (!d || !board || !board.id) return;
       wsSend({ type: "device_open", target: d.id, board: board.id, title: board.title || "" });
     }
+    function hereBoard() {
+      return { id: currentBoardId, title: (currentBoardMeta && currentBoardMeta.title) || (filenameInput && filenameInput.value) || "Blatt" };
+    }
+    // Seite dieses Hefts dort aufschlagen; aus einem offenen Board heraus: das Board dort oeffnen
+    function sendPageToDevice(d, i, enter) {
+      const pg = notebook && notebook.pages[i];
+      if (!d || !pg) return;
+      const here = hereBoard();
+      wsSend({ type: "device_open", target: d.id, board: here.id, title: here.title, page: pg.boardOf || pg.id, enter: !!enter });
+    }
+    function herePageIndex() {
+      if (!notebook) return -1;
+      if (boardEditId) return notebook.pages.findIndex((p) => p.id === boardEditId);
+      return window.sofiaCurrentPage ? window.sofiaCurrentPage() : 0;
+    }
     function otherPaneBoard() {
       if (!splitState) return null;
       const p = splitState.panes[1 - splitState.active];
@@ -27854,6 +28124,52 @@
       return { id: c.currentBoardId, title: (c.currentBoardMeta && c.currentBoardMeta.title) || "Blatt" };
     }
     function deviceSection(add, gap) {
+      if (pagePickFor && notebook) {
+        // Seitenzahlen zum Antippen: diese Seite geht auf dem anderen Geraet auf
+        const d = pagePickFor;
+        const cur = herePageIndex();
+        menu.innerHTML = "";
+        const h = document.createElement("div");
+        h.className = "split-menu-head";
+        h.textContent = "Welche Seite auf " + deviceLabel(d) + "?";
+        menu.appendChild(h);
+        const grid = document.createElement("div");
+        grid.className = "split-page-grid";
+        notebook.pages.forEach((pg, i) => {
+          const b = document.createElement("button");
+          b.type = "button";
+          b.textContent = String(i + 1);
+          b.title = "Seite " + (i + 1) + (pg.board || pg.boardOf ? " (Board)" : "");
+          b.classList.toggle("current", i === cur);
+          b.classList.toggle("board", !!(pg.board || pg.boardOf));
+          b.addEventListener("click", (e) => {
+            e.stopPropagation();
+            closeMenu();
+            sendPageToDevice(d, i, false);
+          });
+          grid.appendChild(b);
+        });
+        menu.appendChild(grid);
+        add("arrow_back", "Zurück", "Andere Möglichkeit wählen", () => {
+          deviceTarget = d;
+          setTimeout(openMenu, 0);
+        });
+        return;
+      }
+      if (pageForDevice && notebook) {
+        // aus der Seitenleiste: nur noch das Geraet waehlen
+        const pi = pageForDevice.i;
+        menu.innerHTML = "";
+        const h = document.createElement("div");
+        h.className = "split-menu-head";
+        h.textContent = "Seite " + (pi + 1) + " öffnen auf …";
+        menu.appendChild(h);
+        if (devices === null) return add("progress_activity", "Sucht Geräte …", "Andere iPads und Geräte mit SOFIA Notes", () => {});
+        if (!devices.length) return add("info", "Kein anderes Gerät gefunden", "Öffne SOFIA Notes auf dem anderen Gerät: dein eigenes mit irgendeinem Blatt, jemand anderes mit diesem Blatt", () => {});
+        for (const d of devices)
+          add(d.device === "iPhone" || d.device === "Handy" ? "smartphone" : "tablet", deviceLabel(d), d.here ? "Hat dieses Blatt offen" : "Hat ein anderes Blatt offen", () => sendPageToDevice(d, pi, false));
+        return;
+      }
       if (showForDevice) {
         // nur die Geraeteliste: antippen schickt die Datei hin
         menu.innerHTML = "";
@@ -27884,11 +28200,23 @@
             close();
             deviceTarget = null;
           });
-        const here = { id: currentBoardId, title: (currentBoardMeta && currentBoardMeta.title) || (filenameInput && filenameInput.value) || "Blatt" };
+        const here = hereBoard();
         add("open_in_full", "Dieses Blatt dort groß", "„" + here.title + "“ auf dem anderen Gerät öffnen", () => {
           sendToDevice(d, here);
           deviceTarget = null;
         });
+        if (notebook) {
+          const pi = herePageIndex();
+          add("auto_stories", boardEditId ? "Dieses Board dort öffnen" : "Diese Seite dort öffnen", "Seite " + (pi + 1) + " von „" + here.title + "“ aufschlagen", () => {
+            sendPageToDevice(d, pi, !!boardEditId);
+            deviceTarget = null;
+          });
+          add("menu_book", "Andere Seite dort …", "Seite aus diesem Heft wählen", () => {
+            pagePickFor = d;
+            deviceTarget = null;
+            setTimeout(openMenu, 0);
+          });
+        }
         add("description", "Anderes Blatt dort …", "Z. B. die Aufgabe wählen – dort groß, hier schreibst du", () => {
           pickForDevice = d;
           deviceTarget = null;
@@ -27928,7 +28256,11 @@
         });
         if (!ok) return;
       }
-      if (msg.board !== currentBoardId || splitState) await openBoard(msg.board, title);
+      const reopen = msg.board !== currentBoardId || !!splitState || !libraryBackdrop.classList.contains("hidden");
+      if (reopen) {
+        pendingPageOpen = msg.page ? { board: msg.board, page: msg.page, enter: !!msg.enter } : null;
+        await openBoard(msg.board, title);
+      } else if (msg.page && window.sofiaOpenPage) window.sofiaOpenPage(msg.page, !!msg.enter);
       showToast(msg.person === currentPersonId ? "Von deinem anderen Gerät geöffnet" : "Von " + personName(msg.person) + " geöffnet");
     };
     document.addEventListener("pointerdown", (e) => {

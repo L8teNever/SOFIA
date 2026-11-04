@@ -60,6 +60,13 @@ class SecondDeviceTests(unittest.TestCase):
             got = self.next_of(b, "device_open")
             self.assertEqual(got["board"], self.aufgabe["id"])
             self.assertEqual(got["person"], "simon")
+            self.assertEqual(got["page"], "")
+            self.next_of(a, "device_open_sent")
+            # bestimmte Heft-Seite dort aufschlagen
+            a.send_json({"type": "device_open", "target": b_init["clientId"], "board": self.heft["id"], "title": "Heft", "page": "seite-3", "enter": True})
+            got = self.next_of(b, "device_open")
+            self.assertEqual(got["page"], "seite-3")
+            self.assertTrue(got["enter"])
             self.next_of(a, "device_open_sent")
 
     def test_other_person_only_in_same_board_and_needs_access(self):
