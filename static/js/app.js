@@ -11,7 +11,7 @@ let lastTouchTime = 0;
 document.addEventListener('touchend', function(e) {
   const now = Date.now();
   if (now - lastTouchTime <= 300) {
-    if (!['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) {
+    if (!['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName) && !e.target.isContentEditable) {
       e.preventDefault();
     }
   }
@@ -23,7 +23,7 @@ document.addEventListener('wheel', function(e) {
 }, { passive: false });
 
 document.addEventListener('dblclick', function(e) {
-  if (!['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) {
+  if (!['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName) && !e.target.isContentEditable) {
     e.preventDefault();
   }
 });

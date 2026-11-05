@@ -930,3 +930,22 @@
 .md-body pre code { background: none; padding: 0; }
 .md-body blockquote { margin: 0 0 8px; padding-left: 10px; border-left: 3px solid var(--m3-prim-cont); color: #49454f; }
 .md-body hr { border: none; border-top: 1px solid #e0dce6; margin: 10px 0; }
+
+/* Textfeld, das Markdown beim Tippen umwandelt */
+.md-live { display: block; max-height: 45vh; overflow-y: auto; cursor: text; white-space: pre-wrap; overflow-wrap: anywhere; -webkit-user-select: text; user-select: text; }
+.md-live.is-empty::before { content: attr(data-ph); position: absolute; color: #79747e; pointer-events: none; }
+.md-l { min-height: 1.2em; }
+.md-l-li { position: relative; padding-left: calc((var(--ind, 0) + 1) * 1.5em); }
+.md-l-li::before { content: attr(data-mark); position: absolute; left: calc(var(--ind, 0) * 1.5em); width: 1.5em; color: #49454f; }
+.md-l[data-task]::before { cursor: pointer; }
+.md-l[data-task='done']::before { color: var(--m3-prim); }
+.md-l.md-h { font-weight: 800; }
+.md-l.md-h1 { font-size: 1.25em; }
+.md-l.md-h2 { font-size: 1.12em; }
+.md-l.md-h3 { font-size: 1em; }
+.md-l-quote { padding-left: 10px; border-left: 3px solid var(--m3-prim-cont); color: #49454f; }
+.md-l-raw { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.88em; }
+.md-l-hr hr { border: none; border-top: 1px solid #c9c4d0; margin: 0.6em 0; }
+.md-live strong { font-weight: 800; }
+.md-live a { color: var(--m3-prim); text-decoration: underline; }
+.md-live code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.88em; background: rgba(103, 80, 164, 0.1); padding: 1px 5px; border-radius: 6px; }

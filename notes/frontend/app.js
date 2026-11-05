@@ -445,6 +445,13 @@
   // Seite, an der eine Blaetter-Geste angefangen hat. Die Ansicht bleibt daran,
   // statt frei in die Luecke zu rutschen und danach zurueckzuspringen.
   let nbHold = null;
+  // Abstand zwischen zwei Seiten-Ansichten in Pixeln beim aktuellen Zoom. Nicht einfach die Offsets
+  // abziehen: zeigt die Nachbarseite anders gross (kurze Board-Seite), waeren die weit daneben -
+  // die Ansicht sprang dann beim ersten Bewegen ganze Seiten weg und "scrollte" von dort zurueck.
+  function viewGap(from, to, key) {
+    const span = key === "offsetX" ? window.innerWidth : window.innerHeight;
+    return ((span / 2 - to[key]) / to.scale - (span / 2 - from[key]) / from.scale) * scale;
+  }
   function beginNbHold() {
     if (boardEditId || nbHold || !notebook || pinchState || !notebookPagingOn() || notebookZoomedIn()) return;
     const i = window.sofiaCurrentPage ? window.sofiaCurrentPage() : 0;
@@ -464,14 +471,14 @@
     const t = !horiz && window.sofiaTallPage && window.sofiaTallPage(i);
     if (t) {
       const oy = Math.max(t.oyBottom, Math.min(t.oyTop, offsetY));
-      const nextGap = vNext ? t.oyBottom - vNext.offsetY : 180;
-      const prevGap = vPrev ? vPrev.offsetY - t.oyTop : 160;
+      const nextGap = vNext ? viewGap({ scale: t.scale, offsetY: t.oyBottom }, vNext, key) : 180;
+      const prevGap = vPrev ? -viewGap({ scale: t.scale, offsetY: t.oyTop }, vPrev, key) : 160;
       nbHold = { i, ox: t.ox, oy, lo: t.oyBottom - oy - nextGap, hi: t.oyTop - oy + prevGap };
       gestureStart = { i, o: oy, startOy: oy, tall: true, nextGap: vNext ? nextGap : null, prevGap: vPrev ? prevGap : null, used: false, sc: scale };
       return;
     }
-    const lo = vNext ? vNext[key] - v[key] : -180;
-    const hi = vPrev ? vPrev[key] - v[key] : 160;
+    const lo = vNext ? -viewGap(v, vNext, key) : -180;
+    const hi = vPrev ? -viewGap(v, vPrev, key) : 160;
     nbHold = { i, ox: v.offsetX, oy: v.offsetY, lo, hi };
     gestureStart = { i, o: v[key], next: vNext ? lo : null, prev: vPrev ? hi : null, used: false, sc: scale };
   }
@@ -4946,6 +4953,8 @@
   // Schlechtes Netz: jede Aenderung (Strich fertig, verschoben, geloescht) bekommt eine Nummer
   // und bleibt hier, bis der Server sie bestaetigt ("ack"). Was nicht bestaetigt ist, geht beim
   // Wiederverbinden nochmal raus - statt vom Server-Stand ueberschrieben zu werden.
+  // Zusaetzlich steht jede Aenderung sofort im Journal (Outbox im Geraetespeicher) und wird erst
+  // nach der Bestaetigung geloescht: so ueberlebt sie auch Neuladen, Update und App-Beenden.
   let wsSeq = 0;
   const pendingOps = new Map(); // seq -> { boardId, kind: "put"|"erase", stroke?, ids? }
   // Stand der Striche (Server-Zaehler), den das Geraet vollstaendig kennt; null = unsicher.
@@ -4995,7 +5004,29 @@
     if (!op) return;
     obj.seq = ++wsSeq;
     op.boardId = currentBoardId;
+    op.t = performance.now();
     pendingOps.set(obj.seq, op);
+    journalOp(op);
+  }
+  function journalOp(op) {
+    // Gaeste im geteilten Blatt: nichts in die Warteschlange. Neues Blatt: Striche gehen danach gesammelt raus
+    if (!window.SofiaOffline || myRole !== "owner" || !currentPersonId) return;
+    if (creatingBoard && creatingBoard.id === op.boardId) return;
+    const base = { personId: currentPersonId, boardId: op.boardId, role: "owner", ts: Date.now() };
+    const entry = op.kind === "put" ? { ...base, type: "stroke_put", stroke: op.stroke } : { ...base, type: "stroke_erase", strokeIds: op.ids };
+    op.saved = SofiaOffline.enqueue(entry)
+      .then((key) => (op.key = key))
+      .catch(() => null);
+  }
+  function unjournal(op) {
+    if (!op || !op.saved) return;
+    op.saved.then((key) => key != null && SofiaOffline.outboxDelete(key).catch(() => {}));
+  }
+  // Wie lange die aelteste Aenderung dieses Blatts schon auf ihre Bestaetigung wartet
+  function oldestPendingMs() {
+    let t = Infinity;
+    for (const op of pendingOps.values()) if (op.boardId === currentBoardId && op.t < t) t = op.t;
+    return t === Infinity ? 0 : performance.now() - t;
   }
   // nach dem (Wieder-)Verbinden: alles Unbestaetigte dieses Blatts nochmal schicken
   function resendPending() {
@@ -5006,7 +5037,10 @@
       if (op.kind === "put") {
         const local = boardStrokes.get(op.stroke.id);
         // inzwischen lokal geloescht: nicht wieder anlegen
-        if (!local && [...pendingOps.values()].some((o) => o.kind === "erase" && o.ids.includes(op.stroke.id))) continue;
+        if (!local && [...pendingOps.values()].some((o) => o.kind === "erase" && o.ids.includes(op.stroke.id))) {
+          unjournal(op);
+          continue;
+        }
         const st = local ? serializeStroke(local) : op.stroke;
         if (!local) {
           const copy = cloneStroke(op.stroke);
@@ -5018,6 +5052,7 @@
         for (const id of op.ids) boardStrokes.delete(id);
         wsSend({ type: "erase", strokeIds: op.ids });
       }
+      unjournal(op); // steht jetzt neu im Journal
     }
     if (mine.length) requestRedraw();
   }
@@ -5029,8 +5064,11 @@
       // Anfang des Strichs kam beim Server nie an: ganz schicken
       const local = boardStrokes.get(op.stroke.id);
       wsSend({ type: "stroke_move", stroke: local ? serializeStroke(local) : op.stroke });
+      unjournal(op);
       return;
     }
+    unjournal(op);
+    if (lastConnMode === "sync" && !oldestPendingMs() && ws && ws.readyState === WebSocket.OPEN) setConnState("live");
     const known = revByBoard.get(op.boardId);
     if (msg.rb != null && known != null && msg.rb === known) revByBoard.set(op.boardId, msg.ra);
     else revInvalidate(op.boardId);
@@ -5042,24 +5080,8 @@
     if (structural) scheduleSaveBoard();
     trackOp(obj);
     if (structural && !(ws && ws.readyState === WebSocket.OPEN)) revInvalidate();
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify(obj));
-      return;
-    }
-    // Blatt wird gerade erst angelegt: Striche bleiben lokal und gehen danach gesammelt raus
-    if (creatingBoard && creatingBoard.id === currentBoardId) return;
-    if (!currentBoardId || !currentPersonId) return;
-    // Gaeste im geteilten Blatt: offline nur lokal, nichts in die Warteschlange
-    if (myRole !== "owner") return;
-    if (obj.type === "stroke_end" && currentStroke) {
-      const stroke = serializeStroke(currentStroke);
-      if (!stroke.author) stroke.author = currentPersonId;
-      enqueueOp({ type: "stroke_put", personId: currentPersonId, boardId: currentBoardId, stroke, role: "owner" });
-    } else if (obj.type === "stroke_move" && obj.stroke) {
-      enqueueOp({ type: "stroke_put", personId: currentPersonId, boardId: currentBoardId, stroke: obj.stroke, role: "owner" });
-    } else if (obj.type === "erase" && obj.strokeIds) {
-      enqueueOp({ type: "stroke_erase", personId: currentPersonId, boardId: currentBoardId, strokeIds: obj.strokeIds, role: "owner" });
-    }
+    // ohne Verbindung genuegt das Journal aus trackOp: es geht beim Wiederverbinden raus
+    if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj));
   }
 
   let reconnecting = false; // Offline-Knopf angetippt: Versuch laeuft
@@ -5273,6 +5295,10 @@
     step(null);
   }
   // App wird verlassen/versteckt: sofort sichern
+  // App geht weg (Neuladen, Update, iPad beendet sie im Hintergrund): offenes Textfeld sichern
+  const commitOpenText = () => textEdit && commitTextEditor();
+  window.addEventListener("pagehide", commitOpenText);
+  document.addEventListener("visibilitychange", () => document.hidden && commitOpenText());
   window.addEventListener("pagehide", () => saveBoardFor && saveBoardNow(true));
   document.addEventListener("visibilitychange", () => document.hidden && saveBoardFor && saveBoardNow(true));
 
@@ -5323,14 +5349,33 @@
     return true;
   }
 
+  let outboxDirty = false; // etwas liegt in der Outbox, das nicht ueber die Verbindung bestaetigt wird
   async function enqueueOp(op) {
     if (!op.ts) op.ts = Date.now();
+    outboxDirty = true;
     if (window.SofiaOffline) await SofiaOffline.enqueue(op);
   }
 
-  async function flushOutbox() {
+  // Nur einmal gleichzeitig: sonst ginge alles doppelt raus
+  let flushing = null;
+  function flushOutbox() {
+    if (!flushing) {
+      const done = () => (flushing = null);
+      flushing = sendOutbox();
+      flushing.then(done, done);
+    }
+    return flushing;
+  }
+  async function sendOutbox() {
     if (!window.SofiaOffline) return true;
-    const entries = await SofiaOffline.outboxEntries();
+    let entries = await SofiaOffline.outboxEntries();
+    // laeuft die Verbindung, kommt die Bestaetigung ueber sie - nicht parallel per Abruf schicken,
+    // sonst koennte ein alter Strich einen schon geloeschten wieder anlegen
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      const live = new Set();
+      for (const op of pendingOps.values()) if (op.key != null) live.add(op.key);
+      entries = entries.filter((it) => !live.has(it.key));
+    }
     if (!entries.length) return true;
     setConnState("sync");
     const rank = (op) => (op && op.role === "owner" ? 1 : 0);
@@ -5343,6 +5388,8 @@
         }
         await sendQueuedOp(item.op);
         await SofiaOffline.outboxDelete(item.key);
+        // anderes Blatt: dort kommt keine Bestaetigung mehr
+        for (const [seq, op] of pendingOps) if (op.key === item.key && op.boardId !== currentBoardId) pendingOps.delete(seq);
       } catch (err) {
         // Server lehnt dauerhaft ab (z. B. nur Ansehen erlaubt): verwerfen statt ewig festzuhaengen
         if (err && err.status >= 400 && err.status < 500 && err.status !== 408 && err.status !== 429) {
@@ -5353,6 +5400,7 @@
         return false;
       }
     }
+    if (ws && ws.readyState === WebSocket.OPEN) setConnState("live");
     return true;
   }
 
@@ -5362,6 +5410,12 @@
     return e;
   }
   async function sendQueuedOp(op) {
+    // schlechtes Netz: ein haengender Abruf darf den ganzen Abgleich nicht blockieren
+    const fetch = (url, opts) => {
+      const ctl = new AbortController();
+      const timer = setTimeout(() => ctl.abort(), op.type === "media" ? 60000 : 15000);
+      return window.fetch(url, { ...opts, signal: ctl.signal }).finally(() => clearTimeout(timer));
+    };
     const headers = { "Content-Type": "application/json" };
     if (op.type === "media") {
       const r = await fetch("/api/media", { method: "POST", headers, body: JSON.stringify({ id: op.id, image: op.image }) });
@@ -5525,6 +5579,11 @@
       (revByBoard.get(currentBoardId) != null && !hasPending(currentBoardId) ? "&rev=" + revByBoard.get(currentBoardId) : "") +
       (window.sofiaWatchQuery ? window.sofiaWatchQuery(currentBoardId) : "");
     ws = new WebSocket(url);
+    // im schlechten WLAN kann schon der Aufbau minutenlang haengen: abbrechen und neu versuchen
+    const opening = ws;
+    setTimeout(() => {
+      if (opening.readyState === WebSocket.CONNECTING) opening.close();
+    }, 8000);
 
     ws.onopen = () => {
       lastWsMsgAt = performance.now();
@@ -5576,6 +5635,22 @@
       ws.send('{"type":"ping"}');
     } catch (err) {}
   }, 10000);
+  // Bleibt eine Bestaetigung aus, ist die Verbindung tot, auch wenn der Browser sie fuer offen
+  // haelt: nicht auf den Herzschlag warten, sondern neu aufbauen (alles steht im Journal)
+  let lastOutboxTry = 0;
+  setInterval(() => {
+    if (document.hidden || !ws || ws.readyState !== WebSocket.OPEN) return;
+    const age = oldestPendingMs();
+    if (age > 8000) return dropDeadSocket();
+    if (age > 2500 && lastConnMode === "live") setConnState("sync");
+    if (outboxDirty && !age && performance.now() - lastOutboxTry > 10000) {
+      lastOutboxTry = performance.now();
+      outboxDirty = false;
+      flushOutbox().then((ok) => {
+        if (!ok) outboxDirty = true;
+      });
+    }
+  }, 2000);
   document.addEventListener("visibilitychange", () => {
     if (document.hidden || !ws || ws.readyState !== WebSocket.OPEN) return;
     lastWsMsgAt = performance.now() - 15000; // 10 s Zeit fuer eine Antwort
@@ -5637,6 +5712,8 @@
           }
           applyPaper(msg.board.paper);
           const firstOpen = !notebook || notebookBoardId !== msg.board.id;
+          // Seiten, die gerade noch gespeichert werden, nicht vom aelteren Server-Stand ueberschreiben
+          if (!firstOpen && window.sofiaNbBusy && window.sofiaNbBusy()) msg.board.notebook = notebook;
           notebook = msg.board.notebook || null;
           notebookBoardId = msg.board.id;
           hdReadyBoards.add(msg.board.id);
@@ -11333,8 +11410,8 @@
   });
 
   // ---- Zweite Zoom-Art "Auto-Weiter": kein Fenster, kein Rahmen ----
-  // Man schreibt normal (reingezoomt) direkt aufs Blatt. Schreibt man rechts am Rand des
-  // Bildschirms, erscheint links ein blauer Kasten wie im Zoom-Fenster: er zeigt die
+  // Man schreibt normal (reingezoomt) direkt aufs Blatt. Schreibt man in der rechten Haelfte
+  // des Bildschirms, erscheint links ein blauer Kasten wie im Zoom-Fenster: er zeigt die
   // Fortsetzung (rechts daneben bzw. am Seitenende die naechste Zeile) im selben Massstab.
   // Setzt man darin an, springt das Blatt dorthin und man schreibt einfach weiter.
   // Von allein bewegt sich nichts.
@@ -11346,6 +11423,7 @@
   let autoBox = null; // {x, y, w, h (Bildschirm), tx, ty (Welt), view, t (letzte Aktivitaet)}
   // 5 s nichts geschrieben: Kasten wird langsam blasser und verschwindet. Sobald wieder
   // geschrieben wird, ist er sofort wieder voll da.
+  const AUTO_OFFER_FROM = 0.55; // ab hier rechts geschrieben -> Kasten (er selbst reicht bis 0.48)
   const AUTO_IDLE_MS = 5000;
   const AUTO_FADE_MS = 1200;
   let autoFadeTimer = null;
@@ -11376,7 +11454,7 @@
     autoAdvBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       setAutoAdvance(!autoAdvanceOn);
-      showToast(autoAdvanceOn ? "Auto-Weiter an: rechts am Rand erscheint links ein Kasten zum Weiterschreiben" : "Auto-Weiter aus");
+      showToast(autoAdvanceOn ? "Auto-Weiter an: ab der Bildschirmmitte erscheint links ein Kasten zum Weiterschreiben" : "Auto-Weiter aus");
     });
   }
   const autoViewSig = () => scale + "|" + offsetX + "|" + offsetY + "|" + viewLeft + "|" + viewRight;
@@ -11393,7 +11471,7 @@
     if (visW < 160) return;
     const sxR = worldToScreen(b.maxX, b.minY).x;
     // kurze Striche weiter links (i-Punkt, Korrektur) lassen einen Kasten stehen
-    if (sxR < visR - visW * 0.22) return;
+    if (sxR < visL + visW * AUTO_OFFER_FROM) return;
     // Seite unter dem Strich (im Notizbuch)
     let page = null;
     const cy = (b.minY + b.maxY) / 2;
@@ -20352,6 +20430,32 @@
       if (local && local.length) applyStrokeList(local);
       // nur wenn der Speicher genau zu diesem Stand passt
       if (saved && typeof saved.rev === "number" && local && saved.n === local.length) revByBoard.set(id, saved.rev);
+      // noch nicht Abgeglichenes gehoert dazu - sonst fehlt es offline, obwohl es sicher gespeichert ist
+      const queued = await SofiaOffline.outboxEntries().catch(() => []);
+      if (currentBoardId !== id) return;
+      let overlaid = false;
+      for (const { op } of queued) {
+        if (op.boardId !== id) continue;
+        if (op.type === "stroke_put" && op.stroke) {
+          const st = cloneStroke(op.stroke);
+          st.bbox = strokeWorldBBox(st);
+          boardStrokes.set(st.id, st);
+          overlaid = true;
+        } else if (op.type === "stroke_erase") {
+          for (const sid of op.strokeIds || []) boardStrokes.delete(sid);
+          overlaid = true;
+        }
+      }
+      if (overlaid) {
+        local = Array.from(boardStrokes.values());
+        revByBoard.delete(id);
+      }
+      // Seiten-Aenderung, die beim letzten Mal nicht mehr rausging
+      const nbLeft = await SofiaOffline.getKv("nbdirty:" + id).catch(() => null);
+      if (nbLeft && nbLeft.nb) {
+        await enqueueOp({ type: "notebook_patch", personId: currentPersonId, boardId: id, notebook: nbLeft.nb, role: "owner", ts: nbLeft.ts });
+        SofiaOffline.setKv("nbdirty:" + id, null).catch(() => {});
+      }
     }
     requestRedraw();
     wantWs = true;
@@ -24164,7 +24268,8 @@
       viewAnim = me;
       const step = (now) => {
         if (viewAnim !== me) return;
-        const t = Math.min(1, (now - t0) / (ms || 260));
+        // der erste Frame kann aelter sein als t0: sonst ruckt die Ansicht kurz rueckwaerts
+        const t = Math.max(0, Math.min(1, (now - t0) / (ms || 260)));
         const e = 1 - Math.pow(1 - t, 3);
         scale = from.scale + (v.scale - from.scale) * e;
         offsetX = from.offsetX + (v.offsetX - from.offsetX) * e;
@@ -24333,11 +24438,17 @@
     function shortenTravel(v) {
       if (!v || !notebook) return;
       const horiz = notebook.layout === "horizontal";
-      const max = (horiz ? window.innerWidth : window.innerHeight) * 1.1;
-      const d = (horiz ? offsetX : offsetY) - (horiz ? v.offsetX : v.offsetY);
-      if (Math.abs(d) <= max) return;
-      if (horiz) offsetX = v.offsetX + Math.sign(d) * max;
-      else offsetY = v.offsetY + Math.sign(d) * max;
+      const span = horiz ? window.innerWidth : window.innerHeight;
+      const max = span * 1.1;
+      // Strecke zwischen den Bildmitten im Blatt messen, nicht an den Offsets: zoomt das Ziel
+      // (z. B. eine kurze Board-Seite), aendert sich der Offset, ohne dass man weit weg ist.
+      const now = (span / 2 - (horiz ? offsetX : offsetY)) / scale;
+      const goal = (span / 2 - (horiz ? v.offsetX : v.offsetY)) / v.scale;
+      const dist = (goal - now) * v.scale;
+      if (Math.abs(dist) <= max) return;
+      const off = span / 2 - (goal - (Math.sign(dist) * max) / v.scale) * scale;
+      if (horiz) offsetX = off;
+      else offsetY = off;
     }
 
     // Einen Schritt weiter (dir = 1) oder zurueck (dir = -1): Pfeiltasten am PC.
@@ -24663,17 +24774,23 @@
       nbQueued = null;
       nbInFlight = true;
       if (creatingBoard && creatingBoard.id === bid) await creatingBoard.promise.catch(() => {});
+      const ctl = new AbortController();
+      const timer = setTimeout(() => ctl.abort(), 12000); // haengendes Netz: nicht ewig "busy"
       try {
         await api("/api/boards/" + encodeURIComponent(bid), {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ notebook: nb }),
+          signal: ctl.signal,
         });
+        if (!nbQueued && window.SofiaOffline) SofiaOffline.setKv("nbdirty:" + bid, null).catch(() => {});
       } catch (err) {
         if (myRole === "owner" && currentPersonId) {
           enqueueOp({ type: "notebook_patch", personId: currentPersonId, boardId: bid, notebook: nb, role: "owner" });
+          if (!nbQueued && window.SofiaOffline) SofiaOffline.setKv("nbdirty:" + bid, null).catch(() => {});
         } else showToast("Seiten speichern hat nicht geklappt");
       }
+      clearTimeout(timer);
       nbInFlight = false;
       if (nbQueued) pushNotebook();
     }
@@ -24691,6 +24808,8 @@
       nbQueued = { bid, nb: next };
       clearTimeout(nbTimer);
       nbTimer = setTimeout(pushNotebook, 250);
+      // ueberlebt Neuladen, solange es noch nicht beim Server ist
+      if (myRole === "owner" && window.SofiaOffline) SofiaOffline.setKv("nbdirty:" + bid, { nb: next, ts: Date.now() }).catch(() => {});
     }
     const clone = () => JSON.parse(JSON.stringify(notebook));
     function templatePage() {
@@ -25122,8 +25241,8 @@
             { icon: "auto_stories", label: "Leseseite", active: !!pg.read, run: () => setPageRead(i, true) },
           ],
         },
-        { icon: "add_row_above", label: "Seite oberhalb einfügen", run: () => addPages(i - 1, [templatePage()]) },
-        { icon: "add_row_below", label: "Seite unterhalb einfügen", run: () => addPages(i, [templatePage()]) },
+        { icon: "add_row_above", label: "Seite oberhalb einfügen …", run: () => openAddPopAt(side, i - 1, i) },
+        { icon: "add_row_below", label: "Seite unterhalb einfügen …", run: () => openAddPopAt(side, i, i) },
         { icon: "content_copy", label: "Duplizieren", run: () => duplicatePage(i) },
         { icon: "rotate_right", label: "Drehen", run: () => rotatePage(i) },
         { icon: "wallpaper", label: "Hintergrund", sub: () => pageBgItems(i) },
@@ -25303,7 +25422,7 @@
       try {
         localStorage.setItem("sofianotes-pages-panel", panelOpen ? "1" : "0");
       } catch (err) {}
-      if (panelOpen) renderPanel();
+      if (panelOpen) renderPanel(!wasOpen);
       else addPop.classList.add("hidden");
     }
     function setPanelKeepingPlace(open) {
@@ -26045,6 +26164,9 @@
     });
     panel.addEventListener("pointerdown", (e) => e.stopPropagation());
     addPop.addEventListener("pointerdown", (e) => e.stopPropagation());
+    window.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && !addPop.classList.contains("hidden")) addPop.classList.add("hidden");
+    });
 
     // Vorschaubild einer Seite: Hintergrund + alles, was auf der Seite liegt
     // Vorschaubilder: Striche einmal nach Seiten sortiert, Bilder im Speicher behalten
@@ -26427,7 +26549,15 @@
     });
     let renderedSig = "";
     let gridKeep = null;
-    function renderPanel() {
+    // Aktuelle Seite in die Mitte der Leiste holen, ohne Animation
+    function centerActiveThumb() {
+      const act = grid.querySelector(".page-thumb.active");
+      if (!act) return;
+      const gr = grid.getBoundingClientRect();
+      const ar = act.getBoundingClientRect();
+      grid.scrollTop = Math.max(0, grid.scrollTop + (ar.top - gr.top) - (gr.height - ar.height) / 2);
+    }
+    function renderPanel(center) {
       if (!panelOpen || !notebook) return;
       renderedSig = JSON.stringify(notebook.pages) + notebook.layout + JSON.stringify(notebook.bookmarks || []);
       renderMarks();
@@ -26442,7 +26572,8 @@
       const keepScroll = gridKeep;
       requestAnimationFrame(() => {
         gridKeep = null;
-        if (Math.abs(grid.scrollTop - keepScroll) > 1) grid.scrollTop = keepScroll;
+        if (center === true) centerActiveThumb();
+        else if (Math.abs(grid.scrollTop - keepScroll) > 1) grid.scrollTop = keepScroll;
       });
       grid.innerHTML = "";
       rects.forEach((r, i) => {
@@ -26451,6 +26582,8 @@
         cell.dataset.index = i;
         const cv = document.createElement("canvas");
         cv.className = "page-thumb-img";
+        // Hoehe steht schon vor dem Zeichnen fest: die Liste verrutscht nicht, wenn Bilder nachkommen
+        cv.style.aspectRatio = r.w + " / " + r.h;
         cell.appendChild(cv);
         const pickId = pageSel ? pickIdOf(i) : null;
         if (pageSel) {
@@ -26595,7 +26728,7 @@
         showToast(added.length > 1 ? added.length + " Vorlagen gespeichert" : "Vorlage gespeichert");
         if (tplThenAdd && notebook && added[0]) {
           const t = added[0];
-          addPages(currentPage(), [{ id: newId(), paper: "blank", mediaId: t.mediaId, w: t.w, h: t.h }]);
+          addPages(addIndex(), [{ id: newId(), paper: "blank", mediaId: t.mediaId, w: t.w, h: t.h }]);
         }
       } catch (err) {
         showToast("Vorlage speichern hat nicht geklappt");
@@ -26713,7 +26846,7 @@
         const imgs = await fileToPageImages(file, 2000);
         if (!imgs.length) return;
         const pages = notebookPagesFromPdfImages(imgs).map((p) => ({ ...p, id: newId() }));
-        addPages(currentPage(), pages);
+        addPages(addIndex(), pages);
       } catch (err) {
         showToast("Hinzufügen hat nicht geklappt");
       }
@@ -26778,13 +26911,29 @@
       return b;
     }
     let addPopFromThumb = false;
-    function openAddPop(anchor) {
+    let addPopAt = null; // Seite, hinter der eingefuegt wird (-1 = ganz vorne); null = aktuelle Seite
+    // nur dazuschreiben: neue Seiten immer hinten (sonst wuerde Fremdes verschoben)
+    function addIndex() {
+      const last = notebook.pages.length - 1;
+      if (!fullRights()) return last;
+      return addPopAt == null ? currentPage() : Math.min(addPopAt, last);
+    }
+    // Aus dem Menue einer Seite: dieselbe Auswahl wie am Plus, nur an dieser Stelle. Das Menue
+    // kann die Kachel beim Schliessen neu aufbauen - dann die neue nehmen.
+    function openAddPopAt(thumb, at, i) {
+      addPopFromThumb = true;
+      const cell = thumb.isConnected ? thumb : grid.querySelector('.page-thumb[data-index="' + i + '"]');
+      openAddPop(cell || pagesBtn, at);
+    }
+    function openAddPop(anchor, position) {
       if (!(anchor && anchor.closest && anchor.closest(".page-thumb, #pages-grid"))) addPopFromThumb = false;
       const box = document.getElementById("pap-templates");
       if (myRole === "view") return showToast("Du darfst dieses Blatt nur ansehen");
       box.innerHTML = "";
-      // nur dazuschreiben: neue Seiten immer hinten (sonst wuerde Fremdes verschoben)
-      const at = fullRights() ? currentPage() : notebook.pages.length - 1;
+      addPopAt = position == null ? null : position;
+      const title = addPop.querySelector(".pap-title");
+      if (title) title.textContent = addPopAt == null ? "Seite hinzufügen" : addPopAt < 0 ? "Seite ganz vorne einfügen" : "Seite nach Seite " + (addPopAt + 1) + " einfügen";
+      const at = addIndex();
       const tpl = templatePage();
       box.appendChild(templateCard("Aktuelle Vorlage", "A4", tpl, () => addPages(at, [templatePage()])));
       for (const k of Object.keys(PAPER_LABELS)) {
@@ -26821,10 +26970,9 @@
         e.stopPropagation();
         addPop.classList.add("hidden");
         if (b.dataset.act === "read") {
-          const at = fullRights() ? currentPage() : notebook.pages.length - 1;
-          addPages(at, [{ id: newId(), paper: "blank", w: A4_W, h: A4_H, read: true }]);
+          addPages(addIndex(), [{ id: newId(), paper: "blank", w: A4_W, h: A4_H, read: true }]);
         } else if (b.dataset.act === "board") {
-          const at = fullRights() ? currentPage() : notebook.pages.length - 1;
+          const at = addIndex();
           const pg = { id: newId(), paper: "blank", w: A4_W, h: A4_H, board: true };
           addPages(at, [pg]);
           enterBoardPage(pg.id);
@@ -26836,7 +26984,7 @@
               const imgs = await fileToPageImages(file, 2000);
               if (!imgs.length) return;
               const pages = notebookPagesFromPdfImages(imgs).map((p) => ({ ...p, id: newId() }));
-              addPages(currentPage(), pages);
+              addPages(addIndex(), pages);
             } catch (err) {
               showToast("Hinzufügen hat nicht geklappt");
             }

@@ -110,8 +110,9 @@
   async function enqueue(op) {
     const db = await openDb();
     const tx = db.transaction("outbox", "readwrite");
-    tx.objectStore("outbox").add(op);
-    return txDone(tx);
+    const req = tx.objectStore("outbox").add(op);
+    await txDone(tx);
+    return req.result;
   }
 
   async function outboxEntries() {
