@@ -1803,12 +1803,12 @@
         ctx.arc(rot.x, rot.y, 2.2 / scale, 0, Math.PI * 2);
         ctx.fill();
       }
-      // ausgewaehlte Tabelle: kleine Griffe auf den inneren Linien (zum Ziehen)
+      // ausgewaehlte Tabelle: kleine Griffe am Rand der inneren Linien (zum Ziehen)
       const selT = typeof selectedTable === "function" ? selectedTable() : null;
       if (selT) {
         const g = tableGeom(selT);
         ctx.fillStyle = "#3b6fe0";
-        const gw = 4 / scale, gl = 14 / scale;
+        const gw = 4 / scale, gl = TABLE_GRIP_PX / scale;
         const live = dragState && dragState.kind === "tblline" ? dragState : null;
         for (let i = 1; i < g.xs.length - 1; i++) {
           if (live && live.axis === "x" && live.i === i) {
@@ -7728,10 +7728,8 @@
     putStroke(t);
     pushUndo({ type: "replace", before: null, after: cloneStroke(t) });
     lastTableId = t.id;
-    // direkt in die erste Zelle schreiben (Text-Modus bleibt)
-    if (currentTool !== "text") setTool("text");
-    openCellEditor(boardStrokes.get(t.id), { r: 0, c: 0 });
-    syncModeBar();
+    // Tabellen fuellt man meist von Hand: Stift nehmen statt ein Textfeld zu oeffnen
+    setMode("pen");
     requestRedraw();
   }
 
@@ -8007,6 +8005,28 @@
     }
     if (world.x >= g.x0 - tol && world.x <= g.x0 + g.W + tol) {
       for (let i = 1; i < lastY; i++) {
+        const d = Math.abs(world.y - g.ys[i]);
+        if (d <= tol && (!best || d < best.d)) best = { axis: "y", i, d };
+      }
+    }
+    return best;
+  }
+  // Lasso: Griff einer inneren Linie unter dem Punkt. Griffe sitzen innen am oberen und linken
+  // Rand, die Linien selbst greifen nicht - so verschiebt Ziehen in der Tabelle immer das Ganze.
+  const TABLE_GRIP_PX = 14;
+  function tableGripAt(t, world, tolPx) {
+    const g = tableGeom(t);
+    const tol = tolPx / scale;
+    const len = (TABLE_GRIP_PX + tolPx) / scale;
+    let best = null;
+    if (world.y >= g.y0 && world.y <= g.y0 + len) {
+      for (let i = 1; i < g.xs.length - 1; i++) {
+        const d = Math.abs(world.x - g.xs[i]);
+        if (d <= tol && (!best || d < best.d)) best = { axis: "x", i, d };
+      }
+    }
+    if (world.x >= g.x0 && world.x <= g.x0 + len) {
+      for (let i = 1; i < g.ys.length - 1; i++) {
         const d = Math.abs(world.y - g.ys[i]);
         if (d <= tol && (!best || d < best.d)) best = { axis: "y", i, d };
       }
@@ -8835,6 +8855,20 @@
       if (line) return { t: s, line };
     }
     return null;
+  }
+
+  // Aufgabentexte aus Sofia sind Markdown. markdown.js kommt beim Docker-Build aus Sofia dazu;
+  // fehlt sie (lokaler Start nur von Notes), bleibt es einfacher Text.
+  function hwPlain(text) {
+    return window.markdownPlain ? window.markdownPlain(text) : text;
+  }
+  function setHwMarkdown(el, text) {
+    if (!window.renderMarkdown) {
+      el.textContent = text;
+      return;
+    }
+    el.classList.add("md-body");
+    el.innerHTML = window.renderMarkdown(text);
   }
 
   function escapeHtml(t) {
@@ -12163,7 +12197,7 @@
     if (typeof syncObjectsMenu === "function") syncObjectsMenu();
   }
 
-  // Wird ein Werkzeug anders gewaehlt (Tastatur, Radierer-Ruecksprung, Tabelle einfuegen ...),
+  // Wird ein Werkzeug anders gewaehlt (Tastatur, Radierer-Ruecksprung ...),
   // folgt der Modus - Tabelle bleibt bei der Auswahl. Das Lineal ist ein eigener Schalter.
   function syncModeFromTool(tool) {
     if (modeSyncing || !toolbarEl.dataset) return;
@@ -14068,7 +14102,7 @@
           for (const a of hw.attachments || []) {
             if (a.type !== "image" || !a.url || seen.has(a.url)) continue;
             seen.add(a.url);
-            out.push({ url: a.url, name: a.name || "Bild", subject: hw.subjectShort || hw.subject || "", task: hw.description || "" });
+            out.push({ url: a.url, name: a.name || "Bild", subject: hw.subjectShort || hw.subject || "", task: hwPlain(hw.description || "") });
           }
         }
         hwImageItems = out;
@@ -15368,9 +15402,10 @@
     if (!selection.bbox) return null;
     const pad = SELECT_PAD_PX / scale;
     let kind = null;
-    // ausgewaehlte Tabelle: innere Linien greifen -> Spalte/Zeile breiter oder schmaler
+    // ausgewaehlte Tabelle: Griff einer Linie -> Spalte/Zeile breiter oder schmaler.
+    // Die Griffe liegen innerhalb der Tabelle, die Skalier-Griffe ausserhalb: Griff geht vor.
     const selTable = cropState ? null : selectedTable();
-    const tline = selTable && !pickScaleHandle(world, selection.bbox, pad, slop) ? tableLineAt(selTable, world, touch ? 14 : 8) : null;
+    const tline = selTable ? tableGripAt(selTable, world, touch ? 14 : 8) : null;
     if (tline) {
       const g = tableGeom(selTable);
       dragState = {
@@ -15867,10 +15902,19 @@
     if (currentTool === "eraser") {
       updateEraserCursor(e.clientX, e.clientY);
     }
-    // Textmodus: ueber einer Tabellenlinie zeigt der Zeiger, dass man sie ziehen kann
-    if (currentTool === "text" && e.pointerType !== "touch") {
-      const tl = textDrag && textDrag.pointerId === e.pointerId ? textDrag.tline : !textDrag ? tableLineHitAt(world, e.pointerType) : null;
-      const axis = tl ? (tl.line ? tl.line.axis : tl.axis) : null;
+    // Ueber einer Tabellenlinie (Textmodus) oder ihrem Griff (Lasso) zeigt der Zeiger, dass man ziehen kann
+    if ((currentTool === "text" || currentTool === "select") && e.pointerType !== "touch") {
+      let axis = null;
+      if (currentTool === "text") {
+        const tl = textDrag && textDrag.pointerId === e.pointerId ? textDrag.tline : !textDrag ? tableLineHitAt(world, e.pointerType) : null;
+        axis = tl ? (tl.line ? tl.line.axis : tl.axis) : null;
+      } else if (dragState) {
+        axis = dragState.kind === "tblline" ? dragState.axis : null;
+      } else {
+        const selT = selectedTable();
+        const grip = selT ? tableGripAt(selT, world, 8) : null;
+        axis = grip ? grip.axis : null;
+      }
       const cur = axis === "x" ? "col-resize" : axis === "y" ? "row-resize" : "";
       if (canvas.style.cursor !== cur) canvas.style.cursor = cur;
     } else if (canvas.style.cursor) canvas.style.cursor = "";
@@ -17975,7 +18019,7 @@
       text.className = "hw-item-text";
       text.innerHTML = '<span class="hw-item-subj"></span><span class="hw-item-desc"></span><span class="hw-item-meta"></span>';
       text.querySelector(".hw-item-subj").textContent = hw.subject || "Fach";
-      text.querySelector(".hw-item-desc").textContent = hw.description || "(ohne Text)";
+      text.querySelector(".hw-item-desc").textContent = hwPlain(hw.description || "") || "(ohne Text)";
       const meta = [];
       const imgs = hw.attachments.filter((a) => a.type === "image").length;
       const files = hw.attachments.length - imgs;
@@ -18043,7 +18087,7 @@
     hwDetailEl.appendChild(head);
     const desc = document.createElement("div");
     desc.className = "hw-desc";
-    desc.textContent = hw.description || "(ohne Text)";
+    setHwMarkdown(desc, hw.description || "(ohne Text)");
     hwDetailEl.appendChild(desc);
     hwAttachmentsHtml(hwDetailEl, hw);
     const actions = document.createElement("div");
@@ -18538,7 +18582,7 @@
     if (msg.text) {
       const t = document.createElement("div");
       t.className = "big-show-text";
-      t.textContent = msg.text;
+      setHwMarkdown(t, msg.text);
       scroll.appendChild(t);
     }
     for (const it of items) {
@@ -18774,7 +18818,7 @@
       hwPanelBody.appendChild(due);
       const desc = document.createElement("div");
       desc.className = "hw-desc";
-      desc.textContent = hwBoard.description || "(ohne Text)";
+      setHwMarkdown(desc, hwBoard.description || "(ohne Text)");
       hwPanelBody.appendChild(desc);
       hwAttachmentsHtml(hwPanelBody, hwBoard);
       if (hwBoard.id) hwPanelBody.appendChild(renderHwRegions(hwBoard.id));
@@ -19141,7 +19185,7 @@
     const t = document.createElement("b");
     t.textContent = it ? it.subject || "Aufgabe" : "Material";
     const dsc = document.createElement("span");
-    dsc.textContent = it ? it.description || "(ohne Text)" : "Eigene Bilder und Unterlagen zu diesem Blatt";
+    dsc.textContent = it ? hwPlain(it.description || "") || "(ohne Text)" : "Eigene Bilder und Unterlagen zu diesem Blatt";
     txt.append(t, dsc);
     if (it) {
       const due = document.createElement("small");

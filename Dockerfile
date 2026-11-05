@@ -28,6 +28,8 @@ RUN mkdir -p uploads
 COPY notes/backend/requirements.txt ./notes/backend/requirements.txt
 RUN python -m venv /opt/notes-venv && /opt/notes-venv/bin/pip install --no-cache-dir -r notes/backend/requirements.txt
 COPY notes/ ./notes/
+# Markdown-Anzeige der Aufgabentexte: dieselbe Datei wie in Sofia
+COPY static/js/markdown.js ./notes/frontend/markdown.js
 # Version/Commit fuer die Anzeige in sofianotes (vom Workflow gesetzt)
 ARG GIT_COMMIT=
 ARG NOTES_VERSION=

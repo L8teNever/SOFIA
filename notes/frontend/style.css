@@ -2984,6 +2984,27 @@ html[data-theme="dark"] .td-toggle.active { background: #3a3350; color: #d0bcff;
 }
 .hw-due { font: 600 13px 'Google Sans', 'Inter', sans-serif; color: #6b6673; }
 .hw-desc { white-space: pre-wrap; font: 400 15.5px/1.55 'Google Sans', 'Inter', sans-serif; color: #1c1b1f; overflow-wrap: anywhere; }
+/* Markdown in Aufgabentexten */
+.md-body { white-space: normal; min-width: 0; overflow-wrap: anywhere; }
+.md-body > :first-child { margin-top: 0; }
+.md-body > :last-child { margin-bottom: 0; }
+.md-body p { margin: 0 0 8px; }
+.md-body strong { font-weight: 700; }
+.md-body ul, .md-body ol { margin: 0 0 8px; padding-left: 22px; }
+.md-body li { margin: 2px 0; }
+.md-body li > ul, .md-body li > ol { margin: 2px 0 0; }
+.md-body li.md-task { list-style: none; margin-left: -20px; }
+.md-body li.md-task > input { margin: 0 4px 0 0; vertical-align: -1px; accent-color: var(--accent); }
+.md-body .md-h { font-weight: 700; margin: 10px 0 4px; }
+.md-body .md-h1 { font-size: 1.2em; }
+.md-body .md-h2 { font-size: 1.1em; }
+.md-body .md-h3 { font-size: 1em; }
+.md-body a { color: var(--accent); text-decoration: underline; }
+.md-body code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.88em; background: rgba(127, 127, 127, 0.16); padding: 1px 5px; border-radius: 6px; }
+.md-body pre { background: rgba(127, 127, 127, 0.16); border-radius: 10px; padding: 8px 10px; margin: 0 0 8px; overflow-x: auto; }
+.md-body pre code { background: none; padding: 0; }
+.md-body blockquote { margin: 0 0 8px; padding-left: 10px; border-left: 3px solid var(--accent-soft); opacity: 0.85; }
+.md-body hr { border: none; border-top: 1px solid rgba(127, 127, 127, 0.35); margin: 10px 0; }
 .hw-images { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 16px; }
 .hw-images img {
   width: 100%;

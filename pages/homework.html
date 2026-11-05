@@ -41,7 +41,7 @@
         <!-- Description Card -->
         <div class="m3-card" id="hwd-desc-card" style="border-radius:20px;margin-top:10px;">
           <div style="font-size:0.72rem;opacity:0.55;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px;">Aufgabe / Beschreibung</div>
-          <div style="white-space:pre-wrap;line-height:1.55;font-size:1.05rem;color:#1c1b1f;font-weight:600;" id="hwd-desc">–</div>
+          <div class="md-body" style="line-height:1.55;font-size:1.05rem;color:#1c1b1f;font-weight:600;" id="hwd-desc">–</div>
         </div>
 
         <!-- Task Attachments Gallery -->
@@ -467,7 +467,7 @@ function hwCard(h, sub, uid, today) {
           ${checked ? '<i data-lucide="check" style="width:14px;height:14px;color:white;"></i>' : ''}
         </div>
         <div style="flex:1;min-width:0;">
-          <div style="font-weight:700;font-size:0.95rem;${checked ? 'text-decoration:line-through;' : ''}">${escapeHtml(h.description)}</div>
+          <div style="font-weight:700;font-size:0.95rem;${checked ? 'text-decoration:line-through;' : ''}">${escapeHtml(markdownPlain(h.description))}</div>
           <div style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap;">
             <span style="font-size:0.72rem;font-weight:700;background:rgba(0,0,0,0.1);padding:4px 10px;border-radius:10px;">${escapeHtml(sub.name || '?')}</span>
             <span style="font-size:0.72rem;font-weight:${overdue ? '700' : '500'};opacity:0.7;${overdue ? 'color:#b3261e;' : ''}">
@@ -587,7 +587,8 @@ function openHwCardMenu(btn, hwId) {
 
 function confirmDelHw(id) {
   const hw = hwItems.find(h => h.id === id);
-  const title = hw ? `„${escapeHtml(hw.description.slice(0, 40))}${hw.description.length > 40 ? '…' : ''}“` : 'diese Aufgabe';
+  const plain = hw ? markdownPlain(hw.description) : '';
+  const title = hw ? `„${escapeHtml(plain.slice(0, 40))}${plain.length > 40 ? '…' : ''}“` : 'diese Aufgabe';
   openModal(confirmDelete({
     title: 'Aufgabe löschen?',
     message: `Willst du ${title} wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.`,
@@ -651,10 +652,10 @@ function renderHwDetail(hw) {
   if (subEl) subEl.textContent = sub.name || '?';
 
   const titleEl = document.getElementById('hwd-title');
-  if (titleEl) titleEl.textContent = hw.description;
+  if (titleEl) titleEl.textContent = markdownPlain(hw.description);
 
   const descEl = document.getElementById('hwd-desc');
-  if (descEl) descEl.textContent = hw.description;
+  if (descEl) descEl.innerHTML = renderMarkdown(hw.description);
 
   const dueEl = document.getElementById('hwd-due');
   if (dueEl) dueEl.textContent = hwFormatDueLabel(hw.due_date);
@@ -1056,7 +1057,7 @@ function openHwSheet(editId) {
   hwPendingFiles = editing ? [...(editing.attachments || [])] : [];
   openSheet('<div class="sheet-title">' + (editing ? 'Hausaufgabe bearbeiten' : 'Neue Hausaufgabe') + '</div>'
     + '<select class="m3-select" id="hw-subject" onchange="renderHwDueSection()">' + hwSubjects.map(s=>'<option value="'+s.id+'"'+(s.id===defaultSubId?' selected':'')+'>'+escapeHtml(s.name)+'</option>').join('') + '</select>'
-    + '<textarea class="m3-input" id="hw-desc" placeholder="Beschreibung" rows="3" style="resize:none;height:auto;">' + (editing ? escapeHtml(editing.description) : '') + '</textarea>'
+    + '<textarea class="m3-input" id="hw-desc" data-markdown placeholder="Beschreibung" rows="3" style="resize:none;height:auto;">' + (editing ? escapeHtml(editing.description) : '') + '</textarea>'
     + '<div class="section-label" style="margin:16px 4px 6px 4px;">Fällig am</div>'
     + '<div id="hw-due-section"></div>'
     + '<div class="section-label" style="margin:16px 4px 6px 4px;">Anhänge (mehrere möglich)</div>'

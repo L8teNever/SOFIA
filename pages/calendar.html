@@ -2104,7 +2104,7 @@ function renderCalEventCard(e, { todayStr, subMap, isPast }) {
             ${e.time ? `<span style="opacity:0.4;">·</span><i data-lucide="clock"></i><span>${e.time} Uhr</span>` : ''}
             ${(e.attachments || []).length ? `<span style="opacity:0.4;">·</span><i data-lucide="paperclip"></i><span>${e.attachments.length}</span>` : ''}
           </div>
-          ${e.description ? `<div class="cal-event-desc">${escapeHtml(e.description)}</div>` : ''}
+          ${e.description ? `<div class="cal-event-desc">${escapeHtml(markdownPlain(e.description))}</div>` : ''}
           ${calCardFilesRow(e)}
         </div>
       </div>
@@ -2148,7 +2148,7 @@ function openCalEventDetail(eventId, pool) {
     <div class="cal-detail-row"><i data-lucide="calendar"></i><div>${escapeHtml(when)}</div></div>
     ${ev.time ? `<div class="cal-detail-row"><i data-lucide="clock"></i><div>${escapeHtml(ev.time)} Uhr</div></div>` : ''}
     ${subObj ? `<div class="cal-detail-row"><i data-lucide="book-open"></i><div>${escapeHtml(subObj.name || subObj.short_name || '')}</div></div>` : ''}
-    ${ev.description ? `<div class="cal-detail-row"><i data-lucide="align-left"></i><div style="white-space:pre-wrap;line-height:1.45;">${escapeHtml(ev.description)}</div></div>` : ''}
+    ${ev.description ? `<div class="cal-detail-row"><i data-lucide="align-left"></i><div class="md-body">${renderMarkdown(ev.description)}</div></div>` : ''}
     ${calDetailAttachments(ev)}
     ${canEdit ? `
       <div class="cal-detail-actions">
@@ -2280,7 +2280,7 @@ async function openNewEventSheet(defaultDate, defaultTime) {
     </div>
     <div class="m3-field">
       <label class="m3-field-label">Beschreibung (optional):</label>
-      <textarea class="m3-input" id="ev-description" rows="3" placeholder="Weitere Details zum Termin..." style="resize:none;height:auto;font-family:inherit;line-height:1.4;"></textarea>
+      <textarea class="m3-input" id="ev-description" data-markdown rows="3" placeholder="Weitere Details zum Termin..." style="resize:none;height:auto;font-family:inherit;line-height:1.4;"></textarea>
     </div>
     ${calAttachmentFields()}
     <div class="m3-field" id="ev-start-date-wrap">
@@ -2407,7 +2407,7 @@ async function openEditEventSheet(eventId) {
     </div>
     <div class="m3-field">
       <label class="m3-field-label">Beschreibung (optional):</label>
-      <textarea class="m3-input" id="ev-description" rows="3" placeholder="Weitere Details zum Termin..." style="resize:none;height:auto;font-family:inherit;line-height:1.4;">${escapeHtml(ev.description || '')}</textarea>
+      <textarea class="m3-input" id="ev-description" data-markdown rows="3" placeholder="Weitere Details zum Termin..." style="resize:none;height:auto;font-family:inherit;line-height:1.4;">${escapeHtml(ev.description || '')}</textarea>
     </div>
     ${calAttachmentFields()}
     <div class="m3-field" id="ev-start-date-wrap">

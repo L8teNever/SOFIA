@@ -1398,6 +1398,7 @@ function openSheet(html) {
   enhanceDropdowns(sheet);
   enhanceDateTimeInputs(sheet);
   enhanceInputAutofill(sheet);
+  if (window.enhanceMarkdownFields) enhanceMarkdownFields(sheet);
   if (window.lucide) lucide.createIcons();
   document.getElementById('bottom-sheet-scrim').classList.add('active');
   requestAnimationFrame(() => sheet.classList.add('active'));
