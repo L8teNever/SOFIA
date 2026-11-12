@@ -963,10 +963,10 @@ html.dark .modal,
 html.dark .m3-dropdown-panel,
 html.dark .cal-day-pop,
 html.dark .m3-picker-dialog {
-  filter: invert(1) hue-rotate(180deg) contrast(1.15) brightness(1.06);
+  filter: invert(1) hue-rotate(180deg) brightness(1.55);
 }
 html.dark .page { background: #fff !important; }
-html.dark .page .m3-card { background: #ebe8ee; border-color: rgba(0,0,0,0.18); }
+html.dark .page .m3-card { background: #e4e1e8; border-color: rgba(0,0,0,0.22); }
 html.dark :is(.page, .bottom-sheet, .modal, .m3-dropdown-panel, .cal-day-pop, .m3-picker-dialog)
   :is(img, video, canvas, iframe, picture, [style*="background-image"], .no-dark) {
   filter: hue-rotate(180deg) invert(1);
