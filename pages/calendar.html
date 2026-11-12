@@ -619,7 +619,6 @@ const CAL_MONTHS_PILL = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep',
 const CAL_WEEKDAY_SHORT = ['Mo','Di','Mi','Do','Fr','Sa','So'];
 const CAL_VIEW_MODES = [
   { id: 'agenda', label: 'Terminübersicht', icon: 'list' },
-  { id: 'day',    label: 'Tag',             icon: 'calendar-1' },
   { id: 'week',   label: 'Woche',           icon: 'calendar-range' },
   { id: 'month',  label: 'Monat',           icon: 'calendar-days' },
 ];
@@ -906,7 +905,8 @@ async function calMiniPickDay(dateStr) {
   selectedCalDate = dateStr;
   calMiniYear = calYear;
   calMiniMonth = calMonth;
-  await setCalDisplayMode('day', { skipReload: false, anchor: d, persist: false });
+  // Keine eigene Tagesansicht mehr: Woche/Uebersicht springen einfach zum Tag
+  await setCalDisplayMode(calDisplayMode, { skipReload: false, anchor: d, persist: false });
 }
 
 function toggleCalViewPicker(btn) {
@@ -1689,7 +1689,7 @@ function _buildCalGrid(grid) {
       calWeekAnchor = new Date(dateStr + 'T00:00');
       calYear = calWeekAnchor.getFullYear();
       calMonth = calWeekAnchor.getMonth();
-      setCalDisplayMode('day', { persist: false });
+      calCompactPickDay(dateStr).then(() => { if (calDisplayMode === 'month') renderCal(); });
     };
     grid.appendChild(el);
   }
@@ -2521,11 +2521,6 @@ async function doDelEvent(eventId) {
   renderCal();
 }
 
-function selectDay(dateStr) {
-  selectedCalDate = dateStr;
-  calWeekAnchor = new Date(dateStr + 'T00:00');
-  setCalDisplayMode('day', { persist: false });
-}
 function toggleCalDisplayMode() { toggleCalViewPicker(document.getElementById('cal-viewmode-btn')); }
 function renderEventList() { if (calDisplayMode === 'agenda') renderAgendaList(); }
 function toggleCalMonthPanel() { toggleCalMiniDrawer(); }
