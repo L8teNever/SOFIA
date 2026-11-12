@@ -1677,7 +1677,7 @@ function _buildCalGrid(grid) {
       const barTags = covering.slice(0, maxBars).map(ev => {
         const { bg, color } = calEventColors(ev);
         const clip = calHasFiles(ev) ? calClipIcon() : '';
-        return `<div class="cal-day-bar" style="background:${bg};color:${color};" title="${escapeHtml(ev.title)}" onclick="event.stopPropagation();openCalEventDetail(${ev.id})">${clip}<span class="cal-day-bar-title">${escapeHtml(ev.title)}</span></div>`;
+        return `<div class="cal-day-bar" style="background:${bg};color:${color};" title="${escapeHtml(ev.title)}">${clip}<span class="cal-day-bar-title">${escapeHtml(ev.title)}</span></div>`;
       }).join('');
       const moreTag = covering.length > maxBars
         ? `<div class="cal-day-more">+${covering.length - maxBars} weitere</div>` : '';
@@ -1689,10 +1689,73 @@ function _buildCalGrid(grid) {
       calWeekAnchor = new Date(dateStr + 'T00:00');
       calYear = calWeekAnchor.getFullYear();
       calMonth = calWeekAnchor.getMonth();
+      // Mit Terminen: Auswahl (PC: Popover am Tag, Handy: Sheet), dann oeffnen/bearbeiten.
+      if (covering.length === 1) { openCalEventDetail(covering[0].id); return; }
+      if (covering.length > 1) { openCalDayPicker(el, dateStr, covering); return; }
       calCompactPickDay(dateStr).then(() => { if (calDisplayMode === 'month') renderCal(); });
     };
     grid.appendChild(el);
   }
+}
+
+// Tag mit mehreren Terminen angeklickt: erst auswaehlen, dann erst oeffnen/bearbeiten.
+// PC = kleines Menue neben dem Tag, Handy = Sheet von unten.
+let calDayPickerEl = null;
+function closeCalDayPicker() {
+  if (calDayPickerEl) { calDayPickerEl.remove(); calDayPickerEl = null; }
+  document.removeEventListener('mousedown', onCalDayPickerOutside, true);
+  document.removeEventListener('keydown', onCalDayPickerKey, true);
+}
+function onCalDayPickerOutside(e) { if (calDayPickerEl && !calDayPickerEl.contains(e.target)) closeCalDayPicker(); }
+function onCalDayPickerKey(e) { if (e.key === 'Escape') closeCalDayPicker(); }
+function pickCalDayEvent(id) {
+  const desktop = !!calDayPickerEl;
+  closeCalDayPicker();
+  if (!desktop && typeof closeSheet === 'function') closeSheet();
+  setTimeout(() => openCalEventDetail(id), desktop ? 0 : 260);
+}
+function _calDayPickerRows(events) {
+  return events.map(ev => {
+    const { bg } = calEventColors(ev);
+    const meta = calTypeMeta(ev);
+    const sub = [meta.label, ev.time ? ev.time + ' Uhr' : null].filter(Boolean).join(' · ');
+    return `<button type="button" onclick="pickCalDayEvent(${ev.id})" style="display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:transparent;border:none;border-radius:14px;padding:10px 12px;cursor:pointer;font:inherit;color:#1c1b1f;">
+      <span style="width:6px;align-self:stretch;min-height:34px;border-radius:3px;background:${bg};flex-shrink:0;"></span>
+      <span style="flex:1;min-width:0;"><span style="display:block;font-weight:700;font-size:0.92rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(ev.title)}</span>
+      <span style="display:block;font-size:0.75rem;color:#49454f;margin-top:1px;">${escapeHtml(sub)}</span></span>
+      <i data-lucide="chevron-right" style="width:16px;height:16px;opacity:0.5;flex-shrink:0;"></i>
+    </button>`;
+  }).join('');
+}
+function openCalDayPicker(anchorEl, dateStr, events) {
+  closeCalDayPicker();
+  const title = new Date(dateStr + 'T00:00').toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' });
+  const rows = _calDayPickerRows(events);
+  if (!window.matchMedia('(min-width: 760px)').matches) {
+    openSheet(`<div class="sheet-title" style="font-size:1.1rem;font-weight:800;color:#1c1b1f;margin-bottom:2px;">${escapeHtml(title)}</div>
+      <div style="font-size:0.8rem;color:#49454f;margin-bottom:10px;">${events.length} Termine – wähle einen aus</div>${rows}`);
+    if (window.lucide) lucide.createIcons();
+    return;
+  }
+  const pop = document.createElement('div');
+  pop.className = 'cal-day-pop';
+  pop.style.cssText = 'position:fixed;z-index:9999;width:300px;max-height:60vh;overflow-y:auto;background:#fff;border-radius:20px;padding:10px;box-shadow:0 8px 32px rgba(0,0,0,0.18),0 1px 6px rgba(0,0,0,0.08);opacity:0;transform:scale(0.96);transition:opacity .12s ease,transform .12s ease;';
+  pop.innerHTML = `<div style="font-size:0.72rem;font-weight:800;text-transform:uppercase;letter-spacing:0.08em;color:#6750a4;padding:6px 12px 6px;">${escapeHtml(title)}</div>${rows}`;
+  document.body.appendChild(pop);
+  const r = anchorEl.getBoundingClientRect();
+  const w = pop.offsetWidth, h = pop.offsetHeight;
+  let left = r.right + 10;
+  if (left + w > window.innerWidth - 12) left = Math.max(12, r.left - w - 10);
+  let top = Math.min(Math.max(12, r.top), window.innerHeight - h - 12);
+  pop.style.left = left + 'px';
+  pop.style.top = top + 'px';
+  requestAnimationFrame(() => { pop.style.opacity = '1'; pop.style.transform = 'none'; });
+  calDayPickerEl = pop;
+  if (window.lucide) lucide.createIcons();
+  setTimeout(() => {
+    document.addEventListener('mousedown', onCalDayPickerOutside, true);
+    document.addEventListener('keydown', onCalDayPickerKey, true);
+  }, 0);
 }
 
 // The small month next to the event list. A day in it picks that day in
@@ -1947,6 +2010,12 @@ function renderMonthEventList(opts) {
 // Opens the list on the picked day when one is selected in this month,
 // otherwise on today. A picked day with no events of its own lands on the
 // next day that has some.
+// Abstand eines Elements zum oberen Rand des Scroll-Containers, gemessen ueber
+// offsetTop. getBoundingClientRect() waere falsch, solange die Seite noch in
+// ihrer Oeffnen-Animation steckt (scale) – dann landete die Liste verrutscht.
+function calAbsTop(el) { let y = 0; while (el) { y += el.offsetTop; el = el.offsetParent; } return y; }
+function calOffsetIn(el, wrap) { return calAbsTop(el) - calAbsTop(wrap); }
+
 function scrollMonthEventsToToday(root) {
   if (!window.matchMedia('(min-width: 760px)').matches) return;
   const scope = root || document;
@@ -1965,7 +2034,7 @@ function scrollMonthEventsToToday(root) {
   const target = groups.find(g => (g.dataset.date || '') >= prefer);
   if (!target) { wrap.scrollTop = 0; return; }
   const headH = wrap.querySelector('.cal-month-events-head')?.offsetHeight || 0;
-  const top = target.getBoundingClientRect().top - wrap.getBoundingClientRect().top + wrap.scrollTop - headH;
+  const top = calOffsetIn(target, wrap) - headH;
   wrap.scrollTop = Math.max(0, top);
 }
 function scrollDrawerEvents() {
@@ -1981,7 +2050,7 @@ function scrollDrawerEvents() {
   const target = groups.find(g => (g.dataset.date || '') >= prefer);
   if (!target) { wrap.scrollTop = 0; return; }
   const headH = wrap.querySelector('.cal-month-events-head')?.offsetHeight || 0;
-  const top = target.getBoundingClientRect().top - wrap.getBoundingClientRect().top + wrap.scrollTop - headH;
+  const top = calOffsetIn(target, wrap) - headH;
   wrap.scrollTop = Math.max(0, top);
 }
 
@@ -2061,7 +2130,7 @@ function scrollAgendaToToday(behavior = 'auto') {
   // Leave room for the pinned month heading, which would otherwise sit on
   // top of the very day the scroll was supposed to bring into view.
   const stickyH = list.querySelector('.cal-agenda-month')?.offsetHeight || 0;
-  const top = target.getBoundingClientRect().top - wrap.getBoundingClientRect().top + wrap.scrollTop - stickyH;
+  const top = calOffsetIn(target, wrap) - stickyH;
   wrap.scrollTo({ top: Math.max(0, top), behavior });
 }
 

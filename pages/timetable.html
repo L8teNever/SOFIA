@@ -290,6 +290,26 @@ async function init_timetable() {
   await ttLoad();
 }
 
+// Die im Admin bei den Faechern festgelegten Farben auch hier nutzen. Sie sind
+// kraeftig, die Stunden-Bloecke haben aber dunkle Schrift – darum als helle
+// Toenung (Fachfarbe mit Weiss gemischt). Faecher ohne Treffer behalten die Palette.
+let ttSubjectList = null;
+async function ttApplySubjectColors() {
+  if (!ttSubjectList) {
+    try { ttSubjectList = await API.subjects(); } catch { ttSubjectList = []; }
+    if (!Array.isArray(ttSubjectList)) ttSubjectList = [];
+  }
+  const byKey = {};
+  ttSubjectList.forEach(sub => {
+    if (!sub.color) return;
+    [sub.short_name, sub.name].forEach(k => { if (k) byKey[String(k).trim().toLowerCase()] = sub.color; });
+  });
+  ttLessons.forEach(l => {
+    const c = byKey[String(l.subject_short || '').trim().toLowerCase()] || byKey[String(l.subject || '').trim().toLowerCase()];
+    if (c && l.subject_short) ttColorMap[l.subject_short] = 'color-mix(in srgb, ' + c + ' 30%, #ffffff)';
+  });
+}
+
 async function ttLoad() {
   ['tt-not-configured', 'tt-error', 'tt-day-view', 'tt-week-view', 'tt-admin-cta'].forEach(id => {
     const el = document.getElementById(id);
@@ -317,6 +337,7 @@ async function ttLoad() {
     ttHolidays = data.holidays || [];
     let ci = 0;
     ttLessons.forEach(l => { if (l.subject_short && !ttColorMap[l.subject_short]) ttColorMap[l.subject_short] = TT_COLORS[ci++ % TT_COLORS.length]; });
+    await ttApplySubjectColors();
 
     // Start on today, skip weekend
     const dow = _today().getDay();

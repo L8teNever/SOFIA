@@ -961,12 +961,13 @@ html.dark .page,
 html.dark .bottom-sheet,
 html.dark .modal,
 html.dark .m3-dropdown-panel,
+html.dark .cal-day-pop,
 html.dark .m3-picker-dialog {
   filter: invert(1) hue-rotate(180deg) contrast(0.85);
 }
 html.dark .page { background: #fff !important; }
 html.dark .page .m3-card { background: #f3f1f4; border-color: rgba(255,255,255,0.06); }
-html.dark :is(.page, .bottom-sheet, .modal, .m3-dropdown-panel, .m3-picker-dialog)
+html.dark :is(.page, .bottom-sheet, .modal, .m3-dropdown-panel, .cal-day-pop, .m3-picker-dialog)
   :is(img, video, canvas, iframe, picture, [style*="background-image"], .no-dark) {
   filter: hue-rotate(180deg) invert(1);
 }
