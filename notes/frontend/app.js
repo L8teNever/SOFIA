@@ -259,6 +259,36 @@
     pageRectCache.set(nb, { sig, rects: out });
     return out;
   }
+  // Zu welcher Seite gehoert ein Objekt? Groesste Ueberdeckung gewinnt (Text/Tabellen ragen oft
+  // ueber den Rand); liegt es zwischen oder knapp neben Seiten, zaehlt die naechste Seite.
+  function pageForBBox(rects, b) {
+    let best = null;
+    let bestArea = 0;
+    for (const r of rects) {
+      const w = Math.min(b.maxX, r.x + r.w) - Math.max(b.minX, r.x);
+      const h = Math.min(b.maxY, r.y + r.h) - Math.max(b.minY, r.y);
+      if (w >= 0 && h >= 0) {
+        const a = w * h + 1;
+        if (a > bestArea) {
+          bestArea = a;
+          best = r;
+        }
+      }
+    }
+    if (best) return best;
+    const cx = (b.minX + b.maxX) / 2;
+    const cy = (b.minY + b.maxY) / 2;
+    let near = null;
+    let nd = PAGE_GAP * 2;
+    for (const r of rects) {
+      const d = Math.hypot(Math.max(r.x - cx, 0, cx - (r.x + r.w)), Math.max(r.y - cy, 0, cy - (r.y + r.h)));
+      if (d <= nd) {
+        nd = d;
+        near = r;
+      }
+    }
+    return near;
+  }
   // Wie ein echter A4-Block: 5-mm-Kaestchen bzw. -Punkte, liniert mit ca. 8,5 mm,
   // Kopfbereich und roter Randlinie. 1 mm = A4_W / 210 Welteinheiten.
   const MM = A4_W / 210;
@@ -24732,9 +24762,7 @@
       for (const st of boardStrokes.values()) {
         if (st.extra && st.extra.boardPage) continue;
         const b = st.bbox || strokeWorldBBox(st);
-        const cx = (b.minX + b.maxX) / 2;
-        const cy = (b.minY + b.maxY) / 2;
-        const old = oldRects.find((r) => cx >= r.x && cx <= r.x + r.w && cy >= r.y && cy <= r.y + r.h);
+        const old = pageForBBox(oldRects, b);
         if (!old) continue;
         const nw = byId.get(old.id);
         if (!nw) {
@@ -24904,9 +24932,7 @@
       for (const st of boardStrokes.values()) {
         if (st.extra && st.extra.boardPage) continue;
         const b = st.bbox || strokeWorldBBox(st);
-        const cx = (b.minX + b.maxX) / 2;
-        const cy = (b.minY + b.maxY) / 2;
-        const old = oldRects.find((r) => cx >= r.x && cx <= r.x + r.w && cy >= r.y && cy <= r.y + r.h);
+        const old = pageForBBox(oldRects, b);
         if (!old) continue;
         if (old.id === o.id) {
           noteStrokeBefore(st);
