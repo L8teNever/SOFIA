@@ -76,6 +76,25 @@
       </div>
     </div>
 
+    <!-- Design / Dark Mode -->
+    <div class="section-label">Design</div>
+    <div class="m3-card">
+      <div style="display:flex;align-items:center;gap:14px;">
+        <div class="icon-box" style="width:42px;height:42px;background:rgba(103,80,164,0.12);flex-shrink:0;">
+          <i data-lucide="moon" style="width:22px;height:22px;color:#6750a4;"></i>
+        </div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:700;font-size:0.96rem;">Darstellung</div>
+          <div style="font-size:0.78rem;opacity:0.6;line-height:1.3;margin-top:2px;">Standardmäßig wie dein Gerät eingestellt</div>
+        </div>
+      </div>
+      <div class="theme-seg" id="theme-seg">
+        <button data-theme="system" onclick="pickTheme('system')"><i data-lucide="smartphone" style="width:16px;height:16px;"></i>Gerät</button>
+        <button data-theme="light" onclick="pickTheme('light')"><i data-lucide="sun" style="width:16px;height:16px;"></i>Hell</button>
+        <button data-theme="dark" onclick="pickTheme('dark')"><i data-lucide="moon" style="width:16px;height:16px;"></i>Dunkel</button>
+      </div>
+    </div>
+
     <!-- PWA Install / Home Screen -->
     <div class="section-label">Als App nutzen</div>
     <div class="m3-card" id="settings-pwa-card" style="cursor:pointer;" onclick="triggerPwaInstall()">
@@ -140,6 +159,13 @@
 </div>
 
 <script>
+function syncThemeSeg() {
+  const cur = window.getThemePref ? getThemePref() : 'system';
+  document.querySelectorAll('#theme-seg button').forEach(b => b.classList.toggle('active', b.dataset.theme === cur));
+}
+function pickTheme(t) { setThemePref(t); syncThemeSeg(); }
+syncThemeSeg();
+
 document.getElementById('ph-settings').outerHTML = pageHeader({ title: 'Einstellungen' });
 let settingsUser = null;
 

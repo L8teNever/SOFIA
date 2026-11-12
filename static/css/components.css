@@ -949,3 +949,32 @@
 .md-live strong { font-weight: 800; }
 .md-live a { color: var(--m3-prim); text-decoration: underline; }
 .md-live code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.88em; background: rgba(103, 80, 164, 0.1); padding: 1px 5px; border-radius: 6px; }
+
+
+/* ===== Dark Mode =====
+   Die Unterseiten, Sheets, Dialoge und Menues sind hell und ihre Farben stehen
+   zu hunderten inline. Darum wird hier die fertige Darstellung invertiert
+   (Helligkeit gedreht, Farbton per hue-rotate zurueck) statt jede Farbe
+   einzeln zu ersetzen. Die Startseite ist ohnehin dunkel und bleibt so.
+   Bilder, Videos und Co. werden doppelt invertiert und sehen dadurch normal aus. */
+html.dark .page,
+html.dark .bottom-sheet,
+html.dark .modal,
+html.dark .m3-dropdown-panel,
+html.dark .m3-picker-dialog {
+  filter: invert(1) hue-rotate(180deg) contrast(0.85);
+}
+html.dark .page { background: #fff !important; }
+html.dark .page .m3-card { background: #f3f1f4; border-color: rgba(255,255,255,0.06); }
+html.dark :is(.page, .bottom-sheet, .modal, .m3-dropdown-panel, .m3-picker-dialog)
+  :is(img, video, canvas, iframe, picture, [style*="background-image"], .no-dark) {
+  filter: hue-rotate(180deg) invert(1);
+}
+html.dark #bottom-sheet-scrim,
+html.dark #modal-scrim,
+html.dark #m3-picker-scrim { background: rgba(0,0,0,0.65); }
+
+/* Design-Auswahl in den Einstellungen */
+.theme-seg { display: flex; gap: 6px; background: rgba(0,0,0,0.05); border-radius: 16px; padding: 4px; margin-top: 14px; }
+.theme-seg button { flex: 1; border: none; background: transparent; color: inherit; font: inherit; font-size: 0.82rem; font-weight: 600; padding: 10px 6px; border-radius: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; }
+.theme-seg button.active { background: #fff; color: #21005d; box-shadow: 0 1px 3px rgba(0,0,0,0.12); }

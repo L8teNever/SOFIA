@@ -1,9 +1,9 @@
 <div class="page" id="page-grades" style="background:#f4f8ff;">
   <div id="ph-grades"></div>
-  <div class="page-scroll">
-    <div class="page-inner">
+  <div class="page-scroll-1col no-scrollbar">
+    <div class="page-inner-wide">
       <div id="grades-summary"></div>
-      <div id="grades-by-subject"></div>
+      <div id="grades-by-subject" class="grades-grid"></div>
       <div id="grades-empty-slot"></div>
     </div>
   </div>
@@ -148,7 +148,7 @@ function renderGrades() {
     const oralCount = grades.filter(g => (g.weight_type || 'exam') === 'oral').length;
     const quizCount = grades.filter(g => (g.weight_type || 'exam') === 'quiz').length;
 
-    return '<div class="m3-card" style="border-radius:24px;margin-bottom:14px;padding:18px 20px;box-shadow:0 1px 4px rgba(0,0,0,0.05);">'
+    return '<div class="m3-card" style="border-radius:24px;margin:0;padding:18px 20px;min-width:0;box-shadow:0 1px 4px rgba(0,0,0,0.05);">'
       + '<div style="display:flex;align-items:center;gap:14px;margin-bottom:8px;">'
       + '<div style="width:40px;height:40px;border-radius:14px;background:' + (sub.color || '#eaddff') + ';flex-shrink:0;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:0.95rem;color:#1c1b1f;">'
       + (sub.short_name || sub.name.slice(0, 2)) + '</div>'
