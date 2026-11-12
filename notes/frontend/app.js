@@ -641,6 +641,9 @@
   }
   function clampNotebookView() {
     if (boardEditId) return;
+    // Geteilte Ansicht: die Haelfte, in der gerade nichts passiert, bleibt stehen. Sonst zieht
+    // die Blaetter-Geste der anderen Haelfte (nbHold, Seiten-Anker) sie mit.
+    if (window.sofiaSplitBg) return;
     if (window.sofiaViewBusy && window.sofiaViewBusy()) return;
     // Pinch/Trackpad-Zoom: der Punkt unter den Fingern bleibt liegen, kein Clamp.
     if (zoomGesture || pinchState) return;
@@ -24166,6 +24169,8 @@
     // gewann die Bildschirmmitte — und die liegt nach dem Rauszoomen oft auf der
     // Seite darüber, weil der Fokuspunkt nicht die Mitte ist.
     let pageAnchor = 0;
+    // Geteilte Ansicht: jede Haelfte merkt sich ihre eigene Seite
+    window.sofiaPageAnchor = (v) => (v === undefined ? pageAnchor : (pageAnchor = v));
     function nearestPageToCenter() {
       const rects = pageRects(notebook);
       if (!rects.length) return 0;
@@ -24294,7 +24299,7 @@
       if (typeof endZoomLock === "function") endZoomLock();
       const from = { scale, offsetX, offsetY };
       const t0 = performance.now();
-      const me = {};
+      const me = { v };
       viewAnim = me;
       const step = (now) => {
         if (viewAnim !== me) return;
@@ -24315,7 +24320,26 @@
     window.sofiaCancelViewAnim = () => {
       viewAnim = null;
     };
-    canvas.addEventListener("pointerdown", () => (viewAnim = null), true);
+    let animCut = null; // gerade abgebrochene Animation: {v, t}
+    canvas.addEventListener(
+      "pointerdown",
+      () => {
+        if (viewAnim) animCut = { v: viewAnim.v, t: performance.now() };
+        viewAnim = null;
+      },
+      true
+    );
+    // Geteilte Ansicht: beim Wechsel der Haelfte laeuft die Animation der alten nicht in der
+    // neuen weiter und bleibt auch nicht halb stehen - sie springt an ihr Ziel.
+    window.sofiaFinishViewAnim = () => {
+      const v = viewAnim ? viewAnim.v : animCut && performance.now() - animCut.t < 60 ? animCut.v : null;
+      viewAnim = null;
+      animCut = null;
+      if (!v) return;
+      scale = v.scale;
+      offsetX = v.offsetX;
+      offsetY = v.offsetY;
+    };
     function fitPage(i, animate) {
       pageAnchor = Math.max(0, i | 0);
       const v = viewFor(i);
@@ -27978,6 +28002,7 @@
       const p = splitState.panes[splitState.active];
       p.view = { scale, offsetX, offsetY };
       p.be = boardEditId;
+      p.anchor = window.sofiaPageAnchor ? window.sofiaPageAnchor() : 0;
       Object.assign(p.ctx, captureCtx());
     }
     function syncPaneBoardUi() {
@@ -27991,7 +28016,8 @@
       const p = st.panes[i];
       const act = st.panes[st.active];
       const other = p.ctx !== act.ctx;
-      const save = { scale, offsetX, offsetY, viewLeft, viewRight, be: boardEditId };
+      const save = { scale, offsetX, offsetY, viewLeft, viewRight, be: boardEditId, anchor: window.sofiaPageAnchor ? window.sofiaPageAnchor() : 0 };
+      if (!ctxOnly && p.anchor != null && window.sofiaPageAnchor) window.sofiaPageAnchor(p.anchor);
       Object.assign(act.ctx, captureCtx());
       if (other) applyCtx(p.ctx);
       if (!ctxOnly) boardEditId = p.be === undefined ? boardEditId : p.be;
@@ -28013,6 +28039,7 @@
           p.be = boardEditId;
         }
         boardEditId = save.be;
+        if (window.sofiaPageAnchor) window.sofiaPageAnchor(save.anchor);
         if (other) {
           Object.assign(p.ctx, captureCtx());
           applyCtx(act.ctx);
@@ -28053,10 +28080,17 @@
         clearSelection();
         if (zoomWin) closeZoomWindow();
       }
+      // Bewegung der alten Haelfte beenden, damit sie nicht in der neuen weiterlaeuft
+      stopFling();
+      if (window.sofiaFinishViewAnim) window.sofiaFinishViewAnim();
+      endNbHold();
+      endZoomLock();
+      gestureStart = null;
       saveActive();
       st.active = i;
       const p = st.panes[i];
       if (differ) applyCtx(p.ctx);
+      if (p.anchor != null && window.sofiaPageAnchor) window.sofiaPageAnchor(p.anchor);
       const beChanged = p.be !== undefined && p.be !== boardEditId;
       if (p.be !== undefined) boardEditId = p.be;
       scale = p.view.scale;
@@ -28135,7 +28169,8 @@
         };
         // diese Haelfte startet ohne gespeicherte Striche: immer alles vom Server holen
         revByBoard.delete(board.id);
-        splitState.panes[1] = { view: { scale: 1, offsetX: 0, offsetY: 0 }, ctx: fresh, be: null };
+        splitState.panes[1] = { view: { scale: 1, offsetX: 0, offsetY: 0 }, ctx: fresh, be: null, anchor: 0 };
+        if (window.sofiaPageAnchor) window.sofiaPageAnchor(0);
         splitState.active = 1;
         applyCtx(fresh);
         boardEditId = null; // anderes Blatt: dort ist (noch) keine Board-Seite offen
