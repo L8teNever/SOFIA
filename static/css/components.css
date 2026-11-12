@@ -233,7 +233,7 @@
    sidebar/back-button column lines up with the header above it instead
    of the header floating over full-width content on wide screens. */
 #admin-stats-row, .admin-main-layout {
-  max-width: 960px;
+  max-width: var(--page-wide);
   margin: 0 auto;
   width: 100%;
   box-sizing: border-box;

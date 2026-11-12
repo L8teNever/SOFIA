@@ -14,8 +14,13 @@
   --m3-green-cont: #c4eed0;
   --m3-orange-cont: #ffdec1;
   --m3-red-cont: #f9dedc;
+  /* Max. Inhaltsbreite der Unterseiten (Kopf, Kalender, Listen) – waechst auf grossen Bildschirmen */
+  --page-wide: 960px;
   --m3-easing: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
+
+@media (min-width: 1400px) { :root { --page-wide: 1320px; } }
+@media (min-width: 1800px) { :root { --page-wide: 1640px; } }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -357,7 +362,7 @@ body.has-active-page .app-container {
    .page-inner's reading-width cap needs (e.g. homework's card grid
    below). Standalone (not scoped to a multi-column .page-scroll) since
    its own layout, not a parent's column-span, is what centers it. */
-.page-inner-wide { max-width: 960px; width: 100%; margin: 0 auto; }
+.page-inner-wide { max-width: var(--page-wide); width: 100%; margin: 0 auto; }
 
 /* A card list broken into labeled sections (Überfällig/Diese Woche/...)
    — CSS Grid instead of .page-scroll's column-count, which fills each
@@ -457,7 +462,7 @@ body.has-active-page .app-container {
   border-bottom: 1px solid rgba(0, 0, 0, 0.08);
   z-index: 10;
   position: relative;
-  max-width: 960px;
+  max-width: var(--page-wide);
   margin: 0 auto 8px auto;
   width: 100%;
   box-sizing: border-box;
@@ -574,7 +579,7 @@ html.is-android .page-header > .hdr-back + * { margin-left: calc(-1 * var(--ph-i
    page edge once the header (but not this row) is capped. Only sets
    horizontal padding — pages keep their own vertical padding inline. */
 .page-subbar {
-  max-width: 960px;
+  max-width: var(--page-wide);
   margin: 0 auto;
   width: 100%;
   box-sizing: border-box;
