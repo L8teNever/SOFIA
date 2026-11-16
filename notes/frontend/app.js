@@ -24998,6 +24998,24 @@
       withPageUndo(() => saveNotebook(nb, { moveStrokes: true }));
       fitPage(to);
     }
+    // Mehrere Seiten auf einmal verschieben (Seiten-Leiste, Tab "Auswählen"): sie landen
+    // zusammen vor der Seite "before" (Index im alten Stand) und behalten ihre Reihenfolge
+    function movePages(indices, before, focus) {
+      const set = new Set(indices);
+      if (!set.size) return;
+      const nb = clone();
+      const picked = nb.pages.filter((_, i) => set.has(i));
+      const rest = nb.pages.filter((_, i) => !set.has(i));
+      let at = 0;
+      for (let i = 0; i < before && i < nb.pages.length; i++) if (!set.has(i)) at++;
+      const focusPg = nb.pages[set.has(focus) ? focus : indices[0]];
+      rest.splice(at, 0, ...picked);
+      if (rest.every((pg, i) => pg === nb.pages[i])) return; // liegt schon so
+      nb.pages = rest;
+      thumbHoldUntil = performance.now() + 2500;
+      withPageUndo(() => saveNotebook(nb, { moveStrokes: true }));
+      fitPage(Math.max(0, rest.indexOf(focusPg)));
+    }
     function setLayout(layout) {
       if (notebook.layout === layout) return;
       const i = currentPage();
@@ -26429,6 +26447,16 @@
         g.style.top = r.top + "px";
         document.body.appendChild(g);
         d.ghost = g;
+        // Auswahl-Modus: haengt die gezogene Seite in der Auswahl, gehen alle ausgewaehlten mit
+        const group = pickedIndices();
+        if (group.length > 1 && group.includes(i)) {
+          d.group = group;
+          for (const k of group) grid.querySelector('.page-thumb[data-index="' + k + '"]')?.classList.add("lifted");
+          const badge = document.createElement("span");
+          badge.textContent = group.length;
+          badge.style.cssText = "position:absolute;top:-8px;right:-8px;min-width:26px;height:26px;padding:0 7px;box-sizing:border-box;border-radius:13px;background:#6750a4;color:#fff;font:700 13px/26px Inter,system-ui,sans-serif;text-align:center;box-shadow:0 2px 6px rgba(0,0,0,0.25)";
+          g.appendChild(badge);
+        }
         d.dx = e.clientX - r.left;
         d.dy = e.clientY - r.top;
         if (navigator.vibrate) navigator.vibrate(15);
@@ -26440,6 +26468,7 @@
       clearTimeout(thumbDrag.timer);
       thumbDrag.ghost?.remove();
       thumbDrag.cell?.classList.remove("lifted");
+      if (thumbDrag.group) grid.querySelectorAll(".page-thumb.lifted").forEach((c) => c.classList.remove("lifted"));
       grid.querySelectorAll(".drop-before,.drop-after").forEach((c) => c.classList.remove("drop-before", "drop-after"));
       thumbDrag = null;
     }
@@ -26475,6 +26504,7 @@
       if (!t) return;
       t.cell.classList.add(t.after ? "drop-after" : "drop-before");
       let to = t.index + (t.after ? 1 : 0);
+      d.before = to; // Einfuegestelle im alten Stand (fuer mehrere Seiten)
       if (to > d.from) to -= 1;
       d.to = to;
       // am Rand der Leiste weiterscrollen
@@ -26486,14 +26516,17 @@
       const d = thumbDrag;
       if (!d || e.pointerId !== d.pointerId) return;
       if (!d.active) return cancelThumbDrag();
-      const { from, to } = d;
+      const { from, to, group, before } = d;
       d.done = true;
       cancelThumbDrag();
       thumbDrag = { done: true };
       setTimeout(() => {
         if (thumbDrag && thumbDrag.done && !thumbDrag.cell) thumbDrag = null;
       }, 50);
-      if (e.type === "pointerup" && to !== from) movePage(from, to);
+      if (e.type !== "pointerup") return;
+      if (group) {
+        if (before != null) movePages(group, before, from);
+      } else if (to !== from) movePage(from, to);
     };
     window.addEventListener("pointerup", endThumb, true);
     window.addEventListener("pointercancel", endThumb, true);
@@ -26517,6 +26550,12 @@
         const id = pickIdOf(i);
         if (id && !out.includes(id)) out.push(id);
       }
+      return out;
+    }
+    // Indizes aller ausgewaehlten Seiten, in Notizbuch-Reihenfolge
+    function pickedIndices() {
+      const out = [];
+      if (pageSel && pageSel.size && notebook) for (let i = 0; i < notebook.pages.length; i++) if (pageSel.has(pickIdOf(i))) out.push(i);
       return out;
     }
     function syncSelectBar() {
