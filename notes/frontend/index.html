@@ -1571,7 +1571,9 @@
       var finish = function () { location.reload(); };
       clearSwCaches().then(finish, finish);
     }
-    function recoverOnce() {
+    // keepCache: nur langsam, nichts kaputt - dann bleibt die gespeicherte App liegen.
+    // Sonst haette der naechste Start bei haengendem Netz gar nichts mehr zum Anzeigen.
+    function recoverOnce(keepCache) {
       if (recovering) return true;
       try {
         if (sessionStorage.getItem("sofianotes-boot-recover") === "1") return false;
@@ -1580,16 +1582,17 @@
         return false;
       }
       recovering = true;
-      clearSwCaches().then(function () { location.reload(); }, function () { location.reload(); });
+      if (keepCache) location.reload();
+      else clearSwCaches().then(function () { location.reload(); }, function () { location.reload(); });
       return true;
     }
-    function showBootError(msg) {
+    function showBootError(msg, keepCache) {
       if (settled || recovering) return;
       var gate = document.getElementById("who-backdrop");
       if (!gate || gate.classList.contains("hidden")) return;
       var title = document.getElementById("gate-title");
       if (title && title.textContent && title.textContent !== "Lädt…") return;
-      if (recoverOnce()) return;
+      if (recoverOnce(keepCache)) return;
       settled = true;
       gate.setAttribute("aria-busy", "false");
       var card = gate.querySelector(".who-card");
@@ -1621,7 +1624,7 @@
       if (e && e.message) showBootError(String(e.message));
     }, true);
     setTimeout(function () {
-      showBootError("Das Laden dauert zu lange. Bitte Seite neu laden.");
+      showBootError("Das Laden dauert zu lange. Bitte Seite neu laden.", true);
     }, LIMIT);
   })();
 </script>

@@ -92,22 +92,54 @@ function isFreshPath(pathname) {
 function networkFirst(request, url) {
   // cache: "reload" umgeht den HTTP-Cache (immutable), ohne IndexedDB anzufassen.
   // new Request(navigate) wirft im Browser, deshalb die URL neu anfragen.
-  const fresh = fetch(request.url, { cache: "reload", credentials: "same-origin", redirect: "follow" });
-  return fresh
-    .then((response) => {
-      if (response.ok && !staleScript(response, url)) {
-        const copy = response.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
-      }
-      return response;
+  const fresh = fetch(request.url, { cache: "reload", credentials: "same-origin", redirect: "follow" }).then((response) => {
+    if (response.ok && !staleScript(response, url)) {
+      const copy = response.clone();
+      caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+    }
+    return response;
+  });
+  return netOrCache(fresh, () =>
+    caches.match(request).then((hit) => {
+      if (hit && !staleScript(hit, url)) return hit;
+      if (isHtmlPath(url.pathname)) return caches.match("/index.html");
+      return undefined;
     })
-    .catch(() =>
-      caches.match(request).then((hit) => {
-        if (hit && !staleScript(hit, url)) return hit;
-        if (isHtmlPath(url.pathname)) return caches.match("/index.html");
-        return undefined;
-      })
-    );
+  );
+}
+
+// Netz zuerst, aber nie endlos warten. Auf dem iPad/iPhone bleibt eine Anfrage nach
+// Stunden im Hintergrund manchmal einfach haengen (keine Antwort, kein Fehler) - die
+// App vom Home-Bildschirm zeigte dann nur noch "laedt". Nach NET_WAIT ms kommt darum
+// die gespeicherte Kopie; gibt es keine, wird weiter aufs Netz gewartet.
+const NET_WAIT = 4000;
+function netOrCache(net, getCached, onEmpty) {
+  return new Promise((resolve, reject) => {
+    let done = false;
+    const finish = (r) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      resolve(r);
+    };
+    const fromCache = () => Promise.resolve().then(getCached).catch(() => undefined);
+    const timer = setTimeout(() => {
+      fromCache().then((hit) => {
+        if (hit) finish(hit);
+        else if (onEmpty) finish(onEmpty());
+      });
+    }, NET_WAIT);
+    net.then(finish, (err) => {
+      if (done) return;
+      fromCache().then((hit) => {
+        if (done) return;
+        if (hit) return finish(hit);
+        done = true;
+        clearTimeout(timer);
+        reject(err);
+      });
+    });
+  });
 }
 
 function staleScript(response, url) {
@@ -143,16 +175,19 @@ self.addEventListener("fetch", (event) => {
   // abgelaufen), geht diese Umleitung unveraendert an den Browser - sonst bliebe die App
   // auf der alten, gespeicherten Seite haengen und kaeme nie mehr an den Server.
   if (event.request.mode === "navigate" && url.origin === self.location.origin) {
+    // Haengt das Netz, startet die App aus der gespeicherten Seite; eine abgelaufene
+    // Anmeldung faellt danach beim ersten Server-Kontakt auf (probeOnline laedt neu).
     event.respondWith(
-      fetch(event.request)
-        .then((response) => {
+      netOrCache(
+        fetch(event.request).then((response) => {
           if (response.ok && response.type === "basic" && isHtmlPath(url.pathname)) {
             const copy = response.clone();
             caches.open(CACHE_NAME).then((cache) => cache.put("/index.html", copy));
           }
           return response;
-        })
-        .catch(() => caches.match(event.request).then((hit) => hit || caches.match("/index.html")))
+        }),
+        () => caches.match(event.request).then((hit) => hit || caches.match("/index.html"))
+      )
     );
     return;
   }
@@ -203,22 +238,28 @@ self.addEventListener("fetch", (event) => {
   }
 
   if (url.origin === self.location.origin || isCdn(url)) {
+    // Schriften und Symbole von fremden Servern sind Zugabe: antworten sie nicht, geht es
+    // ohne sie weiter (leeres Stylesheet bzw. Fehler), statt dass der Start daran haengt.
+    const optional = isCdn(url)
+      ? () => (event.request.destination === "style" ? new Response("", { headers: { "Content-Type": "text/css" } }) : Response.error())
+      : null;
     event.respondWith(
-      fetch(event.request)
-        .then((response) => {
+      netOrCache(
+        fetch(event.request).then((response) => {
           if (response.ok) {
             const copy = response.clone();
             caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
           }
           return response;
-        })
-        .catch(() =>
+        }),
+        () =>
           caches.match(event.request).then((hit) => {
             if (hit) return hit;
             if (isHtmlPath(url.pathname)) return caches.match("/index.html");
             return undefined;
-          })
-        )
+          }),
+        optional
+      )
     );
   }
 });
