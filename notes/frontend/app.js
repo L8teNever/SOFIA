@@ -5622,6 +5622,7 @@
       lastWsMsgAt = performance.now();
       setConnState("live");
       reconnectDelay = 1000;
+      if (window.sofiaNbKick) window.sofiaNbKick();
     };
     ws.onclose = (ev) => {
       if (ev && ev.code === 4403) {
@@ -5746,7 +5747,7 @@
           applyPaper(msg.board.paper);
           const firstOpen = !notebook || notebookBoardId !== msg.board.id;
           // Seiten, die gerade noch gespeichert werden, nicht vom aelteren Server-Stand ueberschreiben
-          if (!firstOpen && window.sofiaNbBusy && window.sofiaNbBusy()) msg.board.notebook = notebook;
+          if (!firstOpen && window.sofiaNbBusy && window.sofiaNbBusy(msg.board.id)) msg.board.notebook = notebook;
           notebook = msg.board.notebook || null;
           notebookBoardId = msg.board.id;
           hdReadyBoards.add(msg.board.id);
@@ -20528,10 +20529,7 @@
       }
       // Seiten-Aenderung, die beim letzten Mal nicht mehr rausging
       const nbLeft = await SofiaOffline.getKv("nbdirty:" + id).catch(() => null);
-      if (nbLeft && nbLeft.nb) {
-        await enqueueOp({ type: "notebook_patch", personId: currentPersonId, boardId: id, notebook: nbLeft.nb, role: "owner", ts: nbLeft.ts });
-        SofiaOffline.setKv("nbdirty:" + id, null).catch(() => {});
-      }
+      if (nbLeft && nbLeft.nb && window.sofiaNbResume) window.sofiaNbResume(id, nbLeft.nb);
     }
     requestRedraw();
     wantWs = true;
@@ -24861,10 +24859,48 @@
     let nbQueued = null; // {bid, nb}
     let nbInFlight = false;
     let nbTimer = null;
-    window.sofiaNbBusy = () => !!(nbQueued || nbInFlight);
+    // Stand, der wegen wackligem Netz noch nicht beim Server ist: bleibt hier, bis er durch ist.
+    // Solange gilt der lokale Stand - sonst ueberschreibt ein aelterer Server-Stand die Seiten
+    // (z. B. eben eingefuegte PDF-Seiten), waehrend die Striche schon verschoben sind.
+    let nbUnsent = null; // {bid, nb}
+    let nbRetryTimer = null;
+    let nbRetryDelay = 2000;
+    window.sofiaNbBusy = (bid) => {
+      const b = bid || currentBoardId;
+      return !!(nbInFlight || (nbQueued && nbQueued.bid === b) || (nbUnsent && nbUnsent.bid === b));
+    };
+    function scheduleNbRetry() {
+      clearTimeout(nbRetryTimer);
+      nbRetryTimer = setTimeout(() => {
+        nbRetryTimer = null;
+        pushNotebook();
+      }, nbRetryDelay);
+      nbRetryDelay = Math.min(30000, nbRetryDelay * 2);
+    }
+    // Verbindung wieder da: Ausstehendes sofort nachschicken
+    window.sofiaNbKick = () => {
+      if (!nbUnsent || nbInFlight) return;
+      nbRetryDelay = 2000;
+      clearTimeout(nbRetryTimer);
+      nbRetryTimer = null;
+      pushNotebook();
+    };
+    // Beim Oeffnen: Stand, der beim letzten Mal nicht mehr rausging, gilt und wird nachgeschickt
+    window.sofiaNbResume = (bid, nb) => {
+      if (!nb || currentBoardId !== bid) return;
+      notebook = nb;
+      notebookBoardId = bid;
+      if (currentBoardMeta) currentBoardMeta.notebook = nb;
+      if (!nbQueued || nbQueued.bid !== bid) nbUnsent = { bid, nb };
+      requestRedraw();
+      if (window.sofiaPagesChanged) window.sofiaPagesChanged(true);
+      window.sofiaNbKick();
+    };
     async function pushNotebook() {
       nbTimer = null;
-      if (nbInFlight || !nbQueued) return;
+      if (nbInFlight) return;
+      if (!nbQueued && nbUnsent) nbQueued = nbUnsent;
+      if (!nbQueued) return;
       const { bid, nb } = nbQueued;
       nbQueued = null;
       nbInFlight = true;
@@ -24878,12 +24914,22 @@
           body: JSON.stringify({ notebook: nb }),
           signal: ctl.signal,
         });
-        if (!nbQueued && window.SofiaOffline) SofiaOffline.setKv("nbdirty:" + bid, null).catch(() => {});
+        if (nbUnsent && nbUnsent.bid === bid) nbUnsent = null;
+        nbRetryDelay = 2000;
+        if (!(nbQueued && nbQueued.bid === bid) && window.SofiaOffline) SofiaOffline.setKv("nbdirty:" + bid, null).catch(() => {});
       } catch (err) {
-        if (myRole === "owner" && currentPersonId) {
-          enqueueOp({ type: "notebook_patch", personId: currentPersonId, boardId: bid, notebook: nb, role: "owner" });
-          if (!nbQueued && window.SofiaOffline) SofiaOffline.setKv("nbdirty:" + bid, null).catch(() => {});
-        } else showToast("Seiten speichern hat nicht geklappt");
+        const status = Number(err && err.message);
+        if (status >= 400 && status < 500) {
+          // vom Server abgelehnt (z. B. nur Lesen): Nachschicken bringt nichts
+          if (nbUnsent && nbUnsent.bid === bid) nbUnsent = null;
+          if (window.SofiaOffline) SofiaOffline.setKv("nbdirty:" + bid, null).catch(() => {});
+          showToast("Seiten speichern hat nicht geklappt");
+        } else {
+          // kein/wackliges Netz: lokaler Stand bleibt gueltig und wird spaeter nachgeschickt
+          // (nbdirty bleibt liegen - ueberlebt auch Schliessen der App)
+          if (!nbQueued || nbQueued.bid !== bid) nbUnsent = { bid, nb };
+          if (!nbQueued) scheduleNbRetry();
+        }
       }
       clearTimeout(timer);
       nbInFlight = false;
