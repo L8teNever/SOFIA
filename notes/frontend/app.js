@@ -20530,24 +20530,29 @@
       // Seiten-Aenderung, die beim letzten Mal nicht mehr rausging
       const nbLeft = await SofiaOffline.getKv("nbdirty:" + id).catch(() => null);
       if (nbLeft && nbLeft.nb && window.sofiaNbResume) window.sofiaNbResume(id, nbLeft.nb);
-    }
-    requestRedraw();
-    wantWs = true;
-    if (await probeOnline()) {
-      await flushOutbox();
-      connectWS();
-    } else {
-      if (currentBoardId !== id) return;
-      // offline: Blatt aus dem lokalen Speicher aufbauen wie nach dem Verbinden
-      // (Titel, Papier, Notizbuch-Seiten, zuletzt angesehene Stelle)
-      const meta = window.SofiaOffline ? await SofiaOffline.getKv("board:" + id).catch(() => null) : null;
+      // Blatt sofort aus dem lokalen Speicher aufbauen (Titel, Papier, Notizbuch-Seiten,
+      // zuletzt angesehene Stelle) - auch online. Sonst steht bei langsamem Netz bis zur
+      // Antwort des Servers nur ein leeres Board da, obwohl es ein Heft ist. Die Antwort
+      // des Servers ersetzt den Stand danach wie gewohnt.
+      const meta = await SofiaOffline.getKv("board:" + id).catch(() => null);
       if (currentBoardId !== id) return;
       if (meta && meta.board) {
         // was seit dem Laden schon lokal dazukam (z.B. waehrend des Wartens geschrieben), bleibt
         const merged = new Map((local || []).map((st) => [st.id, st]));
         for (const st of boardStrokes.values()) merged.set(st.id, st);
-        handleMessage({ type: "init", clientId: myClientId, color: myColor, board: { ...meta.board, id }, role: meta.role || "owner", strokes: Array.from(merged.values()), offline: true });
+        const rev = revByBoard.get(id);
+        handleMessage({ type: "init", clientId: myClientId, color: myColor, board: { ...meta.board, id }, role: meta.role || "owner", strokes: Array.from(merged.values()), rev: typeof rev === "number" ? rev : undefined, offline: true });
+        if (currentBoardId !== id) return;
       }
+    }
+    requestRedraw();
+    wantWs = true;
+    if (await probeOnline()) {
+      if (currentBoardId !== id) return;
+      await flushOutbox();
+      connectWS();
+    } else {
+      if (currentBoardId !== id) return;
       setConnState("offline");
       setBoardLoading(false);
     }
