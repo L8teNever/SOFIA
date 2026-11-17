@@ -8622,7 +8622,7 @@
     if (spot) {
       textEdit = { kind: "text", strokeId: null, x: spot.x, y: spot.y, size: spot.size, color: currentColor, width: spot.width, before: null, onLines: true };
       showTextEditor("");
-      for (const [cmd, f] of Object.entries(FMT)) if (textDefaults[f.flag]) toggleAtCaret(cmd);
+      applyTextDefaults();
       syncFormatBar();
       return;
     }
@@ -8641,7 +8641,7 @@
     };
     showTextEditor("");
     // voreingestellte Formate (Text-Leiste ohne offenes Feld) direkt am Cursor setzen
-    for (const [cmd, f] of Object.entries(FMT)) if (textDefaults[f.flag]) toggleAtCaret(cmd);
+    applyTextDefaults();
     syncFormatBar();
   }
 
@@ -9174,10 +9174,13 @@
     for (const h of [teHandleL, teHandleR, teMoveEl]) if (h) h.classList.toggle("hidden", !show);
     if (!show) return;
     const cy = top + height / 2;
-    teHandleL.style.left = left - 12 + "px";
-    teHandleL.style.top = cy + "px";
-    teHandleR.style.left = left + width + 12 + "px";
-    teHandleR.style.top = cy + "px";
+    // im sichtbaren Bereich halten, sonst ist ein breites Feld nicht mehr greifbar
+    const clampX = (x) => Math.max(26, Math.min(window.innerWidth - 26, x));
+    const clampY = (y) => Math.max(40, Math.min(window.innerHeight - 40, y));
+    teHandleL.style.left = clampX(left - 12) + "px";
+    teHandleL.style.top = clampY(cy) + "px";
+    teHandleR.style.left = clampX(left + width + 12) + "px";
+    teHandleR.style.top = clampY(cy) + "px";
     if (teMoveEl) {
       // Platz der Format-Leiste (sie steht ueber dem Feld, links buendig)
       const bw = textFormatBar.offsetWidth || 260;
@@ -9240,6 +9243,7 @@
     };
     h.addEventListener("pointerup", end);
     h.addEventListener("pointercancel", end);
+    h.addEventListener("lostpointercapture", end);
   }
   if (teMoveEl) {
     teMoveEl.addEventListener("mousedown", (e) => e.preventDefault());
@@ -9258,12 +9262,18 @@
       if (!d || d.id !== e.pointerId || !textEdit) return;
       textEdit.x = d.origX + (e.clientX - d.x0) / scale;
       textEdit.y = d.origY + (e.clientY - d.y0) / scale;
-      if (textEdit.kind === "text") textEdit.y = snapTextBaseline(textEdit.x, textEdit.y, textEdit.size);
       positionTextEditor();
       sendTextLive();
     });
     const endMove = (e) => {
-      if (teMoveDrag && teMoveDrag.id === e.pointerId) teMoveDrag = null;
+      if (teMoveDrag && teMoveDrag.id === e.pointerId) {
+        teMoveDrag = null;
+        if (textEdit && textEdit.kind === "text") {
+          textEdit.y = snapTextBaseline(textEdit.x, textEdit.y, textEdit.size);
+          positionTextEditor();
+          sendTextLive();
+        }
+      }
       if (textEdit) textEditorEl.focus({ preventScroll: true });
     };
     teMoveEl.addEventListener("pointerup", endMove);
@@ -9290,10 +9300,43 @@
     requestRedraw();
   }
 
+  // Voreingestellte Formate am Cursor eines neuen Textfelds setzen. Durchgestrichen und
+  // Unterstrichen gelten nur fuers naechste Feld, sonst bleiben sie unbemerkt "haengen".
+  function applyTextDefaults() {
+    for (const [cmd, f] of Object.entries(FMT)) if (textDefaults[f.flag]) toggleAtCaret(cmd);
+    if (textDefaults.s || textDefaults.u) {
+      textDefaults.s = false;
+      textDefaults.u = false;
+      syncModeBar();
+    }
+  }
+
+  // Leere Listenpunkte am Ende ("• ", "☐ ", "1. ") beim Verlassen des Felds entfernen,
+  // samt dem Zeilenumbruch davor - sonst bleibt unten eine leere Zeile stehen.
+  function trimEmptyListTail(runs) {
+    const text = runsText(runs);
+    const m = /(?:^|\n)[ \t]*(?:[•☐☑]|\d+[.)])[ \t]*(?:\n[ \t]*)*$/.exec(text);
+    if (!m) return runs;
+    let keep = m.index;
+    const out = [];
+    for (const r of runs) {
+      if (keep <= 0) break;
+      if (r.t.length <= keep) {
+        out.push(r);
+        keep -= r.t.length;
+      } else {
+        out.push(Object.assign({}, r, { t: r.t.slice(0, keep) }));
+        keep = 0;
+      }
+    }
+    return out;
+  }
+
   function commitTextEditor() {
     if (!textEdit) return;
     const ed = textEdit;
-    const runs = serializeEditor();
+    let runs = serializeEditor();
+    if (ed.kind === "text") runs = trimEmptyListTail(runs);
     const value = runsText(runs);
     textEdit = null;
     // erst speichern (stroke_move/erase), dann die Live-Sitzung beenden - in dieser Reihenfolge
@@ -10879,7 +10922,7 @@
     const g = formTextGeom(f);
     textEdit = { kind: "text", strokeId: null, x: g.x, y: g.y, size: g.size, color: currentColor, width: g.width, before: null, onLines: true, formField: f.key, formMulti: g.multi };
     showTextEditor("");
-    for (const [cmd, ff] of Object.entries(FMT)) if (textDefaults[ff.flag]) toggleAtCaret(cmd);
+    applyTextDefaults();
     syncFormatBar();
     requestRedraw();
   }

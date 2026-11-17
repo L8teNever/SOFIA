@@ -2209,9 +2209,9 @@ html[data-theme="dark"] .td-toggle.active { background: #3a3350; color: #d0bcff;
 .te-handle {
   position: fixed;
   z-index: 71;
-  width: 22px;
-  height: 34px;
-  margin: -17px 0 0 -11px;
+  width: 44px;
+  height: 64px;
+  margin: -32px 0 0 -22px;
   touch-action: none;
   cursor: ew-resize;
   display: flex;
@@ -2233,10 +2233,10 @@ html[data-theme="dark"] .td-toggle.active { background: #3a3350; color: #d0bcff;
 .te-move {
   position: fixed;
   z-index: 71;
-  width: 40px;
-  height: 28px;
-  margin: -14px 0 0 -20px;
-  border-radius: 10px;
+  width: 52px;
+  height: 40px;
+  margin: -20px 0 0 -26px;
+  border-radius: 12px;
   background: #1a73e8;
   color: #fff;
   display: flex;
