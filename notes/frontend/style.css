@@ -6658,3 +6658,22 @@ html[data-theme="dark"] .big-show { background: #1d1b20; color: #e6e1e5; }
 .press-test-text { font-size: 14px; text-align: center; font-variant-numeric: tabular-nums; }
 html[data-theme="dark"] .press-test-max { background: rgba(255, 255, 255, 0.6); }
 .press-hold-ring { position: fixed; width: 44px; height: 44px; margin: -22px 0 0 -22px; border-radius: 50%; pointer-events: none; z-index: 9999; --p: 0; background: conic-gradient(#f9a825 calc(var(--p) * 1turn), rgba(121, 116, 126, 0.25) 0); -webkit-mask: radial-gradient(circle, transparent 15px, #000 16px); mask: radial-gradient(circle, transparent 15px, #000 16px); }
+
+/* Ring-Menue (fest druecken und halten): Stift, Text, Lasso um die Stiftspitze */
+.tool-ring { position: fixed; width: 0; height: 0; z-index: 10000; pointer-events: none; font-family: 'Google Sans', 'Inter', sans-serif; }
+.tool-ring svg { position: absolute; left: 0; top: 0; transform: translate(-50%, -50%) scale(0.6); opacity: 0; transition: transform 140ms cubic-bezier(0.2, 0, 0, 1), opacity 120ms ease; filter: drop-shadow(0 12px 28px rgba(0, 0, 0, 0.18)) drop-shadow(0 2px 6px rgba(0, 0, 0, 0.08)); overflow: visible; }
+.tool-ring.open svg { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+.tool-ring-seg { fill: var(--dock-bg); stroke: var(--dock-border); stroke-width: 1; transition: fill 90ms ease; }
+.tool-ring-seg.active { fill: var(--accent); }
+.tool-ring-hub { fill: var(--dock-bg); stroke: var(--dock-border); stroke-width: 1; }
+.tool-ring-item { position: absolute; transform: translate(-50%, -50%) scale(0.6); opacity: 0; display: flex; flex-direction: column; align-items: center; gap: 1px; color: var(--ink, #1c1b1f); transition: transform 140ms cubic-bezier(0.2, 0, 0, 1), opacity 120ms ease, color 90ms ease; }
+.tool-ring.open .tool-ring-item { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+.tool-ring-item .material-symbols-rounded { font-size: 26px; }
+.tool-ring-item small { font-size: 11px; font-weight: 700; letter-spacing: 0.01em; }
+.tool-ring-item.current { color: var(--accent); }
+.tool-ring-item.active { color: #fff; }
+.tool-ring.open .tool-ring-item.active { transform: translate(-50%, -50%) scale(1.1); }
+.tool-ring-x { position: absolute; transform: translate(-50%, -50%); font-size: 20px; color: var(--muted, #79747e); opacity: 0; transition: opacity 120ms ease; }
+.tool-ring.open .tool-ring-x { opacity: 0.7; }
+.tool-ring.has-sel .tool-ring-x { opacity: 0.3; }
+html[data-theme="dark"] .tool-ring-item.active { color: #241b33; }

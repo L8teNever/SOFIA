@@ -3994,12 +3994,118 @@
     if (dragState && dragState.pointerId === st.id) cancelSelectionDrag();
     panState = null;
     penTaps = [];
-    runPenTapAction(act);
+    if (act === "ring") openToolRing(st.id, st.x, st.y);
+    else runPenTapAction(act);
     try {
       if (navigator.vibrate) navigator.vibrate(20);
     } catch (err) {}
     requestRedraw();
   }
+  // Ring-Menue um die Stiftspitze: in die Richtung ziehen und loslassen waehlt das Werkzeug
+  const RING_OUT = 84; // Aussenradius (px)
+  const RING_IN = 30; // Innenradius: hier loslassen = nichts aendern
+  const RING_ITEMS = [
+    { mode: "pen", icon: "ink_pen", label: "Stift", angle: -90 },
+    { mode: "text", icon: "text_fields", label: "Text", angle: 30 },
+    { mode: "lasso", icon: "lasso_select", label: "Lasso", angle: 150 },
+  ];
+  let toolRing = null; // {id, cx, cy, el, sel}
+  function ringArc(a0, a1, ro, ri) {
+    const r = (d) => (d * Math.PI) / 180;
+    const p = (rad, d) => (rad * Math.cos(r(d))).toFixed(2) + " " + (rad * Math.sin(r(d))).toFixed(2);
+    return "M" + p(ro, a0) + " A" + ro + " " + ro + " 0 0 1 " + p(ro, a1) + " L" + p(ri, a1) + " A" + ri + " " + ri + " 0 0 0 " + p(ri, a0) + " Z";
+  }
+  function openToolRing(id, x, y) {
+    closeToolRing();
+    const pad = RING_OUT + 8;
+    const cx = Math.max(pad, Math.min(window.innerWidth - pad, x));
+    const cy = Math.max(pad, Math.min(window.innerHeight - pad, y));
+    const el = document.createElement("div");
+    el.className = "tool-ring";
+    el.style.left = cx + "px";
+    el.style.top = cy + "px";
+    const size = RING_OUT * 2 + 8;
+    const half = size / 2;
+    let svg = '<svg width="' + size + '" height="' + size + '" viewBox="' + -half + " " + -half + " " + size + " " + size + '">';
+    for (const it of RING_ITEMS) svg += '<path class="tool-ring-seg" data-mode="' + it.mode + '" d="' + ringArc(it.angle - 58, it.angle + 58, RING_OUT, RING_IN + 4) + '"/>';
+    svg += '<circle class="tool-ring-hub" r="' + (RING_IN - 2) + '"/></svg>';
+    el.innerHTML = svg;
+    const mid = (RING_OUT + RING_IN + 4) / 2;
+    for (const it of RING_ITEMS) {
+      const b = document.createElement("div");
+      b.className = "tool-ring-item" + (currentMode === it.mode ? " current" : "");
+      b.dataset.mode = it.mode;
+      b.style.left = mid * Math.cos((it.angle * Math.PI) / 180) + "px";
+      b.style.top = mid * Math.sin((it.angle * Math.PI) / 180) + "px";
+      b.innerHTML = '<span class="material-symbols-rounded">' + it.icon + "</span><small>" + it.label + "</small>";
+      el.appendChild(b);
+    }
+    const hub = document.createElement("span");
+    hub.className = "material-symbols-rounded tool-ring-x";
+    hub.textContent = "close";
+    el.appendChild(hub);
+    document.body.appendChild(el);
+    toolRing = { id, cx, cy, el, sel: null };
+    // sanft einblenden
+    requestAnimationFrame(() => el.classList.add("open"));
+  }
+  function updateToolRing(clientX, clientY) {
+    const r = toolRing;
+    if (!r) return;
+    const dx = clientX - r.cx;
+    const dy = clientY - r.cy;
+    let sel = null;
+    if (Math.hypot(dx, dy) >= RING_IN) {
+      const ang = (Math.atan2(dy, dx) * 180) / Math.PI;
+      let best = 999;
+      for (const it of RING_ITEMS) {
+        const d = Math.abs(((ang - it.angle + 540) % 360) - 180);
+        if (d < best) {
+          best = d;
+          sel = it.mode;
+        }
+      }
+    }
+    if (sel === r.sel) return;
+    r.sel = sel;
+    r.el.querySelectorAll("[data-mode]").forEach((n) => n.classList.toggle("active", n.dataset.mode === sel));
+    r.el.classList.toggle("has-sel", !!sel);
+  }
+  function closeToolRing() {
+    if (!toolRing) return;
+    const el = toolRing.el;
+    toolRing = null;
+    el.classList.remove("open");
+    setTimeout(() => el.remove(), 140);
+  }
+  window.addEventListener(
+    "pointermove",
+    (e) => {
+      if (!toolRing || e.pointerId !== toolRing.id) return;
+      const evs = coalescedEvents(e);
+      const last = evs[evs.length - 1] || e;
+      updateToolRing(last.clientX, last.clientY);
+    },
+    true
+  );
+  const ringUp = (e) => {
+    if (!toolRing || e.pointerId !== toolRing.id) return;
+    if (e.type === "pointerup") updateToolRing(e.clientX, e.clientY);
+    const sel = e.type === "pointerup" ? toolRing.sel : null;
+    closeToolRing();
+    if (sel && sel !== currentMode) setMode(sel);
+  };
+  window.addEventListener("pointerup", ringUp, true);
+  window.addEventListener("pointercancel", ringUp, true);
+  // anderer Stift/Finger beruehrt das Display: Ring zu, nichts aendern
+  window.addEventListener(
+    "pointerdown",
+    (e) => {
+      if (toolRing && e.pointerId !== toolRing.id) closeToolRing();
+    },
+    true
+  );
+
   function hookPenPress(el) {
     if (!el) return;
     el.addEventListener(
