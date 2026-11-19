@@ -6659,21 +6659,38 @@ html[data-theme="dark"] .big-show { background: #1d1b20; color: #e6e1e5; }
 html[data-theme="dark"] .press-test-max { background: rgba(255, 255, 255, 0.6); }
 .press-hold-ring { position: fixed; width: 44px; height: 44px; margin: -22px 0 0 -22px; border-radius: 50%; pointer-events: none; z-index: 9999; --p: 0; background: conic-gradient(#f9a825 calc(var(--p) * 1turn), rgba(121, 116, 126, 0.25) 0); -webkit-mask: radial-gradient(circle, transparent 15px, #000 16px); mask: radial-gradient(circle, transparent 15px, #000 16px); }
 
-/* Ring-Menue (fest druecken und halten): Stift, Text, Lasso um die Stiftspitze */
-.tool-ring { position: fixed; width: 0; height: 0; z-index: 10000; pointer-events: none; font-family: 'Google Sans', 'Inter', sans-serif; }
-.tool-ring svg { position: absolute; left: 0; top: 0; transform: translate(-50%, -50%) scale(0.6); opacity: 0; transition: transform 140ms cubic-bezier(0.2, 0, 0, 1), opacity 120ms ease; filter: drop-shadow(0 12px 28px rgba(0, 0, 0, 0.18)) drop-shadow(0 2px 6px rgba(0, 0, 0, 0.08)); overflow: visible; }
-.tool-ring.open svg { transform: translate(-50%, -50%) scale(1); opacity: 1; }
-.tool-ring-seg { fill: var(--dock-bg); stroke: var(--dock-border); stroke-width: 1; transition: fill 90ms ease; }
-.tool-ring-seg.active { fill: var(--accent); }
-.tool-ring-hub { fill: var(--dock-bg); stroke: var(--dock-border); stroke-width: 1; }
-.tool-ring-item { position: absolute; transform: translate(-50%, -50%) scale(0.6); opacity: 0; display: flex; flex-direction: column; align-items: center; gap: 1px; color: var(--ink, #1c1b1f); transition: transform 140ms cubic-bezier(0.2, 0, 0, 1), opacity 120ms ease, color 90ms ease; }
+/* Ring-Menue (fest druecken und halten): Material 3 Expressive - getrennte, runde Segmente,
+   Tonal-Flaechen, Auswahl in Primaerfarbe, federnde Bewegung */
+.tool-ring { position: fixed; width: 0; height: 0; z-index: 10000; pointer-events: none; font-family: 'Google Sans', 'Inter', sans-serif;
+  --r-surface: #f3edf7; --r-on: #1d1b20; --r-current: #e8def8; --r-on-current: #4a4458; --r-sel: #6750a4; --r-on-sel: #ffffff; --r-hub: #e6e0e9; --r-on-hub: #49454f;
+  --r-spring: cubic-bezier(0.34, 1.56, 0.64, 1); }
+html[data-theme="dark"] .tool-ring { --r-surface: #2b2930; --r-on: #e6e0e9; --r-current: #4a4458; --r-on-current: #e8def8; --r-sel: #d0bcff; --r-on-sel: #381e72; --r-hub: #36343b; --r-on-hub: #cac4d0; }
+.tool-ring svg { position: absolute; left: 0; top: 0; transform: translate(-50%, -50%) scale(0.4) rotate(-30deg); opacity: 0; transition: transform 320ms var(--r-spring), opacity 140ms ease; filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.16)) drop-shadow(0 1px 3px rgba(0, 0, 0, 0.1)); overflow: visible; }
+.tool-ring.open svg { transform: translate(-50%, -50%) scale(1) rotate(0deg); opacity: 1; }
+.tool-ring-seg { fill: var(--r-surface); stroke: var(--r-surface); stroke-width: 14; stroke-linejoin: round; transform-box: view-box; transform-origin: 0 0; transition: fill 160ms ease, stroke 160ms ease, transform 260ms var(--r-spring); }
+.tool-ring-seg.current { fill: var(--r-current); stroke: var(--r-current); }
+.tool-ring-seg.active { fill: var(--r-sel); stroke: var(--r-sel); transform: scale(1.08); }
+.tool-ring-hub { fill: var(--r-hub); transform-box: view-box; transform-origin: 0 0; transition: transform 260ms var(--r-spring); }
+.tool-ring.has-sel .tool-ring-hub { transform: scale(0.85); }
+.tool-ring-item { position: absolute; transform: translate(-50%, -50%) scale(0.4); opacity: 0; display: flex; flex-direction: column; align-items: center; gap: 2px; color: var(--r-on); transition: transform 320ms var(--r-spring), opacity 160ms ease, color 160ms ease; }
 .tool-ring.open .tool-ring-item { transform: translate(-50%, -50%) scale(1); opacity: 1; }
-.tool-ring-item .material-symbols-rounded { font-size: 26px; }
-.tool-ring-item small { font-size: 11px; font-weight: 700; letter-spacing: 0.01em; }
-.tool-ring-item.current { color: var(--accent); }
-.tool-ring-item.active { color: #fff; }
-.tool-ring.open .tool-ring-item.active { transform: translate(-50%, -50%) scale(1.1); }
-.tool-ring-x { position: absolute; transform: translate(-50%, -50%); font-size: 20px; color: var(--muted, #79747e); opacity: 0; transition: opacity 120ms ease; }
-.tool-ring.open .tool-ring-x { opacity: 0.7; }
-.tool-ring.has-sel .tool-ring-x { opacity: 0.3; }
-html[data-theme="dark"] .tool-ring-item.active { color: #241b33; }
+.tool-ring-item .material-symbols-rounded { font-size: 28px; font-variation-settings: 'FILL' 0, 'wght' 500; transition: font-variation-settings 160ms ease; }
+.tool-ring-item small { font-size: 12px; font-weight: 500; letter-spacing: 0.02em; }
+.tool-ring-item.current { color: var(--r-on-current); }
+.tool-ring-item.active { color: var(--r-on-sel); }
+.tool-ring-item.active .material-symbols-rounded { font-variation-settings: 'FILL' 1, 'wght' 600; }
+.tool-ring.open .tool-ring-item.active { transform: translate(-50%, -50%) scale(1.14); }
+.tool-ring-x { position: absolute; transform: translate(-50%, -50%) scale(0.4); font-size: 22px; color: var(--r-on-hub); opacity: 0; transition: opacity 140ms ease, transform 320ms var(--r-spring); }
+.tool-ring.open .tool-ring-x { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+.tool-ring.has-sel .tool-ring-x { opacity: 0.45; transform: translate(-50%, -50%) scale(0.85); }
+.tool-ring-sub { opacity: 0; transform-box: view-box; transform-origin: 0 0; transform: scale(0.82); transition: opacity 140ms ease, transform 300ms var(--r-spring); }
+.tool-ring.sub-open .tool-ring-sub { opacity: 1; transform: scale(1); }
+.tool-ring-sub-bg { fill: var(--r-surface); stroke: var(--r-surface); stroke-width: 14; stroke-linejoin: round; }
+.tool-ring-dot { transform-box: fill-box; transform-origin: center; transition: transform 240ms var(--r-spring); }
+.tool-ring-dot.active { transform: scale(1.22); }
+.tool-ring-dot-sel { fill: none; stroke: var(--r-sel); stroke-width: 3; opacity: 0; transition: opacity 120ms ease; }
+.tool-ring-dot.active .tool-ring-dot-sel { opacity: 1; }
+.tool-ring-dot-mark { fill: #fff; opacity: 0; }
+.tool-ring-dot.current .tool-ring-dot-mark { opacity: 0.95; }
+.tool-ring.has-color .tool-ring-seg.active { fill: var(--r-current); stroke: var(--r-current); transform: scale(1); }
+.tool-ring.has-color .tool-ring-item.active { color: var(--r-on-current); }
