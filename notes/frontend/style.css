@@ -6702,3 +6702,8 @@ html[data-theme="dark"] .tool-ring { --r-surface: #2b2930; --r-on: #e6e0e9; --r-
 .tool-ring-dot.current .tool-ring-dot-mark { opacity: 0.95; }
 .tool-ring.has-color .tool-ring-seg.active { fill: var(--r-current); stroke: var(--r-current); transform: scale(1); }
 .tool-ring.has-color .tool-ring-item.active { color: var(--r-on-current); }
+
+/* Werkzeugleiste ausblenden (Einstellung): unsichtbar, Platz und Lage bleiben fuer Lineal/Zoom-Fenster.
+   Bei Text und Formen bleibt sie, im Zoom-Fenster auch. */
+#toolbar.dock-hide-pen[data-mode="pen"]:not(.zoom-inner),
+#toolbar.dock-hide-all:not(.zoom-inner):not([data-mode="text"]):not([data-mode="shapes"]) { opacity: 0; visibility: hidden; pointer-events: none; }

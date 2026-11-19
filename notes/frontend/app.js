@@ -4362,6 +4362,7 @@
         localStorage.setItem("sofianotes-pen-press", b.dataset.act);
       } catch (err) {}
       readPenPressCfg();
+      if (typeof applyDockHide === "function") applyDockHide();
       syncPenPressSettings();
     })
   );
@@ -13057,6 +13058,30 @@
   // per CSS (data-mode / data-modes) nur, was zum Modus gehoert.
   const textDefaults = { b: false, i: false, s: false, u: false };
   const modeButtons = Array.from(document.querySelectorAll(".mode-btn"));
+
+  // Werkzeugleiste ausblenden (das Ring-Menue kann Werkzeug, Farbe und Staerke)
+  function dockHideMode() {
+    const v = lsGetRaw("sofianotes-dock-hide");
+    return v === "pen" || v === "all" ? v : "never";
+  }
+  function applyDockHide() {
+    const m = dockHideMode();
+    toolbarEl.classList.toggle("dock-hide-pen", m === "pen");
+    toolbarEl.classList.toggle("dock-hide-all", m === "all");
+    document.querySelectorAll("#set-dock-hide [data-hide]").forEach((b) => b.classList.toggle("active", b.dataset.hide === m));
+    const warn = document.getElementById("set-dock-hide-warn");
+    if (warn) warn.classList.toggle("hidden", m === "never" || lsGetRaw("sofianotes-pen-press") === "ring");
+  }
+  document.querySelectorAll("#set-dock-hide [data-hide]").forEach((b) =>
+    b.addEventListener("click", (e) => {
+      e.stopPropagation();
+      try {
+        localStorage.setItem("sofianotes-dock-hide", b.dataset.hide);
+      } catch (err) {}
+      applyDockHide();
+    })
+  );
+  applyDockHide();
 
   function showMode(mode) {
     currentMode = mode;
