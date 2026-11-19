@@ -1213,6 +1213,10 @@ function prefetchCalNeighbors() {
       calFetchEvents(key).then(list => {
         calPeriodCache.set(key, list || []);
         refreshOpenSwipePane(dir);
+        if (calDisplayMode === 'month' && !calSwipeBusy && !calSwipeTrack && document.getElementById('cal-grid')) {
+          renderCalGridOnly(false);
+          renderCompactMonth();
+        }
       }).catch(() => { if (calPeriodCache.get(key) === null) calPeriodCache.delete(key); });
     });
   });
@@ -1619,6 +1623,19 @@ function renderCal(dir) {
   if (window.lucide) lucide.createIcons();
 }
 
+// Month grids also draw the greyed-out days of the neighbouring months, so
+// their events come from the prefetch cache next to the loaded month.
+function calMonthGridEvents() {
+  if (calDisplayMode !== 'month') return calEvents;
+  const merged = new Map();
+  [-1, 0, 1].forEach(off => {
+    const d = new Date(calYear, calMonth + off, 1);
+    const list = off === 0 ? calEvents : calPeriodCache.get(calMonthKey(d.getFullYear(), d.getMonth()));
+    if (Array.isArray(list)) list.forEach(e => merged.set(e.id, e));
+  });
+  return [...merged.values()];
+}
+
 function renderCalGridOnly(animate, dir) {
   const grid = document.getElementById('cal-grid');
   if (!grid) return;
@@ -1643,6 +1660,7 @@ function _buildCalGrid(grid) {
   const weeks = Math.ceil((startDay + daysInMonth) / 7);
   const totalSlots = weeks * 7;
   grid.style.setProperty('--cal-rows', String(weeks));
+  const gridEvents = calMonthGridEvents();
 
   for (let i = 0; i < totalSlots; i++) {
     let dateObj;
@@ -1657,10 +1675,10 @@ function _buildCalGrid(grid) {
       dateObj = new Date(calYear, calMonth, i - startDay + 1);
     }
     const dateStr = localDateStr(dateObj);
-    const covering = inMonth ? calEvents.filter(e =>
+    const covering = gridEvents.filter(e =>
       eventCoversDate(e, dateStr) &&
       (activeCategoryFilter === 'all' || (e.event_type || 'other') === activeCategoryFilter)
-    ) : [];
+    );
     const isToday = dateStr === todayStr;
     const isSelected = selectedCalDate === dateStr;
 
@@ -1770,6 +1788,7 @@ function renderCompactMonth(target) {
   const prevDays = new Date(calYear, calMonth, 0).getDate();
   const todayStr = localDateStr();
   const weeks = Math.ceil((startDay + daysInMonth) / 7);
+  const gridEvents = calMonthGridEvents();
   let html = '';
   for (let i = 0; i < weeks * 7; i++) {
     let dateObj, inMonth = true;
@@ -1783,7 +1802,7 @@ function renderCompactMonth(target) {
       dateObj = new Date(calYear, calMonth, i - startDay + 1);
     }
     const ds = localDateStr(dateObj);
-    const has = inMonth && calEvents.some(e =>
+    const has = gridEvents.some(e =>
       eventCoversDate(e, ds) &&
       (activeCategoryFilter === 'all' || (e.event_type || 'other') === activeCategoryFilter)
     );
