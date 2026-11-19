@@ -2865,6 +2865,7 @@
   let fingerDrawEnabled = false;
   let mathSolveEnabled = localStorage.getItem("sofianotes-math") !== "0";
   let eraserReturnEnabled = localStorage.getItem("sofianotes-eraser-return") !== "0";
+  let markerTextSnap = lsGetRaw("sofianotes-marker-text-snap") !== "0"; // Marker rastet auf gedrucktem Text ein
   let lastToolBeforeEraser = "pen";
   let strokeClipboard = [];
   let lastPointerWorld = null;
@@ -3249,6 +3250,8 @@
     if (textEdit) commitTextEditor();
     if (zoomWin && (tool === "select" || tool === "text")) closeZoomWindow();
     const already = currentTool === tool;
+    // Marker in der Hand: Text der sichtbaren Bilder schon mal lesen lassen (spaeter, nicht beim Start)
+    if (tool === "marker" && !already) setTimeout(() => prefetchVisibleText(), 0);
     if (tool === "eraser" && currentTool !== "eraser") {
       lastToolBeforeEraser = currentTool || "pen";
     }
@@ -3757,6 +3760,19 @@
     });
   }
 
+  const markerSnapToggleEl = document.getElementById("marker-text-snap-toggle");
+  if (markerSnapToggleEl) {
+    markerSnapToggleEl.classList.toggle("active", markerTextSnap);
+    markerSnapToggleEl.addEventListener("click", (e) => {
+      e.stopPropagation();
+      markerTextSnap = !markerTextSnap;
+      try {
+        localStorage.setItem("sofianotes-marker-text-snap", markerTextSnap ? "1" : "0");
+      } catch (err) {}
+      markerSnapToggleEl.classList.toggle("active", markerTextSnap);
+      if (markerTextSnap && currentTool === "marker") prefetchVisibleText();
+    });
+  }
   const eraserReturnToggleEl = document.getElementById("eraser-return-toggle");
   if (eraserReturnToggleEl) {
     eraserReturnToggleEl.classList.toggle("active", eraserReturnEnabled);
@@ -3901,25 +3917,43 @@
   // Einfuegen-Menue warten so lange.
   const PEN_PRESS_HYST = 0.85; // erst unter 85 % der Schwelle gilt der Druck als losgelassen
   const PEN_PRESS_RING_MS = 800; // ab hier zeigt ein Ring an der Spitze, dass es gleich ausloest
-  const penPressAction = () => lsGetRaw("sofianotes-pen-press") || "off";
-  const penPressThr = () => {
-    const v = parseFloat(lsGetRaw("sofianotes-pen-press-thr"));
-    return v >= 0.1 && v <= 1 ? v : 0.7;
-  };
-  const penPressMs = () => {
-    const v = parseInt(lsGetRaw("sofianotes-pen-press-ms"), 10);
-    return v >= 200 && v <= 10000 ? v : 3000;
-  };
-  // wie weit (Bildschirm-Pixel ab dem Aufsetzpunkt) der Stift dabei wackeln darf
-  const penPressMove = () => {
-    const v = parseInt(lsGetRaw("sofianotes-pen-press-move"), 10);
-    return v >= 1 && v <= 80 ? v : 8;
-  };
+  // Einstellungen einmal lesen und merken: die Pruefung laeuft bei jedem Stiftpunkt
+  // (bis 240/s), localStorage dort zu lesen bremst das Schreiben spuerbar
+  let penPressCfg = null;
+  function readPenPressCfg() {
+    const thr = parseFloat(lsGetRaw("sofianotes-pen-press-thr"));
+    const ms = parseInt(lsGetRaw("sofianotes-pen-press-ms"), 10);
+    const mv = parseInt(lsGetRaw("sofianotes-pen-press-move"), 10);
+    penPressCfg = {
+      act: lsGetRaw("sofianotes-pen-press") || "off",
+      thr: thr >= 0.1 && thr <= 1 ? thr : 0.7,
+      ms: ms >= 200 && ms <= 10000 ? ms : 3000,
+      move: mv >= 1 && mv <= 80 ? mv : 8, // wie weit (px ab dem Aufsetzpunkt) der Stift wackeln darf
+    };
+  }
+  readPenPressCfg();
+  const penPressAction = () => penPressCfg.act;
+  const penPressThr = () => penPressCfg.thr;
+  const penPressMs = () => penPressCfg.ms;
+  const penPressMove = () => penPressCfg.move;
   // Gemeinsame Pruefung fuer echte Geste und Testfeld, damit beide gleich reagieren.
   // st: {x, y, armedAt, dead}; liefert den Zustand nach diesem Messpunkt.
   function penPressStep(st, clientX, clientY, pressure, now) {
     if (st.dead) return st;
-    if (Math.hypot(clientX - st.x, clientY - st.y) > penPressMove()) {
+    // zurueckgelegter Weg: ein kleines "o" bleibt im Wackel-Radius, legt aber viel Weg zurueck
+    // Zittern beim festen Halten zaehlt nicht: erst ab 2 px zum letzten gezaehlten Punkt
+    if (st.lx == null) {
+      st.lx = st.x;
+      st.ly = st.y;
+    }
+    const step = Math.hypot(clientX - st.lx, clientY - st.ly);
+    if (step >= 2) {
+      st.travel = (st.travel || 0) + step;
+      st.lx = clientX;
+      st.ly = clientY;
+    }
+    const move = penPressMove();
+    if (Math.hypot(clientX - st.x, clientY - st.y) > move || st.travel > Math.max(move * 2.5, 20)) {
       st.dead = true;
       st.armedAt = 0;
       return st;
@@ -4004,7 +4038,7 @@
   // Ring-Menue um die Stiftspitze: in die Richtung ziehen und loslassen waehlt das Werkzeug.
   // Ueber Stift/Marker geht ein zweiter Ring mit Farben auf, ueber einer Farbe ein dritter
   // mit den Staerken. Alles in einem Zug: ziehen, loslassen.
-  const RING_OUT = 92; // Aussenradius (px)
+  const RING_OUT = 104; // Aussenradius (px), Platz fuer 6 Werkzeuge
   const RING_IN = 30; // Innenradius: hier loslassen = nichts aendern
   const RING_GAP = 8; // Abstand zwischen den Ringen
   const RING_SUB_W = 50; // Breite Farb-Ring
@@ -4013,10 +4047,13 @@
   const RING_SIZE_STEP = 24; // Grad pro Staerke
   const RING_ITEMS = [
     { key: "pen", mode: "pen", tool: "pen", icon: "ink_pen", label: "Stift", angle: -90 },
-    { key: "marker", mode: "pen", tool: "marker", icon: "ink_highlighter", label: "Marker", angle: 0 },
+    { key: "marker", mode: "pen", tool: "marker", icon: "ink_highlighter", label: "Marker", angle: -30 },
+    { key: "shapes", mode: "shapes", icon: "shapes", label: "Formen", angle: 30 },
     { key: "text", mode: "text", icon: "text_fields", label: "Text", angle: 90 },
-    { key: "lasso", mode: "lasso", icon: "lasso_select", label: "Lasso", angle: 180 },
+    { key: "lasso", mode: "lasso", icon: "lasso_select", label: "Lasso", angle: 150 },
+    { key: "eraser", mode: "eraser", icon: "ink_eraser", label: "Radierer", angle: -150 },
   ];
+  const RING_HALF = 180 / RING_ITEMS.length; // halbe Segmentbreite in Grad
   const R_COL_IN = RING_OUT + RING_GAP;
   const R_COL_OUT = R_COL_IN + RING_SUB_W;
   const R_SIZE_IN = R_COL_OUT + RING_GAP;
@@ -4065,7 +4102,7 @@
     const size = R_SIZE_OUT * 2 + 16;
     const half = size / 2;
     let svg = '<svg width="' + size + '" height="' + size + '" viewBox="' + -half + " " + -half + " " + size + " " + size + '">';
-    for (const it of RING_ITEMS) svg += '<path class="tool-ring-seg' + (cur === it.key ? " current" : "") + '" data-key="' + it.key + '" d="' + ringArc(it.angle - 45, it.angle + 45, RING_OUT - 7, RING_IN + 13, 10) + '"/>';
+    for (const it of RING_ITEMS) svg += '<path class="tool-ring-seg' + (cur === it.key ? " current" : "") + '" data-key="' + it.key + '" d="' + ringArc(it.angle - RING_HALF, it.angle + RING_HALF, RING_OUT - 7, RING_IN + 13, 10) + '"/>';
     svg += '<circle class="tool-ring-hub" r="' + (RING_IN - 6) + '"/>';
     // je Stift/Marker: Farb-Ring und darueber der Staerke-Ring (erst beim Darueberfahren sichtbar)
     const colMid = (R_COL_IN + R_COL_OUT) / 2;
@@ -4273,12 +4310,16 @@
         const st = penPress;
         if (!st || e.pointerId !== st.id || st.dead || st.fired) return;
         const now = performance.now();
-        for (const ev of coalescedEvents(e)) penPressStep(st, ev.clientX, ev.clientY, ev.pressure || 0, now);
+        const wasArmed = st.armedAt;
+        for (const ev of coalescedEvents(e)) {
+          penPressStep(st, ev.clientX, ev.clientY, ev.pressure || 0, now);
+          if (st.dead) break;
+        }
         if (st.dead) {
           penPressStop();
           return;
         }
-        penPressTick();
+        if (st.armedAt !== wasArmed) penPressTick();
       },
       true
     );
@@ -4320,6 +4361,7 @@
       try {
         localStorage.setItem("sofianotes-pen-press", b.dataset.act);
       } catch (err) {}
+      readPenPressCfg();
       syncPenPressSettings();
     })
   );
@@ -4333,6 +4375,7 @@
       try {
         localStorage.setItem(key, inp.value);
       } catch (err) {}
+      readPenPressCfg();
       syncPenPressSettings();
     });
   }
@@ -11362,6 +11405,186 @@
     formFieldFrame = { frame: drawFrameNo, list };
     return list;
   }
+  // ---- Gedruckter Text auf Bildern/PDF-Seiten: Textmarker rastet darauf ein ----
+  // Der Server liest den Text einmal pro Bild (Tesseract) und liefert Zeilen mit Woertern
+  // (0..1 im Bild). Ein Marker-Strich ueber einer Zeile wird zu einem geraden Balken genau
+  // ueber den ueberstrichenen Woertern, so hoch wie die Schrift.
+  // (markerTextSnap steht oben bei den anderen Schaltern, der Schalter liest ihn beim Start)
+  const mediaTextCache = new Map(); // mediaId -> lines[] | Promise
+  const mediaTextFail = new Map(); // mediaId -> Zeitpunkt des letzten Fehlschlags
+  function loadMediaText(mediaId) {
+    if (!mediaId) return Promise.resolve(null);
+    const hit = mediaTextCache.get(mediaId);
+    if (Array.isArray(hit)) return Promise.resolve(hit);
+    if (hit && hit.then) return hit;
+    const failed = mediaTextFail.get(mediaId);
+    if (failed && performance.now() - failed < 30000) return Promise.resolve(null);
+    const p = fetch("/api/media/" + encodeURIComponent(mediaId) + "/text", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!d || !d.ok) throw new Error("text");
+        const lines = Array.isArray(d.lines) ? d.lines : [];
+        mediaTextCache.set(mediaId, lines);
+        mediaTextFail.delete(mediaId);
+        if (window.SofiaOffline) SofiaOffline.setKv("text:" + mediaId, lines).catch(() => {});
+        return lines;
+      })
+      .catch(async () => {
+        mediaTextCache.delete(mediaId);
+        mediaTextFail.set(mediaId, performance.now());
+        const saved = window.SofiaOffline ? await SofiaOffline.getKv("text:" + mediaId).catch(() => null) : null;
+        if (Array.isArray(saved)) {
+          mediaTextCache.set(mediaId, saved);
+          return saved;
+        }
+        return null;
+      });
+    mediaTextCache.set(mediaId, p);
+    return p;
+  }
+  // Bilder/Seiten im Rechteck (Welt): [{mediaId, map(f) -> Weltkasten}]
+  function textSourcesIn(x0, y0, x1, y1) {
+    const out = [];
+    const hit = (a0, b0, a1, b1) => a1 >= x0 && a0 <= x1 && b1 >= y0 && b0 <= y1;
+    if (notebook && !boardEditId) {
+      for (const r of pageRects(notebook)) {
+        const mid = r.page && r.page.mediaId;
+        if (!mid || r.page.board || r.page.boardOf) continue;
+        if (((r.page.rot || 0) % 2) === 1) continue; // quer gedreht: Zeilen laufen senkrecht
+        if (!hit(r.x, r.y, r.x + r.w, r.y + r.h)) continue;
+        out.push({ mediaId: mid, map: (f) => pageFieldBox(f, r) });
+      }
+    }
+    for (const st of boardStrokes.values()) {
+      const ex = st.extra;
+      if (st.tool !== "image" || !ex || !ex.mediaId || ex.koord) continue;
+      const pageId = ex.boardPage;
+      if (boardEditId ? pageId !== boardEditId : pageId) continue;
+      if (strokeRotation(st)) continue;
+      const dest = imageDestRect(st);
+      if (!dest || dest.w < 20 || dest.h < 20) continue;
+      if (!hit(dest.minX, dest.minY, dest.minX + dest.w, dest.minY + dest.h)) continue;
+      const crop = imageCrop(st);
+      out.push({ mediaId: ex.mediaId, map: (f) => imageFieldBox(f, dest, crop) });
+    }
+    return out;
+  }
+  // sichtbare Bilder schon mal lesen lassen, sobald der Marker in die Hand genommen wird
+  function prefetchVisibleText() {
+    if (!markerTextSnap || viewOnly) return;
+    const va = screenToWorld(viewLeft, 0);
+    const vb = screenToWorld(window.innerWidth - viewRight, window.innerHeight);
+    for (const s of textSourcesIn(va.x, va.y, vb.x, vb.y)) loadMediaText(s.mediaId);
+  }
+  // Zeilen (Welt) im Rechteck; null = mindestens ein Bild ist noch nicht gelesen
+  function textLinesIn(x0, y0, x1, y1) {
+    const lines = [];
+    let missing = false;
+    for (const s of textSourcesIn(x0, y0, x1, y1)) {
+      const got = mediaTextCache.get(s.mediaId);
+      if (!Array.isArray(got)) {
+        missing = true;
+        continue;
+      }
+      for (const l of got) {
+        const lb = s.map(l);
+        if (!lb || lb.x1 < x0 || lb.x0 > x1 || lb.y1 < y0 || lb.y0 > y1) continue;
+        const words = [];
+        for (const w of l.w || []) {
+          const wb = s.map(w);
+          if (wb && wb.x1 - wb.x0 > 0.5 && wb.y1 - wb.y0 > 0.5) words.push(wb);
+        }
+        if (words.length) lines.push({ x0: lb.x0, y0: lb.y0, x1: lb.x1, y1: lb.y1, words });
+      }
+    }
+    return { lines, missing };
+  }
+  // Neue Punkte/Staerke fuer einen Marker-Strich ueber gedrucktem Text, sonst null
+  function markerTextFit(stroke) {
+    const pts = stroke.points || [];
+    if (pts.length < 2) return null;
+    const b = makeBBox(pts);
+    const pad = Math.max(4, (stroke.size || 20) / 2);
+    const { lines, missing } = textLinesIn(b.minX - pad, b.minY - pad, b.maxX + pad, b.maxY + pad);
+    if (!lines.length) return missing ? "wait" : null;
+    // Mittellinie des Strichs: Median der y-Werte (Ausreisser am Anfang/Ende zaehlen nicht)
+    const ys = pts.map((p) => p.y).sort((a, c) => a - c);
+    const my = ys[Math.floor(ys.length / 2)];
+    let best = null;
+    let bestD = Infinity;
+    for (const l of lines) {
+      const h = l.y1 - l.y0;
+      const d = Math.abs((l.y0 + l.y1) / 2 - my);
+      if (d > Math.max(h * 0.9, pad * 0.6)) continue;
+      // Strich ueber mehrere Zeilen (schraeg, Kreise): nicht einrasten
+      if (b.maxY - b.minY > h * 1.8 + 6) continue;
+      if (d < bestD) {
+        bestD = d;
+        best = l;
+      }
+    }
+    if (!best) return missing ? "wait" : null;
+    // Woerter, die zur Haelfte ueberstrichen sind (oder deren Mitte im Strich liegt)
+    const words = best.words.filter((w) => {
+      const ov = Math.min(w.x1, b.maxX) - Math.max(w.x0, b.minX);
+      return ov >= (w.x1 - w.x0) * 0.45 || ((w.x0 + w.x1) / 2 >= b.minX && (w.x0 + w.x1) / 2 <= b.maxX);
+    });
+    if (!words.length) return null;
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+    for (const w of words) {
+      x0 = Math.min(x0, w.x0);
+      x1 = Math.max(x1, w.x1);
+      y0 = Math.min(y0, w.y0);
+      y1 = Math.max(y1, w.y1);
+    }
+    const size = Math.max(4, Math.min(160, (y1 - y0) * 1.25));
+    // runde Enden ragen um size/2 hinaus: Endpunkte etwas nach innen
+    const inset = Math.min(size * 0.38, (x1 - x0) / 2);
+    const y = r2((y0 + y1) / 2);
+    const p = pts[0].p || 0.5;
+    return { size: r2(size), points: [{ x: r2(x0 + inset), y, p }, { x: r2(x1 - inset), y, p }] };
+  }
+  function applyMarkerFit(stroke, fit) {
+    stroke.points = fit.points;
+    stroke.size = fit.size;
+    // gehaltene Marker-Linie war eine Form (Griffe, Auswahl): eingerastet ist es nur Markierung
+    const ex = Object.assign({}, stroke.extra || {}, { textSnap: true });
+    delete ex.shape;
+    stroke.extra = ex;
+    stroke.locked = false;
+    stroke.shape = null;
+    stroke.shapeGeom = null;
+    stroke.bbox = makeBBox(stroke.points);
+  }
+  // Am Strichende: sofort einrasten, wenn der Text schon da ist; sonst kurz darauf
+  function snapMarkerToText(stroke) {
+    if (!markerTextSnap || stroke.tool !== "marker" || stroke.rulerEdge || stroke.objectKind) return false;
+    const fit = markerTextFit(stroke);
+    if (fit && fit !== "wait") {
+      applyMarkerFit(stroke, fit);
+      return true;
+    }
+    if (fit === "wait") {
+      const b = makeBBox(stroke.points);
+      const ids = textSourcesIn(b.minX, b.minY, b.maxX, b.maxY).map((s) => s.mediaId);
+      const id = stroke.id;
+      const t0 = performance.now();
+      Promise.all(ids.map((m) => loadMediaText(m))).then(() => {
+        if (performance.now() - t0 > 6000) return; // zu spaet, wuerde ueberraschen
+        const s = boardStrokes.get(id);
+        const top = undoStack[undoStack.length - 1];
+        if (!s || selection.ids.has(id) || !top || top.type !== "add" || !top.stroke || top.stroke.id !== id) return;
+        const late = markerTextFit(s);
+        if (!late || late === "wait") return;
+        applyMarkerFit(s, late);
+        top.stroke = cloneStroke(s);
+        wsSend({ type: "stroke_move", stroke: serializeStroke(s) });
+        requestRedraw();
+      });
+    }
+    return false;
+  }
+
   // Was schon in einem Feld steht (Text oder Tinte): Mittelpunkte aller Eintraege, einmal pro Aenderung
   let formInkCache = { gen: -1, pts: [] };
   function formInkPoints() {
@@ -15683,6 +15906,7 @@
     const id = uuid();
     const tool = currentTool === "marker" ? "marker" : "pen";
     const size = activeSize();
+    if (tool === "marker") prefetchVisibleText();
     currentStroke = {
       id,
       tool,
@@ -15937,6 +16161,8 @@
     }
     shapeGuide = null;
     wsSend({ type: "stroke_end", strokeId: currentStroke.id, extra: currentStroke.extra || null });
+    // Marker ueber gedrucktem Text (Bild/PDF): gerader Balken genau ueber den Woertern
+    if (snapMarkerToText(currentStroke)) wsSend({ type: "stroke_move", stroke: serializeStroke(currentStroke) });
     tagShape(currentStroke);
     currentStroke.bbox = makeBBox(currentStroke.points);
     currentStroke.endedAt = performance.now();

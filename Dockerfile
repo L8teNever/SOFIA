@@ -7,7 +7,9 @@ WORKDIR /app
 # tzdata is installed and /etc/localtime points at it.
 ENV TZ=Europe/Berlin
 # hunspell: Rechtschreibpruefung fuer sofianotes
-RUN apt-get update && apt-get install -y --no-install-recommends tzdata hunspell hunspell-de-de && \
+# tesseract: gedruckten Text auf Bildern/PDF-Seiten finden (Textmarker rastet darauf ein)
+RUN apt-get update && apt-get install -y --no-install-recommends tzdata hunspell hunspell-de-de \
+        tesseract-ocr tesseract-ocr-deu tesseract-ocr-eng && \
     ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone && \
     rm -rf /var/lib/apt/lists/*
 

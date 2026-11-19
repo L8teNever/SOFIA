@@ -6674,8 +6674,8 @@ html[data-theme="dark"] .tool-ring { --r-surface: #2b2930; --r-on: #e6e0e9; --r-
 .tool-ring.has-sel .tool-ring-hub { transform: scale(0.85); }
 .tool-ring-item { position: absolute; transform: translate(-50%, -50%) scale(0.4); opacity: 0; display: flex; flex-direction: column; align-items: center; gap: 2px; color: var(--r-on); transition: transform 320ms var(--r-spring), opacity 160ms ease, color 160ms ease; }
 .tool-ring.open .tool-ring-item { transform: translate(-50%, -50%) scale(1); opacity: 1; }
-.tool-ring-item .material-symbols-rounded { font-size: 28px; font-variation-settings: 'FILL' 0, 'wght' 500; transition: font-variation-settings 160ms ease; }
-.tool-ring-item small { font-size: 12px; font-weight: 500; letter-spacing: 0.02em; }
+.tool-ring-item .material-symbols-rounded { font-size: 26px; font-variation-settings: 'FILL' 0, 'wght' 500; transition: font-variation-settings 160ms ease; }
+.tool-ring-item small { font-size: 11px; font-weight: 500; letter-spacing: 0.01em; white-space: nowrap; }
 .tool-ring-item.current { color: var(--r-on-current); }
 .tool-ring-item.active { color: var(--r-on-sel); }
 .tool-ring-item.active .material-symbols-rounded { font-variation-settings: 'FILL' 1, 'wght' 600; }

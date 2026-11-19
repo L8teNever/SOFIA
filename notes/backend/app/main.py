@@ -14,7 +14,7 @@ from pydantic import BaseModel
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.gzip import GZipMiddleware
 
-from . import board_file, clientlog, cloudflare_ocr, db, files, forms, goodnotes_export, media, shape_learning, sofia_sync, spellcheck
+from . import board_file, clientlog, cloudflare_ocr, db, files, forms, goodnotes_export, media, ocr_text, shape_learning, sofia_sync, spellcheck
 from .auth import get_current_person, get_current_person_ws, require_admin
 from .version import get_version_info, inject_build
 from .ws_manager import ConnectionManager, color_for
@@ -825,6 +825,27 @@ async def get_media_fields(media_id: str, force: int = 0, me: dict = Depends(get
     if fields is None:
         raise HTTPException(status_code=404, detail="not found")
     return {"ok": True, "fields": fields}
+
+
+# Gedruckter Text (Tesseract): eigene Warteschlange, damit er nicht hinter den Feldern wartet
+_text_sem = asyncio.Semaphore(1)
+
+
+@app.get("/api/media/{media_id}/text")
+async def get_media_text(media_id: str, force: int = 0, me: dict = Depends(get_current_person)) -> dict:
+    """Textzeilen mit Woertern (0..1 im Bild) - fuer den Textmarker, der auf Text einrastet."""
+    if not media.valid_id(media_id):
+        raise HTTPException(status_code=400, detail="bad id")
+    if not ocr_text.available():
+        return {"ok": False, "lines": [], "reason": "unavailable"}
+    async with _text_sem:
+        try:
+            lines = await asyncio.get_event_loop().run_in_executor(None, ocr_text.text_for, media_id, bool(force))
+        except Exception:  # noqa: BLE001
+            return {"ok": False, "lines": [], "reason": "error"}
+    if lines is None:
+        raise HTTPException(status_code=404, detail="not found")
+    return {"ok": True, "lines": lines}
 
 
 @app.get("/api/media/{media_id}")
