@@ -1213,7 +1213,7 @@ function prefetchCalNeighbors() {
       calFetchEvents(key).then(list => {
         calPeriodCache.set(key, list || []);
         refreshOpenSwipePane(dir);
-        if (calDisplayMode === 'month' && !calSwipeBusy && !calSwipeTrack && document.getElementById('cal-grid')) {
+        if (calDisplayMode === 'month' && !calSwipeBusy && !calSwipeTrack && !calDayPickerEl && document.getElementById('cal-grid')) {
           renderCalGridOnly(false);
           renderCompactMonth();
         }
@@ -1702,7 +1702,24 @@ function _buildCalGrid(grid) {
       barsHtml = `<div class="cal-day-bars">${barTags}${moreTag}</div>`;
     }
     el.innerHTML = `<span class="cal-day-num">${dateObj.getDate()}</span>${barsHtml}`;
+    el.dataset.date = dateStr;
     el.onclick = () => {
+      // Ausgegrauter Tag aus dem Nachbarmonat: erst sauber in dessen Monat wechseln
+      // (Termine laden, Raster neu), dann den Termin dort oeffnen. Vorher den Monat
+      // still umzustellen liess "Weiter" einen Monat ueberspringen.
+      if (!inMonth) {
+        const ids = covering.map(ev => ev.id);
+        calCompactPickDay(dateStr).then(() => {
+          if (calDisplayMode !== 'month' || !ids.length) return;
+          const evs = calEvents.filter(ev => ids.includes(ev.id));
+          if (evs.length === 1) { openCalEventDetail(evs[0].id); return; }
+          if (evs.length > 1) {
+            const cell = document.querySelector(`#cal-grid .cal-day[data-date="${dateStr}"]`);
+            if (cell) openCalDayPicker(cell, dateStr, evs);
+          }
+        });
+        return;
+      }
       selectedCalDate = dateStr;
       calWeekAnchor = new Date(dateStr + 'T00:00');
       calYear = calWeekAnchor.getFullYear();
