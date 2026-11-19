@@ -4001,29 +4001,47 @@
     } catch (err) {}
     requestRedraw();
   }
-  // Ring-Menue um die Stiftspitze: in die Richtung ziehen und loslassen waehlt das Werkzeug
+  // Ring-Menue um die Stiftspitze: in die Richtung ziehen und loslassen waehlt das Werkzeug.
+  // Ueber Stift/Marker geht ein zweiter Ring mit Farben auf, ueber einer Farbe ein dritter
+  // mit den Staerken. Alles in einem Zug: ziehen, loslassen.
   const RING_OUT = 92; // Aussenradius (px)
   const RING_IN = 30; // Innenradius: hier loslassen = nichts aendern
-  // (RING_SUB_* fuer den Farb-Ring stehen unten bei toolRing)
-  const RING_ITEMS = [
-    { mode: "pen", icon: "ink_pen", label: "Stift", angle: -90 },
-    { mode: "text", icon: "text_fields", label: "Text", angle: 30 },
-    { mode: "lasso", icon: "lasso_select", label: "Lasso", angle: 150 },
-  ];
-  let toolRing = null; // {id, cx, cy, el, sel, colors, color, sub}
-  // Zweiter Ring ueber "Stift": Farben aus der Stift-Leiste (4 feste + bis zu 3 eigene)
-  const RING_SUB_GAP = 8; // Abstand zum inneren Ring
-  const RING_SUB_W = 50; // Breite des Farb-Rings
+  const RING_GAP = 8; // Abstand zwischen den Ringen
+  const RING_SUB_W = 50; // Breite Farb-Ring
+  const RING_SIZE_W = 46; // Breite Staerke-Ring
   const RING_SUB_STEP = 21; // Grad pro Farbe
-  function ringPenColors() {
-    const p = palettes.pen;
+  const RING_SIZE_STEP = 24; // Grad pro Staerke
+  const RING_ITEMS = [
+    { key: "pen", mode: "pen", tool: "pen", icon: "ink_pen", label: "Stift", angle: -90 },
+    { key: "marker", mode: "pen", tool: "marker", icon: "ink_highlighter", label: "Marker", angle: 0 },
+    { key: "text", mode: "text", icon: "text_fields", label: "Text", angle: 90 },
+    { key: "lasso", mode: "lasso", icon: "lasso_select", label: "Lasso", angle: 180 },
+  ];
+  const R_COL_IN = RING_OUT + RING_GAP;
+  const R_COL_OUT = R_COL_IN + RING_SUB_W;
+  const R_SIZE_IN = R_COL_OUT + RING_GAP;
+  const R_SIZE_OUT = R_SIZE_IN + RING_SIZE_W;
+  let toolRing = null; // {id, cx, cy, el, sel, color, size, sub}
+  function ringCurrentKey() {
+    if (currentMode === "pen") return currentTool === "marker" ? "marker" : "pen";
+    return currentMode;
+  }
+  function ringColorsFor(key) {
+    const p = key === "marker" ? palettes.marker : palettes.pen;
     const out = [];
     for (const c of p.base.concat(p.custom)) if (!out.includes(c) && out.length < 7) out.push(c);
     return out;
   }
-  function ringColorAngle(i, n) {
-    return -90 + (i - (n - 1) / 2) * RING_SUB_STEP;
+  function ringNowColor(key) {
+    if (paletteKind === key) return normColor(currentColor);
+    return toolColors[key] ? normColor(toolColors[key]) : null;
   }
+  function ringNowSize(key) {
+    return key === "marker" ? markerSize : penSize;
+  }
+  const ringFan = (center, i, n, step) => center + (i - (n - 1) / 2) * step;
+  const ringAngDiff = (a, b) => Math.abs(((a - b + 540) % 360) - 180);
+  const ringPos = (rad, deg) => [(rad * Math.cos((deg * Math.PI) / 180)).toFixed(2), (rad * Math.sin((deg * Math.PI) / 180)).toFixed(2)];
   // Segment mit gleich breiter Fuge (g px) zum Nachbarn; die Ecken rundet ein Strich in
   // Fuellfarbe (stroke-linejoin round), wie die getrennten Formen bei Material 3 Expressive
   function ringArc(a0, a1, ro, ri, g) {
@@ -4031,50 +4049,71 @@
     const p = (rad, d) => (rad * Math.cos(r(d))).toFixed(2) + " " + (rad * Math.sin(r(d))).toFixed(2);
     const off = (rad) => (Math.asin(Math.min(1, g / rad)) * 180) / Math.PI;
     const o0 = a0 + off(ro), o1 = a1 - off(ro), i0 = a0 + off(ri), i1 = a1 - off(ri);
-    return "M" + p(ro, o0) + " A" + ro + " " + ro + " 0 0 1 " + p(ro, o1) + " L" + p(ri, i1) + " A" + ri + " " + ri + " 0 0 0 " + p(ri, i0) + " Z";
+    const big = o1 - o0 > 180 ? 1 : 0;
+    return "M" + p(ro, o0) + " A" + ro + " " + ro + " 0 " + big + " 1 " + p(ro, o1) + " L" + p(ri, i1) + " A" + ri + " " + ri + " 0 " + big + " 0 " + p(ri, i0) + " Z";
   }
   function openToolRing(id, x, y) {
     closeToolRing();
-    const pad = RING_OUT + 8;
+    const pad = R_SIZE_OUT + 10;
     const cx = Math.max(pad, Math.min(window.innerWidth - pad, x));
-    const cy = Math.max(pad + RING_SUB_W + 8, Math.min(window.innerHeight - pad, y)); // oben Platz fuer den Farb-Ring
+    const cy = Math.max(pad, Math.min(window.innerHeight - pad, y));
     const el = document.createElement("div");
     el.className = "tool-ring";
     el.style.left = cx + "px";
     el.style.top = cy + "px";
-    const size = RING_OUT * 2 + 8;
+    const cur = ringCurrentKey();
+    const size = R_SIZE_OUT * 2 + 16;
     const half = size / 2;
     let svg = '<svg width="' + size + '" height="' + size + '" viewBox="' + -half + " " + -half + " " + size + " " + size + '">';
-    for (const it of RING_ITEMS) svg += '<path class="tool-ring-seg' + (currentMode === it.mode ? " current" : "") + '" data-mode="' + it.mode + '" d="' + ringArc(it.angle - 60, it.angle + 60, RING_OUT - 7, RING_IN + 13, 10) + '"/>';
+    for (const it of RING_ITEMS) svg += '<path class="tool-ring-seg' + (cur === it.key ? " current" : "") + '" data-key="' + it.key + '" d="' + ringArc(it.angle - 45, it.angle + 45, RING_OUT - 7, RING_IN + 13, 10) + '"/>';
     svg += '<circle class="tool-ring-hub" r="' + (RING_IN - 6) + '"/>';
-    // Farb-Ring (erst sichtbar, wenn der Stift ueber "Stift" steht)
-    const colors = ringPenColors();
-    const n = colors.length;
-    const sRi = RING_OUT + RING_SUB_GAP;
-    const sRo = sRi + RING_SUB_W;
-    const sMid = (sRi + sRo) / 2;
-    const span0 = ringColorAngle(0, n) - RING_SUB_STEP / 2 - 4;
-    const span1 = ringColorAngle(n - 1, n) + RING_SUB_STEP / 2 + 4;
-    const penNow = paletteKind === "pen" ? normColor(currentColor) : toolColors.pen ? normColor(toolColors.pen) : null;
-    svg += '<g class="tool-ring-sub"><path class="tool-ring-sub-bg" d="' + ringArc(span0, span1, sRo - 7, sRi + 7, 0.01) + '"/>';
-    colors.forEach((c, i) => {
-      const ang = (ringColorAngle(i, n) * Math.PI) / 180;
-      const x = (sMid * Math.cos(ang)).toFixed(2);
-      const y = (sMid * Math.sin(ang)).toFixed(2);
-      svg += '<g class="tool-ring-dot' + (c === penNow ? " current" : "") + '" data-color="' + c + '">';
-      svg += '<circle class="tool-ring-dot-sel" cx="' + x + '" cy="' + y + '" r="19"/>';
-      svg += '<circle cx="' + x + '" cy="' + y + '" r="14" fill="' + c + '"/>';
-      svg += '<circle class="tool-ring-dot-mark" cx="' + x + '" cy="' + y + '" r="5"/></g>';
-    });
-    svg += "</g></svg>";
+    // je Stift/Marker: Farb-Ring und darueber der Staerke-Ring (erst beim Darueberfahren sichtbar)
+    const colMid = (R_COL_IN + R_COL_OUT) / 2;
+    const sizeMid = (R_SIZE_IN + R_SIZE_OUT) / 2;
+    const subs = {};
+    for (const it of RING_ITEMS) {
+      if (it.key !== "pen" && it.key !== "marker") continue;
+      const colors = ringColorsFor(it.key);
+      const nowC = ringNowColor(it.key);
+      const n = colors.length;
+      const a0 = ringFan(it.angle, 0, n, RING_SUB_STEP) - RING_SUB_STEP / 2 - 4;
+      const a1 = ringFan(it.angle, n - 1, n, RING_SUB_STEP) + RING_SUB_STEP / 2 + 4;
+      svg += '<g class="tool-ring-sub" data-for="' + it.key + '"><path class="tool-ring-sub-bg" d="' + ringArc(a0, a1, R_COL_OUT - 7, R_COL_IN + 7, 0.01) + '"/>';
+      colors.forEach((c, i) => {
+        const [px, py] = ringPos(colMid, ringFan(it.angle, i, n, RING_SUB_STEP));
+        svg += '<g class="tool-ring-dot' + (c === nowC ? " current" : "") + '" data-color="' + c + '">';
+        svg += '<circle class="tool-ring-dot-sel" cx="' + px + '" cy="' + py + '" r="19"/>';
+        svg += '<circle cx="' + px + '" cy="' + py + '" r="14" fill="' + c + '"/>';
+        svg += '<circle class="tool-ring-dot-mark" cx="' + px + '" cy="' + py + '" r="5"/></g>';
+      });
+      svg += "</g>";
+      const cfg = toolConfigs[it.tool];
+      const sizes = sizePresetsFor(it.tool, cfg);
+      const nowS = ringNowSize(it.key);
+      const m = sizes.length;
+      const b0 = ringFan(it.angle, 0, m, RING_SIZE_STEP) - RING_SIZE_STEP / 2 - 3;
+      const b1 = ringFan(it.angle, m - 1, m, RING_SIZE_STEP) + RING_SIZE_STEP / 2 + 3;
+      svg += '<g class="tool-ring-sizes" data-for="' + it.key + '"><path class="tool-ring-sub-bg" d="' + ringArc(b0, b1, R_SIZE_OUT - 7, R_SIZE_IN + 7, 0.01) + '"/>';
+      sizes.forEach((v, i) => {
+        const [px, py] = ringPos(sizeMid, ringFan(it.angle, i, m, RING_SIZE_STEP));
+        const rr = (3 + (12 * (v - cfg.min)) / Math.max(1, cfg.max - cfg.min)).toFixed(1);
+        svg += '<g class="tool-ring-size' + (Math.round(v) === Math.round(nowS) ? " current" : "") + '" data-size="' + v + '">';
+        svg += '<circle class="tool-ring-dot-sel" cx="' + px + '" cy="' + py + '" r="18"/>';
+        svg += '<circle class="tool-ring-size-dot" cx="' + px + '" cy="' + py + '" r="' + rr + '"/></g>';
+      });
+      svg += "</g>";
+      subs[it.key] = { angle: it.angle, colors, sizes };
+    }
+    svg += "</svg>";
     el.innerHTML = svg;
-    const mid = (RING_OUT + RING_IN + 6) / 2; // Mitte des sichtbaren Segments (innen 36, aussen 92)
+    const mid = (RING_OUT + RING_IN + 6) / 2; // Mitte des sichtbaren Segments
     for (const it of RING_ITEMS) {
       const b = document.createElement("div");
-      b.className = "tool-ring-item" + (currentMode === it.mode ? " current" : "");
-      b.dataset.mode = it.mode;
-      b.style.left = mid * Math.cos((it.angle * Math.PI) / 180) + "px";
-      b.style.top = mid * Math.sin((it.angle * Math.PI) / 180) + "px";
+      b.className = "tool-ring-item" + (cur === it.key ? " current" : "");
+      b.dataset.key = it.key;
+      const [px, py] = ringPos(mid, it.angle);
+      b.style.left = px + "px";
+      b.style.top = py + "px";
       b.innerHTML = '<span class="material-symbols-rounded">' + it.icon + "</span><small>" + it.label + "</small>";
       el.appendChild(b);
     }
@@ -4083,57 +4122,79 @@
     hub.textContent = "close";
     el.appendChild(hub);
     document.body.appendChild(el);
-    toolRing = { id, cx, cy, el, sel: null, colors, color: null, sub: false };
-    // sanft einblenden
+    toolRing = { id, cx, cy, el, sel: null, color: null, size: null, sub: null, subs };
     requestAnimationFrame(() => el.classList.add("open"));
+  }
+  function ringNearest(ang, list, center, step) {
+    let best = 999;
+    let hit = null;
+    list.forEach((v, i) => {
+      const d = ringAngDiff(ang, ringFan(center, i, list.length, step));
+      if (d < best) {
+        best = d;
+        hit = v;
+      }
+    });
+    return best <= step * 0.5 + 8 ? hit : null;
   }
   function updateToolRing(clientX, clientY) {
     const r = toolRing;
     if (!r) return;
     const dx = clientX - r.cx;
     const dy = clientY - r.cy;
-    let sel = null;
-    let color = null;
     const dist = Math.hypot(dx, dy);
     const ang = (Math.atan2(dy, dx) * 180) / Math.PI;
-    const angDiff = (a, b) => Math.abs(((a - b + 540) % 360) - 180);
-    if (r.sub && dist > RING_OUT - 6) {
-      // im Farb-Ring: naechste Farbe, solange der Stift in dessen Bogen bleibt
-      const n = r.colors.length;
-      let best = 999;
-      r.colors.forEach((c, i) => {
-        const d = angDiff(ang, ringColorAngle(i, n));
-        if (d < best) {
-          best = d;
-          color = c;
-        }
-      });
-      if (best > RING_SUB_STEP * 0.5 + 8) color = null;
+    let sel = null;
+    let color = null;
+    let size = null;
+    const sub = r.sub && r.subs[r.sub];
+    if (sub && dist > R_SIZE_IN - 4 && r.color) {
+      // ganz aussen: Staerke, die Farbe von eben bleibt
+      size = ringNearest(ang, sub.sizes, sub.angle, RING_SIZE_STEP);
+      color = r.color;
+      if (size == null && dist < R_SIZE_OUT + 30) {
+        // neben den Staerken: Farbe trotzdem behalten
+      } else if (size == null) color = null;
+      if (color) sel = r.sub;
+    } else if (sub && dist > RING_OUT - 6) {
+      color = ringNearest(ang, sub.colors, sub.angle, RING_SUB_STEP);
+      if (color) sel = r.sub;
     }
-    if (color) sel = "pen";
-    else if (dist >= RING_IN) {
+    if (!sel && dist >= RING_IN) {
       let best = 999;
       for (const it of RING_ITEMS) {
-        const d = Math.abs(((ang - it.angle + 540) % 360) - 180);
+        const d = ringAngDiff(ang, it.angle);
         if (d < best) {
           best = d;
-          sel = it.mode;
+          sel = it.key;
         }
       }
     }
-    const sub = sel === "pen" && r.colors.length > 0;
-    if (sub !== r.sub) {
-      r.sub = sub;
-      r.el.classList.toggle("sub-open", sub);
+    const subKey = sel === "pen" || sel === "marker" ? sel : null;
+    if (subKey !== r.sub) {
+      r.sub = subKey;
+      r.el.querySelectorAll(".tool-ring-sub").forEach((n) => n.classList.toggle("open", n.dataset.for === subKey));
+      if (!subKey) color = size = null;
     }
     if (color !== r.color) {
       r.color = color;
-      r.el.querySelectorAll(".tool-ring-dot").forEach((n) => n.classList.toggle("active", n.dataset.color === color));
+      r.el.querySelectorAll(".tool-ring-sub[data-for='" + r.sub + "'] .tool-ring-dot").forEach((n) => n.classList.toggle("active", n.dataset.color === color));
       r.el.classList.toggle("has-color", !!color);
+      // Staerken in der gewaehlten Farbe zeigen
+      r.el.querySelectorAll(".tool-ring-sizes").forEach((n) => {
+        const on = !!color && n.dataset.for === r.sub;
+        n.classList.toggle("open", on);
+        if (on) n.style.setProperty("--ring-size-color", r.sub === "marker" ? hexToRgba(color, 0.7) : themeInk(color));
+      });
+    }
+    if (size !== r.size) {
+      r.size = size;
+      r.el.querySelectorAll(".tool-ring-size").forEach((n) => n.classList.toggle("active", size != null && Number(n.dataset.size) === size && n.closest(".tool-ring-sizes").dataset.for === r.sub));
+      r.el.classList.toggle("has-size", size != null);
     }
     if (sel === r.sel) return;
     r.sel = sel;
-    r.el.querySelectorAll("[data-mode]").forEach((n) => n.classList.toggle("active", n.dataset.mode === sel));
+    r.el.querySelectorAll("[data-key]").forEach((n) => n.classList.toggle("active", n.dataset.key === sel));
     r.el.classList.toggle("has-sel", !!sel);
   }
   function closeToolRing() {
@@ -4141,7 +4202,7 @@
     const el = toolRing.el;
     toolRing = null;
     el.classList.remove("open");
-    setTimeout(() => el.remove(), 140);
+    setTimeout(() => el.remove(), 160);
   }
   window.addEventListener(
     "pointermove",
@@ -4155,16 +4216,21 @@
   );
   const ringUp = (e) => {
     if (!toolRing || e.pointerId !== toolRing.id) return;
-    if (e.type === "pointerup") updateToolRing(e.clientX, e.clientY);
-    const sel = e.type === "pointerup" ? toolRing.sel : null;
-    const color = e.type === "pointerup" ? toolRing.color : null;
+    const r = toolRing;
+    const ok = e.type === "pointerup";
     closeToolRing();
-    if (color) {
-      // Stift (nicht Marker) mit dieser Farbe
+    if (!ok || !r.sel) return;
+    const it = RING_ITEMS.find((x) => x.key === r.sel);
+    if (!it) return;
+    if (it.tool) {
       if (currentMode !== "pen") setMode("pen");
-      if (currentTool !== "pen") setTool("pen");
-      pickColor(color);
-    } else if (sel && sel !== currentMode) setMode(sel);
+      if (currentTool !== it.tool) setTool(it.tool);
+      if (r.color) pickColor(r.color);
+      if (r.size != null) {
+        setActiveSize(r.size);
+        if (typeof renderToolPopover === "function") renderToolPopover();
+      }
+    } else if (it.mode !== currentMode) setMode(it.mode);
   };
   window.addEventListener("pointerup", ringUp, true);
   window.addEventListener("pointercancel", ringUp, true);
