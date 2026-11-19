@@ -739,7 +739,7 @@
         <button type="button" data-act="undo">Rückgängig</button>
       </div>
       <div class="set-sub set-sub-small">Fest drücken und halten</div>
-      <p class="set-hint">Stift fest aufdrücken und nicht bewegen. Zählt nur, wenn der Stift seit dem Aufsetzen still steht und die ganze Zeit fest drückt. Normales Schreiben und Halten am Strichende lösen es nicht aus.</p>
+      <p class="set-hint">Stift fest aufdrücken und nicht bewegen. Zählt nur, wenn der Stift seit dem Aufsetzen still steht und die ganze Zeit fest drückt. „Wackeln“ ist, wie weit sich der Stift dabei bewegen darf. Normales Schreiben und Halten am Strichende lösen es nicht aus.</p>
       <div class="set-seg set-seg-wrap" id="set-pen-press">
         <button type="button" data-act="off">Aus</button>
         <button type="button" data-act="lasso">Lasso</button>
@@ -750,7 +750,8 @@
         <button type="button" data-act="undo">Rückgängig</button>
       </div>
       <label class="press-row"><span>Druck ab</span><input type="range" id="set-pen-press-thr" min="0.3" max="0.95" step="0.05" value="0.7" /><b id="set-pen-press-thr-val">70 %</b></label>
-      <label class="press-row"><span>Halten</span><input type="range" id="set-pen-press-ms" min="2000" max="5000" step="500" value="3000" /><b id="set-pen-press-ms-val">3 s</b></label>
+      <label class="press-row"><span>Halten</span><input type="range" id="set-pen-press-ms" min="300" max="5000" step="100" value="3000" /><b id="set-pen-press-ms-val">3 s</b></label>
+      <label class="press-row"><span>Wackeln</span><input type="range" id="set-pen-press-move" min="2" max="40" step="1" value="8" /><b id="set-pen-press-move-val">8 px</b></label>
       <div id="pen-press-test" class="press-test" title="Hier mit dem Stift testen">
         <div class="press-test-bar"><div class="press-test-fill" id="pen-press-test-fill"></div><div class="press-test-max" id="pen-press-test-max"></div><div class="press-test-thr" id="pen-press-test-thr"></div></div>
         <div class="press-test-text" id="pen-press-test-text">Hier mit dem Stift drücken zum Testen</div>

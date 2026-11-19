@@ -3899,7 +3899,6 @@
   // die ganze Haltezeit ueber fest drueckt. Uhr startet, sobald der Druck die Schwelle
   // erreicht; faellt er spuerbar darunter, faengt sie neu an. Formerkennung und
   // Einfuegen-Menue warten so lange.
-  const PEN_PRESS_MOVE = 8; // Bildschirm-Pixel ab dem Aufsetzpunkt
   const PEN_PRESS_HYST = 0.85; // erst unter 85 % der Schwelle gilt der Druck als losgelassen
   const PEN_PRESS_RING_MS = 800; // ab hier zeigt ein Ring an der Spitze, dass es gleich ausloest
   const penPressAction = () => lsGetRaw("sofianotes-pen-press") || "off";
@@ -3909,13 +3908,18 @@
   };
   const penPressMs = () => {
     const v = parseInt(lsGetRaw("sofianotes-pen-press-ms"), 10);
-    return v >= 1000 && v <= 10000 ? v : 3000;
+    return v >= 200 && v <= 10000 ? v : 3000;
+  };
+  // wie weit (Bildschirm-Pixel ab dem Aufsetzpunkt) der Stift dabei wackeln darf
+  const penPressMove = () => {
+    const v = parseInt(lsGetRaw("sofianotes-pen-press-move"), 10);
+    return v >= 1 && v <= 80 ? v : 8;
   };
   // Gemeinsame Pruefung fuer echte Geste und Testfeld, damit beide gleich reagieren.
   // st: {x, y, armedAt, dead}; liefert den Zustand nach diesem Messpunkt.
   function penPressStep(st, clientX, clientY, pressure, now) {
     if (st.dead) return st;
-    if (Math.hypot(clientX - st.x, clientY - st.y) > PEN_PRESS_MOVE) {
+    if (Math.hypot(clientX - st.x, clientY - st.y) > penPressMove()) {
       st.dead = true;
       st.armedAt = 0;
       return st;
@@ -3953,7 +3957,9 @@
     const total = penPressMs();
     const held = performance.now() - st.armedAt;
     if (held >= total) return penPressFire();
-    if (held >= PEN_PRESS_RING_MS) {
+    // Ring ab 0,8 s, bei kurzer Haltezeit entsprechend frueher
+    const ringAt = Math.min(PEN_PRESS_RING_MS, total * 0.3);
+    if (held >= ringAt) {
       if (!st.ring) {
         st.ring = document.createElement("div");
         st.ring.className = "press-hold-ring";
@@ -3962,7 +3968,7 @@
       st.ring.style.display = "";
       st.ring.style.left = st.x + "px";
       st.ring.style.top = st.y + "px";
-      st.ring.style.setProperty("--p", ((held - PEN_PRESS_RING_MS) / (total - PEN_PRESS_RING_MS)).toFixed(3));
+      st.ring.style.setProperty("--p", ((held - ringAt) / (total - ringAt)).toFixed(3));
     }
     // Safari schickt bei ganz ruhigem Stift evtl. keine Events: selbst weiterzaehlen
     st.timer = setTimeout(penPressTick, Math.min(50, total - held));
@@ -4047,6 +4053,7 @@
   // Einstellungen: Aktion, Druckschwelle, Haltezeit und Testfeld
   const pressThrIn = document.getElementById("set-pen-press-thr");
   const pressMsIn = document.getElementById("set-pen-press-ms");
+  const pressMoveIn = document.getElementById("set-pen-press-move");
   function syncPenPressSettings() {
     const cur = penPressAction();
     document.querySelectorAll("#set-pen-press [data-act]").forEach((b) => b.classList.toggle("active", b.dataset.act === cur));
@@ -4054,6 +4061,9 @@
     const ms = penPressMs();
     if (pressThrIn) pressThrIn.value = String(thr);
     if (pressMsIn) pressMsIn.value = String(ms);
+    if (pressMoveIn) pressMoveIn.value = String(penPressMove());
+    const mov = document.getElementById("set-pen-press-move-val");
+    if (mov) mov.textContent = penPressMove() + " px";
     const tv = document.getElementById("set-pen-press-thr-val");
     if (tv) tv.textContent = Math.round(thr * 100) + " %";
     const mv = document.getElementById("set-pen-press-ms-val");
@@ -4073,6 +4083,7 @@
   for (const [inp, key] of [
     [pressThrIn, "sofianotes-pen-press-thr"],
     [pressMsIn, "sofianotes-pen-press-ms"],
+    [pressMoveIn, "sofianotes-pen-press-move"],
   ]) {
     if (!inp) continue;
     inp.addEventListener("input", () => {
