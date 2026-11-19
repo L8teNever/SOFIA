@@ -3894,6 +3894,264 @@
     true
   );
 
+  // ---- Stift-Geste: fest druecken und still halten (Standard 3 s) ----
+  // Zaehlt nur, wenn der Stift seit dem Aufsetzen still steht (kein Strichende-Halten) und
+  // die ganze Haltezeit ueber fest drueckt. Uhr startet, sobald der Druck die Schwelle
+  // erreicht; faellt er spuerbar darunter, faengt sie neu an. Formerkennung und
+  // Einfuegen-Menue warten so lange.
+  const PEN_PRESS_MOVE = 8; // Bildschirm-Pixel ab dem Aufsetzpunkt
+  const PEN_PRESS_HYST = 0.85; // erst unter 85 % der Schwelle gilt der Druck als losgelassen
+  const PEN_PRESS_RING_MS = 800; // ab hier zeigt ein Ring an der Spitze, dass es gleich ausloest
+  const penPressAction = () => lsGetRaw("sofianotes-pen-press") || "off";
+  const penPressThr = () => {
+    const v = parseFloat(lsGetRaw("sofianotes-pen-press-thr"));
+    return v >= 0.1 && v <= 1 ? v : 0.7;
+  };
+  const penPressMs = () => {
+    const v = parseInt(lsGetRaw("sofianotes-pen-press-ms"), 10);
+    return v >= 1000 && v <= 10000 ? v : 3000;
+  };
+  // Gemeinsame Pruefung fuer echte Geste und Testfeld, damit beide gleich reagieren.
+  // st: {x, y, armedAt, dead}; liefert den Zustand nach diesem Messpunkt.
+  function penPressStep(st, clientX, clientY, pressure, now) {
+    if (st.dead) return st;
+    if (Math.hypot(clientX - st.x, clientY - st.y) > PEN_PRESS_MOVE) {
+      st.dead = true;
+      st.armedAt = 0;
+      return st;
+    }
+    st.pressure = pressure;
+    const thr = penPressThr();
+    if (st.armedAt) {
+      if (pressure < thr * PEN_PRESS_HYST) st.armedAt = 0;
+    } else if (pressure >= thr) st.armedAt = now;
+    return st;
+  }
+  let penPress = null; // {id, x, y, armedAt, dead, timer, ring, fired}
+  let penPressConsumedId = null;
+  function penPressBusy() {
+    return !!(penPress && !penPress.dead && !penPress.fired);
+  }
+  function penPressArmed() {
+    return penPressBusy() && !!penPress.armedAt;
+  }
+  function penPressStop() {
+    if (!penPress) return;
+    clearTimeout(penPress.timer);
+    if (penPress.ring) penPress.ring.remove();
+    penPress = null;
+  }
+  function penPressTick() {
+    const st = penPress;
+    if (!st || st.dead || st.fired) return;
+    clearTimeout(st.timer);
+    st.timer = null;
+    if (!st.armedAt) {
+      if (st.ring) st.ring.style.display = "none";
+      return;
+    }
+    const total = penPressMs();
+    const held = performance.now() - st.armedAt;
+    if (held >= total) return penPressFire();
+    if (held >= PEN_PRESS_RING_MS) {
+      if (!st.ring) {
+        st.ring = document.createElement("div");
+        st.ring.className = "press-hold-ring";
+        document.body.appendChild(st.ring);
+      }
+      st.ring.style.display = "";
+      st.ring.style.left = st.x + "px";
+      st.ring.style.top = st.y + "px";
+      st.ring.style.setProperty("--p", ((held - PEN_PRESS_RING_MS) / (total - PEN_PRESS_RING_MS)).toFixed(3));
+    }
+    // Safari schickt bei ganz ruhigem Stift evtl. keine Events: selbst weiterzaehlen
+    st.timer = setTimeout(penPressTick, Math.min(50, total - held));
+  }
+  function penPressFire() {
+    const st = penPress;
+    const act = penPressAction();
+    st.fired = true;
+    penPressConsumedId = st.id;
+    if (st.ring) st.ring.remove();
+    st.ring = null;
+    if (act === "off") return;
+    if (currentStroke && currentStroke.pointerId === st.id) {
+      if (currentStroke.eraser) currentStroke = null;
+      else abortStroke();
+    }
+    clearHoldTimer();
+    clearPasteHold();
+    if (lassoPointerId === st.id) {
+      lassoPoints = null;
+      lassoPointerId = null;
+    }
+    if (dragState && dragState.pointerId === st.id) cancelSelectionDrag();
+    panState = null;
+    penTaps = [];
+    runPenTapAction(act);
+    try {
+      if (navigator.vibrate) navigator.vibrate(20);
+    } catch (err) {}
+    requestRedraw();
+  }
+  function hookPenPress(el) {
+    if (!el) return;
+    el.addEventListener(
+      "pointerdown",
+      (e) => {
+        if (e.pointerType === "touch") {
+          // zweiter Finger dazu (Zoomen/Schieben): Geste abbrechen
+          penPressStop();
+          return;
+        }
+        penPressStop();
+        penPressConsumedId = null;
+        if (e.pointerType !== "pen" || penPressAction() === "off" || currentTool === "text") return;
+        penPress = { id: e.pointerId, x: e.clientX, y: e.clientY, armedAt: 0, dead: false, timer: null, ring: null, fired: false };
+        penPressStep(penPress, e.clientX, e.clientY, e.pressure || 0, performance.now());
+        penPressTick();
+      },
+      true
+    );
+    el.addEventListener(
+      "pointermove",
+      (e) => {
+        if (penPressConsumedId === e.pointerId) {
+          // Nach dem Ausloesen malt dieser Stift-Kontakt nichts mehr
+          e.stopImmediatePropagation();
+          return;
+        }
+        const st = penPress;
+        if (!st || e.pointerId !== st.id || st.dead || st.fired) return;
+        const now = performance.now();
+        for (const ev of coalescedEvents(e)) penPressStep(st, ev.clientX, ev.clientY, ev.pressure || 0, now);
+        if (st.dead) {
+          penPressStop();
+          return;
+        }
+        penPressTick();
+      },
+      true
+    );
+    // Loslassen laeuft normal weiter (endPointer raeumt auf); der Strich ist schon verworfen
+    const up = (e) => {
+      if (penPress && e.pointerId === penPress.id) penPressStop();
+      if (penPressConsumedId === e.pointerId) penPressConsumedId = null;
+    };
+    el.addEventListener("pointerup", up, true);
+    el.addEventListener("pointercancel", up, true);
+  }
+  hookPenPress(canvas);
+  hookPenPress(document.getElementById("zoom-canvas"));
+
+  // Einstellungen: Aktion, Druckschwelle, Haltezeit und Testfeld
+  const pressThrIn = document.getElementById("set-pen-press-thr");
+  const pressMsIn = document.getElementById("set-pen-press-ms");
+  function syncPenPressSettings() {
+    const cur = penPressAction();
+    document.querySelectorAll("#set-pen-press [data-act]").forEach((b) => b.classList.toggle("active", b.dataset.act === cur));
+    const thr = penPressThr();
+    const ms = penPressMs();
+    if (pressThrIn) pressThrIn.value = String(thr);
+    if (pressMsIn) pressMsIn.value = String(ms);
+    const tv = document.getElementById("set-pen-press-thr-val");
+    if (tv) tv.textContent = Math.round(thr * 100) + " %";
+    const mv = document.getElementById("set-pen-press-ms-val");
+    if (mv) mv.textContent = (ms / 1000).toLocaleString("de-DE") + " s";
+    const mark = document.getElementById("pen-press-test-thr");
+    if (mark) mark.style.left = "calc(" + thr * 100 + "% - 1px)";
+  }
+  document.querySelectorAll("#set-pen-press [data-act]").forEach((b) =>
+    b.addEventListener("click", (e) => {
+      e.stopPropagation();
+      try {
+        localStorage.setItem("sofianotes-pen-press", b.dataset.act);
+      } catch (err) {}
+      syncPenPressSettings();
+    })
+  );
+  for (const [inp, key] of [
+    [pressThrIn, "sofianotes-pen-press-thr"],
+    [pressMsIn, "sofianotes-pen-press-ms"],
+  ]) {
+    if (!inp) continue;
+    inp.addEventListener("input", () => {
+      try {
+        localStorage.setItem(key, inp.value);
+      } catch (err) {}
+      syncPenPressSettings();
+    });
+  }
+  syncPenPressSettings();
+
+  const pressTest = document.getElementById("pen-press-test");
+  if (pressTest) {
+    const fill = document.getElementById("pen-press-test-fill");
+    const maxEl = document.getElementById("pen-press-test-max");
+    const txt = document.getElementById("pen-press-test-text");
+    let t = null; // {id, x, y, armedAt, dead, max, fired, timer}
+    const show = () => {
+      if (!t) return;
+      const thr = penPressThr();
+      const total = penPressMs();
+      const pct = Math.round((t.pressure || 0) * 100);
+      fill.style.width = pct + "%";
+      maxEl.style.display = "";
+      maxEl.style.left = "calc(" + Math.round(t.max * 100) + "% - 1px)";
+      let line = "Druck " + pct + " % · max " + Math.round(t.max * 100) + " % · Schwelle " + Math.round(thr * 100) + " %";
+      const now = performance.now();
+      if (!t.fired && t.armedAt && now - t.armedAt >= total) t.fired = true;
+      if (t.isMouse) line = "Nur mit dem Stift – Finger und Maus haben keinen Druck";
+      else if (t.fired) line += " · würde jetzt auslösen";
+      else if (t.dead) line += " · bewegt, zählt nicht";
+      else if (t.armedAt) line += " · noch " + Math.max(0, (total - (now - t.armedAt)) / 1000).toFixed(1) + " s";
+      else line += " · zu leicht";
+      txt.textContent = line;
+      pressTest.classList.toggle("armed", !!t.armedAt && !t.fired && !t.dead);
+      pressTest.classList.toggle("fired", !!t.fired && !t.dead);
+    };
+    const loop = () => {
+      if (!t) return;
+      show();
+      t.timer = setTimeout(loop, 50);
+    };
+    pressTest.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (t) clearTimeout(t.timer);
+      try {
+        pressTest.setPointerCapture(e.pointerId);
+      } catch (err) {}
+      t = { id: e.pointerId, x: e.clientX, y: e.clientY, armedAt: 0, dead: false, max: 0, fired: false, timer: null, isMouse: e.pointerType !== "pen" };
+      if (!t.isMouse) {
+        penPressStep(t, e.clientX, e.clientY, e.pressure || 0, performance.now());
+        t.max = t.pressure || 0;
+      }
+      loop();
+    });
+    pressTest.addEventListener("pointermove", (e) => {
+      if (!t || e.pointerId !== t.id || t.isMouse) return;
+      e.preventDefault();
+      const now = performance.now();
+      for (const ev of coalescedEvents(e)) {
+        penPressStep(t, ev.clientX, ev.clientY, ev.pressure || 0, now);
+        // Bewegt zeigt der Balken trotzdem weiter den Druck an
+        if (t.dead) t.pressure = ev.pressure || 0;
+        t.max = Math.max(t.max, t.pressure || 0);
+      }
+      show();
+    });
+    const end = (e) => {
+      if (!t || e.pointerId !== t.id) return;
+      clearTimeout(t.timer);
+      show();
+      t = null;
+    };
+    pressTest.addEventListener("pointerup", end);
+    pressTest.addEventListener("pointercancel", end);
+    pressTest.addEventListener("touchstart", (e) => e.preventDefault(), { passive: false });
+  }
+
   // ---- Experimentell: Handschrift auf dem Geraet ----
   const expOcrToggle = document.getElementById("exp-local-ocr-toggle");
   const expOcrStatus = document.getElementById("exp-local-ocr-status");
@@ -3955,6 +4213,7 @@
   function openSettings() {
     toolPopover.classList.add("hidden");
     syncPenTapSettings();
+    syncPenPressSettings();
     zoomPopover.classList.add("hidden");
     hideEraseAllMenu();
     hidePasteMenu();
@@ -6351,6 +6610,12 @@
     return true;
   }
   function firePasteHold() {
+    if (penPressArmed()) {
+      // Stift-Geste "fest druecken" laeuft: Menue erst spaeter, wenn sie abbricht, sonst gar nicht
+      clearTimeout(pasteHoldTimer);
+      pasteHoldTimer = setTimeout(firePasteHold, 150);
+      return;
+    }
     if (!pasteHoldStart || !strokeClipboard.length) {
       clearPasteHold();
       return;
@@ -6580,6 +6845,7 @@
 
   function armHoldTimer() {
     if (!shapeRecognitionEnabled) return clearHoldTimer();
+    if (penPressBusy()) return clearHoldTimer(); // fest gedrueckt und still: keine Form daraus machen
     if (!currentStroke || !isHoldSnapTool(currentStroke.tool) || currentStroke.locked || currentStroke.rulerEdge) return clearHoldTimer();
     const tip = currentStroke.points[currentStroke.points.length - 1];
     if (holdAnchor && tip && Math.hypot(tip.x - holdAnchor.x, tip.y - holdAnchor.y) <= shapeParams.stillPx / scale) return;

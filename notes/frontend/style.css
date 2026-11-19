@@ -6640,3 +6640,21 @@ html[data-theme="dark"] .big-show { background: #1d1b20; color: #e6e1e5; }
 .big-show-cap { max-width: 900px; margin: 14px auto 6px; font: 600 13px 'Google Sans', 'Inter', sans-serif; opacity: 0.75; }
 .big-show-page { margin-bottom: 14px; }
 .big-show-img { display: block; max-width: 100%; margin: 0 auto; border-radius: 8px; cursor: zoom-in; }
+
+/* Stift-Geste "Fest drücken und halten": Regler, Testfeld, Ring an der Stiftspitze */
+.press-row { display: flex; align-items: center; gap: 10px; margin: 8px 2px; font-size: 14px; }
+.press-row span { min-width: 64px; }
+.press-row input { flex: 1; }
+.press-row b { min-width: 44px; text-align: right; font-variant-numeric: tabular-nums; }
+.press-test { margin: 8px 2px 4px; padding: 14px; border: 2px dashed #79747e; border-radius: 14px; touch-action: none; user-select: none; -webkit-user-select: none; min-height: 110px; display: flex; flex-direction: column; justify-content: center; gap: 10px; }
+.press-test.armed { border-color: #f9a825; border-style: solid; }
+.press-test.fired { border-color: #2e7d32; border-style: solid; background: rgba(46, 125, 50, 0.08); }
+.press-test-bar { position: relative; height: 18px; border-radius: 9px; background: rgba(121, 116, 126, 0.25); overflow: hidden; }
+.press-test-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: #6750a4; transition: width 40ms linear; }
+.press-test.armed .press-test-fill { background: #f9a825; }
+.press-test.fired .press-test-fill { background: #2e7d32; }
+.press-test-max { position: absolute; top: 0; bottom: 0; width: 2px; left: 0; background: rgba(0, 0, 0, 0.45); display: none; }
+.press-test-thr { position: absolute; top: -2px; bottom: -2px; width: 3px; background: #b3261e; }
+.press-test-text { font-size: 14px; text-align: center; font-variant-numeric: tabular-nums; }
+html[data-theme="dark"] .press-test-max { background: rgba(255, 255, 255, 0.6); }
+.press-hold-ring { position: fixed; width: 44px; height: 44px; margin: -22px 0 0 -22px; border-radius: 50%; pointer-events: none; z-index: 9999; --p: 0; background: conic-gradient(#f9a825 calc(var(--p) * 1turn), rgba(121, 116, 126, 0.25) 0); -webkit-mask: radial-gradient(circle, transparent 15px, #000 16px); mask: radial-gradient(circle, transparent 15px, #000 16px); }
