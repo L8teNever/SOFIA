@@ -3953,16 +3953,24 @@
       st.ly = clientY;
     }
     const move = penPressMove();
-    if (Math.hypot(clientX - st.x, clientY - st.y) > move || st.travel > Math.max(move * 2.5, 20)) {
+    // Schreiben ist Bewegung: wer mehr als ein kleines Stueck faehrt, schreibt (auch kleine n/m)
+    if (Math.hypot(clientX - st.x, clientY - st.y) > move || st.travel > Math.max(move * 1.5, 12)) {
       st.dead = true;
       st.armedAt = 0;
       return st;
     }
     st.pressure = pressure;
     const thr = penPressThr();
+    // Die Uhr laeuft nur, solange der Stift wirklich ruht: jede Bewegung ueber 3 px
+    // seit dem Scharfwerden startet sie neu
+    if (st.armedAt && Math.hypot(clientX - st.ax, clientY - st.ay) > 3) st.armedAt = 0;
     if (st.armedAt) {
       if (pressure < thr * PEN_PRESS_HYST) st.armedAt = 0;
-    } else if (pressure >= thr) st.armedAt = now;
+    } else if (pressure >= thr) {
+      st.armedAt = now;
+      st.ax = clientX;
+      st.ay = clientY;
+    }
     return st;
   }
   let penPress = null; // {id, x, y, armedAt, dead, timer, ring, fired}
@@ -6944,8 +6952,19 @@
   }
   function notePasteHoldMove(e) {
     if (!pasteHoldStart || pasteHoldStart.pointerId !== e.pointerId) return;
-    const dist = Math.hypot(e.clientX - pasteHoldStart.clientX, e.clientY - pasteHoldStart.clientY);
-    if (dist > 12) clearPasteHold();
+    const h = pasteHoldStart;
+    const dist = Math.hypot(e.clientX - h.clientX, e.clientY - h.clientY);
+    // zurueckgelegter Weg: ein kleines "n" bleibt im Radius, ist aber Schreiben -
+    // sonst brach der Strich ab und das Einfuegen-Menue ging auf
+    const lx = h.lx == null ? h.clientX : h.lx;
+    const ly = h.ly == null ? h.clientY : h.ly;
+    const step = Math.hypot(e.clientX - lx, e.clientY - ly);
+    if (step >= 2) {
+      h.travel = (h.travel || 0) + step;
+      h.lx = e.clientX;
+      h.ly = e.clientY;
+    }
+    if (dist > 12 || h.travel > 10) clearPasteHold();
   }
   function clearAllInk() {
     // Nur Tinte - Bilder, PDFs, Textfelder und Tabellen bleiben stehen.
