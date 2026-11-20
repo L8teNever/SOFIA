@@ -14350,6 +14350,7 @@
     const doneBtn = document.getElementById("btn-media-crop-done");
     const cancelBtn = document.getElementById("btn-media-crop-cancel");
     if (kiBtn) kiBtn.classList.toggle("hidden", cropping || pens.length === 0);
+    document.getElementById("btn-sel-ask")?.classList.toggle("hidden", cropping || !selection.ids.size);
     const hasHand = pens.some(isHandStroke) || selectedStrokes().some(isTypedText);
     const existingUnderlines = typeof hdFindUnderlinesForSelection === "function" ? hdFindUnderlinesForSelection() : [];
     const isUnderlined = existingUnderlines.length > 0;
@@ -21474,6 +21475,280 @@
   // Warteschlange und wird spaeter nachgeholt.
   let toastEl = null;
   let toastTimer = null;
+  // ---- KI im Heft (Stufe 1): markierte Stelle als Zitat, Fragen dazu, Antwort aufs Blatt ----
+  // Das Bild der Markierung kommt direkt vom sichtbaren Blatt (mit Hintergrund, PDF-Seite und
+  // Schrift) - damit liest die KI Handschrift, Druck und Skizzen, ohne eigene Erkennung.
+  const aiPanel = document.getElementById("ai-panel");
+  const aiLogEl = document.getElementById("ai-log");
+  const aiInput = document.getElementById("ai-input");
+  const aiSendBtn = document.getElementById("ai-send");
+  const aiModelSel = document.getElementById("ai-model");
+  const aiQuoteEl = document.getElementById("ai-quote");
+  const aiQuoteImg = document.getElementById("ai-quote-img");
+  const aiQuoteTextEl = document.getElementById("ai-quote-text");
+  let aiTurns = []; // {role, text, image} - geht so an den Server
+  let aiQuote = null; // {image, text, world: bbox}
+  let aiBusy = false;
+
+  const aiModel = () => lsGetRaw("sofianotes-ai-model") || "";
+
+  function aiOpen() {
+    if (!aiPanel) return;
+    aiPanel.classList.remove("hidden");
+    aiLoadModels();
+    setTimeout(() => aiInput && aiInput.focus(), 50);
+  }
+  function aiClose() {
+    if (aiPanel) aiPanel.classList.add("hidden");
+  }
+  async function aiLoadModels() {
+    if (!aiModelSel || aiModelSel.dataset.filled === "1") return;
+    aiModelSel.dataset.filled = "1";
+    try {
+      const r = await fetch("/api/ai/models", { cache: "no-store" });
+      const d = await r.json();
+      const list = (d && d.models) || [];
+      const want = aiModel() || d.defaultModel || "";
+      aiModelSel.innerHTML = "";
+      if (!list.length) {
+        const o = document.createElement("option");
+        o.textContent = d && d.defaultModel ? d.defaultModel : "Kein Modell";
+        o.value = (d && d.defaultModel) || "";
+        aiModelSel.appendChild(o);
+        return;
+      }
+      for (const m of list) {
+        const o = document.createElement("option");
+        o.value = m.id;
+        o.textContent = m.label || m.id;
+        if (m.id === want) o.selected = true;
+        aiModelSel.appendChild(o);
+      }
+      if (!list.some((m) => m.id === want) && want) {
+        const o = document.createElement("option");
+        o.value = want;
+        o.textContent = want;
+        o.selected = true;
+        aiModelSel.appendChild(o);
+      }
+    } catch (err) {
+      aiModelSel.dataset.filled = "";
+    }
+  }
+  if (aiModelSel) {
+    aiModelSel.addEventListener("change", () => {
+      try {
+        localStorage.setItem("sofianotes-ai-model", aiModelSel.value || "");
+      } catch (err) {}
+    });
+  }
+
+  // Bild der Markierung: Ausschnitt vom sichtbaren Blatt (max. 1024 px lange Kante)
+  function captureWorldRect(b) {
+    if (!b || !Number.isFinite(b.minX)) return null;
+    const pad = 10 / Math.max(scale, 0.05);
+    const a = worldToScreen(b.minX - pad, b.minY - pad);
+    const c2 = worldToScreen(b.maxX + pad, b.maxY + pad);
+    const d = Math.max(1, window.devicePixelRatio || 1);
+    const sx = Math.max(0, Math.floor(a.x * d));
+    const sy = Math.max(0, Math.floor(a.y * d));
+    const sw = Math.min(canvas.width - sx, Math.ceil((c2.x - a.x) * d));
+    const sh = Math.min(canvas.height - sy, Math.ceil((c2.y - a.y) * d));
+    if (sw < 8 || sh < 8) return null;
+    const fit = Math.min(1, 1024 / Math.max(sw, sh));
+    const out = document.createElement("canvas");
+    out.width = Math.max(8, Math.round(sw * fit));
+    out.height = Math.max(8, Math.round(sh * fit));
+    const cx = out.getContext("2d");
+    cx.fillStyle = "#ffffff";
+    cx.fillRect(0, 0, out.width, out.height);
+    try {
+      cx.drawImage(canvas, sx, sy, sw, sh, 0, 0, out.width, out.height);
+    } catch (err) {
+      return null;
+    }
+    const url = out.toDataURL("image/jpeg", 0.85);
+    out.width = out.height = 0;
+    return url;
+  }
+
+  // Was wir vom Markierten sicher als Text wissen: Textfelder und gedruckte Woerter darunter
+  function aiKnownText(strokes, b) {
+    const parts = [];
+    for (const s of strokes) {
+      if (isTypedText(s)) parts.push(String(s.points[0].text || "").trim());
+    }
+    const marker = strokes.some((s) => s.tool === "marker");
+    if (marker || !parts.length) {
+      const { lines } = textLinesIn(b.minX, b.minY, b.maxX, b.maxY);
+      for (const l of lines) {
+        const words = l.words.filter((w) => w.x1 >= b.minX && w.x0 <= b.maxX && w.y1 >= b.minY && w.y0 <= b.maxY);
+        const t = words.map((w) => w.t).filter(Boolean).join(" ");
+        if (t) parts.push(t);
+      }
+    }
+    return parts.filter(Boolean).join("\n").slice(0, 4000);
+  }
+
+  function aiSetQuote(q) {
+    aiQuote = q;
+    if (!aiQuoteEl) return;
+    aiQuoteEl.classList.toggle("hidden", !q);
+    if (!q) return;
+    if (aiQuoteImg) aiQuoteImg.src = q.image || "";
+    if (aiQuoteTextEl) aiQuoteTextEl.textContent = q.text || "(Bild der markierten Stelle)";
+  }
+  document.getElementById("ai-quote-drop")?.addEventListener("click", () => aiSetQuote(null));
+  document.getElementById("ai-close")?.addEventListener("click", aiClose);
+  document.getElementById("ai-clear")?.addEventListener("click", () => {
+    aiTurns = [];
+    if (aiLogEl) aiLogEl.innerHTML = "";
+    aiSetQuote(null);
+  });
+
+  function aiAddMsg(kind, text, acts) {
+    if (!aiLogEl) return null;
+    const el = document.createElement("div");
+    el.className = "ai-msg " + kind;
+    el.textContent = text;
+    if (acts && acts.length) {
+      const row = document.createElement("div");
+      row.className = "ai-msg-acts";
+      for (const a of acts) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.textContent = a.label;
+        b.addEventListener("click", a.run);
+        row.appendChild(b);
+      }
+      el.appendChild(row);
+    }
+    aiLogEl.appendChild(el);
+    aiLogEl.scrollTop = aiLogEl.scrollHeight;
+    return el;
+  }
+
+  // Antwort aufs Blatt: Textfeld an der markierten Stelle, sonst in der Bildschirmmitte
+  function aiTextToBoard(text) {
+    if (viewOnly || myRole === "view") return showToast("Nur ansehen: hier kann man nichts ändern");
+    const b = aiQuote && aiQuote.world;
+    const size = Math.max(14, Math.round(textSize || 22));
+    const x = b ? b.minX : screenToWorld(window.innerWidth / 2 - 160, window.innerHeight / 2).x;
+    const y = b ? b.maxY + size : screenToWorld(0, window.innerHeight / 2).y;
+    const width = b ? Math.max(160, b.maxX - b.minX) : 420;
+    const stroke = {
+      id: uuid(),
+      tool: "text",
+      color: currentColor,
+      size,
+      points: boxTextPoints(r2(x), r2(y), text, size, width, [{ t: text }]),
+      extra: { box: true, width },
+    };
+    stampBoardPage(stroke);
+    stroke.bbox = strokeWorldBBox(stroke);
+    boardStrokes.set(stroke.id, stroke);
+    wsSend({ type: "stroke_move", stroke: serializeStroke(stroke) });
+    pushUndo({ type: "add", stroke: cloneStroke(stroke) });
+    requestRedraw();
+    showToast("Als Textfeld eingefügt");
+  }
+
+  async function aiSend(question) {
+    const q = String(question == null ? (aiInput ? aiInput.value : "") : question).trim();
+    if (!q || aiBusy) return;
+    aiBusy = true;
+    if (aiSendBtn) aiSendBtn.disabled = true;
+    if (aiInput && question == null) aiInput.value = "";
+    aiAddMsg("me", q);
+    const turn = { role: "user", text: q };
+    // Zitat nur beim ersten Mal mitschicken (es bleibt im Verlauf stehen)
+    if (aiQuote && !aiTurns.length) {
+      turn.image = aiQuote.image || undefined;
+      if (aiQuote.text) turn.text = "Markierte Stelle (erkannter Text):\n" + aiQuote.text + "\n\nFrage: " + q;
+    }
+    aiTurns.push(turn);
+    const wait = document.createElement("div");
+    wait.className = "ai-typing";
+    wait.textContent = "denkt nach…";
+    if (aiLogEl) {
+      aiLogEl.appendChild(wait);
+      aiLogEl.scrollTop = aiLogEl.scrollHeight;
+    }
+    try {
+      const r = await fetch("/api/ai/ask", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ turns: aiTurns, model: aiModelSel && aiModelSel.value ? aiModelSel.value : aiModel() || undefined }),
+      });
+      const d = await r.json().catch(() => null);
+      wait.remove();
+      if (!d || !d.ok) {
+        const why =
+          d && d.error === "not_configured"
+            ? "Kein KI-Schlüssel auf dem Server."
+            : d && d.error === "empty"
+              ? "Keine Antwort bekommen (evtl. blockiert)."
+              : d && d.status === 429
+                ? "Zu viele Anfragen gerade – gleich nochmal versuchen."
+                : "Hat nicht geklappt: " + ((d && (d.detail || d.error)) || "unbekannt");
+        aiAddMsg("err", why);
+        aiTurns.pop();
+        return;
+      }
+      aiTurns.push({ role: "model", text: d.text });
+      aiAddMsg("ai", d.text, [
+        { label: "Aufs Blatt", run: () => aiTextToBoard(d.text) },
+        {
+          label: "Kopieren",
+          run: () => {
+            try {
+              navigator.clipboard.writeText(d.text);
+              showToast("Kopiert");
+            } catch (err) {}
+          },
+        },
+      ]);
+    } catch (err) {
+      wait.remove();
+      aiAddMsg("err", "Server nicht erreichbar.");
+      aiTurns.pop();
+    } finally {
+      aiBusy = false;
+      if (aiSendBtn) aiSendBtn.disabled = false;
+    }
+  }
+  aiSendBtn?.addEventListener("click", () => aiSend());
+  aiInput?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      aiSend();
+    }
+  });
+  document.querySelectorAll("#ai-quick [data-q]").forEach((b) =>
+    b.addEventListener("click", () => {
+      if (!aiBusy) aiSend(b.dataset.q);
+    })
+  );
+
+  // Auswahl-Leiste: "Fragen" - Markierung als Zitat ins KI-Fenster
+  function askAboutSelection() {
+    const strokes = selectedStrokes();
+    if (!strokes.length) return false;
+    const b = unionBBox(strokes.map((s) => s.bbox || strokeWorldBBox(s)));
+    if (!b || !Number.isFinite(b.minX)) return false;
+    const image = captureWorldRect(b);
+    aiSetQuote({ image, text: aiKnownText(strokes, b), world: b });
+    aiTurns = [];
+    if (aiLogEl) aiLogEl.innerHTML = "";
+    aiOpen();
+    return true;
+  }
+  document.getElementById("btn-sel-ask")?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const ok = askAboutSelection();
+    ackSel(e.currentTarget, ok, ok ? "Im KI-Fenster" : "Nichts markiert");
+  });
+
   function showToast(text) {
     if (!toastEl) {
       toastEl = document.createElement("div");

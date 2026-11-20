@@ -14,7 +14,7 @@ from pydantic import BaseModel
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.gzip import GZipMiddleware
 
-from . import board_file, clientlog, cloudflare_ocr, db, files, forms, goodnotes_export, media, ocr_text, shape_learning, sofia_sync, spellcheck
+from . import ai, board_file, clientlog, cloudflare_ocr, db, files, forms, goodnotes_export, media, ocr_text, shape_learning, sofia_sync, spellcheck
 from .auth import get_current_person, get_current_person_ws, require_admin
 from .version import get_version_info, inject_build
 from .ws_manager import ConnectionManager, color_for
@@ -825,6 +825,33 @@ async def get_media_fields(media_id: str, force: int = 0, me: dict = Depends(get
     if fields is None:
         raise HTTPException(status_code=404, detail="not found")
     return {"ok": True, "fields": fields}
+
+
+# ---- KI im Heft: Fragen zu einer markierten Stelle (Gemini, Schluessel bleibt hier) ----
+_ai_sem = asyncio.Semaphore(2)
+
+
+@app.get("/api/ai/status")
+async def ai_status(me: dict = Depends(get_current_person)) -> dict:
+    return {"ok": True, "configured": ai.configured(), "defaultModel": ai.DEFAULT_MODEL}
+
+
+@app.get("/api/ai/models")
+async def ai_models(me: dict = Depends(get_current_person)) -> dict:
+    return {"ok": True, "models": await ai.models(), "defaultModel": ai.DEFAULT_MODEL}
+
+
+@app.post("/api/ai/ask")
+async def ai_ask(request: Request, me: dict = Depends(get_current_person)) -> dict:
+    body = await _json_body(request)
+    turns = body.get("turns")
+    if not isinstance(turns, list) or not turns:
+        raise HTTPException(status_code=400, detail="turns required")
+    async with _ai_sem:
+        res = await ai.ask(turns, body.get("model"))
+    if not res.get("ok"):
+        ai.log.info("KI-Anfrage fehlgeschlagen: %s %s", res.get("error"), str(res.get("detail"))[:200])
+    return res
 
 
 # Gedruckter Text (Tesseract): eigene Warteschlange, damit er nicht hinter den Feldern wartet

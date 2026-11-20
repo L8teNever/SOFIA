@@ -6708,3 +6708,37 @@ html[data-theme="dark"] .tool-ring { --r-surface: #2b2930; --r-on: #e6e0e9; --r-
    Bei Text und Formen bleibt sie, im Zoom-Fenster auch. */
 #toolbar.dock-hide-pen[data-mode="pen"]:not(.zoom-inner),
 #toolbar.dock-hide-all:not(.zoom-inner):not([data-mode="text"]):not([data-mode="shapes"]) { opacity: 0; visibility: hidden; pointer-events: none; }
+
+/* ---- KI im Heft: Fenster mit Zitat, Verlauf und Eingabe ---- */
+.ai-panel { position: fixed; right: 16px; bottom: 16px; width: min(420px, calc(100vw - 32px)); max-height: min(70vh, 620px); display: flex; flex-direction: column; z-index: 60; background: var(--sheet-bg, #f7f2fa); border: 1px solid var(--dock-border); border-radius: 24px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.08); font-family: 'Google Sans', 'Inter', sans-serif; overflow: hidden; }
+.ai-panel.hidden { display: none; }
+.ai-head { display: flex; align-items: center; gap: 8px; padding: 12px 12px 8px; font-size: 16px; }
+.ai-head-ico { color: #6750a4; }
+html[data-theme="dark"] .ai-head-ico { color: #d0bcff; }
+.ai-model { flex: 1; min-width: 0; height: 32px; border-radius: 16px; border: 1px solid var(--dock-border); background: var(--dock-bg); color: inherit; font: 500 13px/1 'Google Sans', 'Inter', sans-serif; padding: 0 8px; }
+.ai-quote { display: flex; gap: 10px; align-items: flex-start; margin: 0 12px 8px; padding: 8px; border-radius: 16px; background: rgba(103, 80, 164, 0.1); }
+.ai-quote.hidden { display: none; }
+.ai-quote img { width: 64px; height: 64px; object-fit: cover; border-radius: 10px; background: #fff; flex-shrink: 0; }
+.ai-quote img[src=""] { display: none; }
+.ai-quote-body { flex: 1; min-width: 0; }
+.ai-quote-body small { opacity: 0.7; font-size: 11px; }
+.ai-quote-body div { font-size: 13px; max-height: 54px; overflow: hidden; }
+.ai-log { flex: 1; overflow-y: auto; padding: 4px 12px; display: flex; flex-direction: column; gap: 8px; -webkit-overflow-scrolling: touch; }
+.ai-msg { max-width: 92%; padding: 10px 12px; border-radius: 18px; font-size: 14px; line-height: 1.45; white-space: pre-wrap; word-break: break-word; }
+.ai-msg.me { align-self: flex-end; background: #6750a4; color: #fff; border-bottom-right-radius: 6px; }
+.ai-msg.ai { align-self: flex-start; background: var(--dock-bg); border: 1px solid var(--dock-border); border-bottom-left-radius: 6px; }
+.ai-msg.err { align-self: stretch; background: rgba(179, 38, 30, 0.12); color: #b3261e; }
+html[data-theme="dark"] .ai-msg.me { background: #d0bcff; color: #241b33; }
+html[data-theme="dark"] .ai-msg.err { color: #f2b8b5; }
+.ai-msg-acts { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.ai-msg-acts button { height: 30px; padding: 0 12px; border-radius: 15px; border: 1px solid var(--dock-border); background: rgba(255, 255, 255, 0.6); color: inherit; font: 600 12px/1 'Google Sans', 'Inter', sans-serif; cursor: pointer; }
+html[data-theme="dark"] .ai-msg-acts button { background: rgba(255, 255, 255, 0.08); }
+.ai-typing { align-self: flex-start; opacity: 0.6; font-size: 13px; padding: 4px 12px; }
+.ai-quick { display: flex; gap: 6px; padding: 8px 12px 0; flex-wrap: wrap; }
+.ai-quick button { height: 32px; padding: 0 12px; border-radius: 16px; border: 1px solid var(--dock-border); background: var(--dock-bg); color: inherit; font: 600 12px/1 'Google Sans', 'Inter', sans-serif; cursor: pointer; }
+.ai-quick button:active { transform: scale(0.96); }
+.ai-input-row { display: flex; gap: 8px; align-items: flex-end; padding: 10px 12px 12px; }
+.ai-input-row textarea { flex: 1; min-height: 40px; max-height: 120px; resize: none; border-radius: 20px; border: 1px solid var(--dock-border); background: var(--dock-bg); color: inherit; padding: 10px 14px; font: 400 14px/1.4 'Google Sans', 'Inter', sans-serif; }
+.ai-send { width: 44px; height: 44px; flex-shrink: 0; border-radius: 50%; border: none; background: #6750a4; color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.ai-send:disabled { opacity: 0.5; }
+html[data-theme="dark"] .ai-send { background: #d0bcff; color: #241b33; }

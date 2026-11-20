@@ -182,6 +182,10 @@
     <span class="material-symbols-rounded">auto_awesome</span>
     KI
   </button>
+  <button type="button" id="btn-sel-ask" title="Frage zur Auswahl stellen (KI)">
+    <span class="material-symbols-rounded">chat</span>
+    Fragen
+  </button>
   <button type="button" id="btn-sel-underline" class="hidden" title="Doppelt unterstreichen (Überschrift)">
     <span class="material-symbols-rounded">format_underlined</span>
   </button>
@@ -258,6 +262,35 @@
     <span class="material-symbols-rounded">delete_sweep</span>
     Alle Striche löschen
   </button>
+</div>
+<!-- KI im Heft: markierte Stelle als Zitat, Fragen dazu, Antwort aufs Blatt -->
+<div id="ai-panel" class="ai-panel hidden" role="dialog" aria-label="KI">
+  <div class="ai-head">
+    <span class="material-symbols-rounded ai-head-ico">auto_awesome</span>
+    <strong>KI</strong>
+    <select id="ai-model" class="ai-model" title="Modell"></select>
+    <button type="button" id="ai-clear" class="hw-panel-btn" title="Neues Gespräch"><span class="material-symbols-rounded">restart_alt</span></button>
+    <button type="button" id="ai-close" class="hw-panel-btn" title="Schließen"><span class="material-symbols-rounded">close</span></button>
+  </div>
+  <div id="ai-quote" class="ai-quote hidden">
+    <img id="ai-quote-img" alt="" />
+    <div class="ai-quote-body">
+      <small>Markierte Stelle</small>
+      <div id="ai-quote-text"></div>
+    </div>
+    <button type="button" id="ai-quote-drop" class="hw-panel-btn" title="Zitat entfernen"><span class="material-symbols-rounded">close</span></button>
+  </div>
+  <div id="ai-log" class="ai-log"></div>
+  <div class="ai-quick" id="ai-quick">
+    <button type="button" data-q="Erkläre mir das einfach.">Erklären</button>
+    <button type="button" data-q="Fasse das kurz zusammen.">Zusammenfassen</button>
+    <button type="button" data-q="Korrigiere Rechtschreibung und Grammatik. Gib nur den verbesserten Text aus.">Korrigieren</button>
+    <button type="button" data-q="Löse die Aufgabe und zeige den Rechenweg in kurzen Schritten.">Lösen</button>
+  </div>
+  <div class="ai-input-row">
+    <textarea id="ai-input" rows="1" placeholder="Frage zur markierten Stelle…" autocomplete="off"></textarea>
+    <button type="button" id="ai-send" class="ai-send" title="Senden"><span class="material-symbols-rounded">send</span></button>
+  </div>
 </div>
 <div id="paste-menu" class="erase-all-menu paste-menu hidden">
   <button type="button" id="btn-paste-here">
