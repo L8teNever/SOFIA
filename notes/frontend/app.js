@@ -3954,7 +3954,7 @@
     }
     const move = penPressMove();
     // Schreiben ist Bewegung: wer mehr als ein kleines Stueck faehrt, schreibt (auch kleine n/m)
-    if (Math.hypot(clientX - st.x, clientY - st.y) > move || st.travel > Math.max(move * 1.5, 12)) {
+    if (Math.hypot(clientX - st.x, clientY - st.y) > move || st.travel > Math.min(12, Math.max(6, move))) {
       st.dead = true;
       st.armedAt = 0;
       return st;
@@ -3987,33 +3987,35 @@
     if (penPress.ring) penPress.ring.remove();
     penPress = null;
   }
+  // Kein 50-ms-Takt mehr: nur zwei Zeitpunkte (Ring zeigen, ausloesen). Der Ring laeuft als
+  // reine CSS-Animation (transform/opacity) - der alte Ring (conic-gradient + mask, alle 50 ms
+  // neu gesetzt) hat beim Schreiben auf dem iPad geruckelt.
   function penPressTick() {
     const st = penPress;
     if (!st || st.dead || st.fired) return;
     clearTimeout(st.timer);
     st.timer = null;
     if (!st.armedAt) {
-      if (st.ring) st.ring.style.display = "none";
+      if (st.ring) {
+        st.ring.remove();
+        st.ring = null;
+      }
       return;
     }
     const total = penPressMs();
     const held = performance.now() - st.armedAt;
     if (held >= total) return penPressFire();
-    // Ring ab 0,8 s, bei kurzer Haltezeit entsprechend frueher
-    const ringAt = Math.min(PEN_PRESS_RING_MS, total * 0.3);
-    if (held >= ringAt) {
-      if (!st.ring) {
-        st.ring = document.createElement("div");
-        st.ring.className = "press-hold-ring";
-        document.body.appendChild(st.ring);
-      }
-      st.ring.style.display = "";
+    const ringAt = Math.max(250, Math.min(PEN_PRESS_RING_MS, total * 0.4));
+    if (held >= ringAt && !st.ring) {
+      st.ring = document.createElement("div");
+      st.ring.className = "press-hold-ring";
       st.ring.style.left = st.x + "px";
       st.ring.style.top = st.y + "px";
-      st.ring.style.setProperty("--p", ((held - ringAt) / (total - ringAt)).toFixed(3));
+      st.ring.style.animationDuration = Math.max(60, Math.round(total - held)) + "ms";
+      document.body.appendChild(st.ring);
     }
-    // Safari schickt bei ganz ruhigem Stift evtl. keine Events: selbst weiterzaehlen
-    st.timer = setTimeout(penPressTick, Math.min(50, total - held));
+    // Safari schickt bei ganz ruhigem Stift evtl. keine Events: selbst nachsehen
+    st.timer = setTimeout(penPressTick, held < ringAt ? ringAt - held : total - held);
   }
   function penPressFire() {
     const st = penPress;
