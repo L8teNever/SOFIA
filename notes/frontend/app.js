@@ -5982,8 +5982,28 @@
     // sonst koennte ein alter Strich einen schon geloeschten wieder anlegen
     if (ws && ws.readyState === WebSocket.OPEN) {
       const live = new Set();
-      for (const op of pendingOps.values()) if (op.key != null) live.add(op.key);
-      entries = entries.filter((it) => !live.has(it.key));
+      const liveStrokes = new Set();
+      for (const op of pendingOps.values()) {
+        if (op.key != null) live.add(op.key);
+        // Schluessel kann noch fehlen (Eintrag wird gerade gespeichert): am Strich erkennen
+        if (op.kind === "put" && op.stroke && op.boardId === currentBoardId) liveStrokes.add(op.boardId + "\0" + op.stroke.id);
+      }
+      entries = entries.filter((it) => !live.has(it.key) && !(it.op && it.op.type === "stroke_put" && it.op.stroke && liveStrokes.has(it.op.boardId + "\0" + it.op.stroke.id)));
+    }
+    // je Strich nur den neuesten Stand schicken: aeltere Staende wuerden ihn erst zurueck- und
+    // dann wieder vorschieben (und beim Abbruch mittendrin falsch stehen lassen)
+    const newest = new Map();
+    for (const it of entries) {
+      if (!it.op || it.op.type !== "stroke_put" || !it.op.stroke) continue;
+      const k = it.op.boardId + "\0" + it.op.stroke.id;
+      const prev = newest.get(k);
+      if (!prev || (it.op.ts || 0) >= (prev.op.ts || 0)) newest.set(k, it);
+    }
+    const stale = entries.filter((it) => it.op && it.op.type === "stroke_put" && it.op.stroke && newest.get(it.op.boardId + "\0" + it.op.stroke.id) !== it);
+    for (const it of stale) await SofiaOffline.outboxDelete(it.key).catch(() => {});
+    if (stale.length) {
+      const gone = new Set(stale.map((it) => it.key));
+      entries = entries.filter((it) => !gone.has(it.key));
     }
     if (!entries.length) return true;
     setConnState("sync");
@@ -6125,7 +6145,8 @@
       const r = await fetch("/api/boards/" + encodeURIComponent(op.boardId) + "/strokes", {
         method: "POST",
         headers,
-        body: JSON.stringify({ personId: op.personId, stroke: op.stroke }),
+        // ts: der Server verwirft den Stand, wenn er dort inzwischen neuer ist
+        body: JSON.stringify({ personId: op.personId, stroke: op.stroke, ts: op.ts || undefined }),
       });
       if (!r.ok) throw opErr(r, "stroke");
       return;
@@ -6134,7 +6155,7 @@
       const r = await fetch("/api/boards/" + encodeURIComponent(op.boardId) + "/erase", {
         method: "POST",
         headers,
-        body: JSON.stringify({ personId: op.personId, strokeIds: op.strokeIds }),
+        body: JSON.stringify({ personId: op.personId, strokeIds: op.strokeIds, ts: op.ts || undefined }),
       });
       if (!r.ok) throw opErr(r, "erase");
     }
@@ -6251,7 +6272,9 @@
   setInterval(() => {
     if (document.hidden || !ws || ws.readyState !== WebSocket.OPEN) return;
     const age = oldestPendingMs();
-    if (age > 8000) return dropDeadSocket();
+    // Viele Aenderungen auf langsamem Netz: Bestaetigungen kommen, nur spaet. Tot ist die
+    // Verbindung erst, wenn gar nichts mehr ankommt - sonst Neuaufbau und alles nochmal schicken.
+    if (age > 8000 && performance.now() - lastWsMsgAt > 15000) return dropDeadSocket();
     if (age > 2500 && lastConnMode === "live") setConnState("sync");
     if (outboxDirty && !age && performance.now() - lastOutboxTry > 10000) {
       lastOutboxTry = performance.now();

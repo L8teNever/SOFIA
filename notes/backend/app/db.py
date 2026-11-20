@@ -144,6 +144,8 @@ def _init_sync() -> None:
         """
     )
     _conn.execute("CREATE INDEX IF NOT EXISTS stroke_log_board ON stroke_log (board_id, id)")
+    # letzte Aenderung je Strich: veraltete Nachzuegler aus der Outbox erkennen
+    _conn.execute("CREATE INDEX IF NOT EXISTS stroke_log_stroke ON stroke_log (stroke_id, at)")
     # Eingang: Blaetter/PDFs, die jemand einem geschickt hat (Kopie, keine Zusammenarbeit)
     _conn.execute(
         """
@@ -446,6 +448,17 @@ def _insert_sync(stroke: dict[str, Any], person_id: str | None = None) -> None:
     if board_id:
         _conn.execute("UPDATE boards SET updated_at = ? WHERE id = ?", (time.time(), board_id))
     _conn.commit()
+
+
+def _last_change_sync(stroke_id: str) -> float | None:
+    row = _conn.execute("SELECT MAX(at) FROM stroke_log WHERE stroke_id = ?", (stroke_id,)).fetchone()
+    return row[0] if row and row[0] is not None else None
+
+
+async def stroke_last_change(stroke_id: str) -> float | None:
+    """Zeitpunkt (Unix-Sekunden) der letzten gespeicherten Aenderung dieses Strichs, sonst None."""
+    async with _lock:
+        return await asyncio.get_event_loop().run_in_executor(None, _last_change_sync, stroke_id)
 
 
 def _stroke_owners_sync(stroke_ids: list[str]) -> dict[str, str | None]:

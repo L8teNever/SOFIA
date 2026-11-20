@@ -926,6 +926,13 @@ async def upsert_stroke(board_id: str, request: Request, me: dict = Depends(get_
     allowed = await db.filter_owner_protected(board_id, me["id"], [str(stroke["id"])])
     if not allowed:
         return {"ok": True, "skipped": True}
+    # Nachzuegler aus der Outbox: aelter als der Stand hier -> nicht ueberschreiben.
+    # Ein Geraet hatte tagelang alte Lagen gespeichert und hat damit neuere Striche verschoben.
+    ts = body.get("ts")
+    if isinstance(ts, (int, float)) and ts > 0:
+        last = await db.stroke_last_change(str(stroke["id"]))
+        if last is not None and last > ts / 1000.0 + 1.0:
+            return {"ok": True, "skipped": True, "stale": True}
     stroke["board_id"] = board_id
     await db.insert_stroke(stroke, me["id"])
     return {"ok": True}
@@ -940,6 +947,15 @@ async def erase_board_strokes(board_id: str, request: Request, me: dict = Depend
     role = await db.board_role(me["id"], board_id) or "edit"
     stroke_ids = await _writable_ids(role, me["id"], stroke_ids)
     stroke_ids = await db.filter_owner_protected(board_id, me["id"], stroke_ids)
+    # veraltetes Loeschen aus der Outbox: Striche, die danach noch geaendert wurden, bleiben
+    ts = body.get("ts")
+    if isinstance(ts, (int, float)) and ts > 0 and stroke_ids:
+        keep = []
+        for sid in stroke_ids:
+            last = await db.stroke_last_change(str(sid))
+            if last is None or last <= ts / 1000.0 + 1.0:
+                keep.append(sid)
+        stroke_ids = keep
     if stroke_ids:
         await db.delete_strokes(stroke_ids, me["id"])
     return {"ok": True}
