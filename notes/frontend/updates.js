@@ -107,25 +107,34 @@
       bannerBtn.disabled = true;
     }
     try {
-      let sw = pendingWorker || (await waitingWorker());
+      // Gespeicherte App-Dateien weg, damit der Neustart index.html/app.js wirklich vom
+      // Server holt. Ohne das kam auf langsamem Netz die alte Kopie zurueck und "Update"
+      // stand gleich wieder da. Modell-Caches (OCR) bleiben.
+      if ("caches" in window) {
+        const keys = await caches.keys();
+        const keep = (k) => k === "sofianotes-ocr-v1" || k === "transformers-cache";
+        await Promise.all(keys.filter((k) => !keep(k)).map((k) => caches.delete(k)));
+      }
+      const sw = pendingWorker || (await waitingWorker());
       if (sw) {
+        // Erst neu laden, wenn der neue Service-Worker wirklich uebernommen hat
+        const took = new Promise((resolve) => {
+          if (!("serviceWorker" in navigator)) return resolve();
+          navigator.serviceWorker.addEventListener("controllerchange", () => resolve(), { once: true });
+          setTimeout(resolve, 3000);
+        });
         sw.postMessage({ type: "SKIP_WAITING" });
-      } else {
-        if ("serviceWorker" in navigator) {
-          const regs = await navigator.serviceWorker.getRegistrations();
-          await Promise.all(regs.map((r) => r.unregister()));
-        }
-        if ("caches" in window) {
-          const keys = await caches.keys();
-          await Promise.all(keys.map((k) => caches.delete(k)));
-        }
+        await took;
+      } else if ("serviceWorker" in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map((r) => r.unregister()));
       }
     } catch (err) {
       /* reload anyway */
     }
     setTimeout(() => {
       window.location.reload();
-    }, 400);
+    }, 200);
   }
 
   async function checkForUpdates(manual) {

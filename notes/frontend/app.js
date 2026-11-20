@@ -5769,7 +5769,9 @@
     try {
       reconnectDelay = 1000;
       if (await probeOnline()) {
-        await flushOutbox();
+        // Der Abgleich kann bei vielen Aenderungen Minuten dauern - er laeuft im Hintergrund
+        // weiter ("Sync…"). Sonst stand hier minutenlang "Verbinde…".
+        flushOutbox();
         if (currentBoardId) {
           wantWs = true;
           if (ws && ws.readyState !== WebSocket.OPEN) {
