@@ -848,7 +848,7 @@ async def ai_ask(request: Request, me: dict = Depends(get_current_person)) -> di
     if not isinstance(turns, list) or not turns:
         raise HTTPException(status_code=400, detail="turns required")
     async with _ai_sem:
-        res = await ai.ask(turns, body.get("model"))
+        res = await ai.ask(turns, body.get("model"), bool(body.get("json")))
     if not res.get("ok"):
         ai.log.info("KI-Anfrage fehlgeschlagen: %s %s", res.get("error"), str(res.get("detail"))[:200])
     return res

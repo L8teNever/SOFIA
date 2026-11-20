@@ -101,6 +101,20 @@ SYSTEM = (
 )
 
 
+FILL_SYSTEM = (
+    "Du fuellst fuer einen Schueler ein Arbeitsblatt in seinem digitalen Heft aus.\n"
+    "Du bekommst das Bild der Seite (leere Felder pink umrandet und nummeriert) und eine Liste der Felder mit Nummer und Lage.\n"
+    "Antworte NUR mit JSON in genau dieser Form:\n"
+    '{"fills": [{"field": 0, "text": "..."}], "note": "kurzer Hinweis oder leer"}\n'
+    "Regeln:\n"
+    "- Nur Felder ausfuellen, zu denen du die Antwort wirklich kennst. Lieber weniger.\n"
+    "- Felder, in denen schon etwas steht, nicht nochmal ausfuellen.\n"
+    "- Antworten auf Deutsch und kurz: sie muessen in die Zeile passen.\n"
+    "- Ankreuzfelder: 'x' als Text, wenn angekreuzt werden soll.\n"
+    "- Keine Erklaerung drumherum, kein Markdown."
+)
+
+
 def _parts_for(turn: dict[str, Any]) -> list[dict[str, Any]]:
     parts: list[dict[str, Any]] = []
     img = turn.get("image")
@@ -115,11 +129,16 @@ def _parts_for(turn: dict[str, Any]) -> list[dict[str, Any]]:
     return parts
 
 
-def _ask_sync(contents: list[dict[str, Any]], model: str) -> dict:
+def _ask_sync(contents: list[dict[str, Any]], model: str, want_json: bool = False) -> dict:
+    cfg: dict[str, Any] = {"temperature": 0.4, "maxOutputTokens": 4096}
+    if want_json:
+        cfg["temperature"] = 0.2
+        cfg["maxOutputTokens"] = 8192
+        cfg["responseMimeType"] = "application/json"
     body = {
-        "systemInstruction": {"parts": [{"text": SYSTEM}]},
+        "systemInstruction": {"parts": [{"text": FILL_SYSTEM if want_json else SYSTEM}]},
         "contents": contents,
-        "generationConfig": {"temperature": 0.4, "maxOutputTokens": 2048},
+        "generationConfig": cfg,
     }
     tries = [model] + ([FALLBACK_MODEL] if FALLBACK_MODEL and FALLBACK_MODEL != model else [])
     last_err = "unknown"
@@ -151,7 +170,7 @@ def _ask_sync(contents: list[dict[str, Any]], model: str) -> dict:
     return {"ok": False, "error": "api", "detail": last_err}
 
 
-async def ask(turns: list[dict[str, Any]], model: str | None = None) -> dict:
+async def ask(turns: list[dict[str, Any]], model: str | None = None, want_json: bool = False) -> dict:
     """turns: [{role: 'user'|'model', text, image?}] - neuester Eintrag zuletzt."""
     if not configured():
         return {"ok": False, "error": "not_configured"}
@@ -163,4 +182,4 @@ async def ask(turns: list[dict[str, Any]], model: str | None = None) -> dict:
         contents.append({"role": "model" if t.get("role") == "model" else "user", "parts": parts})
     if not contents:
         return {"ok": False, "error": "empty_prompt"}
-    return await asyncio.get_event_loop().run_in_executor(None, _ask_sync, contents, _valid_model(model))
+    return await asyncio.get_event_loop().run_in_executor(None, _ask_sync, contents, _valid_model(model), want_json)

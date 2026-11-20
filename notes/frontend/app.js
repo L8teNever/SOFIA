@@ -2781,6 +2781,7 @@
   // Bedienelemente ueber dem Blatt (Auswahl, Lineal, Zoom-Rahmen ...); schliesst das ctx.save() von drawScene
   function drawSceneOverlays() {
     drawFormFields();
+    drawAiFillPreview();
     drawTextDragPreview();
     drawTableEditOverlay();
     drawZoomBoxOnPage();
@@ -21544,7 +21545,7 @@
   }
 
   // Bild der Markierung: Ausschnitt vom sichtbaren Blatt (max. 1024 px lange Kante)
-  function captureWorldRect(b) {
+  function captureWorldRect(b, maxSide, decorate) {
     if (!b || !Number.isFinite(b.minX)) return null;
     const pad = 10 / Math.max(scale, 0.05);
     const a = worldToScreen(b.minX - pad, b.minY - pad);
@@ -21555,7 +21556,7 @@
     const sw = Math.min(canvas.width - sx, Math.ceil((c2.x - a.x) * d));
     const sh = Math.min(canvas.height - sy, Math.ceil((c2.y - a.y) * d));
     if (sw < 8 || sh < 8) return null;
-    const fit = Math.min(1, 1024 / Math.max(sw, sh));
+    const fit = Math.min(1, (maxSide || 1024) / Math.max(sw, sh));
     const out = document.createElement("canvas");
     out.width = Math.max(8, Math.round(sw * fit));
     out.height = Math.max(8, Math.round(sh * fit));
@@ -21567,6 +21568,11 @@
     } catch (err) {
       return null;
     }
+    // Weltpunkt -> Pixel im Ausschnitt (fuer Markierungen wie Feldnummern)
+    if (decorate) decorate(cx, (wx, wy) => {
+      const p = worldToScreen(wx, wy);
+      return { x: (p.x * d - sx) * fit, y: (p.y * d - sy) * fit };
+    });
     const url = out.toDataURL("image/jpeg", 0.85);
     out.width = out.height = 0;
     return url;
@@ -21748,6 +21754,261 @@
     const ok = askAboutSelection();
     ackSel(e.currentTarget, ok, ok ? "Im KI-Fenster" : "Nichts markiert");
   });
+
+  // ---- KI im Heft (Stufe 2): Arbeitsblatt ausfuellen mit Vorschau ----
+  // Die KI bekommt die ganze Seite als Bild, die leeren erkannten Felder sind darauf nummeriert.
+  // Sie antwortet mit {fills:[{field, text}]}; wir zeigen das als Vorschau in den Feldern,
+  // erst "Uebernehmen" legt die Textfelder an (ein Schritt fuer Rueckgaengig).
+  let aiFill = null; // {items:[{f, text, check}], area}
+  const aiFillBtn = document.getElementById("ai-fill");
+  const nextFrame = () => new Promise((res) => requestAnimationFrame(() => res()));
+
+  function aiFillArea() {
+    if (notebook && !boardEditId && window.sofiaCurrentPage) {
+      const pi = window.sofiaCurrentPage();
+      const r = pageRects(notebook)[pi];
+      if (r) return { pi, minX: r.x, minY: r.y, maxX: r.x + r.w, maxY: r.y + r.h };
+    }
+    const a = screenToWorld(viewLeft, 0);
+    const b = screenToWorld(window.innerWidth - viewRight, window.innerHeight);
+    return { pi: null, minX: a.x, minY: a.y, maxX: b.x, maxY: b.y };
+  }
+  function aiFillSetBusy(on) {
+    aiBusy = on;
+    if (aiSendBtn) aiSendBtn.disabled = on;
+    if (aiFillBtn) aiFillBtn.disabled = on;
+  }
+  function aiParseJson(text) {
+    let t = String(text || "").trim();
+    t = t.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "");
+    try {
+      return JSON.parse(t);
+    } catch (err) {
+      const m = t.match(/\{[\s\S]*\}/);
+      if (m) {
+        try {
+          return JSON.parse(m[0]);
+        } catch (err2) {}
+      }
+    }
+    return null;
+  }
+
+  async function aiFillPage() {
+    if (aiBusy) return;
+    if (viewOnly || myRole === "view") return showToast("Nur ansehen: hier kann man nichts ändern");
+    aiFillDiscard(true);
+    const ids = window.sofiaFieldTargets ? window.sofiaFieldTargets() : [];
+    if (!ids.length) return aiAddMsg("err", "Hier ist kein Arbeitsblatt. Öffne eine Seite mit PDF oder Bild.");
+    aiFillSetBusy(true);
+    const wait = document.createElement("div");
+    wait.className = "ai-typing";
+    wait.textContent = "sucht die Felder…";
+    if (aiLogEl) {
+      aiLogEl.appendChild(wait);
+      aiLogEl.scrollTop = aiLogEl.scrollHeight;
+    }
+    try {
+      let area = aiFillArea();
+      // ganze Seite auf den Bildschirm, sonst fehlt ein Teil im Bild
+      if (area.pi != null && window.sofiaFitPage) {
+        const a = worldToScreen(area.minX, area.minY);
+        const c = worldToScreen(area.maxX, area.maxY);
+        if (a.x < viewLeft - 2 || a.y < -2 || c.x > window.innerWidth - viewRight + 2 || c.y > window.innerHeight + 2) {
+          window.sofiaFitPage(area.pi);
+          area = aiFillArea();
+        }
+      }
+      for (const id of ids) await loadMediaFields(id);
+      formFieldFrame.frame = -1;
+      requestRedraw();
+      await nextFrame();
+      await nextFrame();
+      await new Promise((res) => setTimeout(res, 350)); // PDF-Seite in der neuen Groesse
+      formFieldFrame.frame = -1;
+      const inArea = (f) => {
+        const mx = (f.x0 + f.x1) / 2;
+        const my = (f.y0 + f.y1) / 2;
+        return mx >= area.minX && mx <= area.maxX && my >= area.minY && my <= area.maxY;
+      };
+      const fields = formFieldsAll()
+        .filter((f) => inArea(f) && f.t !== "sign" && !formFieldFilled(f))
+        .slice(0, 80);
+      if (!fields.length) {
+        wait.remove();
+        aiAddMsg("err", "Keine leeren Felder gefunden. Tipp im Menü auf „Textfelder erkennen“ und versuch es nochmal.");
+        return;
+      }
+      wait.textContent = "füllt " + fields.length + (fields.length === 1 ? " Feld" : " Felder") + " aus…";
+      const w = area.maxX - area.minX || 1;
+      const h = area.maxY - area.minY || 1;
+      const rel = (v, o, s) => Math.round(((v - o) / s) * 1000) / 1000;
+      const image = captureWorldRect(area, 1600, (cx, toPx) => {
+        cx.font = "bold 13px sans-serif";
+        cx.textBaseline = "middle";
+        fields.forEach((f, i) => {
+          const a = toPx(f.x0, f.y0);
+          const b = toPx(f.x1, f.y1);
+          cx.strokeStyle = "rgba(220,0,90,0.9)";
+          cx.lineWidth = 1.5;
+          cx.strokeRect(a.x, a.y, b.x - a.x, b.y - a.y);
+          const label = String(i);
+          const tw = cx.measureText(label).width + 6;
+          cx.fillStyle = "rgba(220,0,90,0.95)";
+          cx.fillRect(a.x - tw, a.y, tw, 15);
+          cx.fillStyle = "#fff";
+          cx.fillText(label, a.x - tw + 3, a.y + 8);
+        });
+      });
+      if (!image) {
+        wait.remove();
+        aiAddMsg("err", "Konnte die Seite nicht als Bild aufnehmen.");
+        return;
+      }
+      const list = fields
+        .map((f, i) => i + ": " + (f.t === "check" ? "Ankreuzfeld" : "Textfeld") + " x " + rel(f.x0, area.minX, w) + "-" + rel(f.x1, area.minX, w) + ", y " + rel(f.y0, area.minY, h) + "-" + rel(f.y1, area.minY, h))
+        .join("\n");
+      const extra = aiInput && aiInput.value.trim() ? "\n\nHinweis vom Schüler: " + aiInput.value.trim() : "";
+      const text =
+        "Die leeren Felder sind im Bild pink umrandet und links oben nummeriert. Lage als Anteil der Seite (0 bis 1):\n" + list + extra;
+      const r = await fetch("/api/ai/ask", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ turns: [{ role: "user", text, image }], json: true, model: aiModelSel && aiModelSel.value ? aiModelSel.value : aiModel() || undefined }),
+      });
+      const d = await r.json().catch(() => null);
+      wait.remove();
+      if (!d || !d.ok) {
+        aiAddMsg("err", d && d.error === "not_configured" ? "Kein KI-Schlüssel auf dem Server." : "Hat nicht geklappt: " + ((d && (d.detail || d.error)) || "unbekannt"));
+        return;
+      }
+      const got = aiParseJson(d.text);
+      const fills = got && Array.isArray(got.fills) ? got.fills : [];
+      const items = [];
+      const seen = new Set();
+      for (const it of fills) {
+        const i = Number(it && it.field);
+        const t = String((it && it.text) || "").trim();
+        if (!Number.isInteger(i) || i < 0 || i >= fields.length || !t || seen.has(i)) continue;
+        seen.add(i);
+        const f = fields[i];
+        if (f.t === "check") {
+          if (/^(x|ja|true|1|✓|✔)$/i.test(t)) items.push({ f, text: "X", check: true });
+        } else items.push({ f, text: t.slice(0, 600) });
+      }
+      const note = got && typeof got.note === "string" ? got.note.trim() : "";
+      if (!items.length) {
+        aiAddMsg("ai", note || "Die KI wusste zu keinem Feld eine sichere Antwort.");
+        return;
+      }
+      aiFill = { items, area };
+      requestRedraw();
+      const lines = items.map((x) => fields.indexOf(x.f) + ": " + x.text).join("\n");
+      aiAddMsg("ai", "Vorschlag für " + items.length + (items.length === 1 ? " Feld" : " Felder") + " (gestrichelt auf dem Blatt):\n" + lines + (note ? "\n\n" + note : ""), [
+        { label: "Übernehmen", run: aiFillApply },
+        { label: "Verwerfen", run: () => aiFillDiscard() },
+      ]);
+    } catch (err) {
+      wait.remove();
+      aiAddMsg("err", "Server nicht erreichbar.");
+    } finally {
+      aiFillSetBusy(false);
+    }
+  }
+
+  // Text so klein machen, dass er in eine einzeilige Zeile passt
+  function aiFitSize(text, g) {
+    let size = g.size;
+    if (g.multi) return size;
+    for (let k = 0; k < 12 && size > 8; k++) {
+      measureCtx.font = textFont(size);
+      if (measureCtx.measureText(text).width <= g.width) break;
+      size *= 0.9;
+    }
+    return Math.max(8, Math.round(size * 10) / 10);
+  }
+  function aiFillStroke(item) {
+    const f = item.f;
+    if (item.check) {
+      const side = Math.min(f.x1 - f.x0, f.y1 - f.y0);
+      const size = Math.max(8, side * 1.1);
+      measureCtx.font = textFont(size);
+      const tw = measureCtx.measureText("X").width;
+      return textStrokeFrom({ x: (f.x0 + f.x1) / 2 - tw / 2, y: (f.y0 + f.y1) / 2 + size * 0.3, size, color: currentColor, width: null }, [{ t: "X" }]);
+    }
+    const g = formTextGeom(f);
+    const size = aiFitSize(item.text, g);
+    const y = g.multi ? g.y : g.y + (g.size - size) * 0.25;
+    return textStrokeFrom({ x: g.x, y, size, color: currentColor, width: g.width, onLines: true }, [{ t: item.text }]);
+  }
+  function aiFillApply() {
+    if (!aiFill) return showToast("Kein Vorschlag mehr offen");
+    if (viewOnly || myRole === "view") return showToast("Nur ansehen: hier kann man nichts ändern");
+    const added = [];
+    for (const it of aiFill.items) {
+      if (formFieldFilled(it.f)) continue; // inzwischen selbst ausgefuellt
+      const st = aiFillStroke(it);
+      putStroke(st);
+      added.push(cloneStroke(boardStrokes.get(st.id) || st));
+    }
+    aiFill = null;
+    if (added.length) pushUndo({ type: "add_many", strokes: added });
+    requestRedraw();
+    showToast(added.length ? added.length + (added.length === 1 ? " Feld ausgefüllt" : " Felder ausgefüllt") : "Nichts mehr frei");
+  }
+  function aiFillDiscard(quiet) {
+    if (!aiFill) return;
+    aiFill = null;
+    requestRedraw();
+    if (!quiet) showToast("Vorschlag verworfen");
+  }
+  function drawAiFillPreview() {
+    if (!aiFill) return;
+    ctx.save();
+    ctx.setLineDash([5 / scale, 3 / scale]);
+    ctx.lineWidth = 1.5 / scale;
+    for (const it of aiFill.items) {
+      const f = it.f;
+      ctx.strokeStyle = "rgba(103,80,164,0.85)";
+      ctx.fillStyle = "rgba(103,80,164,0.08)";
+      ctx.fillRect(f.x0, f.y0, f.x1 - f.x0, f.y1 - f.y0);
+      ctx.strokeRect(f.x0, f.y0, f.x1 - f.x0, f.y1 - f.y0);
+      const g = it.check ? null : formTextGeom(f);
+      ctx.fillStyle = darkMode ? "rgba(208,188,255,0.85)" : "rgba(103,80,164,0.85)";
+      if (it.check) {
+        const side = Math.min(f.x1 - f.x0, f.y1 - f.y0);
+        ctx.font = textFont(side * 1.1);
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("X", (f.x0 + f.x1) / 2, (f.y0 + f.y1) / 2);
+        ctx.textAlign = "start";
+        ctx.textBaseline = "alphabetic";
+        continue;
+      }
+      const size = aiFitSize(it.text, g);
+      ctx.font = textFont(size);
+      if (!g.multi) {
+        ctx.fillText(it.text, g.x, g.y + (g.size - size) * 0.25);
+        continue;
+      }
+      // mehrzeilig: einfach umbrechen, nur bis zum Feldende
+      const words = it.text.split(/\s+/);
+      let line = "";
+      let y = g.y;
+      for (const wd of words) {
+        const t = line ? line + " " + wd : wd;
+        if (line && ctx.measureText(t).width > g.width) {
+          ctx.fillText(line, g.x, y);
+          y += size * 1.3;
+          line = wd;
+          if (y > f.y1) break;
+        } else line = t;
+      }
+      if (line && y <= f.y1) ctx.fillText(line, g.x, y);
+    }
+    ctx.restore();
+  }
+  aiFillBtn?.addEventListener("click", () => aiFillPage());
 
   function showToast(text) {
     if (!toastEl) {
