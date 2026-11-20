@@ -24,7 +24,7 @@ API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
 DEFAULT_MODEL = os.environ.get("GEMINI_MODEL", "").strip() or "gemini-2.5-flash"
 FALLBACK_MODEL = os.environ.get("GEMINI_FALLBACK_MODEL", "").strip()
 BASE = "https://generativelanguage.googleapis.com/v1beta"
-TIMEOUT_SEC = 90
+TIMEOUT_SEC = 150  # Modelle mit Denkschritten brauchen bei Bildern auch mal 30-60 s
 MAX_IMAGE_CHARS = 8_000_000  # ~6 MB Bild als data-URI
 MAX_TEXT_CHARS = 30_000
 RETRY_STATUS = (429, 500, 502, 503, 504)
@@ -65,9 +65,12 @@ def _models_sync() -> list[dict[str, str]]:
         if not name or "generateContent" not in (m.get("supportedGenerationMethods") or []):
             continue
         # Alte Spezialmodelle (Einbettungen, Bildgenerierung) gehoeren nicht in die Liste
-        if any(w in name for w in ("embedding", "aqa", "imagen", "veo", "tts", "native-audio")):
+        if any(w in name for w in ("embedding", "aqa", "imagen", "veo", "tts", "native-audio", "image")):
             continue
         out.append({"id": name, "label": str(m.get("displayName") or name)})
+    # nur die Gemini-Modelle anbieten (Forschungs-/Agenten-Modelle passen hier nicht)
+    gem = [m for m in out if m["id"].startswith("gemini")]
+    out = gem or out
     out.sort(key=lambda x: x["id"])
     _models_cache.update({"at": now, "list": out})
     return out
