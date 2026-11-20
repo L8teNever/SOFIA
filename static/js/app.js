@@ -1473,16 +1473,52 @@ document.getElementById('modal-scrim').addEventListener('click', e => {
   if (e.target === document.getElementById('modal-scrim')) closeModal(false);
 });
 
+// Notenschnitt: eine Rechnung fuer Startseite und Notenseite (pages/grades.html nutzt sie auch)
+function computeSubjectAverage(grades, weighting) {
+  if (!grades.length) return 0;
+  const exams = grades.filter(g => (g.weight_type || 'exam') === 'exam');
+  const orals = grades.filter(g => (g.weight_type || 'exam') === 'oral');
+  const quizzes = grades.filter(g => (g.weight_type || 'exam') === 'quiz');
+  // Alle Kurztests zusammen zaehlen wie eine Klassenarbeit: ihr Schnitt geht als eine Arbeit mit ein
+  const examItems = exams.map(g => ({ value: g.value, weight: g.weight || 1.0 }));
+  if (quizzes.length) {
+    const qAvg = quizzes.reduce((s, g) => s + g.value * (g.weight || 1.0), 0) / quizzes.reduce((s, g) => s + (g.weight || 1.0), 0);
+    examItems.push({ value: qAvg, weight: 1.0 });
+  }
+  const avgExam = examItems.length ? examItems.reduce((s, g) => s + g.value * g.weight, 0) / examItems.reduce((s, g) => s + g.weight, 0) : null;
+  const avgOral = orals.length ? orals.reduce((s, g) => s + (g.value * (g.weight || 1.0)), 0) / orals.reduce((s, g) => s + (g.weight || 1.0), 0) : null;
+  if (avgExam !== null && avgOral !== null) {
+    const totalW = weighting.exam_weight + weighting.oral_weight;
+    if (totalW > 0) return (avgExam * weighting.exam_weight + avgOral * weighting.oral_weight) / totalW;
+  } else if (avgExam !== null) {
+    return avgExam;
+  } else if (avgOral !== null) {
+    return avgOral;
+  }
+  return grades.reduce((s, g) => s + g.value, 0) / grades.length;
+}
+
+function gradeOverallAverage(grades, weightings) {
+  const bySubject = {};
+  grades.forEach(g => { (bySubject[g.subject_id] = bySubject[g.subject_id] || []).push(g); });
+  const avgs = Object.entries(bySubject).map(([sid, list]) => {
+    const w = (weightings || []).find(x => x.subject_id === parseInt(sid, 10)) || { exam_weight: 50.0, oral_weight: 50.0, planned_exams: 2 };
+    return computeSubjectAverage(list, w);
+  });
+  return avgs.reduce((s, a) => s + a, 0) / (avgs.length || 1);
+}
+
 async function loadDashboard() {
   const now = Date.now();
   if (now - lastDashboardLoadAt < 3000) return;
   lastDashboardLoadAt = now;
   try {
-    const [hw, events, grades, files] = await Promise.all([
+    const [hw, events, grades, files, weightings] = await Promise.all([
       API.homework().catch(() => []),
       API.events().catch(() => []),
       API.grades().catch(() => []),
       API.files().catch(() => []),
+      API.weightings().catch(() => []),
     ]);
     const today = localDateStr();
     const openHw = hw.filter(h => h.due_date >= today && !(h.checked_by || []).includes(currentUser && currentUser.id));
@@ -1498,8 +1534,8 @@ async function loadDashboard() {
       if (sub) sub.textContent = dayLabel + (ev.time ? ' · ' + ev.time : '');
     }
     if (grades.length) {
-      const avg = (grades.reduce((s, g) => s + g.value, 0) / grades.length).toFixed(1);
-      document.getElementById('w-grade-avg').textContent = avg;
+      // gleiche Rechnung wie die Notenseite: Schnitt je Fach (mit Gewichtung), dann Mittel der Faecher
+      document.getElementById('w-grade-avg').textContent = gradeOverallAverage(grades, weightings).toFixed(1);
     }
     // Moodle-Kachel: offene Aufgaben der naechsten Zeit, sonst Anzahl Kurse
     API.moodle().then(m => {

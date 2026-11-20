@@ -58,35 +58,7 @@ function getSubjectWeighting(subjectId) {
   return found || { exam_weight: 50.0, oral_weight: 50.0, planned_exams: 2 };
 }
 
-function computeSubjectAverage(grades, weighting) {
-  if (!grades.length) return 0;
-
-  const exams = grades.filter(g => (g.weight_type || 'exam') === 'exam');
-  const orals = grades.filter(g => (g.weight_type || 'exam') === 'oral');
-  const quizzes = grades.filter(g => (g.weight_type || 'exam') === 'quiz');
-
-  // Alle Kurztests zusammen zaehlen wie eine Klassenarbeit: ihr Schnitt geht als eine Arbeit mit ein
-  const examItems = exams.map(g => ({ value: g.value, weight: g.weight || 1.0 }));
-  if (quizzes.length) {
-    const qAvg = quizzes.reduce((s, g) => s + g.value * (g.weight || 1.0), 0) / quizzes.reduce((s, g) => s + (g.weight || 1.0), 0);
-    examItems.push({ value: qAvg, weight: 1.0 });
-  }
-  const avgExam = examItems.length ? examItems.reduce((s, g) => s + g.value * g.weight, 0) / examItems.reduce((s, g) => s + g.weight, 0) : null;
-  const avgOral = orals.length ? orals.reduce((s, g) => s + (g.value * (g.weight || 1.0)), 0) / orals.reduce((s, g) => s + (g.weight || 1.0), 0) : null;
-
-  if (avgExam !== null && avgOral !== null) {
-    const totalW = weighting.exam_weight + weighting.oral_weight;
-    if (totalW > 0) {
-      return (avgExam * weighting.exam_weight + avgOral * weighting.oral_weight) / totalW;
-    }
-  } else if (avgExam !== null) {
-    return avgExam;
-  } else if (avgOral !== null) {
-    return avgOral;
-  }
-
-  return grades.reduce((s, g) => s + g.value, 0) / grades.length;
-}
+// computeSubjectAverage kommt aus static/js/app.js (gleiche Rechnung wie die Startseite)
 
 function renderGrades() {
   const subMap = Object.fromEntries(gradeSubjects.map(s => [s.id, s]));

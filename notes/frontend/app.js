@@ -3801,10 +3801,12 @@
   // Einstellbar (Lasso, Radierer, Lineal, Marker, Formen, Rueckgaengig). Die Tipp-Punkte, die
   // der Stift dabei gemalt hat, verschwinden wieder (ohne Spur im Rueckgaengig-Verlauf).
   // Nur sehr dicht beieinander liegende, kurze Tipps zaehlen, damit Ue-Punkte und ":" nicht ausloesen.
-  const PEN_TAP_MAX_MS = 260;
-  const PEN_TAP_MAX_MOVE = 6;
+  // Ein Tipp ist wirklich nur ein Tupfer: kaum Bewegung (2,5 px), kurz. Sonst zaehlten
+  // kleine Striche wie "-", "=" oder der Querstrich von t/f als Doppeltipp und verschwanden.
+  const PEN_TAP_MAX_MS = 220;
+  const PEN_TAP_MAX_MOVE = 2.5;
   const PEN_TAP_GAP_MS = 360;
-  const PEN_TAP_RADIUS = 9;
+  const PEN_TAP_RADIUS = 6;
   let lastEndedStroke = null;
   let penTapDown = null;
   let penTaps = [];
@@ -3871,7 +3873,14 @@
   canvas.addEventListener(
     "pointermove",
     (e) => {
-      if (penTapDown && e.pointerId === penTapDown.id && Math.hypot(e.clientX - penTapDown.x, e.clientY - penTapDown.y) > PEN_TAP_MAX_MOVE) penTapDown.moved = true;
+      if (!penTapDown || e.pointerId !== penTapDown.id || penTapDown.moved) return;
+      // alle Zwischenpunkte pruefen: ein schneller kurzer Strich kann zwischen zwei Events weit laufen
+      for (const ev of coalescedEvents(e)) {
+        if (Math.hypot(ev.clientX - penTapDown.x, ev.clientY - penTapDown.y) > PEN_TAP_MAX_MOVE) {
+          penTapDown.moved = true;
+          break;
+        }
+      }
     },
     true
   );
